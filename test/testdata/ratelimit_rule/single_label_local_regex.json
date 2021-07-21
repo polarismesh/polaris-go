@@ -1,0 +1,31 @@
+{
+    "rules": [
+      {
+        "id": "sl1111",
+        "service": "testRateLimitLocalSvc",
+        "namespace": "Test",
+        "labels": {
+          "operation": {
+            "type": "REGEX",
+            "value": ".*"
+          }
+        },
+        "resource": "QPS",
+        "type": "LOCAL",
+        "action": "reject",
+        "amounts": [
+          {
+            "maxAmount": 100,
+            "validDuration": "1s"
+          }
+        ],
+        "report": {
+          "interval": "100ms"
+        },
+        "ctime": "2020-4-7 16:47:14",
+        "mtime": "2020-4-7 16:47:14",
+        "revision": "68dc47b4b5954b029211295f9843f701"
+      }
+    ],
+  "revision": "58dc47b4b5954b021211295f9863f702"
+}

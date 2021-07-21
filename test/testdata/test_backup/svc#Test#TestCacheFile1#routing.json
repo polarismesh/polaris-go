@@ -1,0 +1,20 @@
+{
+  "code":200000,
+  "info":"execute success",
+  "type":"ROUTING",
+  "service":{
+    "name":"TestCacheFile",
+    "namespace":"Test",
+    "revision":"C5C9B01E135F207E"},
+    "routing":{
+      "service":"TestCacheFile",
+      "namespace":"Test",
+      "inbounds":[
+        {
+          "sources":[{"service":"*","namespace":"*","metadata":{"tag":{"value":"protocol"}}}],
+          "destinations":[{"service":"*","namespace":"*","metadata":{"protocol":{"value":"grpc"}},"weight":100}]
+        }
+      ],
+      "revision":"4B802860EFEA0E54"
+    }
+}

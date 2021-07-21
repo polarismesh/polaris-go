@@ -1,0 +1,37 @@
+{
+  "service": "BadVariable",
+  "namespace": "Test",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "k1": {
+              "type": "EXACT",
+              "valueType": "VARIABLE"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "k1": {
+              "type": "EXACT",
+              "valueType": "VARIABLE"
+            }
+          },
+          "priority": 0,
+          "weight": 100
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0192112f9f9143f702"
+}

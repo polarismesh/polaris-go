@@ -1,0 +1,104 @@
+{
+  "rules": [
+    {
+      "id": "nf0001",
+      "service": "NetworkFailTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "fail4xx"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.mock"
+      }
+    },
+    {
+      "id": "nf0002",
+      "service": "NetworkFailTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "initReturnDelay"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 200,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.mock"
+      }
+    },
+    {
+      "id": "nf0003",
+      "service": "NetworkFailTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "reportDelay"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.mock"
+      }
+    },
+    {
+      "id": "nf0004",
+      "service": "NetworkFailTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "serverConnectFail"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 50,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.not.exists"
+      }
+    }
+  ]
+}

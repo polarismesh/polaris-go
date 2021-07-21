@@ -1,0 +1,26 @@
+{
+    "code": 200000,
+    "info": "execute success",
+    "type": "INSTANCE",
+    "service": {
+        "name": "polaris.discover",
+        "namespace": "Polaris",
+        "revision": "E4BA8D7878C81415456908765EFABF"
+    },
+    "instances": [
+        {
+            "id": "f3e41790-c9d9-4c5a-8a6c-c24c89947071",
+            "service": "polaris.discover",
+            "namespace": "Polaris",
+            "host": "127.0.0.1",
+            "port": 1991,
+            "protocol": "grpc",
+            "weight": 100,
+            "healthy": true,
+            "metadata": {
+                "protocol": "grpc"
+            },
+            "service_token": "2cb6d8fe-f726-4a0d-8c1d-477e64bb43ca"
+        }
+    ]
+}

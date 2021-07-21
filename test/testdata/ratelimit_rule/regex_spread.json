@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "id": "singleregextest",
+      "service": "testRateLimitLocalSvc",
+      "namespace": "Test",
+      "labels": {
+        "operation": {
+          "type": "REGEX",
+          "value": ".*"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "78dc47b4b5954b9992112f9f9843f721"
+    }
+  ],
+  "revision": "x8dc47b4b5954b0212112f9f9863f722"
+}

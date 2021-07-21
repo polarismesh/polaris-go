@@ -1,0 +1,50 @@
+{
+  "service": "source_service",
+  "namespace": "namespace1",
+  "outbounds": [
+    {
+      "sources": [
+        {
+          "service": "source_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "client": {
+              "type" : 1,
+              "value": "and*"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "version": {
+              "value": "v1"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        },
+        {
+          "service": "dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "logic_set": {
+              "type" : 1,
+              "value": "set1"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "18dc47b4b5954b0292112f9f9843f702"
+}

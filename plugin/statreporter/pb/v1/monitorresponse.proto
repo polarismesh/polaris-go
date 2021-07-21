@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package v1;
+
+import "google/protobuf/wrappers.proto";
+
+message StatResponse {
+  google.protobuf.StringValue id = 1; // 唯一标识
+  google.protobuf.UInt32Value code = 2; // 返回码
+  google.protobuf.StringValue info = 3; // 返回信息
+}

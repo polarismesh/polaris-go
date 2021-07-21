@@ -1,0 +1,26 @@
+{
+    "code": 200000,
+    "info": "execute success",
+    "type": "INSTANCE",
+    "service": {
+        "name": "polaris.healthcheck",
+        "namespace": "Polaris",
+        "revision": "63E9A6D4ECFC4CF509FACE"
+    },
+    "instances": [
+        {
+            "id": "e4140fd4-acfe-4900-bb48-8dbe38d7beed",
+            "service": "polaris.healthcheck",
+            "namespace": "Polaris",
+            "host": "127.0.0.1",
+            "port": 1991,
+            "protocol": "grpc",
+            "weight": 100,
+            "healthy": true,
+            "metadata": {
+                "protocol": "grpc"
+            },
+            "service_token": "b85e5586-a59a-42a2-945a-af4a2e5da2e9"
+        }
+    ]
+}

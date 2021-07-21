@@ -1,0 +1,66 @@
+global:
+  api:
+    timeout: 1s
+    reportInterval: 30s
+    maxRetryTimes: 10
+    retryInterval: 1s
+  serverConnector:
+    addresses:
+      - 127.0.0.1:8180
+    protocol: grpc
+    syncInterval: 10s
+    connectTimeout: 1s
+    connectionIdleTimeout: 100ms
+    requestQueueSize: 100000
+    serverSwitchInterval: 50m
+    plugin: {}
+  statReporter:
+    enable: true
+    plugin:
+      stat2Monitor:
+        metricsReportWindow: 30s
+        metricsNumBuckets: 6
+      serviceCache:
+        reportInterval: 10s
+consumer:
+  localCache:
+    serviceExpireTime: 24h
+    serviceRefreshInterval: 2s
+    persistDir: testdata/backup
+    type: inmemory
+    persistMaxWriteRetry: 0
+    persistMaxReadRetry: 0
+    persistRetryInterval: 1s
+    plugin: {}
+  serviceRouter:
+    percentOfMinInstances: 0.3
+    chain:
+      - ruleBasedRouter
+  loadbalancer:
+    type: weightedRandom
+    plugin: {}
+  circuitBreaker:
+    enable: true
+    checkPeriod: 5s
+    requestCountAfterHalfOpen: 3
+    sleepWindow: 5s
+    successCountAfterHalfOpen: 2
+    chain:
+      - errorCount
+      - errorRate
+    plugin:
+      errorCount:
+        continuousErrorThreshold: 10
+        metricStatTimeWindow: 1s
+      errorRate:
+        errorRateThreshold: 0.5
+        metricNumBuckets: 12
+        metricStatTimeWindow: 1m0s
+        requestCountAfterHalfOpen: 3
+  outlierDetection:
+    enable: true
+    checkPeriod: 10s
+    chain:
+      - tcp
+      - udp
+    plugin: {}

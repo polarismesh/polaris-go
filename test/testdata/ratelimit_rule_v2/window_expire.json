@@ -1,0 +1,56 @@
+{
+  "rules": [
+    {
+      "id": "we0001",
+      "service": "ExpireTestSvcV2",
+      "namespace": "Test",
+      "priority": 0,
+      "labels": {
+        "appId": {
+          "type": "EXACT",
+          "value": "remote"
+        },
+        "uin": {
+          "type": "REGEX",
+          "value": ".+"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 200,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    },
+    {
+      "id": "we0002",
+      "service": "ExpireTestSvcV2",
+      "namespace": "Test",
+      "priority": 1,
+      "labels": {
+        "uin": {
+          "type": "REGEX",
+          "value": ".+"
+        }
+      },
+      "resource": "QPS",
+      "type": "LOCAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 50,
+          "validDuration": "1s"
+        }
+      ]
+    }
+  ]
+}

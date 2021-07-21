@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package v1;
+
+import "google/protobuf/wrappers.proto";
+
+message MeshService {
+    google.protobuf.StringValue id = 1;
+    // 所属网格ID
+    google.protobuf.StringValue mesh_id = 2 [json_name="mesh_id"];
+    // 所属网格名字
+    google.protobuf.StringValue mesh_name = 3 [json_name="mesh_name"];
+    // 所属网格token
+    google.protobuf.StringValue mesh_token = 4 [json_name="mesh_token"];
+    // 在北极星上面的服务的ID
+    google.protobuf.StringValue service_id = 5 [json_name="service_id"];
+    // 在北极星上面的服务名
+    google.protobuf.StringValue service = 6;
+    // 在北极星上面的命名空间
+    google.protobuf.StringValue namespace = 7;
+    // 服务的部门
+    google.protobuf.StringValue department = 8;
+    // 服务的业务
+    google.protobuf.StringValue business = 9;
+    // 服务负责人
+    google.protobuf.StringValue owners = 10;
+    // 在服务网格里面的命名空间
+    google.protobuf.StringValue mesh_namespace = 11 [json_name="mesh_namespace"];
+    // 在服务网格里面的服务名
+    google.protobuf.StringValue mesh_service = 12 [json_name="mesh_service"];
+    // 是网格内部还是外部服务
+    google.protobuf.StringValue location = 13;
+    // 可以被网格的哪些命名空间看到
+    google.protobuf.StringValue export_to = 14 [json_name="export_to"];
+    // 网格服务的revision
+    google.protobuf.StringValue revision = 15;
+    // 服务订阅时间
+    google.protobuf.StringValue ctime = 16;
+    // 服务订阅信息修改时间
+    google.protobuf.StringValue mtime = 17;
+}
+
+message Mesh {
+    google.protobuf.StringValue id = 1;
+    // 网格名字
+    google.protobuf.StringValue name = 2;
+    // 网格所属业务
+    google.protobuf.StringValue business = 3;
+    // 网格所属部门
+    google.protobuf.StringValue department = 4;
+    // 网格版本号
+    google.protobuf.StringValue revision = 5;
+    // 网格token
+    google.protobuf.StringValue token = 6;
+    // 网格属主
+    google.protobuf.StringValue owners = 7;
+    // 是否为托管网格
+    google.protobuf.BoolValue managed = 8;
+    // istio的版本
+    google.protobuf.StringValue istio_version = 9 [json_name="istio_version"];
+    // 该网格的数据面集群
+    google.protobuf.StringValue data_cluster = 10 [json_name="data_cluster"];
+    // 网格订阅的服务
+    repeated MeshService services = 11;
+    // 网格描述
+    google.protobuf.StringValue comment = 12;
+    // 网格创建时间
+    google.protobuf.StringValue ctime = 13;
+    // 网格修改时间
+    google.protobuf.StringValue mtime = 14;
+}
+
+message MeshResource {
+    google.protobuf.StringValue id = 1;
+    // 所属网格ID
+    google.protobuf.StringValue mesh_id = 2 [json_name="mesh_id"];
+    // 所属网格名字
+    google.protobuf.StringValue mesh_name = 3 [json_name="mesh_name"];
+    // 所属网格命名空间
+    google.protobuf.StringValue mesh_namespace = 4 [json_name="mesh_namespace"];
+    // 网格规则的类型
+    google.protobuf.StringValue type_url = 5 [json_name="type_url"];
+    // 网格规则名字
+    google.protobuf.StringValue name = 6;
+    // 网格规则修订号
+    google.protobuf.StringValue revision = 7;
+    // 网格规则的内容
+    google.protobuf.StringValue body = 8;
+    // 所属网格的token
+    google.protobuf.StringValue mesh_token = 9 [json_name="mesh_token"];
+    // 规则创建时间
+    google.protobuf.StringValue ctime = 10;
+    // 规则修改时间
+    google.protobuf.StringValue mtime = 11;
+}
+
+message MeshConfig {
+    // 所属网格ID
+    google.protobuf.StringValue mesh_id = 1 [json_name="mesh_id"];
+    // 所属网格名字
+    google.protobuf.StringValue mesh_name = 2 [json_name="mesh_name"];
+    // 请求的配置类型
+    google.protobuf.StringValue type_url = 3 [json_name="type_url"];
+    // 具体的各个网格规则
+    repeated MeshResource resources = 4;
+    // 总体的修订版本号
+    google.protobuf.StringValue revision = 5;
+}

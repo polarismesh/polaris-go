@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package metric;
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/duration.proto";
+
+message RateLimitRequest {
+	google.protobuf.StringValue key = 1; // 限流规则唯一ID
+	google.protobuf.StringValue service = 2; // 服务名
+	google.protobuf.StringValue namespace = 3; // 命名空间
+	google.protobuf.Int64Value timestamp = 4; // 限流server绝对时间，单位ms
+	repeated Limiter totals = 5;  // 限流配额
+	repeated Limiter useds  = 6;  // 每个周期已使用的配额
+}
+
+message RateLimitResponse {
+	google.protobuf.UInt32Value code = 1; // 返回码
+	google.protobuf.StringValue info = 2; // 返回码详情
+	google.protobuf.StringValue key = 3;  // 限流规则KEY
+	google.protobuf.Int64Value timestamp = 4; // 限流server绝对时间，单位ms
+	repeated Limiter sum_useds = 5; // 限流规则当前周期，所使用的配额总量
+}
+
+message Limiter {
+	google.protobuf.UInt32Value amount = 1; // 配额
+	google.protobuf.Duration duration = 2; // 限流周期
+	google.protobuf.UInt32Value limited = 3; //被限流数，只有acquire接口才上报，初始化接口无需上报
+}

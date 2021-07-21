@@ -1,0 +1,9 @@
+.DS_Store
+.idea/
+test_log/
+backup/
+
+polaris/log/*
+
+angevil_test/
+test/other/other_test_suit.go
