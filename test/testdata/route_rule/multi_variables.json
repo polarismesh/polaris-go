@@ -1,0 +1,115 @@
+{
+  "service": "MultiVariables",
+  "namespace": "Test",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "k1": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k1"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "k1": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k1"
+            }
+          },
+          "priority": 0,
+          "weight": 100
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "k2": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k2"
+            },
+            "k3": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k3"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "k2": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k2"
+            },
+            "k4": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k4k"
+            }
+          },
+          "weight": 100
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "k2": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k2"
+            },
+            "k5": {
+              "type": "EXACT",
+              "value": "v5"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "k2": {
+              "type": "EXACT",
+              "value": "v2-0"
+            },
+            "k4": {
+              "type": "EXACT",
+              "valueType": "VARIABLE",
+              "value": "k4"
+            }
+          },
+          "weight": 100
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0192112f9f9143f702"
+}

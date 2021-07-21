@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "id": "sr1111",
+      "service": "NetWorkInit500TestService",
+      "namespace": "Test",
+      "labels": {
+        "operation": {
+          "type": "EXACT",
+          "value": "query"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "o8dc47b4b5954b0292112f9f9843f701"
+    }
+  ],
+  "revision": "v8dc47b4b5954b0212119f9f9863f702"
+}

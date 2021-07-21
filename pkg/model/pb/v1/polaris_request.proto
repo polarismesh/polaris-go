@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package v1;
+
+import "polaris_service.proto";
+import "meshconfig.proto";
+
+message DiscoverRequest {
+	enum DiscoverRequestType {
+		UNKNOWN = 0;
+		INSTANCE = 1;
+		CLUSTER = 2;
+		ROUTING = 3;
+    RATE_LIMIT = 4;
+	SERVICES = 6;
+	    MESH = 7;
+	MESH_CONFIG = 8;
+	}
+
+	DiscoverRequestType type = 1;
+	Service service = 2;
+	Mesh mesh = 3;
+	MeshConfig meshConfig = 4;
+}

@@ -1,0 +1,162 @@
+{
+  "service": "onlyInboundService",
+  "namespace": "Production",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "env": {
+              "value": "^a.*",
+              "type": "REGEX"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "^set.*",
+              "type": "REGEX"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "env": {
+              "value": "testPriority",
+              "type": "EXACT"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "set100",
+              "type": "EXACT"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        },
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "set1",
+              "type": "EXACT"
+            }
+          },
+          "priority": 1,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*",
+          "metadata": {
+            "env": {
+              "value": "testWeight",
+              "type": "EXACT"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "set0",
+              "type": "EXACT"
+            }
+          },
+          "priority": 0,
+          "weight": 40,
+          "transfer": ""
+        },
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "set1",
+              "type": "EXACT"
+            }
+          },
+          "priority": 0,
+          "weight": 60,
+          "transfer": ""
+        },
+        {
+          "service": "onlyInboundService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "set2",
+              "type": "EXACT"
+            }
+          },
+          "priority": 0,
+          "weight": 0,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0192112f9f9143f702"
+}

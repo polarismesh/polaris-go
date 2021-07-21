@@ -1,0 +1,36 @@
+{
+  "service": "InboundAddAndDelete",
+  "namespace": "Production",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "InboundAddAndDelete",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal1"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal1"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0192112f9f9843f702"
+}

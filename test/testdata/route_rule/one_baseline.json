@@ -1,0 +1,72 @@
+{
+  "service": "OneBaseTwoFeatureCallee",
+  "namespace": "Test",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "env": {
+              "type": "EXACT",
+              "valueType": "PARAMETER"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "env": {
+              "type": "EXACT",
+              "valueType": "PARAMETER"
+            }
+          },
+          "priority": 0,
+          "weight": 100
+        },
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "env": {
+              "type": "EXACT",
+              "valueType": "TEXT",
+              "value": "base"
+            }
+          },
+          "priority": 1,
+          "weight": 100
+        }
+      ]
+    },
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "Test"
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Test",
+          "metadata": {
+            "env": {
+              "type": "EXACT",
+              "valueType": "TEXT",
+              "value": "base"
+            }
+          },
+          "weight": 100
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0192112f9f9143f702"
+}

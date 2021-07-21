@@ -1,0 +1,110 @@
+{
+  "rules": [
+    {
+      "id": "r0001",
+      "service": "RemoteTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "query"
+        },
+        "uin": {
+          "type": "EXACT",
+          "value": "007"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 200,
+          "validDuration": "1s"
+        },
+        {
+          "maxAmount": 800,
+          "validDuration": "10s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    },
+    {
+      "id": "r0002",
+      "service": "RemoteTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "appId": {
+          "type": "REGEX",
+          "value": ".+"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "regex_combine": false,
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    },
+    {
+      "id": "r0003",
+      "service": "RemoteTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "test_uin": {
+          "type": "REGEX",
+          "value": ".+"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "regex_combine": true,
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 300,
+          "validDuration": "1s"
+        }
+      ]
+    },
+    {
+      "id": "r0004",
+      "service": "RemoteTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "appIdShare": {
+          "type": "EXACT",
+          "value": "appShare"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "SHARE_EQUALLY",
+      "amounts": [
+        {
+          "maxAmount": 20,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    }
+  ]
+}

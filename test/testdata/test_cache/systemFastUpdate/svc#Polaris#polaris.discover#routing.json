@@ -1,0 +1,31 @@
+{
+    "code": 200000,
+    "info": "execute success",
+    "type": "ROUTING",
+    "service": {
+        "name": "polaris.discover",
+        "namespace": "Polaris",
+        "revision": "D4CC7307D644F8E7098EFACD"
+    },
+    "routing": {
+        "service": "polaris.discover",
+        "namespace": "Polaris",
+        "inbounds": [
+            {
+                "sources": [
+                    {
+                        "service": "*",
+                        "namespace": "*"
+                    }
+                ],
+                "destinations": [
+                    {
+                        "service": "polaris.discover",
+                        "namespace": "Polaris",
+                        "weight": 200
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "rule2",
+  "service": "calledSvc",
+  "namespace": "calledNs",
+  "labels": {
+    "operation": {
+      "type": "EXACT",
+      "value": "write"
+    },
+    "user": {
+      "type": "REGEX",
+      "value": "yy*"
+    }
+  },
+  "resource": "QPS",
+  "type": "LOCAL",
+  "action": "reject",
+  "amounts": [
+    {
+      "maxAmount": 200,
+      "validDuration": "1s"
+    },
+    {
+      "maxAmount": 1000,
+      "validDuration": "30s"
+    }
+  ],
+  "report": {
+    "interval": "100ms"
+  },
+  "ctime": "2020-4-7 16:47:14",
+  "mtime": "2020-4-7 16:47:14",
+  "revision": "68dc47b4b5954b0292112f9f9843f702"
+}

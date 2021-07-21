@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package v1;
+
+import "sdktoken.proto";
+import "google/protobuf/timestamp.proto";
+
+enum LimitMode {
+    //未知类型，用于兼容前面pb
+    UnknownMode = 0;
+    //全局类型，与限流server发生交互
+    GlobalMode = 1;
+    //本地类型，使用本地限流算法
+    LocalMode = 2;
+    //降级类型，因为无法连接限流server，导致必须使用本地限流算法
+    DegradeMode = 3;
+}
+
+//被限流的统计
+message LimitStat {
+    google.protobuf.Timestamp time = 1;
+    //限流次数
+    uint32 period_times = 2;
+    //限流原因，每种原因一个limitStat
+    string reason = 3;
+    //限流发生时处于哪种模式
+    LimitMode mode = 4;
+    //通过请求数
+    uint32 pass = 5;
+    //限流周期，单位为s
+    uint32 limit_duration = 6;
+}
+
+//一个周期内，限流请求数量的情况
+message LimitRequestsCount {
+    google.protobuf.Timestamp time = 1;
+    //总的请求次数
+    uint32 total_requests = 2;
+    //通过请求数
+    uint32 pass_requests = 3;
+    //被拒请求数
+    uint32 reject_requests = 4;
+    //请求发生在什么模式下面
+    LimitMode mode = 5;
+}
+
+message ThresholdChange {
+    google.protobuf.Timestamp time = 1;
+    string oldThreshold = 2;
+    string newThreshold = 3;
+    string reason = 4;
+}
+
+//限流记录
+message RateLimitRecord {
+    //该条记录的唯一id
+    string id = 1;
+    //sdk标识
+    SDKToken sdk_token = 2;
+    //服务命名空间
+    string namespace = 3;
+    //服务名
+    string service = 4;
+    //规则id
+    string rule_id = 5;
+    //规则生效集群
+    string subset = 6;
+    //限流器
+    string rate_limiter = 7;
+    //限流的接口，使用不同lables代表不同接口
+    string labels = 8;
+    //周期限流次数
+    repeated LimitStat limit_stats = 9;
+    //阈值变化事件
+    repeated ThresholdChange threshold_changes = 10;
+    //该限流规则的总请求次数和通过请求次数，在这份PB之后，客户端不要继续上报该字段，使用下面的request_counts字段
+    LimitRequestsCount requests_count = 11;
+    //不同模式下，该限流规则的总请求次数和通过请求次数
+    repeated LimitRequestsCount request_counts = 12;
+}

@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package v1;
+
+import "sdktoken.proto";
+import "google/protobuf/timestamp.proto";
+
+//一次版本号变更
+message RevisionHistory {
+    //变更时间
+    google.protobuf.Timestamp time = 1;
+    //变更的次序
+    uint32 change_seq = 2;
+    //变更后版本号
+    string revision = 3;
+    //实例变化情况
+    InstancesChange instance_change = 4;
+    //网格服务变化情况
+    MeshServicesChange mesh_service_change = 5;
+}
+
+// 单个网格服务的变化情况
+message ChangeMeshService {
+    string mesh_namespace = 1;
+    string mesh_service = 2;
+    string info = 3;
+}
+
+// 一个网格下面所有服务的变化情况
+message MeshServicesChange {
+    uint32 old_count = 1;
+    uint32 new_count = 2;
+    repeated ChangeMeshService modified_services = 3;
+    repeated ChangeMeshService added_services = 4;
+    repeated ChangeMeshService deleted_services = 5;
+}
+
+// 一个网格下面所有服务的变化情况
+message MeshServicesHistory {
+    // 版本号变更
+    repeated RevisionHistory revision = 1;
+}
+
+// 一个网格服务的版本变化情况
+message SingleMeshServiceHistory {
+    string mesh_namespace = 1;
+    string mesh_service = 2;
+    repeated RevisionHistory revision = 3;
+    bool mesh_service_deleted = 4;
+}
+
+//路由变更历史
+message RoutingHistory {
+    //版本号变更
+    repeated RevisionHistory revision = 1;
+}
+
+//一个实例信息
+message ChangeInstance {
+    string vpc_id = 1;
+    string host = 2;
+    uint32 port = 3;
+    string info = 4;
+}
+
+//实例信息的变化情况
+message InstancesChange {
+    uint32 old_count = 1;
+    uint32 new_count = 2;
+    repeated ChangeInstance modified_instances = 3;
+    repeated ChangeInstance added_instances = 4;
+    repeated ChangeInstance deleted_instances = 5;
+}
+
+//实例变更历史
+message InstancesHistory {
+    //版本号变更
+    repeated RevisionHistory revision = 1;
+}
+
+//一个单独限流规则（具备一个ruleId）的变更历史
+message SingleRateLimitRuleHistory {
+    string rule_id = 1;
+    repeated RevisionHistory revision = 2;
+}
+
+//限流规则（各个单独限流规则的汇总）变更历史
+message RateLimitHistory {
+    //版本号变更
+    repeated RevisionHistory revision = 1;
+}
+
+//上报的服务信息
+message ServiceInfo {
+    //该条记录的唯一id
+    string id = 1;
+    //sdk标识
+    SDKToken sdk_token = 2;
+    string namespace = 3;
+    string service = 4;
+    //服务实例的版本变化
+    InstancesHistory instances_history = 5;
+    //服务的实例数据已从sdk中删除（过期淘汰或者server删除了）
+    bool instance_eliminated = 6;
+    //该服务对应的路由变化情况
+    RoutingHistory routing_history = 7;
+    //服务的路由数据已从sdk中删除（过期淘汰或者server删除了）
+    bool routing_eliminated = 8;
+    //服务对应的限流规则版本
+    RateLimitHistory rate_limit_history = 9;
+    //各个单独限流规则的版本变更历史
+    repeated SingleRateLimitRuleHistory single_rate_limit_histories = 10;
+    //服务的限流规则数据已从sdk中删除（过期淘汰或者server删除了）
+    bool rate_limit_eliminated = 11;
+}
+
+//单个网格规则的版本变更记录
+message SingleMeshResourceRuleHistory {
+    string name = 1;
+    repeated RevisionHistory revision = 2;
+    bool mesh_resource_deleted = 3;
+}
+
+//网格规则的版本变更记录
+message MeshResourceInfo {
+    string id = 1;
+    //sdk标识
+    SDKToken sdk_token = 2;
+    string mesh_id = 3;
+    string type_url = 4;
+    //整个规则集体的版本号变更
+    repeated RevisionHistory revision = 5;
+    //整个规则是否被删除
+    bool mesh_config_deleted = 6;
+    //各个单个规则的版本变更历史
+    repeated SingleMeshResourceRuleHistory single_mesh_resource_history = 7;
+}
+
+//网格服务的版本变更记录
+message MeshInfo {
+    string id = 1;
+    //sdk标识
+    SDKToken sdk_token = 2;
+    string mesh_id = 3;
+    //整个订阅服务集体的版本号变更
+    repeated RevisionHistory revision = 4;
+    //整个网格是否被删除
+    bool mesh_deleted = 5;
+    //网格服务的版本变化
+    MeshServicesHistory mesh_services_history = 6;
+    //各个单个规则的版本变更历史
+    repeated SingleMeshServiceHistory single_mesh_service_history = 7;
+}
+

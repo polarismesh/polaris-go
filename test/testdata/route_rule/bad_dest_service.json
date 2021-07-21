@@ -1,0 +1,31 @@
+{
+  "service": "bad_dest_service",
+  "namespace": "namespace1",
+  "outbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*"
+        }
+      ],
+      "destinations": [
+        {
+          "service": "bad_dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "version": {
+              "value": "v2"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0292112f9f9843f702"
+}

@@ -1,0 +1,56 @@
+{
+  "service": "dest_service",
+  "namespace": "namespace1",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "*"
+        }
+      ],
+      "destinations": [
+        {
+          "service": "dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "version": {
+              "value": "v2"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        },
+        {
+          "service": "dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "version": {
+              "value": "v2"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        },
+        {
+          "service": "dest_service",
+          "namespace": "namespace1",
+          "metadata": {
+            "logic_set": {
+              "type" : 1,
+              "value": "set2"
+            }
+          },
+          "priority": 1,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0292112f9f9843f702"
+}

@@ -1,0 +1,100 @@
+{
+  "rules": [
+    {
+      "id": "rc0001",
+      "service": "RuleChangeTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "disable"
+        }
+      },
+      "resource": "QPS",
+      "type": "LOCAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ]
+    },
+    {
+      "id": "rc0002",
+      "service": "RuleChangeTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "amountChange"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    },
+    {
+      "id": "rc0003",
+      "service": "RuleChangeTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "labelChange"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    },
+    {
+      "id": "rc0004",
+      "service": "RuleChangeTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "ruleDeleted"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
+    }
+  ]
+}

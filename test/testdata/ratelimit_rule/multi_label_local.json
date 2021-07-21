@@ -1,0 +1,97 @@
+{
+    "rules": [
+      {
+        "id": "ml1111",
+        "service": "testRateLimitLocalSvc",
+        "namespace": "Test",
+        "labels": {
+          "operation": {
+            "type": "EXACT",
+            "value": "query"
+          },
+          "user": {
+            "type": "REGEX",
+            "value": "xx*"
+          }
+        },
+        "resource": "QPS",
+        "type": "LOCAL",
+        "action": "reject",
+        "amounts": [
+          {
+            "maxAmount": 100,
+            "validDuration": "1s"
+          },
+          {
+            "maxAmount": 500,
+            "validDuration": "30s"
+          }
+        ],
+        "report": {
+          "interval": "100ms"
+        },
+        "ctime": "2020-4-7 16:47:14",
+        "mtime": "2020-4-7 16:47:14",
+        "revision": "k8dc47b4b5954b0292112f9f9843f701"
+      },
+      {
+        "id": "ml2222",
+        "service": "testRateLimitLocalSvc",
+        "namespace": "Test",
+        "labels": {
+          "operation": {
+            "type": "EXACT",
+            "value": "write"
+          },
+          "user": {
+            "type": "REGEX",
+            "value": "yy*"
+          }
+        },
+        "resource": "QPS",
+        "type": "LOCAL",
+        "action": "reject",
+        "amounts": [
+          {
+            "maxAmount": 200,
+            "validDuration": "1s"
+          },
+          {
+            "maxAmount": 1000,
+            "validDuration": "30s"
+          }
+        ],
+        "report": {
+          "interval": "100ms"
+        },
+        "ctime": "2020-4-7 16:47:14",
+        "mtime": "2020-4-7 16:47:14",
+        "revision": "68dc47b4b5954b0292112f9f9843f702"
+      },
+      {
+        "id": "ml3333",
+        "service": "testRateLimitLocalSvc",
+        "namespace": "Test",
+        "resource": "QPS",
+        "type": "LOCAL",
+        "action": "reject",
+        "amounts": [
+          {
+            "maxAmount": 500,
+            "validDuration": "1s"
+          },
+          {
+            "maxAmount": 2000,
+            "validDuration": "30s"
+          }
+        ],
+        "report": {
+          "interval": "100ms"
+        },
+        "ctime": "2020-4-7 16:47:14",
+        "mtime": "2020-4-7 16:47:14",
+        "revision": "68dc47b485954b0292112f9f9843f703"
+      }
+    ],
+  "revision": "50dc47b4b5954b0212112f9f9863f702"
+}

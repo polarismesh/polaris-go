@@ -1,0 +1,36 @@
+{
+    "code": 200000,
+    "info": "execute success",
+    "type": "ROUTING",
+    "service": {
+        "name": "polaris.healthcheck",
+        "namespace": "Polaris",
+        "revision": "1E04F934407DDFD409FACE"
+    },
+    "routing": {
+        "service": "polaris.healthcheck",
+        "namespace": "Polaris",
+        "inbounds": [
+            {
+                "sources": [
+                    {
+                        "service": "*",
+                        "namespace": "*"
+                    }
+                ],
+                "destinations": [
+                    {
+                        "service": "polaris.healthcheck",
+                        "namespace": "Polaris",
+                        "metadata": {
+                            "protocol": {
+                                "value": "grpc"
+                            }
+                        },
+                        "weight": 200
+                    }
+                ]
+            }
+        ]
+    }
+}

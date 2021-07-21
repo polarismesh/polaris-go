@@ -1,0 +1,1162 @@
+{
+  "code": 200000,
+  "info": "execute success",
+  "type": "INSTANCE",
+  "service": {
+    "name": "defTestService",
+    "namespace": "defTest",
+    "revision": "A9A420CE"
+  },
+  "instances": [
+    {
+      "id": "e11de675-5f47-477e-b17d-75c248ad65ff",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1024,
+      "weight": 545,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "657398a1-7363-4441-aeb1-3c89dd579d27",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1025,
+      "weight": 69,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "",
+        "zone": "",
+        "campus": ""
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "982cd294-9270-434f-8586-23ecae1ca224",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1026,
+      "weight": 450,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "d81b38c6-f267-4e22-934c-9c30a677e461",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1027,
+      "weight": 489,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "d4851f35-db6a-4115-a3a6-01f6cfa19f04",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1028,
+      "weight": 790,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "73ed680b-1edb-4276-bf9c-beac98ca16f7",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1029,
+      "weight": 353,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "f8fe5ba2-c913-4af9-8b35-e084ea465403",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1030,
+      "weight": 899,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "1"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "565df7ef-5ec0-4747-878e-c02f1fcbeb33",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1031,
+      "weight": 630,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "1"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "b8b1e312-88e6-452e-b8b2-4bae3fbe7eb0",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1032,
+      "weight": 943,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "c4c4a9f5-dff8-42e2-8e14-b614a66be611",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1033,
+      "weight": 204,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "de06eef5-b5b4-404a-a4f0-405407747e59",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1034,
+      "weight": 609,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "e76e4301-af0d-4823-a220-8aeed2686c98",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1035,
+      "weight": 965,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "c4fd66dd-6639-4442-aad7-1d77f57536cb",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1036,
+      "weight": 621,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "6361c226-a9e4-4a6b-9d99-d02b9f819713",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1037,
+      "weight": 864,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "3"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "46a2813d-f4c5-4756-8f52-8953a373f81b",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1038,
+      "weight": 623,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "2b01e153-582d-4347-a499-33961d3c3a26",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1039,
+      "weight": 333,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "f30cbbc0-680b-47fb-bd3b-90de80d6a1c7",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1040,
+      "weight": 565,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "fe15a32e-1f1d-4571-b169-fd50c6a6e71e",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1041,
+      "weight": 325,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "",
+        "zone": "",
+        "campus": ""
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "463fe6af-bc47-4545-b7f3-11c46627bb4a",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1042,
+      "weight": 398,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "75440cf8-dad8-4e6b-8c40-797b52813d07",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1043,
+      "weight": 555,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "18cc139b-0c40-4cc4-8c3b-a4bb50b3e831",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1044,
+      "weight": 354,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "071e20d1-08eb-4432-ace9-70eb63a499b4",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1045,
+      "weight": 326,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "1"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "b552c449-858c-4253-a4a5-9510c8db2a36",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1046,
+      "weight": 723,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "1"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "f67a7db6-270d-4f50-9ad7-0bc146fc803c",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1047,
+      "weight": 598,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "4852a4bf-decc-447f-b196-ec357da45047",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1048,
+      "weight": 878,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "9717de3a-0654-4759-b126-dad80fde8a46",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1049,
+      "weight": 93,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "8a072c3d-10d8-4106-a52c-53f7f6661e7e",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1050,
+      "weight": 507,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "48f172ff-2f31-473d-849e-c6724191264a",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1051,
+      "weight": 438,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "19303037-b4c4-479f-aa2e-63e90e35a1e2",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1052,
+      "weight": 207,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "6c6a11dd-a6ce-4fcb-8b9e-54440b0a208a",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1053,
+      "weight": 277,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "48b7d23d-80fd-49ed-8a84-5277ebd57d16",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1054,
+      "weight": 987,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "ea7c75da-41ef-4be3-9345-8fbec4a981b9",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1055,
+      "weight": 39,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "78ec44df-5387-4bbf-9af5-08da8f7ef66e",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1056,
+      "weight": 480,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "",
+        "zone": "",
+        "campus": ""
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "b2dac0db-4e57-4eb5-bb1a-af2e936336a6",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1057,
+      "weight": 39,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "00cf0032-91d6-48d8-bd0b-be9a47699e97",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1058,
+      "weight": 461,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "b269f21c-53dc-4cc7-9f79-d5d584902887",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1059,
+      "weight": 623,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "ecab6a0b-5ae8-4e5a-81b3-f8e7e8bc87ac",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1060,
+      "weight": 426,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "e80195d5-e0d7-4d5b-8511-ea22aed5ab23",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1061,
+      "weight": 157,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "d694f331-3169-4135-adf9-0f320efe899a",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1062,
+      "weight": 133,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "6be378ca-1f6a-4f42-88f5-5f899a18e71a",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1063,
+      "weight": 534,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "1483caca-5232-433c-aa57-bcb6069091f7",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1064,
+      "weight": 790,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "",
+        "zone": "",
+        "campus": ""
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "79958dba-82d1-47ce-83a9-5cfee693558f",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1065,
+      "weight": 537,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "6"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "13fde296-0d25-4297-a784-79ba7ab10fcd",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1066,
+      "weight": 717,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "1090acb8-6510-4722-abb8-db0dc2763408",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1067,
+      "weight": 637,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "5"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "0709f6c0-c2c5-4cbd-85f8-f59a978b936c",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1068,
+      "weight": 250,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "e16d5baf-e41f-48d2-9b12-4bb6828c5b4c",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1069,
+      "weight": 48,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "7f937476-ce72-4d78-9540-53a42128df21",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1070,
+      "weight": 64,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "2"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "c47f924f-7b12-415f-bed4-10e986d31435",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1071,
+      "weight": 26,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "b",
+        "campus": "3"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "f8041200-21e0-465b-9a00-c9acbc82c046",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1072,
+      "weight": 197,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "1"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    },
+    {
+      "id": "df410842-3e4a-4cbe-b672-5a0559fad677",
+      "service": "defTestService",
+      "namespace": "defTest",
+      "host": "127.0.0.9",
+      "port": 1073,
+      "weight": 872,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "d",
+        "campus": "7"
+      },
+      "metadata": {
+        "logic_set": "set2"
+      }
+    }
+  ]
+}

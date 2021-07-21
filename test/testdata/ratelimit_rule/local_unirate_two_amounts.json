@@ -1,0 +1,35 @@
+{
+  "rules": [
+    {
+      "id": "1",
+      "service": "testRateLimitLocalSvc",
+      "namespace": "Test",
+      "labels": {
+        "rateLimiter": {
+          "type": "EXACT",
+          "value": "uniRate"
+        }
+      },
+      "resource": "QPS",
+      "type": "LOCAL",
+      "action": "unirate",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "2s"
+        },
+        {
+          "maxAmount": 1200,
+          "validDuration": "1m"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "08dc47b4b5954b0292112f9f9843f701"
+    }
+  ],
+  "revision": "v8dc47b4b5954b0212112f9f9863f701"
+}

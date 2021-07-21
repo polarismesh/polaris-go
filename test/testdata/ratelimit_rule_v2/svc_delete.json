@@ -1,0 +1,25 @@
+{
+  "rules": [
+    {
+      "id": "sd0001",
+      "service": "ServiceDeleteTestSvcV2",
+      "namespace": "Test",
+      "labels": {
+        "method": {
+          "type": "EXACT",
+          "value": "svcDeleted"
+        }
+      },
+      "resource": "QPS",
+      "type": "LOCAL",
+      "action": "reject",
+      "amount_mode": "GLOBAL_TOTAL",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
+        }
+      ]
+    }
+  ]
+}

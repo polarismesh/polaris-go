@@ -1,0 +1,78 @@
+{
+  "code": 200000,
+  "info": "execute success",
+  "type": "INSTANCE",
+  "service": {
+    "name": "TestCacheFile",
+    "namespace": "Test",
+    "revision": "A9A420CE"
+  },
+  "instances": [
+    {
+      "id": "e11de675-5f47-477e-b17d-75c248ad65ff",
+      "service": "TestCacheFile",
+      "namespace": "Test",
+      "host": "127.0.0.1",
+      "port": 1024,
+      "weight": 545,
+      "isolate":false,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata":{"protocol":"grpc"}
+    },
+    {
+      "id": "e11de675-5f47-477e-b17d-75c248ad65ff",
+      "service": "TestCacheFile",
+      "namespace": "Test",
+      "host": "127.0.0.1",
+      "port": 1025,
+      "weight": 545,
+      "isolate":false,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "B",
+        "zone": "c",
+        "campus": "4"
+      },
+      "metadata":{"protocol":"http"}
+    },
+    {
+      "id": "e11de675-5f47-477e-b17d-75c248ad65ff",
+      "service": "TestCacheFile",
+      "namespace": "Test",
+      "host": "127.0.0.1",
+      "port": 1025,
+      "weight": 545,
+      "isolate":false,
+      "healthCheck": {
+        "type": "HEARTBEAT",
+        "heartbeat": {
+          "ttl": 3
+        }
+      },
+      "healthy": true,
+      "location": {
+        "region": "A",
+        "zone": "a",
+        "campus": "0"
+      },
+      "metadata":{"protocol":"http"}
+    }
+  ]
+}

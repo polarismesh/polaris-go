@@ -1,0 +1,65 @@
+{
+  "service": "bioService",
+  "namespace": "Production",
+  "inbounds": [
+    {
+      "sources": [
+        {
+          "service": "*",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "bioService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "sources": [
+        {
+          "service": "bioService",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          }
+        }
+      ],
+      "destinations": [
+        {
+          "service": "*",
+          "namespace": "Production",
+          "metadata": {
+            "env": {
+              "value": "formal"
+            }
+          },
+          "priority": 0,
+          "weight": 100,
+          "transfer": ""
+        }
+      ]
+    }
+  ],
+  "ctime": "2019-11-13 16:47:14",
+  "mtime": "2019-11-13 16:47:14",
+  "revision": "58dc47b4b5954b0292112f9f9843f702"
+}
