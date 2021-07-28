@@ -58,7 +58,7 @@ func init() {
 	//负载均衡测试
 	Suite(&loadbalance.LBTestingSuite{})
 	//缓存持久化测试
-	Suite(&stability.CacheTestingSuite{})
+	//Suite(&stability.CacheTestingSuite{})
 	//熔断测试
 	Suite(&circuitbreak.CircuitBreakSuite{})
 	// 健康探测测试
