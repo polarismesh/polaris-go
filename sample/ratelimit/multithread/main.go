@@ -19,9 +19,9 @@ package main
 
 import (
 	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/sample/ratelimit/util"
 	"log"
-	"math/rand"
 	"os"
 	"strconv"
 	"sync"
@@ -92,10 +92,10 @@ func main() {
 	if nil != err {
 		log.Fatalf("fail to create limitAPI, err: %v", err)
 	}
-	rand.Seed(time.Now().UnixNano())
+	scalableRand := rand.NewScalableRand()
 	sleepWindow = make([]time.Duration, threadNum)
 	for i := 0; i < threadNum; i++ {
-		factor := rand.Intn(3) + 1
+		factor := scalableRand.Intn(3) + 1
 		sleepWindow[i] = time.Duration(factor)*time.Millisecond + time.Duration(sleepInterval)*time.Millisecond
 	}
 	wg := &sync.WaitGroup{}
