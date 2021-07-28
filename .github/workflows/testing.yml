@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read&write
+  contents: read/write
 
 # Always force the use of Go modules
 env:
