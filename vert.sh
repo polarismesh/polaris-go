@@ -56,7 +56,7 @@ git grep -l 'x/net/context' -- "*.go" | not grep -v ".pb.go"
 
 # - Do not import math/rand for real library code.  Use internal/grpcrand for
 #   thread safety.
-git grep -l '"math/rand"' -- "*.go" 2>&1 | not grep -v 'scalable_rand.go|scalable_rand_test.go|^benchmark\|_suite.go'
+git grep -l '"math/rand"' -- "*.go" 2>&1 | not grep -v 'scalable_rand.go\|scalable_rand_test.go\|^benchmark\|_suite.go'
 
 misspell -error .
 
@@ -69,7 +69,7 @@ for MOD_FILE in $(find . -name 'go.mod'); do
   go vet -all ./... | fail_on_output
   gofmt -s -d -l . 2>&1 | fail_on_output
   goimports -l . 2>&1 | not grep -vE "\.pb\.go"
-  golint ./... 2>&1 | not grep -vE "/testv3\.pb\.go:"
+  golint ./... 2>&1 | not grep -vE "\.pb\.go"
 
   go mod tidy
   git status --porcelain 2>&1 | fail_on_output || \
