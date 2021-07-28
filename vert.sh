@@ -46,7 +46,7 @@ elif [[ "$#" -ne 0 ]]; then
 fi
 
 # - Ensure all source files contain a copyright message.
-not git grep -L "\(Copyright \\(C\\) [0-9]\{4,\} THL A29 Limited, a Tencent company. All rights reserved.\)\|DO NOT EDIT" -- '*.go'
+not git grep -L "\(Copyright (C) [0-9]\{4,\} THL A29 Limited, a Tencent company. All rights reserved.\)\|DO NOT EDIT" -- '*.go'
 
 # - Make sure all tests in grpc and grpc/test use leakcheck via Teardown.
 not grep 'func Test[^(]' *_test.go
