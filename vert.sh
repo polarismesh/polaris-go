@@ -20,7 +20,7 @@ fail_on_output() {
 }
 
 # Check to make sure it's safe to modify the user's git repo.
-#git status --porcelain | fail_on_output
+git status --porcelain | fail_on_output
 
 # Undo any edits made by this script.
 cleanup() {
@@ -52,11 +52,11 @@ not git grep -L "\(Copyright (C) [0-9]\{4,\} THL A29 Limited, a Tencent company.
 not grep -r 'func Test[^(]' test/*.go
 
 # - Do not import x/net/context.
-git grep -l 'x/net/context' -- "*.go" | not grep -v "*.pb.go"
+git grep -l 'x/net/context' -- "*.go" | not grep -v ".pb.go"
 
 # - Do not import math/rand for real library code.  Use internal/grpcrand for
 #   thread safety.
-git grep -l '"math/rand"' -- "*.go" 2>&1 | not grep -v '^scalable_rand\|^benchmark\|*_suite.go'
+git grep -l '"math/rand"' -- "*.go" 2>&1 | not grep -v 'scalable_rand.go|scalable_rand_test.go|^benchmark\|_suite.go'
 
 misspell -error .
 
