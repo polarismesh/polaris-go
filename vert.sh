@@ -15,7 +15,6 @@ die() {
   exit 1
 }
 
-
 fail_on_output() {
   tee /dev/stderr | not read
 }
