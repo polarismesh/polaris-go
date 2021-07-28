@@ -29,5 +29,5 @@ jobs:
       - name: run tests
         run: |
           cd ./test
-          go mod test -timeout=50m
+          go test -timeout=50m
 
