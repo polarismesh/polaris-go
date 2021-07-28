@@ -92,11 +92,11 @@ func init() {
 	//基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
 	//基础远程限流用例测试
-	Suite(&ratelimit.RemoteNormalTestingSuite{})
+	//Suite(&ratelimit.RemoteNormalTestingSuite{})
 	//限流超时淘汰用例测试
-	Suite(&ratelimit.WindowExpireTestingSuite{})
+	//Suite(&ratelimit.WindowExpireTestingSuite{})
 	//限流规则变更用例测试
-	Suite(&ratelimit.RuleChangeTestingSuite{})
+	//Suite(&ratelimit.RuleChangeTestingSuite{})
 	//限流网络异常用例
-	Suite(&ratelimit.NetworkFailTestingSuite{})
+	//Suite(&ratelimit.NetworkFailTestingSuite{})
 }
