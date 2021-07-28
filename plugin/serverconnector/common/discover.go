@@ -20,25 +20,25 @@ package common
 import (
 	"context"
 	"fmt"
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/modern-go/reflect2"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	"github.com/golang/protobuf/ptypes/wrappers"
 )
 
 const (
@@ -59,8 +59,7 @@ const (
 )
 
 var (
-	randSeed = rand.New(rand.NewSource(time.Now().UnixNano()))
-	mu       sync.Mutex
+	mu sync.Mutex
 )
 
 //Connector cl5服务端代理，使用GRPC协议对接
@@ -89,6 +88,7 @@ type DiscoverConnector struct {
 	queueSize          int32
 	//创建具体调度客户端的逻辑
 	createClient DiscoverClientCreator
+	scalableRand *rand.ScalableRand
 }
 
 //任务对象，用于在connector协程中做轮转处理
@@ -101,6 +101,7 @@ type clientTask struct {
 func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverClientCreator) {
 	ctxConfig := ctx.Config
 	g.RunContext = common.NewRunContext()
+	g.scalableRand = rand.NewScalableRand()
 	g.discoverKey.Namespace = ctxConfig.GetGlobal().GetSystem().GetDiscoverCluster().GetNamespace()
 	g.discoverKey.Service = ctxConfig.GetGlobal().GetSystem().GetDiscoverCluster().GetService()
 	g.valueCtx = ctx.ValueCtx
@@ -927,7 +928,7 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	updateTask.Type = svcEventHandler.Type
 	//增加随机秒数[0~3)，为了让更新不要聚集
 	mu.Lock()
-	diffSecond := randSeed.Intn(3)
+	diffSecond := g.scalableRand.Intn(3)
 	mu.Unlock()
 	updateTask.updateInterval = svcEventHandler.RefreshInterval + (time.Duration(diffSecond) * time.Second)
 	log.GetBaseLogger().Debugf(

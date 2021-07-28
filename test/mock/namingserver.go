@@ -22,15 +22,15 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"io"
 	log2 "log"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -194,6 +194,7 @@ type namingServer struct {
 	mesh                  map[model.ServiceKey]*namingpb.MeshConfig
 	meshs                 map[model.ServiceKey]*namingpb.Mesh
 	notRegisterAssistant  bool
+	scalableRand          *rand.ScalableRand
 }
 
 //创建NamingServer模拟桩
@@ -1150,7 +1151,7 @@ func (n *namingServer) DeRegisterMeshConfig(svc *namingpb.Service, meshId string
 	defer n.rwMutex.Unlock()
 	key := model.ServiceKey{
 		Namespace: svc.Namespace.GetValue(),
-		Service:   model.MeshPrefix + meshId+ mtype,
+		Service:   model.MeshPrefix + meshId + mtype,
 	}
 	if _, exist := n.mesh[key]; !exist {
 		log2.Printf("delete mesh but not exist: %v", key)
@@ -1198,7 +1199,6 @@ func (n *namingServer) genTestInstancesByMeta(
 		{"6", "d", "B"},
 		{"7", "d", "B"},
 	}
-	rand.Seed(time.Now().UnixNano())
 	var instances = make([]*namingpb.Instance, 0, num)
 	h := sha1.New()
 	keys := make([]string, 0, num)
@@ -1268,7 +1268,6 @@ func (n *namingServer) GenInstancesWithStatus(svc *namingpb.Service, num int, st
 	if IsolatedStatus == st {
 		isolated = true
 	}
-	rand.Seed(time.Now().UnixNano())
 	h := sha1.New()
 	var instances = make([]*namingpb.Instance, 0, num)
 	for i := 0; i < num; i++ {
@@ -1282,7 +1281,7 @@ func (n *namingServer) GenInstancesWithStatus(svc *namingpb.Service, num int, st
 			Namespace: &wrappers.StringValue{Value: key.Namespace},
 			Host:      &wrappers.StringValue{Value: "127.0.0.9"},
 			Port:      &wrappers.UInt32Value{Value: port},
-			Weight:    &wrappers.UInt32Value{Value: uint32(rand.Intn(999) + 1)},
+			Weight:    &wrappers.UInt32Value{Value: uint32(n.scalableRand.Intn(999) + 1)},
 			Isolate:   &wrappers.BoolValue{Value: isolated},
 			Healthy:   &wrappers.BoolValue{Value: healthy},
 			HealthCheck: &namingpb.HealthCheck{

@@ -1,3 +1,5 @@
+// +build tools
+
 /**
  * Tencent is pleased to support the open source community by making polaris-go available.
  *

@@ -771,7 +771,8 @@ func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 		go func(idx int) {
 			log.Printf("start discover worker %d", idx)
 			defer wg.Done()
-			timeoutCtx, _ := context.WithTimeout(context.Background(), timeout)
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
 			for {
 				select {
 				case <-timeoutCtx.Done():

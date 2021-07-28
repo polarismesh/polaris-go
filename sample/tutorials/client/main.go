@@ -43,7 +43,7 @@ func main() {
 	var requestNum int
 	requestNum, err = strconv.Atoi(argsWithoutProg[2])
 	if err != nil {
-		log.Fatalf("fail to convert requestNum %s to int, err: %v", argsWithoutProg[0])
+		log.Fatalf("fail to convert requestNum %s to int, err: %v", argsWithoutProg[0], err)
 	}
 	if requestNum <= 0 {
 		log.Fatalf("requestNum must be greater than 0, which is %d now", requestNum)
