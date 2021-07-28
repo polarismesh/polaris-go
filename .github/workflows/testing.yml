@@ -23,8 +23,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v2
     
-      - name: check dir
-        run: ls -al
       - name: vert check
-        run: ./vet.sh -install && ./vet.sh
+        run: ./vert.sh -install && ./vert.sh
 
