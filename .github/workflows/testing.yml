@@ -1,0 +1,28 @@
+name: Go
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Always force the use of Go modules
+env:
+  GO111MODULE: on
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Setup the environment.
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+      - name: Checkout repo
+        uses: actions/checkout@v2
+    
+      - name: vert check
+        run: chmod +x vert.sh && ./vert.sh -install && ./vert.sh
+
