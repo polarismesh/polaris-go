@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"strconv"
 	"time"
 )
 
@@ -130,7 +131,7 @@ func (r *RateLimitConfigImpl) GetRateLimitCluster() ServerClusterConfig {
 func (r *RateLimitConfigImpl) Init() {
 	r.Plugin = PluginConfigs{}
 	r.Plugin.Init(common.TypeRateLimiter)
-	r.Mode = string(model.ConfigQuotaGlobalMode)
+	r.Mode = strconv.Itoa(int(model.ConfigQuotaGlobalMode))
 	r.RateLimitCluster = &ServerClusterConfigImpl{
 		Namespace: "",
 		Service:   "",

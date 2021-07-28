@@ -24,7 +24,6 @@ import (
 	"github.com/polarismesh/polaris-go/test/observability"
 	"github.com/polarismesh/polaris-go/test/ratelimit"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
-	"github.com/polarismesh/polaris-go/test/sidecar"
 	"github.com/polarismesh/polaris-go/test/stability"
 	"github.com/polarismesh/polaris-go/test/subscribe"
 	"log"
@@ -54,8 +53,6 @@ func init() {
 	Suite(&stability.SDKContextDestroySuite{})
 	//consumer api测试
 	Suite(&discover.ConsumerTestingSuite{})
-	//consumer meshconfig测试
-	Suite(&discover.ConsumerMeshTestingSuite{})
 	//provider api 测试
 	Suite(&discover.ProviderTestingSuite{})
 	//负载均衡测试
@@ -86,10 +83,6 @@ func init() {
 	Suite(&serviceroute.SetDivisionTestingSuite{})
 	//server异常调用测试
 	Suite(&stability.ServerFailOverSuite{})
-	//dns协议测试
-	Suite(&sidecar.DnsProtoSuit{})
-	//sidecar client测试
-	Suite(&sidecar.SideCarClientSuit{})
 	//消息订阅 测试
 	Suite(&subscribe.EventSubscribeSuit{})
 	//金丝雀路由测试
