@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 # Always force the use of Go modules
 env:
   GO111MODULE: on

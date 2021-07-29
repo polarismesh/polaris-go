@@ -58,7 +58,7 @@ func init() {
 	//负载均衡测试
 	Suite(&loadbalance.LBTestingSuite{})
 	//缓存持久化测试
-	Suite(&stability.CacheTestingSuite{})
+	//Suite(&stability.CacheTestingSuite{})
 	//熔断测试
 	Suite(&circuitbreak.CircuitBreakSuite{})
 	// 健康探测测试
@@ -92,11 +92,11 @@ func init() {
 	//基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
 	//基础远程限流用例测试
-	Suite(&ratelimit.RemoteNormalTestingSuite{})
+	//Suite(&ratelimit.RemoteNormalTestingSuite{})
 	//限流超时淘汰用例测试
-	Suite(&ratelimit.WindowExpireTestingSuite{})
+	//Suite(&ratelimit.WindowExpireTestingSuite{})
 	//限流规则变更用例测试
-	Suite(&ratelimit.RuleChangeTestingSuite{})
+	//Suite(&ratelimit.RuleChangeTestingSuite{})
 	//限流网络异常用例
-	Suite(&ratelimit.NetworkFailTestingSuite{})
+	//Suite(&ratelimit.NetworkFailTestingSuite{})
 }

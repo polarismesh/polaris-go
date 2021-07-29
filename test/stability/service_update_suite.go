@@ -359,11 +359,9 @@ func batchGetServices(c *check.C, consumerAPI api.ConsumerAPI) {
 			hasError := false
 			svcName := fmt.Sprintf(batchSvcName, idx)
 			request := &api.GetOneInstanceRequest{}
-			startTime := time.Now()
 			request.Namespace = svcUpdateNamespace
 			request.Service = svcName
 			_, err := consumerAPI.GetOneInstance(request)
-			log.Printf("%s, consumed time: %v", svcName, time.Now().Sub(startTime))
 			if nil != err {
 				hasError = true
 				log.Printf("error on service %s:%s, detail: %v", request.Namespace, request.Service, err)

@@ -203,6 +203,7 @@ func NewNamingServer() NamingServer {
 	//
 	//
 	ns := &namingServer{
+		scalableRand:      rand.NewScalableRand(),
 		svcInstances:      make(map[model.ServiceKey][]*namingpb.Instance, 0),
 		namespaces:        make(map[string]*namingpb.Namespace, 0),
 		services:          make(map[string]*namingpb.Service, 0),
