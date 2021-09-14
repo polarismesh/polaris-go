@@ -210,8 +210,6 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 					response, err := consumerAPI.GetInstances(request)
 					c.Assert(err, check.IsNil)
 					instances = response.Instances
-					instancesCount := len(instances)
-					log.Printf("instances count %d", instancesCount)
 					time.Sleep(1 * time.Second)
 				}
 			}

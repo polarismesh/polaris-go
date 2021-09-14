@@ -19,7 +19,7 @@ package version
 
 var (
 	//当前版本号
-	Version = "0.9.0"
+	Version = "v1.0.0-alpha.0"
 	//客户端类型
 	ClientType = "polaris-go"
 )

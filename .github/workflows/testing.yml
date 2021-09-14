@@ -23,14 +23,18 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.15
+      # Checkout latest code
       - name: Checkout repo
         uses: actions/checkout@v2
-    
+
+      # Execute vert check
       - name: vert check
         run: bash vert.sh -install && bash vert.sh
-        
+
+      # Run tests
       - name: run tests
         run: |
           cd ./test
           go test -timeout=50m
 
+      # TODO: Examine coverage
