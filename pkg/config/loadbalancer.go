@@ -18,7 +18,6 @@
 package config
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
@@ -72,21 +71,3 @@ func (l *LoadBalancerConfigImpl) Init() {
 	l.Plugin = PluginConfigs{}
 	l.Plugin.Init(common.TypeLoadBalancer)
 }
-
-//获取该域下所有插件的名字
-func (l *LoadBalancerConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	nameMap.Add(l.Type)
-	for _, v := range DefaultServerServiceToLoadBalancer {
-		nameMap.Add(v)
-	}
-	return nameMap
-}
-
-////为每个负载均衡插件设置空的配置项
-//func (l *LoadBalancerConfigImpl) CreateDefaultPluginCfg() {
-//	if nil == l.Plugin {
-//		l.Plugin = make(map[string]map[string]interface{})
-//	}
-//	createEmptyCfgForChainedPlug([]string{l.Type, DefaultLoadBalancerRingHash}, l.Plugin)
-//}

@@ -18,7 +18,6 @@
 package config
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
@@ -54,11 +53,6 @@ func (s *SubscribeImpl) SetType(typeStr string) {
 //获取插件
 func (s *SubscribeImpl) GetType() string {
 	return s.Type
-}
-
-//GetPluginNames
-func (s *SubscribeImpl) GetPluginNames() model.HashSet {
-	return nil
 }
 
 //GetPluginConfig

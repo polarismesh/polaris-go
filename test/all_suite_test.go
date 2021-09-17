@@ -62,7 +62,9 @@ func init() {
 	//熔断测试
 	Suite(&circuitbreak.CircuitBreakSuite{})
 	// 健康探测测试
-	Suite(&circuitbreak.OutlierDetectionTestingSuite{})
+	Suite(&circuitbreak.HealthCheckTestingSuite{})
+	// 持久探测测试
+	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
 	//就近路由接入测试
 	Suite(&serviceroute.NearbyTestingSuite{})
 	//服务定时更新测试

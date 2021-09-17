@@ -26,9 +26,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/pkg/plugin/outlierdetection"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
@@ -61,9 +61,14 @@ func GetRegistry(cfg config.Configuration, supplier plugin.Supplier) (localregis
 func GetCircuitBreakers(
 	cfg config.Configuration, supplier plugin.Supplier) ([]circuitbreaker.InstanceCircuitBreaker, error) {
 	cbChain := cfg.GetConsumer().GetCircuitBreaker().GetChain()
+	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
+	var hasHealthCheckBreaker bool
 	cbreakers := make([]circuitbreaker.InstanceCircuitBreaker, 0, len(cbChain))
 	if len(cbChain) > 0 {
 		for _, cbName := range cbChain {
+			if cbName == config.DefaultCircuitBreakerErrCheck {
+				hasHealthCheckBreaker = true
+			}
 			targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, cbName)
 			if nil != err {
 				return nil, err
@@ -71,24 +76,30 @@ func GetCircuitBreakers(
 			cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
 		}
 	}
+	if when == config.HealthCheckAlways && !hasHealthCheckBreaker {
+		targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, config.DefaultCircuitBreakerErrCheck)
+		if nil != err {
+			return nil, err
+		}
+		cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
+	}
 	return cbreakers, nil
 }
 
 //获取健康探测插件列表
-func GetOutlierDetectionChain(
-	cfg config.Configuration, supplier plugin.Supplier) ([]outlierdetection.OutlierDetector, error) {
-	odChain := cfg.GetConsumer().GetOutlierDetectionConfig().GetChain()
-	odDetections := make([]outlierdetection.OutlierDetector, 0, len(odChain))
-	if len(odChain) > 0 {
-		for _, odName := range odChain {
-			targetPlugin, err := supplier.GetPlugin(common.TypeOutlierDetector, odName)
+func GetHealthCheckers(cfg config.Configuration, supplier plugin.Supplier) ([]healthcheck.HealthChecker, error) {
+	names := cfg.GetConsumer().GetHealthCheck().GetChain()
+	healthCheckers := make([]healthcheck.HealthChecker, 0, len(names))
+	if len(names) > 0 {
+		for _, name := range names {
+			targetPlugin, err := supplier.GetPlugin(common.TypeHealthCheck, name)
 			if nil != err {
 				return nil, err
 			}
-			odDetections = append(odDetections, targetPlugin.(outlierdetection.OutlierDetector))
+			healthCheckers = append(healthCheckers, targetPlugin.(healthcheck.HealthChecker))
 		}
 	}
-	return odDetections, nil
+	return healthCheckers, nil
 }
 
 //获取服务路由插件链

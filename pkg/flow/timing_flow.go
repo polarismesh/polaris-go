@@ -32,7 +32,7 @@ const (
 	taskConfigReport  = "sdkConfigReportTask"
 	taskClientReport  = "clientReportTask"
 	taskServerService = "syncGetServerService"
-	taskOutlierDetect = "outlierDetectTask"
+	taskHealthCheck   = "healthCheckTask"
 )
 
 //调度任务
@@ -52,7 +52,7 @@ func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbc
 		Name:         taskCircuitBreak,
 		CallBack:     callback,
 		TakePriority: true,
-		LongRun:      true,
+		LongRun:      false,
 		Period:       e.configuration.GetConsumer().GetCircuitBreaker().GetCheckPeriod() / 2,
 	})
 	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
@@ -112,17 +112,17 @@ func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 }
 
 //添加客户端主动健康检查任务
-func (e *Engine) addPeriodicOutlierDetectTask() error {
-	callback, err := detect.NewOutlierDetectCallBack(e.configuration, e.plugins)
+func (e *Engine) addHealthCheckTask() error {
+	callback, err := detect.NewHealthCheckCallBack(e.configuration, e.plugins)
 	if nil != err {
 		return err
 	}
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
-		Name:         taskOutlierDetect,
+		Name:         taskHealthCheck,
 		CallBack:     callback,
 		TakePriority: false,
-		LongRun:      true,
-		Period:       e.configuration.GetConsumer().GetOutlierDetectionConfig().GetCheckPeriod() / 2,
+		LongRun:      false,
+		Period:       e.configuration.GetConsumer().GetHealthCheck().GetInterval() / 2,
 	})
 	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
 	//注入服务回调函数

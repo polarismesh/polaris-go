@@ -90,14 +90,14 @@ const (
 	Close Status = 3
 )
 
-// DetectorStatus 健康探测状态
-type DetectorStatus int
+// HealthCheckStatus 健康探测状态
+type HealthCheckStatus int
 
 const (
 	// Healthy 节点探测结果已经恢复健康, 代表可以放开一部分流量
-	Healthy DetectorStatus = 1
+	Healthy HealthCheckStatus = 1
 	// Dead 节点仍然不可用
-	Dead DetectorStatus = 2
+	Dead HealthCheckStatus = 2
 )
 
 //熔断器状态管理器
@@ -126,10 +126,10 @@ type CircuitBreakerStatus interface {
 	AllocatedRequestsAfterHalfOpen() int32
 }
 
-// OutlierDetectorStatus 健康探测管理器
-type OutlierDetectorStatus interface {
-	// GetOutlierDetectorStatus 健康探测结果状态
-	GetStatus() DetectorStatus
+// ActiveDetectStatus 健康探测管理器
+type ActiveDetectStatus interface {
+	// GetStatus 健康探测结果状态
+	GetStatus() HealthCheckStatus
 	// GetStartTime 状态转换的时间
 	GetStartTime() time.Time
 }
@@ -165,9 +165,6 @@ type Instance interface {
 	//实例的断路器状态，包括：
 	//打开（被熔断）、半开（探测恢复）、关闭（正常运行）
 	GetCircuitBreakerStatus() CircuitBreakerStatus
-	// 实例的健康探测状态
-	// Health 健康 Dead 不可达
-	GetOutlierDetectorStatus() OutlierDetectorStatus
 	//实例是否健康，基于服务端返回的健康数据
 	IsHealthy() bool
 	//实例是否已经被手动隔离
@@ -949,9 +946,6 @@ func (i *InstanceHeartbeatRequest) Validate() error {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceHeartbeatRequest can not be nil")
 	}
 	var errs error
-	if len(i.ServiceToken) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest: serviceToken should not be empty"))
-	}
 	if len(i.InstanceID) > 0 {
 		return errs
 	}
@@ -1029,9 +1023,6 @@ func (i *InstanceDeRegisterRequest) Validate() error {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceDeRegisterRequest can not be nil")
 	}
 	var errs error
-	if len(i.ServiceToken) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest: serviceToken should not be empty"))
-	}
 	if len(i.InstanceID) > 0 {
 		return errs
 	}
@@ -1170,9 +1161,6 @@ func (g *InstanceRegisterRequest) Validate() error {
 	var errs error
 	if len(g.Service) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: serviceName should not be empty"))
-	}
-	if len(g.ServiceToken) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: serviceToken should not be empty"))
 	}
 	if len(g.Namespace) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: namespace should not be empty"))

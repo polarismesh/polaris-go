@@ -20,9 +20,8 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/hashicorp/go-multierror"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
 //服务路由配置
@@ -130,27 +129,3 @@ func (s *ServiceRouterConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeServiceRouter)
 }
-
-//获取该域下所有插件的名字
-func (s *ServiceRouterConfigImpl) GetPluginNames() model.HashSet {
-	names := model.HashSet{}
-	for _, name := range s.Chain {
-		names.Add(name)
-	}
-	names.Add(DefaultServiceRouterFilterOnly)
-	for _, v := range DefaultServerServiceRouterChain {
-		names.Add(v)
-	}
-	// 支持兼容 TRPC 路由插件
-	names.Add(DefaultServiceRouterDstMeta)
-	names.Add(DefaultServiceRouterSetDivision)
-	return names
-}
-
-////为不同的路由插件创建属于其自身的空配置
-//func (s *ServiceRouterConfigImpl) CreateDefaultPluginCfg() {
-//	if nil == s.Plugin {
-//		s.Plugin = make(map[string]map[string]interface{})
-//	}
-//	createEmptyCfgForChainedPlug(s.Chain, s.Plugin)
-//}

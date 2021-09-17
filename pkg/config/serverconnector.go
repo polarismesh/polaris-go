@@ -20,10 +20,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/go-multierror"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"time"
 )
 
@@ -45,9 +45,6 @@ type ServerConnectorConfigImpl struct {
 	ServerSwitchInterval *time.Duration `yaml:"serverSwitchInterval" json:"serverSwitchInterval"`
 
 	ReconnectInterval *time.Duration `yaml:"reconnectInterval" json:"reconnectInterval"`
-
-	//接入的埋点集群类型
-	JoinPoint string `yaml:"joinPoint" json:"joinPoint"`
 
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
@@ -204,13 +201,6 @@ func (s *ServerConnectorConfigImpl) SetDefault() {
 	if len(s.Protocol) == 0 {
 		s.Protocol = DefaultServerConnector
 	}
-	if len(s.Addresses) == 0 {
-		if s.JoinPoint == "" {
-			s.Addresses = getDefaultBuiltinServers(JoinPointMainland)
-		} else {
-			s.Addresses = getDefaultBuiltinServers(s.JoinPoint)
-		}
-	}
 	s.Plugin.SetDefault(common.TypeServerConnector)
 }
 
@@ -219,29 +209,3 @@ func (s *ServerConnectorConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeServerConnector)
 }
-
-//获取该域下所有插件的名字
-func (s *ServerConnectorConfigImpl) GetPluginNames() model.HashSet {
-	names := model.HashSet{}
-	names.Add(s.Protocol)
-	return names
-}
-
-//埋点集群类型
-func (s *ServerConnectorConfigImpl) GetJoinPoint() string {
-	return s.JoinPoint
-}
-
-//设置埋点集群类型
-func (s *ServerConnectorConfigImpl) SetJoinPoint(joinPoint string) {
-	s.JoinPoint = joinPoint
-	s.Addresses = getDefaultBuiltinServers(s.JoinPoint)
-}
-
-////创建空的默认插件配置
-//func (s *ServerConnectorConfigImpl) CreateDefaultPluginCfg() {
-//	if nil == s.Plugin {
-//		s.Plugin = make(map[string]map[string]interface{})
-//	}
-//	createEmptyCfgForChainedPlug([]string{s.Protocol}, s.Plugin)
-//}

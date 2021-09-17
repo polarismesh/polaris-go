@@ -19,7 +19,6 @@ package config
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -49,36 +48,12 @@ func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 	return c.Provider
 }
 
-//获取该域下所有插件的名字
-func (c *ConfigurationImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	memberArr := []PluginAwareBaseConfig{c.Global, c.Consumer, c.Provider}
-	for _, member := range memberArr {
-		for k := range member.GetPluginNames() {
-			nameMap.Add(k)
-		}
-	}
-	return nameMap
-}
-
 // 全局配置
 type GlobalConfigImpl struct {
 	System          *SystemConfigImpl          `yaml:"system" json:"system"`
 	API             *APIConfigImpl             `yaml:"api" json:"api"`
 	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector" json:"serverConnector"`
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
-}
-
-//获取该域下所有插件的名字
-func (g *GlobalConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	memberArr := []PluginAwareBaseConfig{g.ServerConnector, g.StatReporter}
-	for _, member := range memberArr {
-		for k := range member.GetPluginNames() {
-			nameMap.Add(k)
-		}
-	}
-	return nameMap
 }
 
 //获取系统配置
@@ -103,13 +78,13 @@ func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 
 // 消费者配置
 type ConsumerConfigImpl struct {
-	LocalCache       *LocalCacheConfigImpl       `yaml:"localCache" json:"localCache"`
-	ServiceRouter    *ServiceRouterConfigImpl    `yaml:"serviceRouter" json:"serviceRouter"`
-	Loadbalancer     *LoadBalancerConfigImpl     `yaml:"loadbalancer" json:"loadbalancer"`
-	CircuitBreaker   *CircuitBreakerConfigImpl   `yaml:"circuitBreaker" json:"circuitBreaker"`
-	OutlierDetection *OutlierDetectionConfigImpl `yaml:"outlierDetection" json:"outlierDetection"`
-	Subscribe        *SubscribeImpl              `yaml:"subscribe" json:"subscribe"`
-	ServicesSpecific []*ServiceSpecific          `yaml:"servicesSpecific" json:"servicesSpecific"`
+	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache" json:"localCache"`
+	ServiceRouter    *ServiceRouterConfigImpl  `yaml:"serviceRouter" json:"serviceRouter"`
+	Loadbalancer     *LoadBalancerConfigImpl   `yaml:"loadbalancer" json:"loadbalancer"`
+	CircuitBreaker   *CircuitBreakerConfigImpl `yaml:"circuitBreaker" json:"circuitBreaker"`
+	HealthCheck      *HealthCheckConfigImpl    `yaml:"healthCheck" json:"healthCheck"`
+	Subscribe        *SubscribeImpl            `yaml:"subscribe" json:"subscribe"`
+	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific" json:"servicesSpecific"`
 }
 
 //GetLocalCache consumer.localCache前缀开头的所有配置
@@ -132,44 +107,14 @@ func (c *ConsumerConfigImpl) GetCircuitBreaker() CircuitBreakerConfig {
 	return c.CircuitBreaker
 }
 
-//cl5.consumer.outlierDetection前缀开头的所有配置
-func (c *ConsumerConfigImpl) GetOutlierDetectionConfig() OutlierDetectionConfig {
-	return c.OutlierDetection
+// GetHealthCheckConfig get health check config
+func (c *ConsumerConfigImpl) GetHealthCheck() HealthCheckConfig {
+	return c.HealthCheck
 }
 
 //订阅配置
 func (c *ConsumerConfigImpl) GetSubScribe() SubscribeConfig {
 	return c.Subscribe
-}
-
-//获取该域下所有插件的名字
-func (c *ConsumerConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	memberArr := []PluginAwareBaseConfig{c.LocalCache, c.ServiceRouter, c.Loadbalancer,
-		c.CircuitBreaker, c.OutlierDetection}
-	for _, member := range memberArr {
-		for k := range member.GetPluginNames() {
-			nameMap.Add(k)
-		}
-	}
-	return nameMap
-}
-
-// 设置 discover 服务配置
-func (c *ConsumerConfigImpl) setPolarisDiscoverSpecific() {
-	v := c.GetServiceSpecific(ServerNamespace, ServerDiscoverService)
-	if v != nil {
-		return
-	}
-	sConf := &ServiceSpecific{
-		Namespace: ServerNamespace,
-		Service:   ServerDiscoverService,
-	}
-	sConf.Init()
-	sConf.SetDefault()
-	sConf.CircuitBreaker.GetErrorCountConfig().SetContinuousErrorThreshold(1)
-	sConf.ServiceRouter.GetNearbyConfig().SetMatchLevel(RegionLevel)
-	c.ServicesSpecific = append(c.ServicesSpecific, sConf)
 }
 
 //服务独立配置
@@ -192,10 +137,6 @@ type SystemConfigImpl struct {
 	HealthCheckCluster *ServerClusterConfigImpl `yaml:"healthCheckCluster" json:"healthCheckCluster"`
 	//监控上报集群
 	MonitorCluster *ServerClusterConfigImpl `yaml:"monitorCluster" json:"monitorCluster"`
-	//已废弃，服务限流集群
-	RateLimitCluster *ServerClusterConfigImpl `yaml:"rateLimitCluster" json:"rateLimitCluster"`
-	//已废弃，metric集群（用于限流、熔断）
-	MetricCluster *ServerClusterConfigImpl `yaml:"metricCluster" json:"metricCluster"`
 	//传入的路由规则variables
 	Variables map[string]string `yaml:"variables" json:"variables"`
 }
@@ -223,16 +164,6 @@ func (s *SystemConfigImpl) GetHealthCheckCluster() ServerClusterConfig {
 //监控上报集群
 func (s *SystemConfigImpl) GetMonitorCluster() ServerClusterConfig {
 	return s.MonitorCluster
-}
-
-//Deprecated: 服务限流集群1
-func (s *SystemConfigImpl) GetRateLimitCluster() ServerClusterConfig {
-	return s.RateLimitCluster
-}
-
-//Deprecated: 服务限流集群2
-func (s *SystemConfigImpl) GetMetricCluster() ServerClusterConfig {
-	return s.MetricCluster
 }
 
 //获取一个路由variable
@@ -388,25 +319,14 @@ func (a *APIConfigImpl) SetRetryInterval(interval time.Duration) {
 }
 
 //创建默认配置对象
-func NewDefaultConfiguration(serverAddrs []string) *ConfigurationImpl {
+func NewDefaultConfiguration(addresses []string) *ConfigurationImpl {
 	cfg := &ConfigurationImpl{}
 	cfg.Init()
 	cfg.SetDefault()
-	cfg.GetGlobal().GetServerConnector().(*ServerConnectorConfigImpl).Addresses = serverAddrs
-	return cfg
-}
-
-//根据埋点ip的端口构造埋点Server列表
-func getDefaultBuiltinServers(joinPoint string) []string {
-	if builtInServers, ok := joinPointsBuiltInServers[joinPoint]; ok {
-		res := make([]string, len(builtInServers))
-		for i := 0; i < len(res); i++ {
-			res[i] = fmt.Sprintf("%s:%d", model.ToNetIP(builtInServers[i]), defaultBuiltinServerPort)
-		}
-		return res
-	} else {
-		panic(fmt.Sprintf("%s not find in joinPointsBuiltInServers", joinPoint))
+	if len(addresses) > 0 {
+		cfg.GetGlobal().GetServerConnector().(*ServerConnectorConfigImpl).Addresses = addresses
 	}
+	return cfg
 }
 
 //获取可以从获取的容器
@@ -420,7 +340,7 @@ func GetContainerNameEnvList() []string {
 
 //创建带有默认埋点server域名的默认配置
 func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
-	return NewDefaultConfiguration(getDefaultBuiltinServers(JoinPointMainland))
+	return NewDefaultConfiguration(nil)
 }
 
 //LoadConfigurationByFile 通过文件加载配置项

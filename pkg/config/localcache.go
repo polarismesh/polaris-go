@@ -20,9 +20,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/hashicorp/go-multierror"
 	"time"
 )
 
@@ -219,11 +219,4 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 func (l *LocalCacheConfigImpl) Init() {
 	l.Plugin = PluginConfigs{}
 	l.Plugin.Init(common.TypeLocalRegistry)
-}
-
-//获取该域下所有插件的名字
-func (l *LocalCacheConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	nameMap.Add(l.Type)
-	return nameMap
 }

@@ -19,9 +19,9 @@ package config
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/hashicorp/go-multierror"
 	"github.com/modern-go/reflect2"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"gopkg.in/yaml.v2"
 	"reflect"
 	"time"
@@ -170,7 +170,7 @@ func (p PluginConfigs) Verify() error {
 	return nil
 }
 
-//设置单独一个插件的值
+// SetPluginConfig 设置单独一个插件的值
 func (p PluginConfigs) SetPluginConfig(plugType common.Type, plugName string, value BaseConfig) error {
 	configType, exists := getPluginConfigType(plugType, plugName)
 	if !exists {
@@ -188,4 +188,13 @@ func (p PluginConfigs) SetPluginConfig(plugType common.Type, plugName string, va
 	}
 	p[plugName] = value
 	return nil
+}
+
+// GetPluginConfig 根据插件名获取配置
+func (p PluginConfigs) GetPluginConfig(pluginName string) BaseConfig {
+	cfg, ok := p[pluginName]
+	if !ok {
+		return nil
+	}
+	return cfg.(BaseConfig)
 }

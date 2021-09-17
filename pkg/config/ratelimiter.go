@@ -58,7 +58,7 @@ const ForbidServerMetricService = "polaris.metric"
 //校验配置参数
 func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r {
-		return errors.New("OutlierDetectionConfig is nil")
+		return errors.New("RateLimitConfig is nil")
 	}
 	if nil == r.Enable {
 		return fmt.Errorf("provider.rateLimit.enable must not be nil")
@@ -136,16 +136,6 @@ func (r *RateLimitConfigImpl) Init() {
 		Namespace: "",
 		Service:   "",
 	}
-}
-
-//获取该域下所有插件的名字
-func (r *RateLimitConfigImpl) GetPluginNames() model.HashSet {
-	names := model.HashSet{}
-	names.Add(DefaultRejectRateLimiter)
-	names.Add(DefaultWarmUpRateLimiter)
-	names.Add(DefaultUniformRateLimiter)
-	names.Add(DefaultWarmUpWaitLimiter)
-	return names
 }
 
 //GetMaxWindowSize

@@ -20,12 +20,12 @@ package network
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/google/uuid"
-	"github.com/modern-go/reflect2"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -200,8 +200,7 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 }
 
 //与远程server进行连接
-func (s *ServerAddressList) tryGetConnection(clusterType config.ClusterType, timeout time.Duration,
-	hashKey []byte) (*Connection, error) {
+func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []byte) (*Connection, error) {
 	curConnValue := s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
 		//log.GetBaseLogger().Debugf("[CheckConnection]traceCheck IsAvailableConnection")
@@ -279,7 +278,7 @@ func NewConnectionManager(
 			useDefault: config.DefaultServerServiceToUseDefault[svc.ClusterType],
 			manager:    manager,
 		}
-		if svcList.useDefault {
+		if svc.ClusterType == config.DiscoverCluster {
 			manager.discoverService = svc.ServiceKey
 		}
 		manager.serverServices[svc.ClusterType] = svcList
@@ -295,6 +294,11 @@ func NewConnectionManager(
 		curIndex:   rand.Intn(len(addresses)),
 	}
 	manager.serverServices[config.BuiltinCluster] = builtInAddrList
+	if len(manager.discoverService.Service) == 0 {
+		manager.discoverService = builtInAddrList.service.ServiceKey
+		manager.ready = serviceReadyStatus
+	}
+
 	manager.ctx, manager.cancel = context.WithCancel(context.Background())
 	go manager.doSwitchRoutine()
 	return manager, nil
@@ -309,9 +313,16 @@ func (c *connectionManager) SetConnCreator(creator ConnCreator) {
 func (c *connectionManager) tryGetConnection(clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
 	serverList, ok := c.serverServices[clusterType]
 	if !ok {
-		return nil, fmt.Errorf("cluster %v is invalid", clusterType)
+		var useDefault, ok bool
+		if useDefault, ok = config.DefaultServerServiceToUseDefault[clusterType]; !ok {
+			return nil, fmt.Errorf("cluster %v is invalid", clusterType)
+		}
+		if !useDefault {
+			return nil, fmt.Errorf("service name for cluster %v is not config", clusterType)
+		}
+		serverList = c.serverServices[config.BuiltinCluster]
 	}
-	return serverList.tryGetConnection(clusterType, c.connectTimeout, hashKey)
+	return serverList.tryGetConnection(c.connectTimeout, hashKey)
 }
 
 //获取并占用连接

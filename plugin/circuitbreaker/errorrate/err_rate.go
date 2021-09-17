@@ -36,7 +36,7 @@ import (
 type CircuitBreaker struct {
 	*plugin.PluginBase
 	cfg             config.ErrorRateConfig
-	halfOpenHandler *common.HalfOpenHandler
+	halfOpenHandler *common.HalfOpenConversionHandler
 }
 
 //Type 插件类型
@@ -46,7 +46,7 @@ func (g *CircuitBreaker) Type() common2.Type {
 
 //Name 插件名，一个类型下插件名唯一
 func (g *CircuitBreaker) Name() string {
-	return "errorRate"
+	return config.DefaultCircuitBreakerErrRate
 }
 
 //Init 初始化插件
@@ -56,7 +56,7 @@ func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	ctx.Plugins.RegisterEventSubscriber(common2.OnInstanceLocalValueCreated, common2.PluginEventHandler{
 		Callback: g.generateSliceWindow,
 	})
-	g.halfOpenHandler = common.NewHalfOpenHandler(ctx.Config)
+	g.halfOpenHandler = common.NewHalfOpenConversionHandler(ctx.Config)
 	return nil
 }
 
@@ -210,6 +210,9 @@ func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreak
 				instance.GetId(), instance.GetNamespace(), instance.GetService(), instance.GetHost(), instance.GetPort())
 			result.InstancesToClose.Add(instance.GetId())
 		}
+	}
+	if result.IsEmpty() {
+		return nil, nil
 	}
 	result.RequestCountAfterHalfOpen = g.halfOpenHandler.GetRequestCountAfterHalfOpen()
 	return result, nil

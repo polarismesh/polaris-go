@@ -37,7 +37,7 @@ type CircuitBreaker struct {
 	*plugin.PluginBase
 	wholeCfg        config.Configuration
 	cfg             config.ErrorCountConfig
-	halfOpenHandler *common.HalfOpenHandler
+	halfOpenHandler *common.HalfOpenConversionHandler
 }
 
 //Type 插件类型
@@ -47,7 +47,7 @@ func (g *CircuitBreaker) Type() common2.Type {
 
 //Name 插件名，一个类型下插件名唯一
 func (g *CircuitBreaker) Name() string {
-	return "errorCount"
+	return config.DefaultCircuitBreakerErrCount
 }
 
 //Init 初始化插件
@@ -58,7 +58,7 @@ func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	ctx.Plugins.RegisterEventSubscriber(common2.OnInstanceLocalValueCreated, common2.PluginEventHandler{
 		Callback: g.generateSliceWindow,
 	})
-	g.halfOpenHandler = common.NewHalfOpenHandler(ctx.Config)
+	g.halfOpenHandler = common.NewHalfOpenConversionHandler(ctx.Config)
 	return nil
 }
 
@@ -85,8 +85,6 @@ func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
 const (
 	//错误数统计窗口下标
 	metricIdxErrCount = iota
-	//半开统计窗口下标
-	metricIdxHalfOpen
 	//最大窗口下标
 	metricIdxMax
 )
@@ -215,6 +213,9 @@ func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreak
 				instance.GetId(), instance.GetNamespace(), instance.GetService(), instance.GetHost(), instance.GetPort())
 			result.InstancesToClose.Add(instance.GetId())
 		}
+	}
+	if result.IsEmpty() {
+		return nil, nil
 	}
 	result.RequestCountAfterHalfOpen = g.halfOpenHandler.GetRequestCountAfterHalfOpen()
 	return result, nil

@@ -33,7 +33,6 @@ const logLevel = plog.InfoLog
 
 var (
 	addresses string
-	joinPoint string
 	namespace string
 	service   string
 	seconds   int
@@ -41,7 +40,6 @@ var (
 
 func initArgs() {
 	flag.StringVar(&addresses, "addresses", "", "polaris default addresses")
-	flag.StringVar(&joinPoint, "joinPoint", "", "joinPoint")
 	flag.StringVar(&namespace, "namespace", "", "namespace")
 	flag.StringVar(&service, "service", "", "service")
 	flag.IntVar(&seconds, "round", 1, "loop seconds")
@@ -63,11 +61,10 @@ func main() {
 	//创建consumerAPI实例
 	//注意该实例所有方法都是协程安全，一般用户进程只需要创建一个consumerAPI,重复使用即可
 	//切勿每次调用之前都创建一个consumerAPI
-	//设置直接埋点地址与设置jointPoint不能同时生效
 	if len(addresses) > 0 {
 		cfg.GetGlobal().GetServerConnector().SetAddresses(strings.Split(addresses, ","))
-	} else if len(joinPoint) > 0 {
-		cfg.GetGlobal().GetServerConnector().SetJoinPoint(joinPoint)
+	} else {
+		log.Fatalf("addresses is empty")
 	}
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	if nil != err {

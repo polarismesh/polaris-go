@@ -19,18 +19,18 @@ package localregistry
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/golang/protobuf/proto"
 	"strings"
 )
 
 const (
 	// PropertyCircuitBreakerStatus InstanceProperties中Properties的key,熔断结果状态
 	PropertyCircuitBreakerStatus = "CircuitBreakerStatus"
-	// PropertyOutlierDetectorStatus InstanceProperties中Properties的key,健康探测结果状态
-	PropertyOutlierDetectorStatus = "OutlierDetectorStatus"
+	// PropertyHealthCheckStatus InstanceProperties中Properties的key,健康探测结果状态
+	PropertyHealthCheckStatus = "HealthCheckStatus"
 )
 
 //待更新的实例属性

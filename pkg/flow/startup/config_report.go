@@ -57,3 +57,8 @@ func (c *ConfigReportCallBack) Process(
 	}
 	return model.CONTINUE
 }
+
+//OnTaskEvent 任务事件回调
+func (c *ConfigReportCallBack) OnTaskEvent(event model.TaskEvent) {
+
+}

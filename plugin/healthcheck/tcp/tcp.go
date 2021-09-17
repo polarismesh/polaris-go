@@ -15,45 +15,28 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package http
+package tcp
 
 import (
-	"fmt"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"net/http"
+	"net"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/outlierdetection"
-	"github.com/polarismesh/polaris-go/plugin/outlierdetection/utils"
+	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
+	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
 )
 
 //Detector TCP协议的实例健康探测器
 type Detector struct {
 	*plugin.PluginBase
-	cfg *Config
-}
-
-//Type 插件类型
-func (g *Detector) Type() common.Type {
-	return common.TypeOutlierDetector
-}
-
-//Name 插件名，一个类型下插件名唯一
-func (g *Detector) Name() string {
-	return "http"
-}
-
-//Init 初始化插件
-func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
-	g.PluginBase = plugin.NewPluginBase(ctx)
-	cfgValue := ctx.Config.GetConsumer().GetOutlierDetectionConfig().GetPluginConfig(g.Name())
-	if cfgValue != nil {
-		g.cfg = cfgValue.(*Config)
-	}
-	return nil
+	cfg                 *Config
+	SendPackageBytes    []byte
+	ReceivePackageBytes [][]byte
+	timeout             time.Duration
 }
 
 //Destroy 销毁插件，可用于释放资源
@@ -61,29 +44,50 @@ func (g *Detector) Destroy() error {
 	return nil
 }
 
+//Type 插件类型
+func (g *Detector) Type() common.Type {
+	return common.TypeHealthCheck
+}
+
+//Name 插件名，一个类型下插件名唯一
+func (g *Detector) Name() string {
+	return config.DefaultTCPHealthCheck
+}
+
+//Init 初始化插件
+func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
+	g.PluginBase = plugin.NewPluginBase(ctx)
+	cfgValue := ctx.Config.GetConsumer().GetHealthCheck().GetPluginConfig(g.Name())
+	if cfgValue != nil {
+		g.cfg = cfgValue.(*Config)
+	}
+	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
+	return nil
+}
+
 //DetectInstance 探测服务实例健康
-func (g *Detector) DetectInstance(ins model.Instance) (result common.DetectResult, err error) {
-	if g.cfg.HTTPPattern == "" {
-		return nil, nil
-	}
+func (g *Detector) DetectInstance(ins model.Instance) (result healthcheck.DetectResult, err error) {
 	start := time.Now()
-	retCode := model.RetFail
-
-	// 得到Http address
-	address, e := utils.GetAddressByInstance(ins)
-	if e != nil {
-		return nil, model.NewSDKError(model.ErrCodeInstanceInfoError,
-			fmt.Errorf("Face Error In DetectInstance By %s:%s", g.Name(), e.Error()), "")
-	}
-
-	retCode = g.doHttpDetect(address)
-	result = &outlierdetection.DetectResultImp{
-		DetectType:     g.Name(),
+	address := utils.GetAddressByInstance(ins)
+	success := g.doTCPDetect(address)
+	result = &healthcheck.DetectResultImp{
+		Success:        success,
 		DetectTime:     start,
-		RetStatus:      retCode,
 		DetectInstance: ins,
 	}
 	return result, nil
+}
+
+// doTCPDetect 执行一次探测逻辑
+func (g *Detector) doTCPDetect(address string) bool {
+	// 建立连接
+	conn, err := net.DialTimeout("tcp", address, g.timeout)
+	if err != nil {
+		log.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // enable
@@ -93,21 +97,6 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 	} else {
 		return true
 	}
-}
-
-// doHttpDetect 执行一次健康探测逻辑
-func (g *Detector) doHttpDetect(address string) model.RetStatus {
-	c := &http.Client{
-		Timeout: g.cfg.Timeout,
-	}
-	resp, e := c.Get(fmt.Sprintf("http://%s%s", address, g.cfg.HTTPPattern))
-	if e != nil {
-		return model.RetFail
-	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		return model.RetSuccess
-	}
-	return model.RetFail
 }
 
 //init 注册插件信息

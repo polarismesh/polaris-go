@@ -15,27 +15,18 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package detect
+package tcp
 
-import (
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"time"
-)
-
-// healthCheckingStatus 实现接口HealthCheckingStatus
-type healthCheckingStatus struct {
-	// status 探测结果状态
-	status model.HealthCheckStatus
-	// startTime 开始时间
-	startTime time.Time
+// Config 健康探测的配置
+type Config struct {
 }
 
-// GetStatus 获取健康探测的状态结果
-func (od *healthCheckingStatus) GetStatus() model.HealthCheckStatus {
-	return od.status
+// verify 检验健康探测配置
+func (r *Config) Verify() error {
+	return nil
 }
 
-// GetStartTime 获取健康探测的时间
-func (od *healthCheckingStatus) GetStartTime() time.Time {
-	return od.startTime
+// SetDefault 设置默认值
+func (r *Config) SetDefault() {
+
 }

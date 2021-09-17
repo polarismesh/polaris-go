@@ -331,8 +331,8 @@ func (i *InstanceInProto) GetCircuitBreakerStatus() model.CircuitBreakerStatus {
 }
 
 //instance dynamic weight
-func (i *InstanceInProto) GetOutlierDetectorStatus() model.OutlierDetectorStatus {
-	return i.localValue.GetOutlierDetectorStatus()
+func (i *InstanceInProto) GetActiveDetectStatus() model.ActiveDetectStatus {
+	return i.localValue.GetActiveDetectStatus()
 }
 
 //instance health status

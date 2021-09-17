@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -55,7 +55,7 @@ const (
 	//默认server的切换时间时间
 	DefaultServerSwitchInterval time.Duration = 10 * time.Minute
 	//默认缓存持久化存储目录
-	DefaultCachePersistDir string = model.HomeVar + "/polaris/backup"
+	DefaultCachePersistDir string = "./polaris/backup"
 	//持久化缓存写文件的默认重试次数
 	DefaultPersistMaxWriteRetry int = 5
 	//读取持久化缓存的默认重试次数
@@ -74,12 +74,16 @@ const (
 	DefaultRecoverAllEnabled bool = true
 	//路由至少返回节点数百分比
 	DefaultPercentOfMinInstances float64 = 0.0
-	//健康探测默认开启与否
-	DefaultOutlierDetectEnabled bool = false
-	//默认健康探测周期
-	DefaultOutlierDetectPeriod time.Duration = 10 * time.Second
-	//最低健康探测周期
-	MinOutlierDetectPeriod time.Duration = 1 * time.Second
+	// DefaultHealthCheckConcurrency 默认心跳检测的并发数
+	DefaultHealthCheckConcurrency int = 1
+	// DefaultHealthCheckConcurrencyAlways 默认持续心跳检测的并发数
+	DefaultHealthCheckConcurrencyAlways int = 10
+	// DefaultHealthCheckInterval 默认健康探测周期
+	DefaultHealthCheckInterval time.Duration = 10 * time.Second
+	// MinHealthCheckInterval 最低健康探测周期
+	MinHealthCheckInterval time.Duration = 500 * time.Millisecond
+	// DefaultHealthCheckTimeout 默认健康探测超时时间
+	DefaultHealthCheckTimeout time.Duration = 100 * time.Millisecond
 	//客户端信息上报周期，默认10分钟
 	DefaultReportClientIntervalDuration time.Duration = 10 * time.Minute
 	//最大重定向次数，默认1
@@ -123,10 +127,6 @@ const (
 	//默认Map组装str (key:value) 二元组分割符
 	DefaultMapKVTupleSeparator = "|"
 )
-
-//默认埋点server的uint32表示形式ip
-//var defaultBuiltInServers = []uint32{160252424, 160252500, 160252537, 160252443, 160252541, 159939664,
-//	159939027, 159939824, 159939852, 159939813}
 
 //默认埋点server的端口，与上面的IP一一对应
 const defaultBuiltinServerPort = 8081
@@ -176,10 +176,12 @@ const (
 	DefaultCircuitBreakerErrRate string = "errorRate"
 	//默认持续错误熔断器
 	DefaultCircuitBreakerErrCount string = "errorCount"
+	//默认错误探测熔断器
+	DefaultCircuitBreakerErrCheck string = "errorCheck"
 	//默认TCP探测器
-	DefaultTCPOutlierDetect string = "tcp"
+	DefaultTCPHealthCheck string = "tcp"
 	//默认UDP探测器
-	DefaultUDPOutlierDetect string = "udp"
+	DefaultUDPHealthCheck string = "udp"
 
 	//默认的reject限流器
 	DefaultRejectRateLimiter = "reject"
@@ -221,22 +223,7 @@ const (
 	DefaultMinServiceExpireTime         time.Duration = 5 * time.Second
 	DefaultMaxServiceExpireCheckTime    time.Duration = 1 * time.Hour
 	DefaultMinTimingInterval            time.Duration = 100 * time.Millisecond
-	DefaultServerServiceRefreshInterval time.Duration = 10 * time.Minute
-)
-
-//默认注册中心服务名
-const (
-	ServerNamespace        = "Polaris"
-	ServerDiscoverService  = "polaris.discover"
-	ServerHeartBeatService = "polaris.healthcheck"
-	ServerMonitorService   = "polaris.monitor"
-)
-
-//默认注册中心服务对象
-var (
-	SvcKeyDiscoverService  = model.ServiceKey{Namespace: ServerNamespace, Service: ServerDiscoverService}
-	SvcKeyMonitorService   = model.ServiceKey{Namespace: ServerNamespace, Service: ServerMonitorService}
-	SvcKeyHeartBeatService = model.ServiceKey{Namespace: ServerNamespace, Service: ServerHeartBeatService}
+	DefaultServerServiceRefreshInterval time.Duration = 1 * time.Minute
 )
 
 //集群类型，用以标识系统服务集群
@@ -250,22 +237,12 @@ const (
 	MonitorCluster     ClusterType = "monitor"
 )
 
-//北极星集群名称
+//默认注册中心服务名
 const (
-	//国内默认集群
-	JoinPointMainland = "default"
-	//国内腾讯云金融区/合作区集群
-	JoinPointTcloudFinance = "TcloudFinance"
-	//国内微信支付独立集群
-	JoinPointPrivatePay = "PrivatePay"
-	//国内PCG独立集群
-	JoinPointPrivatePcg = "PrivatePcg"
-	//海外新加坡集群
-	JoinPointSingapore = "singapore"
-	// OA区
-	JoinPointOA = "OA"
-	// 美国海外集群
-	JoinPointUSA = "USA"
+	ServerNamespace        = "Polaris"
+	ServerDiscoverService  = "polaris.discover"
+	ServerHeartBeatService = "polaris.healthcheck"
+	ServerMonitorService   = "polaris.monitor"
 )
 
 //server集群服务信息
@@ -280,42 +257,44 @@ func (c ClusterService) String() string {
 	return fmt.Sprintf("{ServiceKey: %s, ClusterType: %v}", c.ServiceKey, c.ClusterType)
 }
 
+// ServerServices 系统服务列表数据
+type ServerServices map[ClusterType]ClusterService
+
+// GetClusterService 获取集群服务
+func (s ServerServices) GetClusterService(clsType ClusterType) *ClusterService {
+	svc, ok := s[clsType]
+	if !ok {
+		return nil
+	}
+	return &svc
+}
+
 //获取系统服务列表
-func GetServerServices(cfg Configuration) map[ClusterType]ClusterService {
+func GetServerServices(cfg Configuration) ServerServices {
 	discoverConfig := cfg.GetGlobal().GetSystem().GetDiscoverCluster()
 	healthCheckConfig := cfg.GetGlobal().GetSystem().GetHealthCheckCluster()
 	monitorConfig := cfg.GetGlobal().GetSystem().GetMonitorCluster()
 
-	retMap := map[ClusterType]ClusterService{
-		DiscoverCluster: {
+	retMap := make(map[ClusterType]ClusterService)
+	if len(discoverConfig.GetService()) > 0 && len(discoverConfig.GetNamespace()) > 0 {
+		retMap[DiscoverCluster] = ClusterService{
 			ServiceKey:    ServiceClusterToServiceKey(discoverConfig),
 			ClusterType:   DiscoverCluster,
 			ClusterConfig: discoverConfig,
-		},
-		HealthCheckCluster: {
+		}
+	}
+	if len(healthCheckConfig.GetService()) > 0 && len(healthCheckConfig.GetNamespace()) > 0 {
+		retMap[HealthCheckCluster] = ClusterService{
 			ServiceKey:    ServiceClusterToServiceKey(healthCheckConfig),
 			ClusterType:   HealthCheckCluster,
 			ClusterConfig: healthCheckConfig,
-		},
-		MonitorCluster: {
+		}
+	}
+	if len(monitorConfig.GetService()) > 0 && len(monitorConfig.GetNamespace()) > 0 {
+		retMap[MonitorCluster] = ClusterService{
 			ServiceKey:    ServiceClusterToServiceKey(monitorConfig),
 			ClusterType:   MonitorCluster,
 			ClusterConfig: monitorConfig,
-		},
-	}
-	if cfg.GetGlobal().GetServerConnector().GetJoinPoint() != "" {
-		if v, ok := clusterPolarisServers[cfg.GetGlobal().GetServerConnector().GetJoinPoint()]; ok {
-			for t, c := range retMap {
-				if name, ok := v[t]; ok {
-					c.ServiceKey.Service = name
-					retMap[t] = c
-				} else {
-					panic(fmt.Sprintf("clusterType:%s not in clusterPolarisServers", t))
-				}
-			}
-		} else {
-			panic(fmt.Sprintf("joinPoint: %s not in clusterPolarisServers",
-				cfg.GetGlobal().GetServerConnector().GetJoinPoint()))
 		}
 	}
 	return retMap
@@ -332,13 +311,14 @@ var (
 		MonitorCluster:     DefaultLoadBalancerMaglev,
 	}
 	DefaultServerServiceToUseDefault = map[ClusterType]bool{
-		DiscoverCluster: true,
+		DiscoverCluster:    true,
+		HealthCheckCluster: true,
 	}
 )
 
 const (
 	//系统默认配置文件
-	DefaultConfigFile = model.HomeVar + "/polaris/conf/polaris.yaml"
+	DefaultConfigFile = "./polaris/polaris.yaml"
 )
 
 //自身自带校验器的配置集合
@@ -347,13 +327,6 @@ type BaseConfig interface {
 	Verify() error
 	//对关键值设置默认值
 	SetDefault()
-}
-
-//提供查询相关插件信息的配置集合
-type PluginAwareBaseConfig interface {
-	BaseConfig
-	//获取域下所有插件的名字
-	GetPluginNames() model.HashSet
 }
 
 //检验API配置
@@ -452,8 +425,8 @@ func (c *ConsumerConfigImpl) Init() {
 	c.ServiceRouter.Init()
 	c.Loadbalancer = &LoadBalancerConfigImpl{}
 	c.Loadbalancer.Init()
-	c.OutlierDetection = &OutlierDetectionConfigImpl{}
-	c.OutlierDetection.Init()
+	c.HealthCheck = &HealthCheckConfigImpl{}
+	c.HealthCheck.Init()
 	c.Subscribe = &SubscribeImpl{}
 	c.Subscribe.Init()
 }
@@ -477,7 +450,7 @@ func (c *ConsumerConfigImpl) Verify() error {
 	if err = c.CircuitBreaker.Verify(); nil != err {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.OutlierDetection.Verify(); nil != err {
+	if err = c.HealthCheck.Verify(); nil != err {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
@@ -489,9 +462,8 @@ func (c *ConsumerConfigImpl) SetDefault() {
 	c.Loadbalancer.SetDefault()
 	c.ServiceRouter.SetDefault()
 	c.CircuitBreaker.SetDefault()
-	c.OutlierDetection.SetDefault()
+	c.HealthCheck.SetDefault()
 	c.Subscribe.SetDefault()
-	c.setPolarisDiscoverSpecific()
 }
 
 //初始化整体配置对象
@@ -532,9 +504,9 @@ func (c *ConfigurationImpl) SetDefault() {
 
 //systemConfig init
 func (s *SystemConfigImpl) Init() {
-	s.DiscoverCluster = NewServerClusterConfig(SvcKeyDiscoverService)
-	s.HealthCheckCluster = NewServerClusterConfig(SvcKeyHeartBeatService)
-	s.MonitorCluster = NewServerClusterConfig(SvcKeyMonitorService)
+	s.DiscoverCluster = &ServerClusterConfigImpl{}
+	s.HealthCheckCluster = &ServerClusterConfigImpl{}
+	s.MonitorCluster = &ServerClusterConfigImpl{}
 }
 
 //设置systemConfig默认值
@@ -584,12 +556,6 @@ func (s *ServerClusterConfigImpl) Verify() error {
 		return errors.New("ServerClusterConfig is nil")
 	}
 	var errs error
-	if len(s.Namespace) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("namespace can not be empty"))
-	}
-	if len(s.Service) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("service can not be empty"))
-	}
 	if nil == s.RefreshInterval || *s.RefreshInterval < DefaultMinTimingInterval {
 		errs = multierror.Append(errs,
 			fmt.Errorf("refreshInterval can not be empty and must greater than %v", DefaultMinTimingInterval))

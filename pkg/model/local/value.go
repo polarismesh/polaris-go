@@ -32,7 +32,7 @@ type InstanceLocalValue interface {
 	//实例的熔断状态
 	GetCircuitBreakerStatus() model.CircuitBreakerStatus
 	//实例的健康检查状态
-	GetOutlierDetectorStatus() model.OutlierDetectorStatus
+	GetActiveDetectStatus() model.ActiveDetectStatus
 	GetExtendedData(pluginIndex int32) interface{}
 	SetExtendedData(pluginIndex int32, data interface{})
 }
@@ -85,7 +85,7 @@ func (lv *DefaultInstanceLocalValue) SetCircuitBreakerStatus(st model.CircuitBre
 }
 
 //设置健康检测信息
-func (lv *DefaultInstanceLocalValue) SetOutlierDetectorStatus(st model.OutlierDetectorStatus) {
+func (lv *DefaultInstanceLocalValue) SetActiveDetectStatus(st model.ActiveDetectStatus) {
 	lv.odStatus.Store(st)
 }
 
@@ -99,12 +99,12 @@ func (lv *DefaultInstanceLocalValue) GetCircuitBreakerStatus() model.CircuitBrea
 }
 
 //返回健康检测信息
-func (lv *DefaultInstanceLocalValue) GetOutlierDetectorStatus() model.OutlierDetectorStatus {
+func (lv *DefaultInstanceLocalValue) GetActiveDetectStatus() model.ActiveDetectStatus {
 	res := lv.odStatus.Load()
 	if nil == res {
 		return nil
 	}
-	return res.(model.OutlierDetectorStatus)
+	return res.(model.ActiveDetectStatus)
 }
 
 //服务localvalue接口

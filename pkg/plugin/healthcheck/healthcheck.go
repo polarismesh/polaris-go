@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package outlierdetection
+package healthcheck
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -25,30 +25,34 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//OutlierDetector 【扩展点接口】主动健康探测策略
-type OutlierDetector interface {
+//HealthChecker 【扩展点接口】主动健康探测策略
+type HealthChecker interface {
 	plugin.Plugin
-	//对单个实例进行探测，返回探测结果
-	//每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
-	DetectInstance(model.Instance) (common.DetectResult, error)
+	// 对单个实例进行探测，返回探测结果
+	// DetectInstance 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
+	DetectInstance(model.Instance) (DetectResult, error)
+}
+
+// DetectResult 健康探测结果
+type DetectResult interface {
+	// IsSuccess 是否探测成功
+	IsSuccess() bool
+	// GetDetectTime 本次探测时间
+	GetDetectTime() time.Time
+	// GetDetectInstance 探测是实例
+	GetDetectInstance() model.Instance
 }
 
 // DetectResultImp 探活返回的结果，plugin.DetectResult的实现
 type DetectResultImp struct {
-	DetectType     string          // 探测类型，与探测插件名相同
-	RetStatus      model.RetStatus // 探测返回码
-	DetectTime     time.Time       // 探测时间
-	DetectInstance model.Instance  // 探测的实例
+	Success        bool
+	DetectTime     time.Time      // 探测时间
+	DetectInstance model.Instance // 探测的实例
 }
 
 // GetDetectType 探测类型，与探测插件名相同
-func (r *DetectResultImp) GetDetectType() string {
-	return r.DetectType
-}
-
-// GetRetStatus 探测返回码
-func (r *DetectResultImp) GetRetStatus() model.RetStatus {
-	return r.RetStatus
+func (r *DetectResultImp) IsSuccess() bool {
+	return r.Success
 }
 
 // GetDetectTime 探测时间
@@ -63,5 +67,5 @@ func (r *DetectResultImp) GetDetectInstance() model.Instance {
 
 //初始化
 func init() {
-	plugin.RegisterPluginInterface(common.TypeOutlierDetector, new(OutlierDetector))
+	plugin.RegisterPluginInterface(common.TypeHealthCheck, new(HealthChecker))
 }

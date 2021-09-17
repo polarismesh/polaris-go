@@ -18,6 +18,7 @@
 package cbcheck
 
 import (
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -25,7 +26,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/modern-go/reflect2"
 	"time"
 )
 
@@ -82,11 +82,15 @@ func (c *CircuitBreakCallBack) Process(
 	return model.CONTINUE
 }
 
+//OnTaskEvent 任务事件回调
+func (c *CircuitBreakCallBack) OnTaskEvent(event model.TaskEvent) {
+
+}
+
 //对服务进行熔断判断操作
 func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, svcInstances model.ServiceInstances,
 	instance model.Instance, cbName string) (*localregistry.ServiceUpdateRequest, error) {
-	allResults := make(map[string]circuitbreaker.Result, 0)
-	statusChangedInstances := model.HashSet{}
+	allResults := make(map[string]*circuitbreaker.Result, 0)
 	var instances []model.Instance
 	if reflect2.IsNil(instance) {
 		instances = svcInstances.GetInstances()
@@ -96,21 +100,29 @@ func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, sv
 	if len(instances) == 0 {
 		return nil, nil
 	}
-	for _, circuitBreaker := range c.circuitBreakerChain {
-		if len(cbName) > 0 && circuitBreaker.Name() != cbName {
+	for _, instance := range instances {
+		if len(c.circuitBreakerChain) == 0 {
 			continue
 		}
-		result, err := circuitBreaker.CircuitBreak(instances)
-		if nil != err {
-			log.GetBaseLogger().Errorf("fail to do timingCircuitBreak %s for %v, error: %v",
-				circuitBreaker.Name(), svc, err)
-			continue
-		}
-		if nil != result {
-			cleanInstanceSet(result.InstancesToOpen, statusChangedInstances)
-			cleanInstanceSet(result.InstancesToHalfOpen, statusChangedInstances)
-			cleanInstanceSet(result.InstancesToClose, statusChangedInstances)
-			allResults[circuitBreaker.Name()] = *result
+		for _, circuitBreaker := range c.circuitBreakerChain {
+			if len(cbName) > 0 && circuitBreaker.Name() != cbName {
+				continue
+			}
+			result, err := circuitBreaker.CircuitBreak([]model.Instance{instance})
+			if nil != err {
+				log.GetBaseLogger().Errorf("fail to do timingCircuitBreak %s for %v, instance %s:%d, error: %v",
+					circuitBreaker.Name(), svc, instance.GetHost(), instance.GetPort(), err)
+				continue
+			}
+			if nil == result {
+				continue
+			}
+			if lastResult, ok := allResults[circuitBreaker.Name()]; ok {
+				lastResult.Merge(result)
+			} else {
+				allResults[circuitBreaker.Name()] = result
+			}
+			break
 		}
 	}
 	//批量更新状态
@@ -155,7 +167,7 @@ func buildInstanceProperty(now time.Time, allowedRequests int, instances model.H
 
 //构造服务更新数据
 func buildServiceUpdateRequest(
-	svc model.ServiceKey, results map[string]circuitbreaker.Result) *localregistry.ServiceUpdateRequest {
+	svc model.ServiceKey, results map[string]*circuitbreaker.Result) *localregistry.ServiceUpdateRequest {
 	request := &localregistry.ServiceUpdateRequest{
 		ServiceKey: svc,
 	}
