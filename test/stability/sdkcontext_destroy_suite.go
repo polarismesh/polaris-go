@@ -20,7 +20,6 @@ package stability
 import (
 	"fmt"
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	plog "github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/test/util"
 	"gopkg.in/check.v1"
@@ -110,6 +109,7 @@ func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	//等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
+	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
 	configuration.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	var routinesCount int
 	var preCreateRoutinesNum int
@@ -127,26 +127,4 @@ func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)
 	c.Assert(preCreateRoutinesNum, check.Equals, afterDestroyRoutinesNum)
 	c.Assert(lumberjackCount < plog.MaxLogger, check.Equals, true)
-}
-
-func (s *SDKContextDestroySuite) TestServiceSpecific(c *check.C) {
-	ctx, err := api.InitContextByFile("testdata/service_sp_conf.yaml")
-	c.Check(err, check.IsNil)
-	cb1 := ctx.GetConfig().GetConsumer().GetServiceSpecific("Test", "TestName1").GetServiceCircuitBreaker()
-	c.Check(cb1, check.NotNil)
-	c.Check(cb1.GetCheckPeriod(), check.Equals, time.Second*5)
-
-	cb2 := ctx.GetConfig().GetConsumer().GetServiceSpecific("Test", "TestName2")
-	c.Check(cb2, check.IsNil)
-
-	cb1 = ctx.GetConfig().GetConsumer().GetServiceSpecific(config.ServerNamespace, config.ServerDiscoverService).GetServiceCircuitBreaker()
-	c.Check(cb1, check.NotNil)
-	errCount := cb1.GetErrorCountConfig()
-	c.Check(errCount, check.NotNil)
-	c.Check(errCount.GetContinuousErrorThreshold(), check.Equals, 1)
-	router := ctx.GetConfig().GetConsumer().GetServiceSpecific(config.ServerNamespace, config.ServerDiscoverService).GetServiceRouter()
-	c.Check(router, check.NotNil)
-	nearby := router.GetNearbyConfig()
-	c.Check(nearby, check.NotNil)
-	c.Check(nearby.GetMatchLevel(), check.Equals, config.RegionLevel)
 }
