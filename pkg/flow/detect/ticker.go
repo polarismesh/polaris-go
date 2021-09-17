@@ -104,8 +104,6 @@ func (c *HealthCheckCallBack) OnTaskEvent(event model.TaskEvent) {
 		}
 	case model.EventStop:
 		c.taskWorkerCancel()
-		c.taskWorkerCancel = nil
-		c.taskChannels = nil
 	}
 }
 
