@@ -1,4 +1,8 @@
 global:
+  system:
+    monitorCluster:
+      namespace: Polaris
+      service: polaris.monitor
   api:
     # 默认api超时时间
     timeout: 500ms

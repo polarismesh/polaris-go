@@ -83,6 +83,7 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	//等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
+	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
 	configuration.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	var routinesCount int
 	var preCreateRoutinesNum int

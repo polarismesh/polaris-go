@@ -19,6 +19,9 @@ package circuitbreak
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -28,9 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	log2 "log"
@@ -1051,7 +1051,7 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 10, 2000)
 	//但是成功数少于配置要求
 	t.reportCallStatus(c, consumer, targetIns, 0, model.RetSuccess, 100*time.Millisecond, 9)
-	time.Sleep(12*time.Second)
+	time.Sleep(12 * time.Second)
 	//重新熔断
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 
@@ -1159,11 +1159,11 @@ func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
 	for _, inst := range allInstances {
 		t.reportCallStatus(c, consumer, inst, -1, model.RetFail, 100*time.Millisecond, 11)
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	for _, inst := range allInstances {
 		c.Assert(inst.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	time.Sleep(11*time.Second)
+	time.Sleep(11 * time.Second)
 	for _, inst := range allInstances {
 		c.Assert(inst.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 		for i := 0; i < 10; i++ {
@@ -1194,5 +1194,3 @@ func (t *CircuitBreakSuite) reportCallStatus(c *check.C, consumerAPI api.Consume
 		c.Assert(err, check.IsNil)
 	}
 }
-
-

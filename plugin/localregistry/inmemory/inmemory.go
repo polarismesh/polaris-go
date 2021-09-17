@@ -566,7 +566,6 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 				preCBStatus := localValues.GetCircuitBreakerStatus()
 				nextCBStatus := v.(model.CircuitBreakerStatus)
 				localValues.SetCircuitBreakerStatus(nextCBStatus)
-				fmt.Printf("set cbStatus %v, port %d\n", nextCBStatus, updateInstance.GetPort())
 				cbStatusUpdated = true
 				if (nil != preCBStatus && preCBStatus.GetStatus() == nextCBStatus.GetStatus()) ||
 					(nil == preCBStatus && nextCBStatus.GetStatus() == model.Close) {
