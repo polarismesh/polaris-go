@@ -29,7 +29,7 @@ type HealthCheckConfigImpl struct {
 	When        When          `yaml:"when" json:"when"`
 	Interval    time.Duration `yaml:"interval" json:"interval"`
 	Timeout     time.Duration `yaml:"timeout" json:"timeout"`
-	Chain       []string      `yaml:"chain"`
+	Chain       []string      `yaml:"chain" json:"chain"`
 	Concurrency int           `yaml:"concurrency" json:"concurrency"`
 	Plugin      PluginConfigs `yaml:"plugin" json:"plugin"`
 }
