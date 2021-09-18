@@ -79,7 +79,7 @@ func (e *Engine) syncConsumerInitCallServiceAndFinalize(commonRequest *data.Cons
 }
 
 //SyncGetOneInstance 同步获取服务实例
-func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.InstancesResponse, error) {
+func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.OneInstanceResponse, error) {
 	//方法开始时间
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetOneRequest(req, e.configuration)
@@ -89,7 +89,7 @@ func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.In
 }
 
 //操作主要业务逻辑
-func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest) (*model.InstancesResponse, error) {
+func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
 	consumeTime := e.globalCtx.Since(startTime)
@@ -117,8 +117,9 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 	} else {
 		instances = inst.(data.SingleInstancesOwner).SingleInstances()
 	}
-	return commonRequest.BuildInstancesResponse(commonRequest.FlowID, commonRequest.DstService,
-		nil, instances, 0, commonRequest.Revision, commonRequest.DstInstances.GetMetadata()), nil
+	instancesResp := commonRequest.BuildInstancesResponse(commonRequest.FlowID, commonRequest.DstService,
+		nil, instances, 0, commonRequest.Revision, commonRequest.DstInstances.GetMetadata())
+	return &model.OneInstanceResponse{InstancesResponse: *instancesResp}, nil
 }
 
 //同步加载资源
@@ -254,9 +255,9 @@ func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster) 
 		return cluster
 	}
 	//对账失败，需要重建cluster
-	log.GetBaseLogger().Warnf("cluster invalid, namespace: %s, service:%s cluster revision %s,   " +
+	log.GetBaseLogger().Warnf("cluster invalid, namespace: %s, service:%s cluster revision %s,   "+
 		"namespace: %s, service:%s services revision %s, rebuild cluster",
-		clsServices.GetService(), clsServices.GetNamespace(),  clsServices.GetRevision(),
+		clsServices.GetService(), clsServices.GetNamespace(), clsServices.GetRevision(),
 		svcInstances.GetNamespace(), svcInstances.GetService(), svcInstances.GetRevision())
 	newCls := model.NewCluster(svcInstances.GetServiceClusters(), cluster)
 	cluster.PoolPut()

@@ -627,7 +627,7 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	request.HashKey = []byte("abc")
 
 	// 不设置负载均衡算法，默认使用配置文件中的, 默认为weightedRandom
-	var rspList []model.InstancesResponse
+	var rspList []model.OneInstanceResponse
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request)
 		c.Assert(err, check.IsNil)

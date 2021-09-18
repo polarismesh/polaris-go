@@ -625,6 +625,18 @@ func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
 }
 
+type OneInstanceResponse struct {
+	InstancesResponse
+}
+
+//GetInstance get the only instance
+func (o *OneInstanceResponse) GetInstance() Instance {
+	if len(o.InstancesResponse.Instances) > 0 {
+		return o.InstancesResponse.Instances[0]
+	}
+	return nil
+}
+
 //服务实例查询应答
 type InstancesResponse struct {
 	ServiceInfo

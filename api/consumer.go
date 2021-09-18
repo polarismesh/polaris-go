@@ -94,7 +94,7 @@ type InitCalleeServiceRequest struct {
 type ConsumerAPI interface {
 	SDKOwner
 	// 同步获取单个服务
-	GetOneInstance(req *GetOneInstanceRequest) (*model.InstancesResponse, error)
+	GetOneInstance(req *GetOneInstanceRequest) (*model.OneInstanceResponse, error)
 	// 同步获取可用的服务列表
 	GetInstances(req *GetInstancesRequest) (*model.InstancesResponse, error)
 	// 同步获取完整的服务列表

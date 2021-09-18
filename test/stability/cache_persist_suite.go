@@ -433,11 +433,11 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 		Namespace: "Test",
 		Metadata:  map[string]string{"tag": "protocol"},
 	}
-	result, err = consumer1.GetInstances(req1)
+	instancesResult, err := consumer1.GetInstances(req1)
 	c.Assert(err, check.IsNil)
-	fmt.Println(result.GetInstances())
-	c.Assert(len(result.GetInstances()), check.Equals, 1)
-	c.Assert(result.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
+	fmt.Println(instancesResult.GetInstances())
+	c.Assert(len(instancesResult.GetInstances()), check.Equals, 1)
+	c.Assert(instancesResult.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
 	time.Sleep(time.Second * 1)
 }
 

@@ -35,7 +35,7 @@ type consumerAPI struct {
 }
 
 //GetOneInstance sync get one instance after load balance
-func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.InstancesResponse, error) {
+func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInstanceResponse, error) {
 	if err := checkAvailable(c); nil != err {
 		return nil, err
 	}

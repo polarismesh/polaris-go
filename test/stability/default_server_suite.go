@@ -175,12 +175,11 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 
-	var resp *model.InstancesResponse
 	for i := 0; i < 20; i++ {
 		t.serviceReq.FlowID = uint64(i)
-		resp, err = consumer.GetOneInstance(t.serviceReq)
+		oneReps, err := consumer.GetOneInstance(t.serviceReq)
 		c.Assert(err, check.IsNil)
-		log.Printf("ip from polaris-server is %s, index is %d\n", resp.Instances[0], i)
+		log.Printf("ip from polaris-server is %s, index is %d\n", oneReps.GetInstance(), i)
 	}
 	time.Sleep(10 * time.Second)
 	consumer.Destroy()
@@ -197,7 +196,7 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	for i := 0; i < 3; i++ {
 		t.serviceReq.FlowID = uint64(i)
 		log.Printf("get instance with wrong cfg, %v\n", t.serviceReq.FlowID)
-		resp, err = failConsumer2.GetOneInstance(t.serviceReq)
+		resp, err := failConsumer2.GetOneInstance(t.serviceReq)
 		c.Assert(err, check.NotNil)
 		c.Assert(resp, check.IsNil)
 		//log.Printf("ip from polaris-server is %+v, index is %d\n", resp.Instances[0], i)
