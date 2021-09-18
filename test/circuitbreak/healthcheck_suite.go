@@ -200,8 +200,8 @@ func Logic(c *check.C,
 			c.Assert(err, check.IsNil)
 		}()
 	}
-	// 2s 之后，探测为Health
-	time.Sleep(2 * time.Second)
+	// 5s 之后，探测为Health
+	time.Sleep(5 * time.Second)
 	if checkFlag {
 		c.Assert(localInstanceValue.GetActiveDetectStatus(), check.NotNil)
 		c.Assert(localInstanceValue.GetActiveDetectStatus().GetStatus(), check.Equals, model.Healthy)

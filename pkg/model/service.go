@@ -90,6 +90,19 @@ const (
 	Close Status = 3
 )
 
+// String toString method
+func (s Status) String() string {
+	switch s {
+	case Open:
+		return "open"
+	case HalfOpen:
+		return "half-open"
+	case Close:
+		return "close"
+	}
+	return "unknown"
+}
+
 // HealthCheckStatus 健康探测状态
 type HealthCheckStatus int
 
