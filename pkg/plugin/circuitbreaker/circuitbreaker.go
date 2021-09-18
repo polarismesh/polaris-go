@@ -47,13 +47,37 @@ type Result struct {
 	RequestCountAfterHalfOpen int
 }
 
-//创建熔断结果对象
+// NewCircuitBreakerResult 创建熔断结果对象
 func NewCircuitBreakerResult(now time.Time) *Result {
 	return &Result{
 		Now:                 now,
 		InstancesToClose:    model.HashSet{},
 		InstancesToHalfOpen: model.HashSet{},
 		InstancesToOpen:     model.HashSet{}}
+}
+
+// Merge merge results
+func (r *Result) Merge(result *Result) {
+	if len(result.InstancesToOpen) > 0 {
+		for k, v := range result.InstancesToOpen {
+			r.InstancesToOpen[k] = v
+		}
+	}
+	if len(result.InstancesToHalfOpen) > 0 {
+		for k, v := range result.InstancesToHalfOpen {
+			r.InstancesToHalfOpen[k] = v
+		}
+	}
+	if len(result.InstancesToClose) > 0 {
+		for k, v := range result.InstancesToClose {
+			r.InstancesToClose[k] = v
+		}
+	}
+}
+
+// IsEmpty result has status changing instances
+func (r *Result) IsEmpty() bool {
+	return len(r.InstancesToClose) == 0 && len(r.InstancesToHalfOpen) == 0 && len(r.InstancesToOpen) == 0
 }
 
 //初始化

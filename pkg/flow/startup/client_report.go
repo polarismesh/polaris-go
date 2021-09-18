@@ -18,6 +18,7 @@
 package startup
 
 import (
+	"github.com/golang/protobuf/proto"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -27,7 +28,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"github.com/golang/protobuf/proto"
 	"time"
 )
 
@@ -121,6 +121,11 @@ func (r *ReportClientCallBack) Process(
 		Campus: reportClientResp.Campus,
 	}, nil)
 	return model.CONTINUE
+}
+
+//OnTaskEvent 任务事件回调
+func (r *ReportClientCallBack) OnTaskEvent(event model.TaskEvent) {
+
 }
 
 //更新区域属性

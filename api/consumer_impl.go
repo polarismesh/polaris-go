@@ -19,11 +19,11 @@ package api
 
 import (
 	"fmt"
+	"github.com/hashicorp/go-multierror"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/hashicorp/go-multierror"
-	"github.com/modern-go/reflect2"
 
 	//加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
@@ -35,7 +35,7 @@ type consumerAPI struct {
 }
 
 //GetOneInstance sync get one instance after load balance
-func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.InstancesResponse, error) {
+func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInstanceResponse, error) {
 	if err := checkAvailable(c); nil != err {
 		return nil, err
 	}
@@ -180,8 +180,7 @@ func newConsumerAPIByContext(context SDKContext) ConsumerAPI {
 
 //从系统默认配置文件中创建ConsumerAPI
 func newConsumerAPIByDefaultConfigFile() (ConsumerAPI, error) {
-	path := model.ReplaceHomeVar(config.DefaultConfigFile)
-	return NewConsumerAPIByFile(path)
+	return NewConsumerAPIByFile(config.DefaultConfigFile)
 }
 
 //实例请求

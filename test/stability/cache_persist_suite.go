@@ -19,6 +19,9 @@ package stability
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -29,9 +32,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"io"
@@ -433,21 +433,20 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 		Namespace: "Test",
 		Metadata:  map[string]string{"tag": "protocol"},
 	}
-	result, err = consumer1.GetInstances(req1)
+	instancesResult, err := consumer1.GetInstances(req1)
 	c.Assert(err, check.IsNil)
-	fmt.Println(result.GetInstances())
-	c.Assert(len(result.GetInstances()), check.Equals, 1)
-	c.Assert(result.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
+	fmt.Println(instancesResult.GetInstances())
+	c.Assert(len(instancesResult.GetInstances()), check.Equals, 1)
+	c.Assert(instancesResult.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
 	time.Sleep(time.Second * 1)
 }
 
 // 测试埋点不同缓存文件的路径不同
 func (t *CacheTestingSuite) TestFileCachePwd(c *check.C) {
-	t.FileCachePwdFunc(c, "")
-	t.FileCachePwdFunc(c, api.SingaporeJoinPoint)
+	t.FileCachePwdFunc(c)
 }
 
-func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C, joinPoint string) {
+func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
 	user, err := user.Current()
 	if err != nil {
 		log.Fatalf(err.Error())
@@ -457,12 +456,8 @@ func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C, joinPoint string) {
 	defer util.DeleteDir(fmt.Sprintf("%s/polaris/backup", homeDir))
 
 	cfg := api.NewConfiguration()
-	if joinPoint != "" {
-		cfg.GetGlobal().GetServerConnector().SetJoinPoint(joinPoint)
-	}
 	cfg.GetGlobal().GetServerConnector().SetAddresses([]string{fmt.Sprintf("%s:%d", cacheIP,
 		cachePort)})
-	//fmt.Println(joinPoint)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -477,11 +472,7 @@ func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C, joinPoint string) {
 	//fmt.Println(runtime.GOOS)
 
 	var filePath string
-	if joinPoint != "" {
-		filePath = fmt.Sprintf("%s/polaris/backup_%s/svc#%s#%s#instance.json", homeDir, joinPoint, cacheNS, cacheSVC)
-	} else {
-		filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
-	}
+	filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
 	_, err = os.Open(filePath)
 	fmt.Println(err)
 	c.Assert(err, check.IsNil)

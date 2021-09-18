@@ -24,54 +24,53 @@ import (
 
 //PluginConfig 插件配置对象
 type PluginConfig interface {
-	//cl5.*.plugin.<name>下面的所有配置
-	//获取插件配置，将map[string]interface形式的配置marshal进value中
+	// GetPluginConfig 获取plugin.<name>下的插件配置，将map[string]interface形式的配置marshal进value中
 	GetPluginConfig(pluginName string) BaseConfig
-	//设置插件配置，将value的内容unmarshal为map[string]interface{}形式
+	// SetPluginConfig 设置插件配置，将value的内容unmarshal为map[string]interface{}形式
 	SetPluginConfig(plugName string, value BaseConfig) error
 }
 
 //GlobalConfig 全局配置对象
 type GlobalConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	GetSystem() SystemConfig
-	//cl5.global.api前缀开头的所有配置项
+	//global.api前缀开头的所有配置项
 	GetAPI() APIConfig
-	//cl5.global.serverConnector前缀开头的所有配置项
+	//global.serverConnector前缀开头的所有配置项
 	GetServerConnector() ServerConnectorConfig
-	//cl5.global.statReporter前缀开头的所有配置项
+	//global.statReporter前缀开头的所有配置项
 	GetStatReporter() StatReporterConfig
 }
 
-//ConsumerConfig 调用者配置对象
+// ConsumerConfig consumer config object
 type ConsumerConfig interface {
-	PluginAwareBaseConfig
-	//cl5.consumer.localCache前缀开头的所有配置
+	BaseConfig
+	// GetLocalCache get local cache config
 	GetLocalCache() LocalCacheConfig
-	//cl5.consumer.serviceRouter前缀开头的所有配置
+	// GetServiceRouter get service router config
 	GetServiceRouter() ServiceRouterConfig
-	//cl5.consumer.loadbalancer前缀开头的所有配置
+	// GetLoadbalancer get load balancer config
 	GetLoadbalancer() LoadbalancerConfig
-	//cl5.consumer.circuitbreaker前缀开头的所有配置
+	// GetCircuitBreaker get circuit breaker config
 	GetCircuitBreaker() CircuitBreakerConfig
-	//cl5.consumer.outlierDetection前缀开头的所有配置
-	GetOutlierDetectionConfig() OutlierDetectionConfig
-	//订阅配置
+	// GetHealthCheckConfig get health check config
+	GetHealthCheck() HealthCheckConfig
+	// GetSubScribe get subscribe config
 	GetSubScribe() SubscribeConfig
-	//服务独立配置
+	// GetServiceSpecific 服务独立配置
 	GetServiceSpecific(namespace string, service string) ServiceSpecificConfig
 }
 
 //ProviderConfig 被调端配置对象
 type ProviderConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	//获取限流配置
 	GetRateLimit() RateLimitConfig
 }
 
 //限流相关配置
 type RateLimitConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
 	//是否启用限流能力
 	IsEnable() bool
@@ -115,12 +114,6 @@ type SystemConfig interface {
 	//global.systemConfig.monitorCluster
 	//监控上报集群
 	GetMonitorCluster() ServerClusterConfig
-	//global.systemConfig.rateLimitCluster
-	//监控上报集群
-	GetRateLimitCluster() ServerClusterConfig
-	//global.systemConfig.metricCluster
-	//分布式熔断、限流集群
-	GetMetricCluster() ServerClusterConfig
 	//global.systemConfig.variables
 	//获取一个路由环境变量
 	GetVariable(key string) (string, bool)
@@ -151,32 +144,32 @@ type ServerClusterConfig interface {
 //APIConfig api相关的配置对象
 type APIConfig interface {
 	BaseConfig
-	//cl5.global.api.timeout
+	//global.api.timeout
 	//默认调用超时时间
 	GetTimeout() time.Duration
 	//设置默认调用超时时间
 	SetTimeout(time.Duration)
-	//cl5.global.api.bindIf
+	//global.api.bindIf
 	//默认客户端绑定的网卡地址
 	GetBindIntf() string
 	//设置默认客户端绑定的网卡地址
 	SetBindIntf(string)
-	//cl5.global.api.bindIP
+	//global.api.bindIP
 	//默认客户端绑定的IP地址
 	GetBindIP() string
 	//设置默认客户端绑定的IP地址
 	SetBindIP(string)
-	//cl5.global.api.reportInterval
+	//global.api.reportInterval
 	//默认客户端定时上报周期
 	GetReportInterval() time.Duration
 	//设置默认客户端定时上报周期
 	SetReportInterval(time.Duration)
-	//cl5.global.api.maxRetryTimes
+	//global.api.maxRetryTimes
 	//api调用最多重试时间
 	GetMaxRetryTimes() int
 	//设置api调用最多重试时间
 	SetMaxRetryTimes(int)
-	//cl5.global.api.retryInterval
+	//global.api.retryInterval
 	//api调用重试时间
 	GetRetryInterval() time.Duration
 	//设置api调用重试时间
@@ -185,7 +178,7 @@ type APIConfig interface {
 
 //统计上报配置
 type StatReporterConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
 	//是否启用上报
 	IsEnable() bool
@@ -199,7 +192,7 @@ type StatReporterConfig interface {
 
 //ServerConnectorConfig 与名字服务服务端的连接配置
 type ServerConnectorConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
 	//global.serverConnector.addresses
 	//远端server地址，格式为<host>:<port>
@@ -240,32 +233,28 @@ type ServerConnectorConfig interface {
 	GetConnectionIdleTimeout() time.Duration
 	//设置连接会被释放的空闲的时长
 	SetConnectionIdleTimeout(time.Duration)
-	//埋点集群类型
-	GetJoinPoint() string
-	//设置埋点集群类型
-	SetJoinPoint(string)
 }
 
 //LocalCacheConfig 本地缓存相关配置项
 type LocalCacheConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
-	//cl5.consumer.localCache.service.expireTime,
+	//consumer.localCache.service.expireTime,
 	//服务的超时淘汰时间
 	GetServiceExpireTime() time.Duration
 	//设置服务的超时淘汰时间
 	SetServiceExpireTime(time.Duration)
-	//cl5.consumer.localCache.service.refreshInterval
+	//consumer.localCache.service.refreshInterval
 	//服务的定期刷新时间
 	GetServiceRefreshInterval() time.Duration
 	//设置服务的定期刷新时间
 	SetServiceRefreshInterval(time.Duration)
-	//cl5.consumer.localCache.persistDir
+	//consumer.localCache.persistDir
 	//本地缓存持久化路径
 	GetPersistDir() string
 	//设置本地缓存持久化路径
 	SetPersistDir(string)
-	//cl5.consumer.localCache.type
+	//consumer.localCache.type
 	//本地缓存类型，默认default，可修改成具体的缓存插件名
 	GetType() string
 	//设置本地缓存类型
@@ -329,9 +318,9 @@ type NearbyConfig interface {
 
 //ServiceRouterConfig 服务路由相关配置项
 type ServiceRouterConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
-	//cl5.consumer.serviceRouter.chain
+	//consumer.serviceRouter.chain
 	//路由责任链配置
 	GetChain() []string
 	//设置路由责任链配置
@@ -350,7 +339,7 @@ type ServiceRouterConfig interface {
 
 //LoadbalancerConfig 负载均衡相关配置项
 type LoadbalancerConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
 	//负载均衡类型
 	GetType() string
@@ -360,7 +349,8 @@ type LoadbalancerConfig interface {
 
 //CircuitBreakerConfig 熔断相关的配置项
 type CircuitBreakerConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
+	PluginConfig
 	//是否启用熔断
 	IsEnable() bool
 	//设置是否启用熔断
@@ -401,35 +391,55 @@ type CircuitBreakerConfig interface {
 
 //Configuration 全量配置对象
 type Configuration interface {
-	PluginAwareBaseConfig
-	//cl5.global前缀开头的所有配置项
+	BaseConfig
+	//global前缀开头的所有配置项
 	GetGlobal() GlobalConfig
-	//cl5.consumer前缀开头的所有配置项
+	//consumer前缀开头的所有配置项
 	GetConsumer() ConsumerConfig
-	//cl5.provider前缀开头的所有配置项
+	//provider前缀开头的所有配置项
 	GetProvider() ProviderConfig
 }
 
-//主动健康检查配置
-type OutlierDetectionConfig interface {
-	PluginAwareBaseConfig
+// When when to active health check
+type When string
+
+const (
+	// HealthCheckNever never active health check
+	HealthCheckNever When = "never"
+	// HealthCheckAlways always active health check
+	HealthCheckAlways = "always"
+	// HealthCheckOnRecover active health check when instance has fail
+	HealthCheckOnRecover = "on_recover"
+)
+
+//HealthCheckConfig active health check config
+type HealthCheckConfig interface {
+	BaseConfig
 	PluginConfig
-	//定时探测时间
-	GetCheckPeriod() time.Duration
-	//设置定时探测时间
-	SetCheckPeriod(time.Duration)
-	//是否启用健康检查
-	IsEnable() bool
-	//设置是否启用健康检查
-	SetEnable(bool)
-	//健康检查插件链
+	// GetWhen get when to active health check
+	GetWhen() When
+	// SetWhen set when to active health check
+	SetWhen(When)
+	// GetInterval get health check interval
+	GetInterval() time.Duration
+	// SetInterval set health check interval
+	SetInterval(duration time.Duration)
+	// GetTimeout get health check max timeout
+	GetTimeout() time.Duration
+	// SetTimeout set health check max timeout
+	SetTimeout(duration time.Duration)
+	// GetConcurrency get concurrency to execute the health check jobs
+	GetConcurrency() int
+	// SetConcurrency set concurrency to execute the health check jobs
+	SetConcurrency(int)
+	// GetChain get health checking chain
 	GetChain() []string
-	//设置健康检查插件链
+	//SetChain set health checking chain
 	SetChain([]string)
 }
 
 type SubscribeConfig interface {
-	PluginAwareBaseConfig
+	BaseConfig
 	PluginConfig
 	//获取插件
 	GetType() string

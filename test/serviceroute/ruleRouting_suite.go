@@ -19,10 +19,10 @@ package serviceroute
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/jsonpb"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/jsonpb"
 	"io/ioutil"
 	"log"
 	"math"
@@ -32,12 +32,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 )
@@ -728,9 +728,9 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	//测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
-			Namespace: productionNamespace,
-			Service:   onlyInboundService,
-			Plugin:    config.DefaultServiceRouterRuleBased,
+			Namespace:     productionNamespace,
+			Service:       onlyInboundService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
 			RouteRuleType: monitorpb.RouteRecord_DestRule,
 		}: {recordKey{
 			RouteStatus: "Normal",
@@ -985,13 +985,13 @@ func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 	request2 := &api.GetOneInstanceRequest{}
 	request2.Namespace = productionNamespace
 	request2.Service = serviceName
-	resp, err = consumer.GetOneInstance(request2)
+	_, err = consumer.GetOneInstance(request2)
 	fmt.Println(err)
 	c.Assert(err, check.NotNil)
 
 	t.mockServer.DeregisterRouteRule(service)
 	time.Sleep(time.Second * 6)
-	resp, err = consumer.GetOneInstance(request2)
+	_, err = consumer.GetOneInstance(request2)
 	c.Assert(err, check.IsNil)
 
 }
@@ -1086,7 +1086,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	//注册具有相应标签的实例
-	t.RegisterInstancesWithMetadataAndNum(service,  []*InstanceMetadataAndNum{
+	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"env": "base"}, 2},
 		{map[string]string{"env": "feature0"}, 1},
 		{map[string]string{"env": "feature1"}, 1},
@@ -1103,7 +1103,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "OneBaseTwoFeatureCaller",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"env": "feature0",
 		},
 	}
@@ -1171,7 +1171,7 @@ func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "MultiBaseTwoFeatureCaller",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"env": "feature",
 		},
 	}
@@ -1211,9 +1211,9 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	//注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2-0", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4-0"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2-0", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4-0"}, 2},
 	})
 
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -1227,7 +1227,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "MultiParameters",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"k1": "v1",
 		},
 	}
@@ -1237,7 +1237,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 		c.Assert(resp.Instances[0].GetMetadata()["k1"], check.Equals, "v1")
 	}
 
-	request1.SourceService.Metadata = map[string]string{"k2":"v2", "k3":"v3", "k4":"v4"}
+	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k3": "v3", "k4": "v4"}
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
@@ -1245,7 +1245,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 		c.Assert(resp.Instances[0].GetMetadata()["k4"], check.Equals, "v4")
 	}
 
-	request1.SourceService.Metadata = map[string]string{"k2":"v2", "k3":"v3", "k4":"v4-0"}
+	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k3": "v3", "k4": "v4-0"}
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
@@ -1253,7 +1253,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 		c.Assert(resp.Instances[0].GetMetadata()["k4"], check.Equals, "v4-0")
 	}
 
-	request1.SourceService.Metadata = map[string]string{"k2":"v2", "k5":"v5", "k4":"v4"}
+	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k5": "v5", "k4": "v4"}
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
@@ -1276,9 +1276,9 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	//注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2-0", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4-0"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2-0", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4-0"}, 2},
 	})
 
 	//配置文件里面带有k1:v1的变量
@@ -1294,7 +1294,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "MultiVariables",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"k1": "v1",
 		},
 	}
@@ -1312,7 +1312,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	cfg.GetGlobal().GetSystem().SetVariable("k2", "v2")
 	//使之无法匹配到第一个route
 	cfg.GetGlobal().GetSystem().UnsetVariable("k1")
-	request1.SourceService.Metadata = map[string]string{"k2":"v2", "k3":"v3"}
+	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k3": "v3"}
 	//匹配到第二个route
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
@@ -1321,10 +1321,9 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 		c.Assert(resp.Instances[0].GetMetadata()["k4"], check.Equals, "v4")
 	}
 
-
 	os.Unsetenv("k3")
 	os.Setenv("k4", "v4")
-	request1.SourceService.Metadata = map[string]string{"k2":"v2", "k5":"v5"}
+	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k5": "v5"}
 	//匹配到第三个route
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
@@ -1349,9 +1348,9 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	//注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2-0", "k4":"v4"}, 2},
-		{map[string]string{"k2": "v2", "k4":"v4-0"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2-0", "k4": "v4"}, 2},
+		{map[string]string{"k2": "v2", "k4": "v4-0"}, 2},
 	})
 
 	//配置文件里面带有k1:v1的变量
@@ -1367,7 +1366,7 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "BadVariable",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"k1": "v1",
 		},
 	}
@@ -1406,7 +1405,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "RegexParameter",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"k1": "v1",
 			"k2": "v2x+",
 		},
@@ -1502,7 +1501,7 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	request1.SourceService = &model.ServiceInfo{
 		Service:   "RegexVariable",
 		Namespace: testNamespace,
-		Metadata:  map[string]string{
+		Metadata: map[string]string{
 			"k1": "v1d",
 			"k2": "v2d",
 		},
@@ -1586,7 +1585,7 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 
 type InstanceMetadataAndNum struct {
 	metadata map[string]string
-	num int
+	num      int
 }
 
 func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namingpb.Service, metadatas []*InstanceMetadataAndNum) {
@@ -1600,7 +1599,7 @@ func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namin
 				Host:      &wrappers.StringValue{Value: fmt.Sprintf("127.0.0.%d", idx)},
 				Port:      &wrappers.UInt32Value{Value: uint32(10040 + i)},
 				Weight:    &wrappers.UInt32Value{Value: 100},
-				Metadata: m.metadata,
+				Metadata:  m.metadata,
 			})
 		}
 		t.mockServer.RegisterServiceInstances(svc, instances)

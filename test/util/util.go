@@ -19,14 +19,14 @@ package util
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"io/ioutil"
@@ -225,11 +225,10 @@ func SelectInstanceSpecificNum(c *check.C, consumerAPI api.ConsumerAPI, targetIn
 	allReq := &api.GetAllInstancesRequest{}
 	allReq.Service = targetIns.GetService()
 	allReq.Namespace = targetIns.GetNamespace()
-	resp, err := consumerAPI.GetAllInstances(allReq)
+	_, err := consumerAPI.GetAllInstances(allReq)
 	c.Assert(err, check.Equals, nil)
-	log.Printf("all instances: %v", resp.GetInstances())
+	//log.Printf("all instances: %v", resp.GetInstances())
 	request := &api.GetOneInstanceRequest{}
-	request.FlowID = 1111
 	request.Namespace = targetIns.GetNamespace()
 	request.Service = targetIns.GetService()
 	request.Timeout = model.ToDurationPtr(2 * time.Second)
@@ -245,6 +244,6 @@ func SelectInstanceSpecificNum(c *check.C, consumerAPI api.ConsumerAPI, targetIn
 			}
 		}
 	}
-	log.Printf("cbstatus of targetInstance: %+v\n", targetIns.GetCircuitBreakerStatus())
+	//log.Printf("cbstatus of targetInstance: %+v\n", targetIns.GetCircuitBreakerStatus())
 	c.Assert(selected, check.Equals, selectNum)
 }

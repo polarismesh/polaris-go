@@ -19,7 +19,6 @@ package config
 
 import (
 	"errors"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -64,16 +63,4 @@ func (p *ProviderConfigImpl) SetDefault() {
 func (p *ProviderConfigImpl) Init() {
 	p.RateLimit = &RateLimitConfigImpl{}
 	p.RateLimit.Init()
-}
-
-//获取该域下所有插件的名字
-func (p *ProviderConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	memberArr := []PluginAwareBaseConfig{p.RateLimit}
-	for _, member := range memberArr {
-		for k := range member.GetPluginNames() {
-			nameMap.Add(k)
-		}
-	}
-	return nameMap
 }

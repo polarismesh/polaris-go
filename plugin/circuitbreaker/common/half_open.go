@@ -18,9 +18,11 @@
 package common
 
 import (
+	"github.com/golang/protobuf/proto"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"math"
 	"time"
 
@@ -43,37 +45,60 @@ func forceIsolate(instance model.Instance) bool {
 	return !instance.IsHealthy() || instance.IsIsolated()
 }
 
-//半开熔断器
-type HalfOpenHandler struct {
+// HalfOpenConversionHandler 半开状态变更处理器
+type HalfOpenConversionHandler struct {
 	//熔断器全局配置
 	cbCfg config.CircuitBreakerConfig
-	//是否启用健康检查
-	enableDetection bool
+	//健康检查判断器
+	enableHealthCheck bool
 }
 
 //创建半开熔断器
-func NewHalfOpenHandler(cfg config.Configuration) *HalfOpenHandler {
-	handler := &HalfOpenHandler{
-		cbCfg:           cfg.GetConsumer().GetCircuitBreaker(),
-		enableDetection: cfg.GetConsumer().GetOutlierDetectionConfig().IsEnable(),
+func NewHalfOpenConversionHandler(cfg config.Configuration) *HalfOpenConversionHandler {
+	handler := &HalfOpenConversionHandler{
+		cbCfg:             cfg.GetConsumer().GetCircuitBreaker(),
+		enableHealthCheck: cfg.GetConsumer().GetHealthCheck().GetWhen() != config.HealthCheckNever,
 	}
 	return handler
 }
 
 //获取恢复滑桶间隔
-func (h *HalfOpenHandler) GetRecoverBucketInterval() time.Duration {
+func (h *HalfOpenConversionHandler) GetRecoverBucketInterval() time.Duration {
 	bucketSize := math.Ceil(float64(h.cbCfg.GetRecoverWindow()) / float64(h.cbCfg.GetRecoverNumBuckets()))
 	return time.Duration(bucketSize)
 }
 
 //创建半开的统计窗口
-func (h *HalfOpenHandler) CreateHalfOpenMetricWindow(name string) *metric.SliceWindow {
+func (h *HalfOpenConversionHandler) CreateHalfOpenMetricWindow(name string) *metric.SliceWindow {
 	return metric.NewSliceWindow(name, h.cbCfg.GetRecoverNumBuckets(),
 		h.GetRecoverBucketInterval(), MaxHalfOpenDimension, clock.GetClock().Now().UnixNano())
 }
 
-//熔断器从打开到半开
-func (h *HalfOpenHandler) OpenToHalfOpen(instance model.Instance, now time.Time, cbName string) bool {
+//halfOpenByCheck 打开了探测，通过探测结果来判断半开
+func (h *HalfOpenConversionHandler) halfOpenByCheck(instance model.Instance, startTime time.Time) *bool {
+	if !h.enableHealthCheck {
+		return nil
+	}
+	var instanceLocalValue local.InstanceLocalValue
+	var ok bool
+	instanceLocalValue, ok = instance.(local.InstanceLocalValue)
+	if !ok {
+		return nil
+	}
+	odStatus := instanceLocalValue.GetActiveDetectStatus()
+	if odStatus != nil && odStatus.GetStatus() == model.Healthy &&
+		odStatus.GetStartTime().After(startTime) {
+		return proto.Bool(true)
+	}
+	if odStatus != nil && odStatus.GetStatus() == model.Dead &&
+		odStatus.GetStartTime().After(startTime) {
+		return proto.Bool(false)
+	}
+	return nil
+}
+
+//OpenToHalfOpen 熔断器从打开到半开
+func (h *HalfOpenConversionHandler) OpenToHalfOpen(instance model.Instance, now time.Time, cbName string) bool {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil == cbStatus || cbStatus.GetCircuitBreaker() != cbName || cbStatus.GetStatus() != model.Open {
 		//判断状态以及是否当前熔断器
@@ -84,21 +109,11 @@ func (h *HalfOpenHandler) OpenToHalfOpen(instance model.Instance, now time.Time,
 	}
 	//增加探测结果恢复判断
 	startTime := cbStatus.GetStartTime()
-	if h.enableDetection {
-		//主动探测，如果探测是OK的话，则进行半开
-		return halfOpenByDetect(instance, startTime)
+	result := h.halfOpenByCheck(instance, startTime)
+	if nil != result {
+		return *result
 	}
 	return halfOpenByTimeout(now, startTime, h.cbCfg.GetSleepWindow())
-}
-
-//打开了探测，通过探测结果来判断半开
-func halfOpenByDetect(instance model.Instance, startTime time.Time) bool {
-	odStatus := instance.GetOutlierDetectorStatus()
-	if odStatus != nil && odStatus.GetStatus() == model.Healthy &&
-		odStatus.GetStartTime().After(startTime) {
-		return true
-	}
-	return false
 }
 
 //打开了探测，通过探测结果来判断半开
@@ -125,7 +140,7 @@ const (
 )
 
 //半开状态转换判断逻辑
-func (h *HalfOpenHandler) halfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
+func (h *HalfOpenConversionHandler) halfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil == cbStatus || cbStatus.GetCircuitBreaker() != cbName ||
 		cbStatus.GetStatus() != model.HalfOpen {
@@ -175,18 +190,18 @@ func (h *HalfOpenHandler) halfOpenConversion(now time.Time, instance model.Insta
 }
 
 //熔断器的半开状态转换
-func (h *HalfOpenHandler) HalfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
+func (h *HalfOpenConversionHandler) HalfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
 	return h.halfOpenConversion(now, instance, cbName)
 }
 
 //获取半开后分配的请求数
-func (h *HalfOpenHandler) GetRequestCountAfterHalfOpen() int {
+func (h *HalfOpenConversionHandler) GetRequestCountAfterHalfOpen() int {
 	return h.cbCfg.GetRequestCountAfterHalfOpen()
 }
 
 //统计半开状态的调用量以及成功失败数
 //当达到半开次数阈值时，返回true，代表立刻进行状态判断
-func (h *HalfOpenHandler) StatHalfOpenCalls(cbStatus model.CircuitBreakerStatus, gauge model.InstanceGauge) bool {
+func (h *HalfOpenConversionHandler) StatHalfOpenCalls(cbStatus model.CircuitBreakerStatus, gauge model.InstanceGauge) bool {
 	reqCountAfterHalfOpen := cbStatus.AddRequestCountAfterHalfOpen(1, gauge.GetRetStatus() == model.RetSuccess)
 	//如果调用失败，直接恢复成熔断状态
 	if gauge.GetRetStatus() != model.RetSuccess && cbStatus.AcquireStatusLock() {

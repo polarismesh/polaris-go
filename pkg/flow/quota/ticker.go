@@ -92,3 +92,8 @@ func (r *RemoteQuotaCallBack) Process(
 	}
 	return model.CONTINUE
 }
+
+//OnTaskEvent 任务事件回调
+func (r *RemoteQuotaCallBack) OnTaskEvent(event model.TaskEvent) {
+
+}

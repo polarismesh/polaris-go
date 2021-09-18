@@ -22,20 +22,20 @@ import (
 	"time"
 )
 
-// outlierDetectorStatus 实现接口OutlierDetectorStatus
-type outlierDetectorStatus struct {
+// healthCheckingStatus 实现接口HealthCheckingStatus
+type healthCheckingStatus struct {
 	// status 探测结果状态
-	status model.DetectorStatus
+	status model.HealthCheckStatus
 	// startTime 开始时间
 	startTime time.Time
 }
 
-// GetOutlierDetectorStatus 获取健康探测的状态结果
-func (od *outlierDetectorStatus) GetStatus() model.DetectorStatus {
+// GetStatus 获取健康探测的状态结果
+func (od *healthCheckingStatus) GetStatus() model.HealthCheckStatus {
 	return od.status
 }
 
 // GetStartTime 获取健康探测的时间
-func (od *outlierDetectorStatus) GetStartTime() time.Time {
+func (od *healthCheckingStatus) GetStartTime() time.Time {
 	return od.startTime
 }

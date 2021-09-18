@@ -18,6 +18,7 @@
 package flow
 
 import (
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -35,7 +36,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
-	"github.com/modern-go/reflect2"
 )
 
 /**
@@ -61,7 +61,7 @@ type Engine struct {
 	//全局上下文，在reportclient
 	globalCtx model.ValueContext
 	//系统服务列表
-	serverServices map[config.ClusterType]config.ClusterService
+	serverServices config.ServerServices
 	//插件仓库
 	plugins plugin.Supplier
 	//任务调度协程
@@ -95,7 +95,6 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if nil != err {
 		return err
 	}
-	//加载统计上报插件
 	if cfg.GetGlobal().GetStatReporter().IsEnable() {
 		flowEngine.reporterChain, err = data.GetStatReporterChain(cfg, plugins)
 		if nil != err {
@@ -115,9 +114,10 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	//加载全局上下文
 	flowEngine.globalCtx = globalCtx
 	//启动健康探测
-	enableOutlierDetect := cfg.GetConsumer().GetOutlierDetectionConfig().IsEnable()
-	if enableOutlierDetect {
-		if err = flowEngine.addPeriodicOutlierDetectTask(); nil != err {
+	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
+	disableHealthCheck := when == config.HealthCheckNever
+	if !disableHealthCheck {
+		if err = flowEngine.addHealthCheckTask(); nil != err {
 			return err
 		}
 	}
@@ -247,13 +247,15 @@ func (e *Engine) Start() error {
 	//添加上报sdk配置任务
 	configReportTaskValues := e.addSDKConfigReportTask()
 	//启动协程
+	discoverSvc := e.serverServices.GetClusterService(config.DiscoverCluster)
+	if nil != discoverSvc {
+		schedule.StartTask(
+			taskServerService, serverServiceTaskValues, map[interface{}]model.TaskValue{
+				keyDiscoverService: &data.ServiceKeyComparable{SvcKey: discoverSvc.ServiceKey}})
+	}
 	schedule.StartTask(
 		taskClientReport, clientReportTaskValues, map[interface{}]model.TaskValue{
 			taskClientReport: &data.AllEqualsComparable{}})
-	discoverSvc := e.serverServices[config.DiscoverCluster].ServiceKey
-	schedule.StartTask(
-		taskServerService, serverServiceTaskValues, map[interface{}]model.TaskValue{
-			keyDiscoverService: &data.ServiceKeyComparable{SvcKey: discoverSvc}})
 	schedule.StartTask(
 		taskConfigReport, configReportTaskValues, map[interface{}]model.TaskValue{
 			taskConfigReport: &data.AllEqualsComparable{}})

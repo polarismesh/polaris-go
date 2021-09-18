@@ -20,9 +20,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/hashicorp/go-multierror"
 	"time"
 )
 
@@ -225,13 +225,4 @@ func (c *CircuitBreakerConfigImpl) SetPluginConfig(pluginName string, value Base
 func (c *CircuitBreakerConfigImpl) Init() {
 	c.Plugin = PluginConfigs{}
 	c.Plugin.Init(common.TypeCircuitBreaker)
-}
-
-//获取该域下所有插件的名字
-func (c *CircuitBreakerConfigImpl) GetPluginNames() model.HashSet {
-	nameMap := model.HashSet{}
-	for _, name := range c.Chain {
-		nameMap.Add(name)
-	}
-	return nameMap
 }

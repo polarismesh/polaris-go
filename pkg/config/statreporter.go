@@ -18,7 +18,6 @@
 package config
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
@@ -88,14 +87,4 @@ func (s *StatReporterConfigImpl) Init() {
 //输出插件具体配置
 func (s *StatReporterConfigImpl) SetPluginConfig(plugName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeStatReporter, plugName, value)
-}
-
-//获取该域下所有插件的名字
-func (s *StatReporterConfigImpl) GetPluginNames() model.HashSet {
-
-	names := model.HashSet{}
-	for _, name := range s.Chain {
-		names.Add(name)
-	}
-	return names
 }

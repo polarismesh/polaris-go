@@ -20,15 +20,15 @@ package discover
 import (
 	"context"
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"github.com/modern-go/reflect2"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"log"
@@ -496,174 +496,6 @@ func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 	}
 	wg.Wait()
 }
-
-//func copy(src, dst string) (int64, error) {
-//	sourceFileStat, err := os.Stat(src)
-//	if err != nil {
-//		return 0, err
-//	}
-//
-//	if !sourceFileStat.Mode().IsRegular() {
-//		return 0, fmt.Errorf("%s is not a regular file", src)
-//	}
-//
-//	source, err := os.Open(src)
-//	if err != nil {
-//		return 0, err
-//	}
-//	defer source.Close()
-//
-//	destination, err := os.Create(dst)
-//	if err != nil {
-//		return 0, err
-//	}
-//	defer destination.Close()
-//	nBytes, err := io.Copy(destination, source)
-//	return nBytes, err
-//}
-//
-//func (t *ConsumerTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
-//	defer util.DeleteDir("./testdata/test_log/backup")
-//	err1 := os.Mkdir("./testdata/test_log/backup", 644)
-//
-//	c.Assert(err1, check.IsNil)
-//	testService := &namingpb.Service{
-//		Name:      &wrappers.StringValue{Value: fmt.Sprintf("TestCacheFile")},
-//		Namespace: &wrappers.StringValue{Value: "Test"},
-//		Token:     &wrappers.StringValue{Value: uuid.New().String()},
-//	}
-//	t.mockServer.RegisterService(testService)
-//	t.mockServer.GenTestInstancesWithHostPortAndMeta(
-//		testService, 1, "127.0.0.1", 11080, map[string]string{"protocol": "http"})
-//	t.mockServer.GenTestInstancesWithHostPortAndMeta(
-//		testService, 1, "127.0.0.1", 11090, map[string]string{"protocol": "grpc"})
-//	defer t.mockServer.DeregisterService("Test", "TestCacheFile")
-//
-//	_, err := copy("testdata/test_backup/svc#Test#TestCacheFile#instance.json", "testdata/test_log/backup/svc#Test#TestCacheFile#instance.json")
-//	c.Assert(err, check.IsNil)
-//	//_, err = copy("testdata/test_backup/svc#Test#TestCacheFile#routing.json", "testdata/test_log/backup/svc#Test#TestCacheFile#routing.json")
-//	//c.Assert(err, check.IsNil)
-//	_, err = copy("testdata/test_backup/client_info.json", "testdata/test_log/backup/client_info.json")
-//	c.Assert(err, check.IsNil)
-//
-//	cfg0 := config.NewDefaultConfiguration(
-//		[]string{fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort)})
-//	cfg0.GetConsumer().GetLocalCache().SetPersistDir("./testdata/test_log/backup")
-//	cfg0.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
-//	consumer0, err := api.NewConsumerAPIByConfig(cfg0)
-//	c.Assert(err, check.IsNil)
-//	defer consumer0.Destroy()
-//	req0 := &api.GetInstancesRequest{}
-//	req0.Namespace = "Test"
-//	req0.Service = fmt.Sprintf("TestCacheFile")
-//	result0, err := consumer0.GetInstances(req0)
-//	c.Assert(err, check.IsNil)
-//	fmt.Println(result0.GetInstances())
-//	c.Assert(len(result0.GetInstances()), check.Equals, 2)
-//	c.Assert(result0.Instances[0].GetPort() > 11000, check.Equals, true)
-//	time.Sleep(time.Second * 1)
-//
-//	_, err = copy("testdata/test_backup/svc#Test#TestCacheFile#instance.json", "testdata/test_log/backup/svc#Test#TestCacheFile#instance.json")
-//	c.Assert(err, check.IsNil)
-//	_, err = copy("testdata/test_backup/svc#Test#TestCacheFile#routing.json", "testdata/test_log/backup/svc#Test#TestCacheFile#routing.json")
-//	c.Assert(err, check.IsNil)
-//	_, err = copy("testdata/test_backup/client_info.json", "testdata/test_log/backup/client_info.json")
-//	c.Assert(err, check.IsNil)
-//
-//	cfg := config.NewDefaultConfiguration(
-//		[]string{fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort)})
-//	cfg.GetConsumer().GetLocalCache().SetPersistDir("./testdata/test_log/backup")
-//	consumer, err := api.NewConsumerAPIByConfig(cfg)
-//	c.Assert(err, check.IsNil)
-//	defer consumer.Destroy()
-//
-//	req := &api.GetOneInstanceRequest{}
-//	req.Namespace = "Test"
-//	req.Service = fmt.Sprintf("TestCacheFile")
-//	req.SourceService = &model.ServiceInfo{
-//		Service:   "TestCacheFile",
-//		Namespace: "Test",
-//		Metadata:  map[string]string{"tag": "protocol"},
-//	}
-//	result, err := consumer.GetOneInstance(req)
-//	c.Assert(err, check.IsNil)
-//	fmt.Println(result.GetInstances())
-//	c.Assert(len(result.GetInstances()), check.Equals, 1)
-//	c.Assert(result.Instances[0].GetPort() < 2000, check.Equals, true)
-//	time.Sleep(time.Second * 1)
-//
-//	result, err = consumer.GetOneInstance(req)
-//	c.Assert(err, check.IsNil)
-//	fmt.Println(result.GetInstances())
-//	c.Assert(len(result.GetInstances()), check.Equals, 1)
-//	c.Assert(result.Instances[0].GetPort() > 2000, check.Equals, true)
-//
-//	_, err = copy("testdata/test_backup/svc#Test#TestCacheFile#instance.json", "testdata/test_log/backup/svc#Test#TestCacheFile#instance.json")
-//	c.Assert(err, check.IsNil)
-//	_, err = copy("testdata/test_backup/svc#Test#TestCacheFile#routing.json", "testdata/test_log/backup/svc#Test#TestCacheFile#routing.json")
-//	c.Assert(err, check.IsNil)
-//
-//	consumer1, err := api.NewConsumerAPIByConfig(cfg)
-//	c.Assert(err, check.IsNil)
-//	defer consumer1.Destroy()
-//
-//	req1 := &api.GetInstancesRequest{}
-//	req1.Namespace = "Test"
-//	req1.Service = fmt.Sprintf("TestCacheFile")
-//	req1.SourceService = &model.ServiceInfo{
-//		Service:   "TestCacheFile",
-//		Namespace: "Test",
-//		Metadata:  map[string]string{"tag": "protocol"},
-//	}
-//	result, err = consumer1.GetInstances(req1)
-//	c.Assert(err, check.IsNil)
-//	fmt.Println(result.GetInstances())
-//	c.Assert(len(result.GetInstances()), check.Equals, 1)
-//	c.Assert(result.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
-//	time.Sleep(time.Second * 1)
-//}
-//
-//func (t *ConsumerTestingSuite) TestFileCachePwd(c *check.C) {
-//	t.FileCachePwdFunc(c, "")
-//	t.FileCachePwdFunc(c, api.SingaporeJoinPoint)
-//}
-//
-//func (t *ConsumerTestingSuite) FileCachePwdFunc(c *check.C, joinPoint string) {
-//	cfg := api.NewConfiguration()
-//	if joinPoint != "" {
-//		cfg.GetGlobal().GetServerConnector().SetJoinPoint(joinPoint)
-//	}
-//	cfg.GetGlobal().GetServerConnector().SetAddresses([]string{fmt.Sprintf("%s:%d", consumerIPAddress,
-//		consumerPort)})
-//	//fmt.Println(joinPoint)
-//	consumer, err := api.NewConsumerAPIByConfig(cfg)
-//	c.Assert(err, check.IsNil)
-//	defer consumer.Destroy()
-//
-//	req := &api.GetOneInstanceRequest{}
-//	req.Namespace = consumerNamespace
-//	req.Service = consumerService
-//	result, err := consumer.GetOneInstance(req)
-//	c.Assert(err, check.IsNil)
-//	_ = result
-//	time.Sleep(time.Second * 2)
-//	//fmt.Println(runtime.GOOS)
-//	user, err := user.Current()
-//	if err != nil {
-//		log.Fatalf(err.Error())
-//	}
-//	homeDir := user.HomeDir
-//	fmt.Printf("Home Directory: %s\n", homeDir)
-//	var filePath string
-//	if joinPoint != "" {
-//		filePath = fmt.Sprintf("%s/polaris/backup_%s/svc#testns#svc1#instance.json", homeDir, joinPoint)
-//	} else {
-//		filePath = fmt.Sprintf("%s/polaris/backup/svc#testns#svc1#instance.json", homeDir)
-//	}
-//	_, err = os.Open(filePath)
-//	fmt.Println(err)
-//	c.Assert(err, check.IsNil)
-//}
 
 func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 	log.Printf("Start TestConsumerInit")

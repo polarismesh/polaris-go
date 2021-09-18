@@ -29,12 +29,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 )
@@ -947,8 +947,9 @@ func (t *NearbyTestingSuite) TestCase11(c *check.C) {
 	getInstancesReq.FlowID = 1
 	getInstancesReq.Namespace = srNamespace
 	getInstancesReq.Service = srService
-	resp, err = consumer.GetOneInstance(getInstancesReq)
-	targetInstance := resp.GetInstances()[0]
+	oneResp, err := consumer.GetOneInstance(getInstancesReq)
+	c.Assert(err, check.IsNil)
+	targetInstance := oneResp.GetInstance()
 	//熔断健康的实例
 	fmt.Println("-------------circuitbreak on instance")
 	var errCode int32

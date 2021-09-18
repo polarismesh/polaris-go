@@ -19,6 +19,8 @@ package loadbalance
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -30,8 +32,6 @@ import (
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"log"
@@ -61,7 +61,7 @@ var (
 	lbTypeToFactor = map[string]matchFactor{
 		config.DefaultLoadBalancerWR: {
 			totalDiff: 0.025,
-			stdDev:    1,
+			stdDev:    1.5,
 		},
 		config.DefaultLoadBalancerRingHash: {
 			totalDiff: 0.3,
@@ -627,7 +627,7 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	request.HashKey = []byte("abc")
 
 	// 不设置负载均衡算法，默认使用配置文件中的, 默认为weightedRandom
-	var rspList []model.InstancesResponse
+	var rspList []model.OneInstanceResponse
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request)
 		c.Assert(err, check.IsNil)
@@ -648,7 +648,6 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	rspList = rspList[:0]
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request)
-		fmt.Println(resp.GetInstances()[0].GetPort())
 		c.Assert(err, check.IsNil)
 		rspList = append(rspList, *resp)
 	}

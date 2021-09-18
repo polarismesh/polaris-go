@@ -20,14 +20,14 @@ package stability
 import (
 	"context"
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"log"
@@ -51,7 +51,7 @@ const (
 	//初始化服务实例数
 	instanceCount = 4
 	//测试多服务首次并发拉取的场景
-	svcCount = 300
+	svcCount = 50
 	//批量服务名
 	batchSvcName = "batchSvc%d"
 	//不存在服务名
@@ -200,7 +200,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 			for {
 				select {
 				case <-ctx.Done():
-					log.Printf("context TestDynamicAddService exits")
+					//log.Printf("context TestDynamicAddService exits")
 					break ForEnd
 				default:
 					request := &api.GetInstancesRequest{}
@@ -303,7 +303,7 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 			for {
 				select {
 				case <-ctx.Done():
-					log.Printf("context TestDynamicModifyInstance exits")
+					//log.Printf("context TestDynamicModifyInstance exits")
 					break ForEnd
 				default:
 					request := &api.GetInstancesRequest{}
@@ -313,8 +313,8 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 					response, err := consumerAPI.GetInstances(request)
 					c.Assert(err, check.IsNil)
 					instances = response.Instances
-					instancesCount := len(instances)
-					log.Printf("instances count %d", instancesCount)
+					//instancesCount := len(instances)
+					//log.Printf("instances count %d", instancesCount)
 					time.Sleep(1 * time.Second)
 				}
 			}

@@ -19,6 +19,8 @@ package inmemory
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -32,8 +34,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	lrplug "github.com/polarismesh/polaris-go/plugin/localregistry/common"
-	"github.com/golang/protobuf/proto"
-	"github.com/modern-go/reflect2"
 	"sync/atomic"
 
 	"sync"
@@ -158,10 +158,6 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.serviceRefreshInterval = ctx.Config.GetConsumer().GetLocalCache().GetServiceRefreshInterval()
 	g.serviceExpireTime = ctx.Config.GetConsumer().GetLocalCache().GetServiceExpireTime()
 	g.persistDir = model.ReplaceHomeVar(ctx.Config.GetConsumer().GetLocalCache().GetPersistDir())
-	joinPoint := ctx.Config.GetGlobal().GetServerConnector().GetJoinPoint()
-	if joinPoint != "" && joinPoint != config.JoinPointMainland {
-		g.persistDir += "_" + joinPoint
-	}
 	log.GetBaseLogger().Infof("LocalCache Real persistDir:%s", g.persistDir)
 	g.persistTasks = &sync.Map{}
 	g.persistTaskChan = make(chan struct{}, 1)
@@ -568,15 +564,20 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 			switch k {
 			case localregistry.PropertyCircuitBreakerStatus:
 				preCBStatus := localValues.GetCircuitBreakerStatus()
-				localValues.SetCircuitBreakerStatus(v.(model.CircuitBreakerStatus))
+				nextCBStatus := v.(model.CircuitBreakerStatus)
+				localValues.SetCircuitBreakerStatus(nextCBStatus)
 				cbStatusUpdated = true
+				if (nil != preCBStatus && preCBStatus.GetStatus() == nextCBStatus.GetStatus()) ||
+					(nil == preCBStatus && nextCBStatus.GetStatus() == model.Close) {
+					cbStatusUpdated = false
+				}
 				err := g.engine.SyncReportStat(model.CircuitBreakStat,
 					&circuitBreakGauge{changeInstance: updateInstance, previousCBStatus: preCBStatus})
 				if nil != err {
 					log.GetBaseLogger().Errorf("fail to report circuitbreak change, error %v", err)
 				}
-			case localregistry.PropertyOutlierDetectorStatus:
-				localValues.SetOutlierDetectorStatus(v.(model.OutlierDetectorStatus))
+			case localregistry.PropertyHealthCheckStatus:
+				localValues.SetActiveDetectStatus(v.(model.ActiveDetectStatus))
 			}
 		}
 		if cbStatusUpdated {

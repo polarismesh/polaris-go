@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hashicorp/go-multierror"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -33,8 +35,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"github.com/google/uuid"
-	"github.com/hashicorp/go-multierror"
 	"gopkg.in/yaml.v2"
 
 	"io/ioutil"
@@ -52,24 +52,6 @@ const (
 	LBPolicyMaglev = config.DefaultLoadBalancerMaglev
 	//L5一致性Hash兼容算法，保证和L5产生相同的结果
 	LBPolicyL5CST = config.DefaultLoadBalancerL5CST
-
-	// 国内集群埋点
-	MainlandJoinPoint = config.JoinPointMainland
-	// 国内腾讯云金融区/合作区集群
-	TcloudFinanceJoinPoint = config.JoinPointTcloudFinance
-	// 国内微信支付独立集群
-	PrivatePayJoinPoint = config.JoinPointPrivatePay
-	// 国内PCG独立集群
-	PrivatePcgJoinPoint = config.JoinPointPrivatePcg
-	// 新加坡集群埋点
-	SingaporeJoinPoint = config.JoinPointSingapore
-	// OA 区
-	OAJoinPoint = config.JoinPointOA
-	// 美国海外集群埋点
-	USAJoinPoint = config.JoinPointUSA
-
-	RateLimitLocalMode  = model.RateLimitLocal
-	RateLimitGlobalMode = model.RateLimitGlobal
 )
 
 /**

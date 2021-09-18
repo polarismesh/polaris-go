@@ -20,6 +20,8 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,8 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/modern-go/reflect2"
 	"google.golang.org/grpc"
 	"io"
 	"sync"
@@ -643,6 +643,11 @@ func (a *AsyncRateLimitConnector) Process(
 		return model.TERMINATE
 	}
 	return model.CONTINUE
+}
+
+//OnTaskEvent 任务事件回调
+func (a *AsyncRateLimitConnector) OnTaskEvent(event model.TaskEvent) {
+
 }
 
 //获取stream的数量，用于测试

@@ -21,16 +21,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/agiledragon/gomonkey"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 // Test_GetAddressByInstance 根据Instance获取IP：port
 func Test_GetAddressByInstance(t *testing.T) {
 	Convey("空instance，应该返回错误", t, func() {
-		address, err := GetAddressByInstance(nil)
-		So(err, ShouldNotBeNil)
+		address := GetAddressByInstance(nil)
 		So(address, ShouldBeEmpty)
 	})
 
@@ -40,8 +39,7 @@ func Test_GetAddressByInstance(t *testing.T) {
 			return ""
 		})
 		defer p.Reset()
-		address, err := GetAddressByInstance(ins)
-		So(err, ShouldNotBeNil)
+		address := GetAddressByInstance(ins)
 		So(address, ShouldBeEmpty)
 	})
 
@@ -55,8 +53,7 @@ func Test_GetAddressByInstance(t *testing.T) {
 			return 0
 		})
 		defer p1.Reset()
-		address, err := GetAddressByInstance(ins)
-		So(err, ShouldNotBeNil)
+		address := GetAddressByInstance(ins)
 		So(address, ShouldBeEmpty)
 	})
 
@@ -70,8 +67,7 @@ func Test_GetAddressByInstance(t *testing.T) {
 			return 8080
 		})
 		defer p1.Reset()
-		address, err := GetAddressByInstance(ins)
-		So(err, ShouldBeNil)
+		address := GetAddressByInstance(ins)
 		So(address, ShouldNotBeEmpty)
 		So(address, ShouldEqual, "127.0.0.1:8080")
 	})

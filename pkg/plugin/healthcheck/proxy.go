@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package outlierdetection
+package healthcheck
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -23,25 +23,25 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of OutlierDetector
+//proxy of HealthChecker
 type Proxy struct {
-	OutlierDetector
+	HealthChecker
 	engine model.Engine
 }
 
 //设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
-	p.OutlierDetector = plug.(OutlierDetector)
+	p.HealthChecker = plug.(HealthChecker)
 	p.engine = engine
 }
 
-//proxy OutlierDetector DetectInstance
-func (p *Proxy) DetectInstance(inst model.Instance) (common.DetectResult, error) {
-	result, err := p.OutlierDetector.DetectInstance(inst)
+//proxy HealthChecker DetectInstance
+func (p *Proxy) DetectInstance(inst model.Instance) (DetectResult, error) {
+	result, err := p.HealthChecker.DetectInstance(inst)
 	return result, err
 }
 
 //注册proxy
 func init() {
-	plugin.RegisterPluginProxy(common.TypeOutlierDetector, &Proxy{})
+	plugin.RegisterPluginProxy(common.TypeHealthCheck, &Proxy{})
 }

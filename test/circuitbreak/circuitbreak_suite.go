@@ -19,6 +19,9 @@ package circuitbreak
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -28,9 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	log2 "log"
@@ -183,7 +183,6 @@ func (t *CircuitBreakSuite) testCircuitBreakByInstance(c *check.C, cbWay string,
 	consumerAPI := api.NewConsumerAPIByContext(sdkCtx)
 	defer consumerAPI.Destroy()
 	var targetInstance model.Instance
-	var resp *model.InstancesResponse
 	//随机获取一个实例，并将这个实例作为熔断的目标
 	if oneInstance {
 		request := &api.GetOneInstanceRequest{}
@@ -191,20 +190,20 @@ func (t *CircuitBreakSuite) testCircuitBreakByInstance(c *check.C, cbWay string,
 		request.Namespace = cbNS
 		request.Service = cbSVC
 		request.Timeout = model.ToDurationPtr(2 * time.Second)
-		resp, err = consumerAPI.GetOneInstance(request)
+		resp, err := consumerAPI.GetOneInstance(request)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(resp.Instances), check.Equals, 1)
+		targetInstance = resp.Instances[0]
 	} else {
 		request := &api.GetInstancesRequest{}
 		request.FlowID = 1111
 		request.Namespace = cbNS
 		request.Service = cbSVC
 		request.Timeout = model.ToDurationPtr(2 * time.Second)
-		resp, err = consumerAPI.GetInstances(request)
+		resp, err := consumerAPI.GetInstances(request)
 		c.Assert(err, check.IsNil)
+		targetInstance = resp.Instances[0]
 	}
-	targetInstance = resp.Instances[0]
-
 	c.Assert(cbWay == "errorCount" || cbWay == "errorRate", check.Equals, true)
 
 	switch cbWay {
@@ -694,7 +693,7 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 	request1.Service = cbSVC
 	useNum := 0
 	for i := 0; i < 10000; i++ {
-		response, err = consumerAPI.GetOneInstance(request1)
+		response, err := consumerAPI.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(response.Instances) > 0, check.Equals, true)
 		if response.Instances[0].GetId() == targetIns.GetId() {
@@ -812,17 +811,17 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	request2.FlowID = 1111
 	request2.Namespace = cbNS
 	request2.Service = "cbTest1"
-	response, err = consumerAPI.GetInstances(request2)
+	instResp, err := consumerAPI.GetInstances(request2)
 	c.Assert(err, check.IsNil)
-	c.Assert(len(response.Instances), check.Equals, 1)
-	c.Assert(response.Instances[0].GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
+	c.Assert(len(instResp.Instances), check.Equals, 1)
+	c.Assert(instResp.Instances[0].GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 
 	t.mockServer.UpdateServerInstanceHealthy(cbNS, "cbTest1", targetIns.GetId(), false)
 	time.Sleep(time.Second * 3)
-	response, err = consumerAPI.GetInstances(request2)
+	oneResponse, err := consumerAPI.GetInstances(request2)
 	c.Assert(err, check.IsNil)
-	c.Assert(len(response.Instances), check.Equals, 2)
-	for _, ins := range response.GetInstances() {
+	c.Assert(len(oneResponse.Instances), check.Equals, 2)
+	for _, ins := range oneResponse.GetInstances() {
 		c.Assert(ins.IsHealthy(), check.Equals, false)
 	}
 }
@@ -896,7 +895,7 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 		//CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
 	}
 	for i := 0; i < 29; i++ {
-		log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
+		//log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
 		util.SelectInstanceSpecificNum(c, consumerAPI, targetIns, 1, 2000)
 		err := consumerAPI.UpdateServiceCallResult(callResult)
 		c.Assert(err, check.IsNil)
@@ -1051,7 +1050,7 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 10, 2000)
 	//但是成功数少于配置要求
 	t.reportCallStatus(c, consumer, targetIns, 0, model.RetSuccess, 100*time.Millisecond, 9)
-	time.Sleep(12*time.Second)
+	time.Sleep(12 * time.Second)
 	//重新熔断
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 
@@ -1159,11 +1158,11 @@ func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
 	for _, inst := range allInstances {
 		t.reportCallStatus(c, consumer, inst, -1, model.RetFail, 100*time.Millisecond, 11)
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	for _, inst := range allInstances {
 		c.Assert(inst.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	time.Sleep(11*time.Second)
+	time.Sleep(11 * time.Second)
 	for _, inst := range allInstances {
 		c.Assert(inst.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 		for i := 0; i < 10; i++ {
@@ -1194,5 +1193,3 @@ func (t *CircuitBreakSuite) reportCallStatus(c *check.C, consumerAPI api.Consume
 		c.Assert(err, check.IsNil)
 	}
 }
-
-

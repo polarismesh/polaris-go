@@ -43,12 +43,21 @@ type TaskValues interface {
 type TaskResult int
 
 const (
-	//本次任务处理完毕，更新时间戳并等待下一轮
+	// CONTINUE 本次任务处理完毕，更新时间戳并等待下一轮
 	CONTINUE TaskResult = iota
-	//本次任务无需执行，不更新时间戳
+	// SKIP 本次任务无需执行，不更新时间戳
 	SKIP
-	//后续任务无需再执行
+	// TERMINATE 后续任务无需再执行
 	TERMINATE
+)
+
+type TaskEvent int
+
+const (
+	// EventStart 任务启动事件
+	EventStart TaskEvent = iota
+	// EventStop 任务停止事件
+	EventStop
 )
 
 //回调接口
@@ -61,6 +70,8 @@ type PeriodicCallBack interface {
 	//返回值：
 	//TaskResult：后续是否继续执行，本次是否忽略
 	Process(taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) TaskResult
+	//OnTaskEvent 任务事件回调
+	OnTaskEvent(event TaskEvent)
 }
 
 //周期执行的任务信息（含高优先级任务)

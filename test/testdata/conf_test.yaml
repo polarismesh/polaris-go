@@ -3,7 +3,6 @@ global:
     # 默认api超时时间
     timeout: 1000ms
   serverConnector:
-    joinPoint: default
     # 服务注册中心地址
     addresses:
       - 127.0.0.1:8008

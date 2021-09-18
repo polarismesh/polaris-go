@@ -1,0 +1,93 @@
+global:
+  api:
+    # 默认api超时时间
+    timeout: 500ms
+  serverConnector:
+    # 服务注册中心地址
+    addresses:
+      - 127.0.0.1:8008
+    # 访问服务注册中心的协议
+    protocol: grpc
+    # 服务的定时同步周期
+    syncInterval: 1s
+    # 服务的定时同步周期
+    serverSwitchInterval: 50m
+    # 连接超时时间
+    connectTimeout: 10ms
+  statReporter:
+    enable: false
+consumer:
+  localCache:
+    # 缓存类型
+    type: inmemory
+    # 服务超时淘汰时间
+    serviceExpireTime: 3600s
+    # 服务刷新间隔
+    serviceRefreshInterval: 5s
+    # 缓存持久化路径
+    persistDir: testdata/backup
+  weightAdjuster:
+    # 是否开启动态权重调整
+    enable: true
+    # 动态权重调整延迟倍率
+    delayFactor: 1
+    # 动态权重调整成功率倍率
+    rateFactor: 7
+  circuitBreaker:
+    # 是否开启熔断
+    enable: true
+    # 熔断器定时检查周期，默认5s，不能低于1s
+    checkPeriod: 1s
+    # 熔断周期，被熔断后多久可以变为半开
+    sleepWindow: 60s
+    # 半开状态后最多分配多少个探测请求
+    requestCountAfterHalfOpen: 3
+    # 半开状态后多少个成功请求则恢复
+    successCountAfterHalfOpen: 2
+    # 熔断插件配置
+    chain:
+    # 按照错误率进行熔断
+    - errorRate
+    # 按照连续请求错误进行熔断
+    - errorCount
+    plugin:
+      errorRate:
+        # 只有请求数达到某个阈值才执行熔断计算，默认10
+        requestVolumeThreshold: 12
+        # 触发熔断的错误率阈值，默认0.5
+        errorRateThreshold: 0.5
+        # 错误率统计时间窗口，默认1分钟
+        metricStatTimeWindow: 5s
+        # 统计窗口细分的桶数量，默认12
+        metricNumBuckets: 12
+      errorCount:
+        # 连续错误数阈值
+        continuousErrorThreshold: 10
+        # 连续错误数统计时间窗口，默认1秒
+        metricStatTimeWindow: 1s
+  healthCheck:
+    # 何时开启探测
+    when: on_recover
+    # 探测超时时间
+    timeout: 80ms
+    # 探测周期
+    interval: 1s
+    # 熔断插件配置
+    chain:
+    # http探测插件
+    - http
+    # tcp探测插件
+    - tcp
+    # 配置探测插件
+    plugin:
+      tcp:
+      http:
+        # http探测路径
+        path: /health
+  loadbalancer:
+    # 负载均衡类型
+    type: weightedRandom
+  serviceRouter:
+    # 服务路由链
+    chain:
+      - ruleBasedRouter

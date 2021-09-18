@@ -3,7 +3,6 @@ global:
     # 默认api超时时间
     timeout: 1000ms
   serverConnector:
-    joinPoint: USA
     # 访问服务注册中心的协议
     protocol: grpc
     # 服务的定时同步周期

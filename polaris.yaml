@@ -51,9 +51,6 @@ global:
     retryInterval: 1s
   #描述:对接polaris server的相关配置
   serverConnector:
-    #描述: 北极星埋点server的类型  目前有可选值： default, singapore. 如果不填默认选择国内的埋点server
-    #如果填了address, 则以address为埋点server, joinPoint值则无效
-    #joinPoint: default
     #描述:访问server的连接协议，SDK会根据协议名称会加载对应的插件
     #类型:string
     #范围:已注册的连接器插件名

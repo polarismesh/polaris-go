@@ -91,7 +91,7 @@ type Engine interface {
 	/**
 	 * @brief 同步获取负载均衡后的服务实例
 	 */
-	SyncGetOneInstance(req *GetOneInstanceRequest) (*InstancesResponse, error)
+	SyncGetOneInstance(req *GetOneInstanceRequest) (*OneInstanceResponse, error)
 
 	/**
 	 * @brief 同步获取批量服务实例

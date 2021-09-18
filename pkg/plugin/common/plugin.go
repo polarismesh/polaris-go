@@ -19,12 +19,10 @@ package common
 
 import (
 	"context"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/modern-go/reflect2"
-	"sync/atomic"
-	"time"
-
 	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"sync/atomic"
 )
 
 //Type 插件类型，每个扩展点有自己独立的插件类型
@@ -41,8 +39,8 @@ const (
 	TypeServiceRouter Type = 0x1003
 	//TypeLoadBalancer 负载均衡扩展点
 	TypeLoadBalancer Type = 0x1004
-	//TypeOutlierDetector 健康探测扩展点
-	TypeOutlierDetector Type = 0x1005
+	//TypeHealthCheck 健康探测扩展点
+	TypeHealthCheck Type = 0x1005
 	//TypeCircuitBreaker 节点熔断扩展点
 	TypeCircuitBreaker Type = 0x1006
 	//TypeWeightAdjuster 动态权重调整扩展点
@@ -63,7 +61,7 @@ var typeToPresent = map[Type]string{
 	TypeLocalRegistry:   "localRegistry",
 	TypeServiceRouter:   "serviceRouter",
 	TypeLoadBalancer:    "loadBalancer",
-	TypeOutlierDetector: "outlierDetector",
+	TypeHealthCheck:     "healthChecker",
 	TypeCircuitBreaker:  "circuitBreaker",
 	TypeWeightAdjuster:  "weightAdjuster",
 	TypeStatReporter:    "statReporter",
@@ -221,30 +219,12 @@ func (n *Notifier) Notify(sdkErr model.SDKError) {
 	n.cancel()
 }
 
-//健康探测结果
-type DetectResult interface {
-	//探测类型，与探测插件名相同
-	GetDetectType() string
-	//探测返回码
-	GetRetStatus() model.RetStatus
-	//上一次的探测时间
-	GetDetectTime() time.Time
-	// 探测是实例
-	GetDetectInstance() model.Instance
-}
-
-//用于获取探活结果
-type DetectResultProvider interface {
-	//通过实例ID来获取实例探活结果
-	GetDetectResult(instanceID string) []DetectResult
-}
-
 //要加载的插件类型
 var LoadedPluginTypes = []Type{
 	TypeServerConnector,
 	TypeServiceRouter,
 	TypeLoadBalancer,
-	TypeOutlierDetector,
+	TypeHealthCheck,
 	TypeCircuitBreaker,
 	TypeWeightAdjuster,
 	TypeStatReporter,

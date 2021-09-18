@@ -19,6 +19,8 @@ package serviceroute
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -26,8 +28,6 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"log"
@@ -149,6 +149,7 @@ func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", dstMetaIPAddress, dstMetaPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
+	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
 	cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter, &serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -183,6 +184,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", dstMetaIPAddress, dstMetaPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
+	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
 	cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter, &serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -207,7 +209,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 		}: {recordKey{
 			RouteStatus: "Normal",
 			RetCode:     "ErrCodeDstMetaMismatch",
-		}:1},
+		}: 1},
 	}, c)
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
@@ -363,6 +365,7 @@ func (t *DstMetaTestingSuite) buildFaultOverConsumer() (api.ConsumerAPI, error) 
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", dstMetaIPAddress, dstMetaPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
+	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
 	_ = cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
 		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})

@@ -19,10 +19,10 @@ package schedule
 
 import (
 	"context"
+	"github.com/modern-go/reflect2"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/modern-go/reflect2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -97,6 +97,7 @@ func (t *taskRoutine) start() {
 		return
 	}
 	t.started = true
+	t.periodicTask.CallBack.OnTaskEvent(model.EventStart)
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	if t.periodicTask.TakePriority {
 		log.GetBaseLogger().Infof("task %s started priority", t.periodicTask.Name)
@@ -114,6 +115,7 @@ func (t *taskRoutine) stop() {
 	}
 	t.cancel()
 	t.started = false
+	t.periodicTask.CallBack.OnTaskEvent(model.EventStop)
 }
 
 //优先级队列长度，暂定100

@@ -1,9 +1,11 @@
 global:
   api:
     # 默认api超时时间
-    timeout: 500ms
+    timeout: 2s
     # 客户端上报周期
     reportInterval: 3s
+    # 重试次数
+    maxRetryTimes: 5
   serverConnector:
     # 服务注册中心地址
     addresses:

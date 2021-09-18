@@ -105,3 +105,8 @@ func (s *ServerServiceCallBack) Process(
 	log.GetBaseLogger().Infof("success to discover server service %s", discoverService)
 	return model.TERMINATE
 }
+
+//OnTaskEvent 任务事件回调
+func (s *ServerServiceCallBack) OnTaskEvent(event model.TaskEvent) {
+
+}

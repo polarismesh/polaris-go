@@ -1237,7 +1237,7 @@ func (n *namingServer) genTestInstancesByMeta(
 			Revision: &wrappers.StringValue{Value: "beginReversion"},
 		})
 	}
-	fmt.Printf("id keys for %s:%s is %v\n", svc.GetNamespace().GetValue(), svc.GetName().GetValue(), keys)
+	//fmt.Printf("id keys for %s:%s is %v\n", svc.GetNamespace().GetValue(), svc.GetName().GetValue(), keys)
 	n.svcInstances[*key] = append(n.svcInstances[*key], instances...)
 	return instances
 }
