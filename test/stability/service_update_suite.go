@@ -51,7 +51,7 @@ const (
 	//初始化服务实例数
 	instanceCount = 4
 	//测试多服务首次并发拉取的场景
-	svcCount = 300
+	svcCount = 50
 	//批量服务名
 	batchSvcName = "batchSvc%d"
 	//不存在服务名
