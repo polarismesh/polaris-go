@@ -29,12 +29,13 @@ var (
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "", "namespace")
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "", "service")
 }
 
 func main() {
 	initArgs()
+	flag.Parse()
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
@@ -43,18 +44,8 @@ func main() {
 	if nil != err {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
-	log.Printf("start to invoke getOneInstance operation")
-	getOneRequest := &api.GetOneInstanceRequest{}
-	getOneRequest.Namespace = namespace
-	getOneRequest.Service = service
-	oneInstResp, err := consumer.GetOneInstance(getOneRequest)
-	if nil != err {
-		log.Fatalf("fail to getOneInstance, err is %v", err)
-	}
-	instance := oneInstResp.GetInstance()
-	if nil != instance {
-		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-	}
+	defer consumer.Destroy()
+
 	log.Printf("start to invoke getAllInstances operation")
 	getAllRequest := &api.GetAllInstancesRequest{}
 	getAllRequest.Namespace = namespace
@@ -66,7 +57,20 @@ func main() {
 	instances := allInstResp.GetInstances()
 	if len(instances) > 0 {
 		for i, instance := range instances {
-			log.Printf("%d in all: instance is %s:%d", i, instance.GetHost(), instance.GetPort())
+			log.Printf("instance getAllInstances %d is %s:%d", i, instance.GetHost(), instance.GetPort())
 		}
+	}
+
+	log.Printf("start to invoke getOneInstance operation")
+	getOneRequest := &api.GetOneInstanceRequest{}
+	getOneRequest.Namespace = namespace
+	getOneRequest.Service = service
+	oneInstResp, err := consumer.GetOneInstance(getOneRequest)
+	if nil != err {
+		log.Fatalf("fail to getOneInstance, err is %v", err)
+	}
+	instance := oneInstResp.GetInstance()
+	if nil != instance {
+		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
 	}
 }
