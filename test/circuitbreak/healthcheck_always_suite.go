@@ -87,7 +87,7 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	mockServer.RegisterService(testService)
-	mockServer.GenTestInstancesWithHostPort(testService, 100, "127.0.0.1", 1024)
+	mockServer.GenTestInstancesWithHostPort(testService, 5, "127.0.0.1", 1024)
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if nil != err {
@@ -111,7 +111,7 @@ func (t *HealthCheckAlwaysTestingSuite) TearDownSuite(c *check.C) {
 const (
 	healthPort1025 = 1025
 
-	healthPort1030 = 1030
+	healthPort1030 = 1027
 )
 
 // TestTCPDetection 测试持久化探测
@@ -146,8 +146,8 @@ func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	time.Sleep(10 * time.Second)
 	resp, err = consumerAPI.GetInstances(request)
 	c.Assert(err, check.IsNil)
-	for _, instance := range resp.Instances {
-		fmt.Printf("instance :%d, value is %v\n", instance.GetPort(), instance.GetCircuitBreakerStatus())
-	}
+	//for _, instance := range resp.Instances {
+	//	fmt.Printf("instance :%d, value is %v\n", instance.GetPort(), instance.GetCircuitBreakerStatus())
+	//}
 	c.Assert(len(resp.Instances), check.Equals, 2)
 }

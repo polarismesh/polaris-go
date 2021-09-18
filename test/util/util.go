@@ -244,6 +244,6 @@ func SelectInstanceSpecificNum(c *check.C, consumerAPI api.ConsumerAPI, targetIn
 			}
 		}
 	}
-	log.Printf("cbstatus of targetInstance: %+v\n", targetIns.GetCircuitBreakerStatus())
+	//log.Printf("cbstatus of targetInstance: %+v\n", targetIns.GetCircuitBreakerStatus())
 	c.Assert(selected, check.Equals, selectNum)
 }

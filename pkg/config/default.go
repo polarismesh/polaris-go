@@ -318,7 +318,7 @@ var (
 
 const (
 	//系统默认配置文件
-	DefaultConfigFile = "./polaris/polaris.yaml"
+	DefaultConfigFile = "./polaris.yaml"
 )
 
 //自身自带校验器的配置集合

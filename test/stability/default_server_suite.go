@@ -19,6 +19,8 @@ package stability
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,8 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"io/ioutil"
@@ -169,6 +169,7 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	enableStat := false
 	cfg.Consumer.LocalCache.PersistDir = util.BackupDir
 	cfg.Global.StatReporter.Enable = &enableStat
+	cfg.GetGlobal().GetAPI().SetTimeout(3 * time.Second)
 	defer util.DeleteDir(util.BackupDir)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)

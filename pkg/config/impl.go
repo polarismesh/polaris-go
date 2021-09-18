@@ -20,6 +20,7 @@ package config
 import (
 	"bytes"
 	"io/ioutil"
+	"log"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -227,7 +228,7 @@ func (s *ServerClusterConfigImpl) SetRefreshInterval(interval time.Duration) {
 	s.RefreshInterval = &interval
 }
 
-//通过服务信息创建服务集群配置
+// NewServerClusterConfig 通过服务信息创建服务集群配置
 func NewServerClusterConfig(svcKey model.ServiceKey) *ServerClusterConfigImpl {
 	return &ServerClusterConfigImpl{
 		Namespace: svcKey.Namespace,
@@ -235,7 +236,7 @@ func NewServerClusterConfig(svcKey model.ServiceKey) *ServerClusterConfigImpl {
 	}
 }
 
-//服务集群信息转换为服务对象
+// ServiceClusterToServiceKey 服务集群信息转换为服务对象
 func ServiceClusterToServiceKey(config ServerClusterConfig) model.ServiceKey {
 	return model.ServiceKey{
 		Namespace: config.GetNamespace(),
@@ -243,7 +244,7 @@ func ServiceClusterToServiceKey(config ServerClusterConfig) model.ServiceKey {
 	}
 }
 
-// API访问相关的配置
+// APIConfigImpl API访问相关的配置
 type APIConfigImpl struct {
 	Timeout        *time.Duration `yaml:"timeout" json:"timeout"`
 	BindIntf       string         `yaml:"bindIf" json:"bindIf"`
@@ -254,30 +255,27 @@ type APIConfigImpl struct {
 	RetryInterval  *time.Duration `yaml:"retryInterval" json:"retryInterval"`
 }
 
-//GetTimeout global.api.timeout
-// 默认调用超时时间
+// GetTimeout 默认调用超时时间
 func (a *APIConfigImpl) GetTimeout() time.Duration {
 	return *a.Timeout
 }
 
-//设置默认超时时间
+// SetTimeout 设置默认超时时间
 func (a *APIConfigImpl) SetTimeout(timeout time.Duration) {
 	a.Timeout = &timeout
 }
 
-//GetBindIntf global.api.bindIf
-// 默认客户端绑定的网卡地址
+// GetBindIntf 默认客户端绑定的网卡地址
 func (a *APIConfigImpl) GetBindIntf() string {
 	return a.BindIntf
 }
 
-//设置默认客户端绑定的网卡地址
+// SetBindIntf 设置默认客户端绑定的网卡地址
 func (a *APIConfigImpl) SetBindIntf(bindIntf string) {
 	a.BindIntf = bindIntf
 }
 
-//GetBindIntf global.api.bindIP
-// 默认客户端绑定的网卡地址
+// GetBindIP 默认客户端绑定的网卡地址
 func (a *APIConfigImpl) GetBindIP() string {
 	return a.BindIPValue
 }
@@ -287,38 +285,37 @@ func (a *APIConfigImpl) SetBindIP(bindIPValue string) {
 	a.BindIPValue = bindIPValue
 }
 
-//GetReportInterval global.api.reportInterval
-// 默认客户端上报周期
+// GetReportInterval 默认客户端上报周期
 func (a *APIConfigImpl) GetReportInterval() time.Duration {
 	return *a.ReportInterval
 }
 
-// 设置默认客户端上报周期
+// SetReportInterval 设置默认客户端上报周期
 func (a *APIConfigImpl) SetReportInterval(interval time.Duration) {
 	a.ReportInterval = &interval
 }
 
-//最大重试次数
+// GetMaxRetryTimes 最大重试次数
 func (a *APIConfigImpl) GetMaxRetryTimes() int {
 	return a.MaxRetryTimes
 }
 
-//最大重试次数
+// SetMaxRetryTimes 最大重试次数
 func (a *APIConfigImpl) SetMaxRetryTimes(maxRetryTimes int) {
 	a.MaxRetryTimes = maxRetryTimes
 }
 
-//重试周期
+// GetRetryInterval 重试周期
 func (a *APIConfigImpl) GetRetryInterval() time.Duration {
 	return *a.RetryInterval
 }
 
-//重试周期
+// SetRetryInterval 重试周期
 func (a *APIConfigImpl) SetRetryInterval(interval time.Duration) {
 	a.RetryInterval = &interval
 }
 
-//创建默认配置对象
+// NewDefaultConfiguration 创建默认配置对象
 func NewDefaultConfiguration(addresses []string) *ConfigurationImpl {
 	cfg := &ConfigurationImpl{}
 	cfg.Init()
@@ -329,7 +326,7 @@ func NewDefaultConfiguration(addresses []string) *ConfigurationImpl {
 	return cfg
 }
 
-//获取可以从获取的容器
+// GetContainerNameEnvList 获取可以从获取的容器
 func GetContainerNameEnvList() []string {
 	res := make([]string, len(containerNameEnvs))
 	for i, c := range containerNameEnvs {
@@ -338,8 +335,19 @@ func GetContainerNameEnvList() []string {
 	return res
 }
 
-//创建带有默认埋点server域名的默认配置
+// NewDefaultConfigurationWithDomain 创建带有默认埋点server域名的默认配置
 func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
+	var cfg *ConfigurationImpl
+	var err error
+	if model.IsFile(DefaultConfigFile) {
+		cfg, err = LoadConfigurationByDefaultFile()
+		if nil != err {
+			log.Printf("fail to load default config from %s, err is %v", DefaultConfigFile, err)
+		}
+	}
+	if nil != cfg {
+		return cfg
+	}
 	return NewDefaultConfiguration(nil)
 }
 
@@ -355,10 +363,9 @@ func LoadConfigurationByFile(path string) (*ConfigurationImpl, error) {
 	return LoadConfiguration(buff)
 }
 
-//通过默认配置文件加载配置项
+// LoadConfigurationByDefaultFile 通过默认配置文件加载配置项
 func LoadConfigurationByDefaultFile() (*ConfigurationImpl, error) {
-	path := model.ReplaceHomeVar(DefaultConfigFile)
-	return LoadConfigurationByFile(path)
+	return LoadConfigurationByFile(DefaultConfigFile)
 }
 
 //LoadConfiguration 加载配置项

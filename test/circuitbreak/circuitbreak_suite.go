@@ -896,7 +896,7 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 		//CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
 	}
 	for i := 0; i < 29; i++ {
-		log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
+		//log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
 		util.SelectInstanceSpecificNum(c, consumerAPI, targetIns, 1, 2000)
 		err := consumerAPI.UpdateServiceCallResult(callResult)
 		c.Assert(err, check.IsNil)

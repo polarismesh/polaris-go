@@ -278,6 +278,9 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 			//头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
+		if allocatedPerSecond < 5 {
+			continue
+		}
 		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1000, check.Equals, true)
 	}
 }

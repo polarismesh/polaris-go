@@ -19,17 +19,17 @@ package stability
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 	"log"
@@ -87,7 +87,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 			Port:      &wrappers.UInt32Value{Value: uint32(port)},
 			Weight:    &wrappers.UInt32Value{Value: 100},
 			Healthy:   &wrappers.BoolValue{Value: true},
-			Metadata: map[string]string{"protocol" : "grpc"},
+			Metadata:  map[string]string{"protocol": "grpc"},
 		})
 	}
 	for _, port := range mockPorts {
@@ -162,6 +162,8 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 	configuration := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", mockListenHost, builtinPort)})
 	configuration.Global.ServerConnector.SetServerSwitchInterval(interval)
+	configuration.GetGlobal().GetSystem().GetDiscoverCluster().SetNamespace(config.ServerNamespace)
+	configuration.GetGlobal().GetSystem().GetDiscoverCluster().SetService(config.ServerDiscoverService)
 	configuration.GetGlobal().GetServerConnector().SetConnectTimeout(50 * time.Millisecond)
 	configuration.GetGlobal().GetServerConnector().SetConnectionIdleTimeout(100 * time.Millisecond)
 	configuration.Global.System.DiscoverCluster.RefreshInterval = model.ToDurationPtr(2 * time.Second)

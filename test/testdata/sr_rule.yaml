@@ -1,7 +1,7 @@
 global:
   api:
     # 默认api超时时间
-    timeout: 500ms
+    timeout: 2s
     # 客户端上报周期
     reportInterval: 3s
   serverConnector:

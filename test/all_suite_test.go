@@ -19,7 +19,6 @@ package test
 
 import (
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
-	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
 	"github.com/polarismesh/polaris-go/test/observability"
 	"github.com/polarismesh/polaris-go/test/ratelimit"
@@ -49,20 +48,20 @@ func init() {
 	if err := api.ConfigLoggers(logDir, api.DebugLog); nil != err {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
-	// sdkcontext 销毁测试
-	Suite(&stability.SDKContextDestroySuite{})
-	//consumer api测试
-	Suite(&discover.ConsumerTestingSuite{})
-	//provider api 测试
-	Suite(&discover.ProviderTestingSuite{})
-	//负载均衡测试
-	Suite(&loadbalance.LBTestingSuite{})
+	//// sdkcontext 销毁测试
+	//Suite(&stability.SDKContextDestroySuite{})
+	////consumer api测试
+	//Suite(&discover.ConsumerTestingSuite{})
+	////provider api 测试
+	//Suite(&discover.ProviderTestingSuite{})
+	////负载均衡测试
+	//Suite(&loadbalance.LBTestingSuite{})
 	//缓存持久化测试
 	//Suite(&stability.CacheTestingSuite{})
-	//熔断测试
-	Suite(&circuitbreak.CircuitBreakSuite{})
-	// 健康探测测试
-	Suite(&circuitbreak.HealthCheckTestingSuite{})
+	////熔断测试
+	//Suite(&circuitbreak.CircuitBreakSuite{})
+	//// 健康探测测试
+	//Suite(&circuitbreak.HealthCheckTestingSuite{})
 	// 持久探测测试
 	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
 	//就近路由接入测试
@@ -87,12 +86,13 @@ func init() {
 	Suite(&stability.ServerFailOverSuite{})
 	//消息订阅 测试
 	Suite(&subscribe.EventSubscribeSuit{})
-	//金丝雀路由测试
-	Suite(&serviceroute.CanaryTestingSuite{})
+	////金丝雀路由测试
+	//Suite(&serviceroute.CanaryTestingSuite{})
 	//内部服务结构测试
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
 	//基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
+
 	//基础远程限流用例测试
 	//Suite(&ratelimit.RemoteNormalTestingSuite{})
 	//限流超时淘汰用例测试
