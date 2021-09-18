@@ -95,9 +95,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if nil != err {
 		return err
 	}
-	//加载统计上报插件
-	_, hasMonitorService := flowEngine.serverServices[config.MonitorCluster]
-	if cfg.GetGlobal().GetStatReporter().IsEnable() && hasMonitorService {
+	if cfg.GetGlobal().GetStatReporter().IsEnable() {
 		flowEngine.reporterChain, err = data.GetStatReporterChain(cfg, plugins)
 		if nil != err {
 			return err

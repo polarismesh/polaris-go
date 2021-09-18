@@ -61,7 +61,7 @@ var (
 	lbTypeToFactor = map[string]matchFactor{
 		config.DefaultLoadBalancerWR: {
 			totalDiff: 0.025,
-			stdDev:    1,
+			stdDev:    1.5,
 		},
 		config.DefaultLoadBalancerRingHash: {
 			totalDiff: 0.3,

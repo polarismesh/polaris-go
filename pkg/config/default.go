@@ -216,7 +216,7 @@ const (
 	DefaultLoadBalanceReporter  string = "lbInfo"
 	DefaultRateLimitReporter    string = "rateLimitRecord"
 	DefaultServiceRouteReporter string = "serviceRoute"
-	DefaultStatReportEnabled    bool   = true
+	DefaultStatReportEnabled    bool   = false
 )
 
 const (
@@ -506,7 +506,10 @@ func (c *ConfigurationImpl) SetDefault() {
 func (s *SystemConfigImpl) Init() {
 	s.DiscoverCluster = &ServerClusterConfigImpl{}
 	s.HealthCheckCluster = &ServerClusterConfigImpl{}
-	s.MonitorCluster = &ServerClusterConfigImpl{}
+	s.MonitorCluster = &ServerClusterConfigImpl{
+		Namespace: ServerNamespace,
+		Service:   ServerMonitorService,
+	}
 }
 
 //设置systemConfig默认值
