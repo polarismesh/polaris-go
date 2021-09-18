@@ -1,0 +1,16 @@
+global:
+  serverConnector:
+    addresses:
+    - 127.0.0.1:8091
+consumer:
+  healthCheck:
+    when: always
+    interval: 1s
+    chain:
+    - http
+    plugin:
+      http:
+        path: /health
+  circuitBreaker:
+    enable: true
+    checkPeriod: 1s

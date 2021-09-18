@@ -65,7 +65,7 @@ const (
 	//默认持久化文件有效时间
 	DefaultPersistAvailableInterval = 60 * time.Second
 	//默认熔断节点检查周期
-	DefaultCircuitBreakerCheckPeriod time.Duration = 30 * time.Second
+	DefaultCircuitBreakerCheckPeriod time.Duration = 10 * time.Second
 	//最低熔断节点检查周期
 	MinCircuitBreakerCheckPeriod time.Duration = 1 * time.Second
 	//熔断器默认开启与否
