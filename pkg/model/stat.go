@@ -21,22 +21,89 @@ import (
 	"time"
 )
 
+// StatInfo
+type StatInfo struct {
+	// routerGauge instance route monitoring indicators
+	routerGauge InstanceGauge
+	// ratelimitGauge instance ratelimit monitoring indicators
+	ratelimitGauge RateLimitGauge
+	// circuitBreakGauge instance circuitBreak monitoring indicators
+	circuitBreakGauge CircuitBreakGauge
+}
+
+// GetInstanceGauge get gauge about Route
+func (statInfo *StatInfo) GetInstanceGauge() InstanceGauge {
+	return statInfo.routerGauge
+}
+
+// GetRateLimitGauge get gauge about RateLimit
+func (statInfo *StatInfo) GetRateLimitGauge() RateLimitGauge {
+	return statInfo.ratelimitGauge
+}
+
+// GetCircuitBreakGauge get gauge about CircuitBreak
+func (statInfo *StatInfo) GetCircuitBreakGauge() CircuitBreakGauge {
+	return statInfo.circuitBreakGauge
+}
+
+// NewStatInfo
+func NewStatInfo(routerGauge InstanceGauge, ratelimitGauge RateLimitGauge, circuitBreakGauge CircuitBreakGauge) *StatInfo {
+	return &StatInfo{
+		routerGauge:       routerGauge,
+		ratelimitGauge:    ratelimitGauge,
+		circuitBreakGauge: circuitBreakGauge,
+	}
+}
+
+const (
+	RateLimitResultForPass    string = "PASSED"
+	RateLimitResultForLimited string = "LIMITED"
+)
+
+// RateLimitGauge
+type RateLimitGauge interface {
+	ServiceSimple
+	// GetMethod get method name
+	GetMethod() string
+	// GetLabels get the request tag
+	GetLabels() string
+	// GetResult get rate limit result
+	GetResult() string
+}
+
+type CircuitBreakGauge interface {
+	ServiceSimple
+	// GetMethod get method name
+	GetMethod() string
+	// GetHost host information for the instance
+	GetHost() string
+	// GetPort port information of the instance
+	GetPort() int
+	// GetSubSet get Instance groups
+	GetSubSet() string
+	// GetInstanceID get instance uniq id
+	GetInstanceID() string
+	// SetInstanceID set instance uniq id info
+	SetInstanceID(id string)
+	// GetCallerService get caller service info
+	GetCallerService() ServiceMetadata
+	// GetCircuitBreakerStatus the fusible state of the instance
+	GetCircuitBreakerStatus() CircuitBreakerStatus
+}
+
 //InstanceGauge 针对单个实例的单次评估指标
 type InstanceGauge interface {
-	//获取服务的命名空间
-	GetNamespace() string
-	//获取服务名
-	GetService() string
+	ServiceSimple
 	//获取调用api
 	GetAPI() ApiOperation
 	//实例的节点信息
 	GetHost() string
 	//实例的端口信息
 	GetPort() int
+	// GetInstance get instance info
+	// GetInstance() Instance
 	//实例的调用返回状态
 	GetRetStatus() RetStatus
-	//实例的熔断状态
-	GetCircuitBreakerStatus() CircuitBreakerStatus
 	//实例的返回码
 	GetRetCodeValue() int32
 	//调用时延

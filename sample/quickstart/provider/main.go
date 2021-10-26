@@ -19,9 +19,11 @@ package main
 
 import (
 	"flag"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
+	"sync"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (
@@ -34,7 +36,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "", "service")
+	flag.StringVar(&service, "service", "tdsql-ops-server", "service")
 	flag.StringVar(&host, "host", "127.0.0.1", "host")
 	flag.IntVar(&port, "port", 7879, "port")
 	flag.StringVar(&token, "token", "", "token")
@@ -71,6 +73,7 @@ func main() {
 	for i := 0; i < 10; i++ {
 		log.Printf("do heartbeat, %d time", i)
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
+		heartbeatRequest.InstanceID = resp.InstanceID
 		heartbeatRequest.Namespace = namespace
 		heartbeatRequest.Service = service
 		heartbeatRequest.Host = host
@@ -84,14 +87,18 @@ func main() {
 	}
 
 	log.Printf("start to invoke deregister operation")
-	deregisterRequest := &api.InstanceDeRegisterRequest{}
-	deregisterRequest.Service = service
-	deregisterRequest.Namespace = namespace
-	deregisterRequest.Host = host
-	deregisterRequest.Port = port
-	deregisterRequest.ServiceToken = token
-	err = provider.Deregister(deregisterRequest)
-	if nil != err {
-		log.Fatalf("fail to deregister instance, err is %v", err)
-	}
+	// deregisterRequest := &api.InstanceDeRegisterRequest{}
+	// deregisterRequest.Service = service
+	// deregisterRequest.Namespace = namespace
+	// deregisterRequest.Host = host
+	// deregisterRequest.Port = port
+	// deregisterRequest.ServiceToken = token
+	// err = provider.Deregister(deregisterRequest)
+	// if nil != err {
+	// 	log.Fatalf("fail to deregister instance, err is %v", err)
+	// }
+
+	wait := &sync.WaitGroup{}
+	wait.Add(1)
+	wait.Wait()
 }

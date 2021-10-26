@@ -19,8 +19,6 @@ package model
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/mitchellh/go-homedir"
 	"hash/fnv"
 	"net"
 	"os"
@@ -28,6 +26,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -288,4 +289,126 @@ func SortMap(values map[string]string, keys []string) ([]string, int) {
 //将uint32类型转化为ipv4地址
 func ToNetIP(val uint32) net.IP {
 	return net.IPv4(byte(val>>24), byte(val>>16&0xFF), byte(val>>8)&0xFF, byte(val&0xFF))
+}
+
+//NewConcurrentMap 创建一个新的 ConcurrentMap
+func NewConcurrentMap() *ConcurrentMap {
+	return &ConcurrentMap{
+		actualMap: make(map[interface{}]interface{}),
+		rwLock:    sync.RWMutex{},
+	}
+}
+
+//ConcurrentMap 并发map，读读不阻塞
+type ConcurrentMap struct {
+	actualMap map[interface{}]interface{}
+	rwLock    sync.RWMutex
+	size      int
+}
+
+//Put 存入一个键值对
+func (cm *ConcurrentMap) Put(k, v interface{}) {
+	defer cm.rwLock.Unlock()
+	cm.rwLock.Lock()
+	cm.actualMap[k] = v
+	cm.size++
+}
+
+//Remove 根据 key 删除一个 key-value
+func (cm *ConcurrentMap) Remove(k interface{}) {
+	defer cm.rwLock.Unlock()
+	cm.rwLock.Lock()
+	delete(cm.actualMap, k)
+	cm.size--
+}
+
+//Get 根据 key 获取一个数据
+func (cm *ConcurrentMap) Get(k interface{}) interface{} {
+	defer cm.rwLock.RUnlock()
+	cm.rwLock.RLock()
+	return cm.actualMap[k]
+}
+
+//Contains 判断是否包含某个 key
+func (cm *ConcurrentMap) Contains(k interface{}) bool {
+	defer cm.rwLock.RUnlock()
+	cm.rwLock.RLock()
+	_, exist := cm.actualMap[k]
+	return exist
+}
+
+//ForEach 遍历所有的 key-value
+func (cm *ConcurrentMap) ForEach(consumer func(k, v interface{})) {
+	defer cm.rwLock.RUnlock()
+	cm.rwLock.RLock()
+	for k, v := range cm.actualMap {
+		consumer(k, v)
+	}
+}
+
+//Keys 获取所有的 key 数组
+func (cm *ConcurrentMap) Keys() []interface{} {
+	defer cm.rwLock.RUnlock()
+	cm.rwLock.RLock()
+	keys := make([]interface{}, len(cm.actualMap))
+	i := 0
+	for k := range cm.actualMap {
+		keys[i] = k
+		i++
+	}
+	return keys
+}
+
+//Values 获取所有的 value 数组
+func (cm *ConcurrentMap) Values() []interface{} {
+	defer cm.rwLock.RUnlock()
+	cm.rwLock.RLock()
+	values := make([]interface{}, len(cm.actualMap))
+	i := 0
+	for _, v := range cm.actualMap {
+		values[i] = v
+		i++
+	}
+	return values
+}
+
+//ComputeIfAbsent 懒Put操作，通过 key 计算是否存在该 key，如果存在，直接返回，否则执行 function 方法计算对应的 value
+func (cm *ConcurrentMap) ComputeIfAbsent(key interface{}, function func(key interface{}) interface{}) (bool, interface{}) {
+	defer cm.rwLock.Unlock()
+	cm.rwLock.Lock()
+
+	exist := true
+
+	if _, exist := cm.actualMap[key]; !exist {
+		cm.actualMap[key] = function(key)
+		cm.size++
+		exist = false
+	}
+	return exist, cm.actualMap[key]
+}
+
+//PutIfAbsent
+func (cm *ConcurrentMap) PutIfAbsent(key, val interface{}) interface{} {
+	defer cm.rwLock.Unlock()
+	cm.rwLock.Lock()
+
+	v := cm.actualMap[key]
+	if v == nil {
+		cm.actualMap[key] = val
+		return nil
+	}
+
+	return v
+}
+
+//Clear 清空 map
+func (cm *ConcurrentMap) Clear() {
+	defer cm.rwLock.Unlock()
+	cm.rwLock.Lock()
+	cm.actualMap = make(map[interface{}]interface{})
+}
+
+//Size 返回map的元素个数
+func (cm *ConcurrentMap) Size() int {
+	return cm.size
 }

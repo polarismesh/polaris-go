@@ -1,0 +1,199 @@
+2021-10-19 11:47:41.687274Z	warn	base	config/default.go:342	no IP or interface name configured
+2021-10-19 11:47:41.687476Z	warn	base	config/default.go:342	no IP or interface name configured
+2021-10-19 11:47:41.687509Z	info	base	api/config.go:284	
+-------Start to init SDKContext of version v1.0.0, IP: , PID: 1987424, UID: B9780C44-42B1-4664-B688-9A5900FCE182, CONTAINER: , HOSTNAME:VM-224-139-centos-------
+2021-10-19 11:47:41.687634Z	info	base	grpc/operation_async.go:81	set grpc plugin as connectionCreator
+2021-10-19 11:47:41.690201Z	info	base	plugin/manage.go:235	Initialized plugin type serverConnector, name grpc, id 15
+2021-10-19 11:47:41.690237Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name setDivisionRouter, id 21
+2021-10-19 11:47:41.690247Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name canaryRouter, id 16
+2021-10-19 11:47:41.690257Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name dstMetaRouter, id 17
+2021-10-19 11:47:41.690265Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name filterOnlyRouter, id 18
+2021-10-19 11:47:41.690278Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name nearbyBasedRouter, id 19
+2021-10-19 11:47:41.690697Z	info	base	plugin/manage.go:235	Initialized plugin type serviceRouter, name ruleBasedRouter, id 20
+2021-10-19 11:47:41.690717Z	info	base	plugin/manage.go:235	Initialized plugin type loadBalancer, name hash, id 7
+2021-10-19 11:47:41.690730Z	info	base	plugin/manage.go:235	Initialized plugin type loadBalancer, name maglev, id 8
+2021-10-19 11:47:41.690739Z	info	base	plugin/manage.go:235	Initialized plugin type loadBalancer, name l5cst, id 9
+2021-10-19 11:47:41.690748Z	info	base	plugin/manage.go:235	Initialized plugin type loadBalancer, name ringHash, id 10
+2021-10-19 11:47:41.691162Z	info	base	plugin/manage.go:235	Initialized plugin type loadBalancer, name weightedRandom, id 11
+2021-10-19 11:47:41.691175Z	info	base	plugin/manage.go:235	Initialized plugin type healthChecker, name http, id 5
+2021-10-19 11:47:41.691187Z	info	base	plugin/manage.go:235	Initialized plugin type healthChecker, name tcp, id 6
+2021-10-19 11:47:41.691200Z	info	base	plugin/manage.go:235	Initialized plugin type circuitBreaker, name errorCheck, id 2
+2021-10-19 11:47:41.691214Z	info	base	plugin/manage.go:235	Initialized plugin type circuitBreaker, name errorCount, id 3
+2021-10-19 11:47:41.691225Z	info	base	plugin/manage.go:235	Initialized plugin type circuitBreaker, name errorRate, id 4
+2021-10-19 11:47:41.691233Z	info	base	plugin/manage.go:235	Initialized plugin type weightAdjuster, name rateDelayAdjuster, id 27
+2021-10-19 11:47:41.693826Z	info	base	plugin/manage.go:235	Initialized plugin type statReporter, name stat2Monitor, id 22
+2021-10-19 11:47:41.693865Z	info	base	plugin/manage.go:235	Initialized plugin type statReporter, name rateLimitRecord, id 23
+2021-10-19 11:47:41.693884Z	info	base	plugin/manage.go:235	Initialized plugin type statReporter, name serviceCache, id 24
+2021-10-19 11:47:41.693903Z	info	base	plugin/manage.go:235	Initialized plugin type statReporter, name serviceRoute, id 25
+2021-10-19 11:47:41.693916Z	info	base	plugin/manage.go:235	Initialized plugin type alarmReporter, name alarm2file, id 1
+2021-10-19 11:47:41.693925Z	info	base	inmemory/inmemory.go:161	LocalCache Real persistDir:./polaris/backup
+2021-10-19 11:47:41.693972Z	info	base	plugin/manage.go:235	Initialized plugin type localRegistry, name inmemory, id 12
+2021-10-19 11:47:41.693983Z	info	base	plugin/manage.go:235	Initialized plugin type rateLimiter, name reject, id 13
+2021-10-19 11:47:41.693992Z	info	base	plugin/manage.go:235	Initialized plugin type rateLimiter, name unirate, id 14
+2021-10-19 11:47:41.694002Z	info	base	plugin/manage.go:235	Initialized plugin type subScribe, name subscribeLocalChannel, id 26
+2021-10-19 11:47:41.695292Z	info	base	api/config.go:311	
+B9780C44-42B1-4664-B688-9A5900FCE182, -------Configuration with default value-------
+global:
+  system:
+    mode: 0
+    discoverCluster:
+      namespace: ""
+      service: ""
+      refreshInterval: 1m0s
+    healthCheckCluster:
+      namespace: ""
+      service: ""
+      refreshInterval: 1m0s
+    monitorCluster:
+      namespace: Polaris
+      service: polaris.monitor
+      refreshInterval: 1m0s
+    variables: {}
+  api:
+    timeout: 1s
+    bindIf: ""
+    bindIP: ""
+    reportInterval: 10m0s
+    maxRetryTimes: 1
+    retryInterval: 1s
+  serverConnector:
+    addresses:
+    - 159.75.195.18:8091
+    protocol: grpc
+    connectTimeout: 500ms
+    messageTimeout: 1.5s
+    connectionIdleTimeout: 3s
+    requestQueueSize: 1000
+    serverSwitchInterval: 10m0s
+    reconnectInterval: 500ms
+    plugin:
+      grpc:
+        maxCallRecvMsgSize: 52428800
+  statReporter:
+    enable: false
+    chain:
+    - stat2Monitor
+    - serviceCache
+    - rateLimitRecord
+    - serviceRoute
+    plugin:
+      rateLimitRecord:
+        reportInterval: 1m0s
+      serviceCache:
+        reportInterval: 3m0s
+      serviceRoute:
+        reportInterval: 5m0s
+      stat2Monitor:
+        metricsReportWindow: 1m0s
+        metricsNumBuckets: 12
+consumer:
+  localCache:
+    serviceExpireTime: 24h0m0s
+    serviceRefreshInterval: 2s
+    persistDir: ./polaris/backup
+    type: inmemory
+    persistMaxWriteRetry: 5
+    persistMaxReadRetry: 1
+    persistRetryInterval: 1s
+    persistAvailableInterval: 1m0s
+    startUseFileCache: true
+    plugin: {}
+  serviceRouter:
+    chain:
+    - ruleBasedRouter
+    - nearbyBasedRouter
+    plugin:
+      nearbyBasedRouter:
+        matchLevel: zone
+        maxMatchLevel: ""
+        strictNearby: false
+        enableDegradeByUnhealthyPercent: true
+        unhealthyPercentToDegrade: 100
+    percentOfMinInstances: 0
+    enableRecoverAll: true
+  loadbalancer:
+    type: weightedRandom
+    plugin:
+      hash:
+        hashFunction: murmur3
+      maglev:
+        hashFunction: murmur3
+        tableSize: 65537
+      ringHash:
+        hashFunction: murmur3
+        vnodeCount: 10
+  circuitBreaker:
+    enable: true
+    checkPeriod: 10s
+    chain:
+    - errorCount
+    - errorRate
+    sleepWindow: 30s
+    requestCountAfterHalfOpen: 10
+    successCountAfterHalfOpen: 8
+    recoverWindow: 1m0s
+    recoverNumBuckets: 10
+    plugin:
+      errorCount:
+        continuousErrorThreshold: 10
+        metricStatTimeWindow: 1m0s
+        metricNumBuckets: 10
+      errorRate:
+        requestVolumeThreshold: 10
+        errorRatePercent: 50
+        errorRateThreshold: 0
+        metricStatTimeWindow: 1m0s
+        metricNumBuckets: 5
+  healthCheck:
+    when: never
+    interval: 10s
+    timeout: 100ms
+    chain: []
+    concurrency: 1
+    plugin:
+      http:
+        path: ""
+        host: ""
+        requestHeadersToAdd: []
+        expectedStatuses:
+        - start: 200
+          end: 400
+      tcp: {}
+  subscribe:
+    type: subscribeLocalChannel
+    plugin:
+      subscribeLocalChannel:
+        channelBufferSize: 30
+  servicesSpecific: []
+provider:
+  rateLimit:
+    enable: true
+    plugin:
+      unirate:
+        maxQueuingTime: 1s
+    mode: "1"
+    rateLimitCluster:
+      namespace: ""
+      service: ""
+      refreshInterval: 1m0s
+    maxWindowSize: 20000
+    purgeInterval: 1m0s
+
+2021-10-19 11:47:41.695325Z	info	base	api/config.go:316	
+-------B9780C44-42B1-4664-B688-9A5900FCE182, All plugins and engine initialized successfully-------
+2021-10-19 11:47:41.695445Z	info	base	common/cache_persist.go:138	Start to load cache from polaris/backup/client_info.json
+2021-10-19 11:47:41.696165Z	info	base	startup/client_report.go:135	current client area info is {Region:, Zone:, Campus:}
+2021-10-19 11:47:41.696204Z	info	base	schedule/routines.go:212	item clientReportTask in task clientReportTask has added
+2021-10-19 11:47:41.696219Z	info	base	schedule/routines.go:106	task clientReportTask started period 5m0s
+2021-10-19 11:47:41.696236Z	info	base	schedule/routines.go:257	task clientReportTask has been started
+2021-10-19 11:47:41.696245Z	info	base	schedule/routines.go:212	item sdkConfigReportTask in task sdkConfigReportTask has added
+2021-10-19 11:47:41.696256Z	info	base	schedule/routines.go:106	task sdkConfigReportTask started period 2m30s
+2021-10-19 11:47:41.696266Z	info	base	schedule/routines.go:257	task sdkConfigReportTask has been started
+2021-10-19 11:47:41.696277Z	info	base	api/config.go:326	
+-------B9780C44-42B1-4664-B688-9A5900FCE182, All plugins and engine started successfully-------
+2021-10-19 11:47:41.696290Z	info	base	api/config.go:334	
+-------B9780C44-42B1-4664-B688-9A5900FCE182, SDKContext init successfully-------
+2021-10-19 11:47:41.696320Z	info	base	grpc/operation_sync.go:231	B9780C44-42B1-4664-B688-9A5900FCE182, waitDiscover: discover service is ready
+2021-10-19 11:47:41.696936Z	info	base	grpc/creator.go:82	localAddress from connection is 9.135.224.139:42348, IP is 9.135.224.139, hashValue is 5745004646677244532
+2021-10-19 11:47:42.715424Z	error	base	startup/client_report.go:113	report client info:&{Host: Version:v1.0.0 Timeout:1s PersistHandler:0xb18880}, error:Polaris-1007(ErrCodeNetworkError): fail to get connection, opKey ReportClient, cause: fail to connect to 159.75.195.18:8091, timeout is 503.129888ms, service is {ServiceKey: {namespace: "Polaris", service: "polaris-default"}, ClusterType: builtin}, because context deadline exceeded
+2021-10-19 11:47:43.203785Z	warn	base	data/util.go:184	retry register for timeout, consume time 501.890582ms, Namespace: default, Service: tdsql-ops-server, retry times: 0

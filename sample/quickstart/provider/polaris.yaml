@@ -1,4 +1,4 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - 159.75.195.18:8091

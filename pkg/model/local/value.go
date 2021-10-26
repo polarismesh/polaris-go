@@ -18,11 +18,12 @@
 package local
 
 import (
+	"sync"
+	"sync/atomic"
+
 	"github.com/polarismesh/polaris-go/pkg/metric"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"sync"
-	"sync/atomic"
 )
 
 //本地实例数据，包括熔断，动态权重等信息
