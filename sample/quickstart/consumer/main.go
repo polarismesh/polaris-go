@@ -15,52 +15,62 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package main
+ package main
 
-import (
-	"flag"
-	"log"
-
-	"github.com/polarismesh/polaris-go/api"
-)
-
-var (
-	namespace string
-	service   string
-)
-
-func initArgs() {
-	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "", "service")
-}
-
-func main() {
-	initArgs()
-	flag.Parse()
-	if len(namespace) == 0 || len(service) == 0 {
-		log.Print("namespace and service are required")
-		return
-	}
-	consumer, err := api.NewConsumerAPI()
-	if nil != err {
-		log.Fatalf("fail to create consumerAPI, err is %v", err)
-	}
-	defer consumer.Destroy()
-
-	locationInfo := consumer.SDKContext().GetEngine().GetContext().GetCurrentLocation()
-
-	log.Printf("%#v\n%s\n%s\n%d", locationInfo.GetLocation(), locationInfo.IsLocationReady(), locationInfo.IsLocationInitialized(), locationInfo.GetStatus())
-
-	log.Printf("start to invoke getInstance operation")
-	getRequest := &api.GetInstancesRequest{}
-	getRequest.Namespace = namespace
-	getRequest.Service = service
-	instResp, err := consumer.GetInstances(getRequest)
-	if nil != err {
-		log.Fatalf("fail to getInstance, err is %v", err)
-	}
-	instances := instResp.GetInstances()
-	for i := range instances {
-		log.Printf("instance is %s:%d", instances[i].GetHost(), instances[i].GetPort())
-	}
-}
+ import (
+	 "flag"
+	 "github.com/polarismesh/polaris-go/api"
+	 "log"
+ )
+ 
+ var (
+	 namespace string
+	 service   string
+ )
+ 
+ func initArgs() {
+	 flag.StringVar(&namespace, "namespace", "default", "namespace")
+	 flag.StringVar(&service, "service", "", "service")
+ }
+ 
+ func main() {
+	 initArgs()
+	 flag.Parse()
+	 if len(namespace) == 0 || len(service) == 0 {
+		 log.Print("namespace and service are required")
+		 return
+	 }
+	 consumer, err := api.NewConsumerAPI()
+	 if nil != err {
+		 log.Fatalf("fail to create consumerAPI, err is %v", err)
+	 }
+	 defer consumer.Destroy()
+ 
+	 log.Printf("start to invoke getAllInstances operation")
+	 getAllRequest := &api.GetAllInstancesRequest{}
+	 getAllRequest.Namespace = namespace
+	 getAllRequest.Service = service
+	 allInstResp, err := consumer.GetAllInstances(getAllRequest)
+	 if nil != err {
+		 log.Fatalf("fail to getAllInstances, err is %v", err)
+	 }
+	 instances := allInstResp.GetInstances()
+	 if len(instances) > 0 {
+		 for i, instance := range instances {
+			 log.Printf("instance getAllInstances %d is %s:%d", i, instance.GetHost(), instance.GetPort())
+		 }
+	 }
+ 
+	 log.Printf("start to invoke getOneInstance operation")
+	 getOneRequest := &api.GetOneInstanceRequest{}
+	 getOneRequest.Namespace = namespace
+	 getOneRequest.Service = service
+	 oneInstResp, err := consumer.GetOneInstance(getOneRequest)
+	 if nil != err {
+		 log.Fatalf("fail to getOneInstance, err is %v", err)
+	 }
+	 instance := oneInstResp.GetInstance()
+	 if nil != instance {
+		 log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+	 }
+ }
