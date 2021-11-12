@@ -19,6 +19,8 @@ package flow
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -27,7 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"time"
+	"github.com/polarismesh/polaris-go/pkg/utils"
 )
 
 //结果上报及归还请求实例请求对象
@@ -334,6 +336,9 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 		RetStatus: model.RetSuccess,
 	}
 	defer e.reportAPIStat(apiCallResult)
+
+	fillLocationInCloudEnv(instance)
+
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
 	//方法开始时间
@@ -634,4 +639,12 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 	}
 	reportReq.CallResult.SetSuccess(costTime)
 	return nil
+}
+
+// fillLocationInCloudEnv 在云环境下主动填充实例的地理信息；如果用户主动设置了相关的地理信息的话，则不填充
+//  @param instance
+func fillLocationInCloudEnv(instance *model.InstanceRegisterRequest) {
+	if instance.Location == nil {
+		instance.Location = utils.GetInstanceLocation()
+	}
 }

@@ -20,6 +20,10 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+	"time"
+
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -27,10 +31,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
+	"github.com/polarismesh/polaris-go/pkg/utils"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	"github.com/golang/protobuf/jsonpb"
-	"sync/atomic"
-	"time"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 //RegisterInstance 同步注册服务
@@ -264,6 +267,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 		req.Host = g.connManager.GetClientInfo().GetIPString()
 	}
 	reqProto := reportClientRequestToProto(req)
+	fillReportInfoInCloudEnv(reqProto)
 	//打印请求报文
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
@@ -309,4 +313,13 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 		Campus:  pbResp.GetClient().GetLocation().GetCampus().GetValue(),
 	}
 	return rsp, nil
+}
+
+func fillReportInfoInCloudEnv(reqProto *namingpb.Client) {
+	localL := utils.GetInstanceLocation()
+
+	reqProto.Location = &namingpb.Location{
+		Zone:   &wrapperspb.StringValue{Value: localL.Zone},
+		Campus: &wrapperspb.StringValue{Value: localL.Campus},
+	}
 }

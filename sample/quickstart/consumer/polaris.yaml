@@ -1,4 +1,25 @@
 global:
   serverConnector:
     addresses:
-    - 127.0.0.1:8091
+      - 127.0.0.1:8091
+consumer:
+  serviceRouter:
+    chain:
+      # 基于主调和被调服务规则的路由策略(默认的路由策略)
+      - ruleBasedRouter
+      # 就近路由策略
+      - nearbyBasedRouter
+    #描述：服务路由插件的配置
+    plugin:
+      nearbyBasedRouter:
+        #描述:就近路由的最小匹配级别
+        #类型:string
+        #范围:region(大区)、zone(区域)、campus(园区)
+        #默认值:zone
+        matchLevel: campus
+        maxMatchLevel: 
+      ruleBasedRouter: {}
+    #至少应该返回多少比率的实例，如果不填，默认0%，即全死全活
+    percentOfMinInstances: 0
+    #是否开启全死全活，默认开启
+    enableRecoverAll: true

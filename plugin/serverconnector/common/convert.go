@@ -18,9 +18,9 @@
 package common
 
 import (
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
 )
 
 //将用户的API注册请求结构转换成为server端需要的proto结构
@@ -57,6 +57,15 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 			},
 		}
 	}
+
+	if nil != request.Location {
+		pbInstance.Location = &namingpb.Location{
+			Region: &wrappers.StringValue{Value: request.Location.Region},
+			Zone:   &wrappers.StringValue{Value: request.Location.Zone},
+			Campus: &wrappers.StringValue{Value: request.Location.Campus},
+		}
+	}
+
 	return pbInstance
 }
 

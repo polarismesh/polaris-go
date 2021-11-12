@@ -19,11 +19,12 @@ package model
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/modern-go/reflect2"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/modern-go/reflect2"
 
 	"github.com/hashicorp/go-multierror"
 )
@@ -1118,7 +1119,8 @@ type InstanceRegisterRequest struct {
 	Isolate *bool
 	//ttl超时时间，如果节点要调用heartbeat上报，则必须填写，否则会400141错误码，单位：秒
 	TTL *int
-
+	//实例地理信息
+	Location *Location
 	//可选，单次查询超时时间，默认直接获取全局的超时配置
 	//用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration

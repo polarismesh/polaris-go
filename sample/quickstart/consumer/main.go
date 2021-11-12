@@ -19,8 +19,9 @@ package main
 
 import (
 	"flag"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (
@@ -46,31 +47,20 @@ func main() {
 	}
 	defer consumer.Destroy()
 
-	log.Printf("start to invoke getAllInstances operation")
-	getAllRequest := &api.GetAllInstancesRequest{}
-	getAllRequest.Namespace = namespace
-	getAllRequest.Service = service
-	allInstResp, err := consumer.GetAllInstances(getAllRequest)
-	if nil != err {
-		log.Fatalf("fail to getAllInstances, err is %v", err)
-	}
-	instances := allInstResp.GetInstances()
-	if len(instances) > 0 {
-		for i, instance := range instances {
-			log.Printf("instance getAllInstances %d is %s:%d", i, instance.GetHost(), instance.GetPort())
-		}
-	}
+	locationInfo := consumer.SDKContext().GetEngine().GetContext().GetCurrentLocation()
 
-	log.Printf("start to invoke getOneInstance operation")
-	getOneRequest := &api.GetOneInstanceRequest{}
-	getOneRequest.Namespace = namespace
-	getOneRequest.Service = service
-	oneInstResp, err := consumer.GetOneInstance(getOneRequest)
+	log.Printf("%#v\n%s\n%s\n%d", locationInfo.GetLocation(), locationInfo.IsLocationReady(), locationInfo.IsLocationInitialized(), locationInfo.GetStatus())
+
+	log.Printf("start to invoke getInstance operation")
+	getRequest := &api.GetInstancesRequest{}
+	getRequest.Namespace = namespace
+	getRequest.Service = service
+	instResp, err := consumer.GetInstances(getRequest)
 	if nil != err {
-		log.Fatalf("fail to getOneInstance, err is %v", err)
+		log.Fatalf("fail to getInstance, err is %v", err)
 	}
-	instance := oneInstResp.GetInstance()
-	if nil != instance {
-		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+	instances := instResp.GetInstances()
+	for i := range instances {
+		log.Printf("instance is %s:%d", instances[i].GetHost(), instances[i].GetPort())
 	}
 }

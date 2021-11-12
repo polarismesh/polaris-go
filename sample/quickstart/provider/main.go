@@ -83,15 +83,15 @@ func main() {
 		time.Sleep(2 * time.Second)
 	}
 
-	log.Printf("start to invoke deregister operation")
-	deregisterRequest := &api.InstanceDeRegisterRequest{}
-	deregisterRequest.Service = service
-	deregisterRequest.Namespace = namespace
-	deregisterRequest.Host = host
-	deregisterRequest.Port = port
-	deregisterRequest.ServiceToken = token
-	err = provider.Deregister(deregisterRequest)
-	if nil != err {
-		log.Fatalf("fail to deregister instance, err is %v", err)
-	}
+	// log.Printf("start to invoke deregister operation")
+	// deregisterRequest := &api.InstanceDeRegisterRequest{}
+	// deregisterRequest.Service = service
+	// deregisterRequest.Namespace = namespace
+	// deregisterRequest.Host = host
+	// deregisterRequest.Port = port
+	// deregisterRequest.ServiceToken = token
+	// err = provider.Deregister(deregisterRequest)
+	// if nil != err {
+	// 	log.Fatalf("fail to deregister instance, err is %v", err)
+	// }
 }
