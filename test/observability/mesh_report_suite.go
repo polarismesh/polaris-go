@@ -18,13 +18,13 @@
 package observability
 
 import (
+	"time"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
 	"gopkg.in/check.v1"
-	"time"
 )
 
 const (
@@ -84,7 +84,7 @@ func (m *MonitorReportSuite) TestMeshConfigReport(c *check.C) {
 		Body:          &wrappers.StringValue{Value: "body of first"},
 	})
 	meshService := &namingpb.Service{
-		Name: &wrappers.StringValue{Value: model.MeshPrefix + meshID + meshType},
+		Name:      &wrappers.StringValue{Value: model.MeshPrefix + meshID + meshType},
 		Namespace: &wrappers.StringValue{Value: meshNamespace},
 	}
 	//初始只有一个resource
@@ -123,38 +123,6 @@ func (m *MonitorReportSuite) TestMeshConfigReport(c *check.C) {
 	m.mockServer.DeRegisterMeshConfig(meshService, meshConfig.MeshId.GetValue(), meshType)
 	//等待上传
 	time.Sleep(12 * time.Second)
-	totalRevisions := []string{firstRevision, secondRevision, thirdRevision, forthRevision, ""}
-	mesh1Revisions := []string{firstRevision, thirdRevision, ""}
-	mesh2Revisions := []string{secondRevision, ""}
-	meshStats := m.monitorServer.GetMeshConfigRecords()
-	m.monitorServer.SetMeshConfigRecords(nil)
-	checkMeshStats(totalRevisions, mesh1Revisions, mesh2Revisions, meshStats, c)
-}
-
-func checkMeshStats(totalRevisions, mesh1Revisions, mesh2Revisions []string, stats []*monitorpb.MeshResourceInfo, c *check.C) {
-	var totalActual []string
-	var mesh1Actual []string
-	var mesh2Actual []string
-	for _, stat := range stats {
-		for _, rev := range stat.GetRevision() {
-			totalActual = append(totalActual, rev.Revision)
-		}
-		for _, rev := range stat.GetSingleMeshResourceHistory() {
-			if rev.Name == meshName1 {
-				for _, r := range rev.GetRevision() {
-					mesh1Actual = append(mesh1Actual, r.GetRevision())
-				}
-			}
-			if rev.Name == meshName2 {
-				for _, r := range rev.GetRevision() {
-					mesh2Actual = append(mesh2Actual, r.GetRevision())
-				}
-			}
-		}
-	}
-	checkRevisions(totalRevisions, totalActual, c)
-	checkRevisions(mesh1Revisions, mesh1Actual, c)
-	checkRevisions(mesh2Revisions, mesh2Actual, c)
 }
 
 func checkRevisions(expect, actual []string, c *check.C) {

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
+	"github.com/polarismesh/polaris-go/plugin/statreporter"
 )
 
 const (
@@ -33,9 +33,9 @@ const (
 // Config
 type Config struct {
 	// JobName
-	JobName      string         `yaml:"jobName"`
+	JobName string `yaml:"jobName"`
 	// InstanceName
-	InstanceName string         `yaml:"instanceName"`
+	InstanceName string `yaml:"instanceName"`
 	// PushInterval
 	PushInterval *time.Duration `yaml:"pushInterval"`
 }
@@ -50,10 +50,10 @@ func (c *Config) Verify() error {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, nil,
 			"instanceName of statReporter rateLimitRecord not configured")
 	}
-	if *c.PushInterval < basereporter.MinReportInterval {
+	if *c.PushInterval < statreporter.MinReportInterval {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, nil,
 			"invalid pushInterval %v for statReporter rateLimitRecord, which must be greater than or equal to %v",
-			*c.PushInterval, basereporter.MinReportInterval)
+			*c.PushInterval, statreporter.MinReportInterval)
 	}
 	return nil
 }

@@ -20,7 +20,6 @@ package serviceroute
 import (
 	"fmt"
 	"github.com/golang/protobuf/jsonpb"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 	"io/ioutil"
@@ -88,8 +87,6 @@ type RuleRoutingTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	mockServer   mock.NamingServer
-	mockMonitor  mock.MonitorServer
-	grpcMonitor  *grpc.Server
 	pbServices   map[model.ServiceKey]*namingpb.Service
 }
 
@@ -377,23 +374,12 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
-	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
-		Namespace: config.ServerNamespace,
-		Service:   config.ServerMonitorService,
-	}, util.RegisteredInstance{
-		IP:      ruleMonitorIPAddr,
-		Port:    ruleMonitorPort,
-		Healthy: true,
-	})
-	if err != nil {
-		log.Fatalf("fail to setup monitor, err %v", err)
-	}
+
 }
 
 // TearDownSuite 结束测试套程序
 func (t *RuleRoutingTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
-	t.grpcMonitor.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
@@ -402,7 +388,6 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
 	c.Assert(err, check.IsNil)
-	setRouteRecordMonitor(cfg)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -420,18 +405,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	//等待路由更新
 	time.Sleep(10 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     defaultNamespace,
-			Service:       calledService,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 	//校验失败，所以上一个规则仍然有效
 	t.callDstService(consumer, c)
 	err = registerRouteRuleByFile(
@@ -440,18 +414,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	//等待路由更新
 	time.Sleep(5 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     defaultNamespace,
-			Service:       calledService,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //调用目标服务
@@ -525,7 +488,6 @@ func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
 	c.Assert(err, check.IsNil)
-	setRouteRecordMonitor(cfg)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -553,18 +515,7 @@ func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 	}
 	time.Sleep(2 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     defaultNamespace,
-			Service:       calledService,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: uint32(runNum)},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 // match inbound & outbound rules
@@ -572,7 +523,6 @@ func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
 	c.Assert(err, check.IsNil)
-	setRouteRecordMonitor(cfg)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -603,20 +553,7 @@ func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 	}
 	time.Sleep(2 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     defaultNamespace,
-			Service:       calledService,
-			SrcNamespace:  defaultNamespace,
-			SrcService:    callingService,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试匹配残缺的路由规则
@@ -624,7 +561,6 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
 	c.Assert(err, check.IsNil)
-	setRouteRecordMonitor(cfg)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -667,20 +603,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(strings.Contains(sdkErr.Error(), "sourceRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     productionNamespace,
-			Service:       onlyOutboundService,
-			SrcService:    bioService,
-			SrcNamespace:  productionNamespace,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_SrcRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeRouteRuleNotMatch",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 
 	//指定错误的metadata查询入规则不为空的服务
 	request = &api.GetInstancesRequest{}
@@ -700,20 +623,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(strings.Contains(sdkErr.Error(), "dstRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     productionNamespace,
-			Service:       onlyInboundService,
-			SrcService:    bioService,
-			SrcNamespace:  productionNamespace,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeRouteRuleNotMatch",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 
 	//不指定source，查询入规则不为空的服务
 	request = &api.GetInstancesRequest{}
@@ -726,18 +636,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(strings.Contains(sdkErr.Error(), "dstRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
 	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:     productionNamespace,
-			Service:       onlyInboundService,
-			Plugin:        config.DefaultServiceRouterRuleBased,
-			RouteRuleType: monitorpb.RouteRecord_DestRule,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeRouteRuleNotMatch",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 // inbound rules

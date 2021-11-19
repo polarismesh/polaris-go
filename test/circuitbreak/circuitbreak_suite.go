@@ -19,6 +19,12 @@ package circuitbreak
 
 import (
 	"fmt"
+	log2 "log"
+	"net"
+	"os"
+	"sync"
+	"time"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
@@ -27,18 +33,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
-	log2 "log"
-	"net"
-	"os"
-	"sort"
-	"sync"
-	"time"
 )
 
 const (
@@ -55,9 +53,6 @@ type CircuitBreakSuite struct {
 	serviceToken    string
 	testService     *namingpb.Service
 	mockServer      mock.NamingServer
-	monitorServer   mock.MonitorServer
-	monitorToken    string
-	grpcMonitor     *grpc.Server
 	monitorListener net.Listener
 }
 
@@ -70,17 +65,11 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 
 	var err error
 	t.grpcServer = grpc.NewServer(grpcOptions...)
-	t.grpcMonitor = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()
 	//注册系统服务
 	t.mockServer.RegisterServerServices(cbIP, cbPORT)
 
-	t.monitorServer = mock.NewMonitorServer()
-
-	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
-	t.mockServer.RegisterServerInstance(
-		mock.MonitorIp, mock.MonitorPort, config.ServerMonitorService, t.monitorToken, true)
 	t.mockServer.RegisterRouteRule(&namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
@@ -100,15 +89,6 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	t.mockServer.GenTestInstances(t.testService, 50)
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
-	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
-	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
-		log2.Fatal(fmt.Sprintf("error listening monitor %v", err))
-	}
-	log2.Printf("moniator server listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
-	go func() {
-		t.grpcMonitor.Serve(t.monitorListener)
-	}()
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cbIP, cbPORT))
 	c.Assert(err, check.IsNil)
@@ -126,7 +106,6 @@ func (t *CircuitBreakSuite) GetName() string {
 //销毁套件
 func (t *CircuitBreakSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
-	t.grpcMonitor.Stop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}
@@ -161,8 +140,6 @@ func (t *CircuitBreakSuite) testErrCountByInstance(
 	t.openToHalfOpen(targetInstance, 20*time.Second, c, consumerAPI)
 	t.halfOpenToClose(targetInstance, consumerAPI, c)
 	time.Sleep(13 * time.Second)
-	t.checkCircuitBreakReport(c, targetInstance)
-	t.monitorServer.SetCircuitBreakCache(nil)
 }
 
 //测试利用err_rate熔断器熔断实例
@@ -175,8 +152,6 @@ func (t *CircuitBreakSuite) testCircuitBreakByInstance(c *check.C, cbWay string,
 	cfg, err := config.LoadConfigurationByFile("testdata/circuitbreaker.yaml")
 	c.Assert(err, check.IsNil)
 	cfg.Global.StatReporter.Chain = []string{config.DefaultCacheReporter}
-	err = cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultCacheReporter,
-		&serviceinfo.Config{ReportInterval: model.ToDurationPtr(10 * time.Second)})
 	c.Assert(err, check.IsNil)
 	sdkCtx, err := api.InitContextByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -242,8 +217,6 @@ func (t *CircuitBreakSuite) testErrRateByInstance(
 	t.openToHalfOpen(targetInstance, 60*time.Second, c, consumerAPI)
 	t.halfOpenToClose(targetInstance, consumerAPI, c)
 	time.Sleep(13 * time.Second)
-	t.checkCircuitBreakReport(c, targetInstance)
-	t.monitorServer.SetCircuitBreakCache(nil)
 }
 
 func CheckInstanceAvailable(c *check.C, consumerAPI api.ConsumerAPI, targetIns model.Instance,
@@ -350,49 +323,6 @@ func (t *CircuitBreakSuite) halfOpenToClose(openInstance model.Instance, consume
 	time.Sleep(10 * time.Second)
 	c.Assert(openInstance.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Close)
 	CheckInstanceAvailable(c, consumerAPI, openInstance, true, cbNS, cbSVC)
-}
-
-//熔断变化数组
-type changeArray []*monitorpb.CircuitbreakChange
-
-//熔断比较
-func (ca changeArray) Less(i, j int) bool {
-	return ca[i].ChangeSeq < ca[j].ChangeSeq
-}
-
-//熔断交换
-func (ca changeArray) Swap(i, j int) {
-	ca[i], ca[j] = ca[j], ca[i]
-}
-
-//熔断状态数量
-func (ca changeArray) Len() int {
-	return len(ca)
-}
-
-//检查熔断状态的上报是否正确
-func (t *CircuitBreakSuite) checkCircuitBreakReport(c *check.C, inst model.Instance) {
-	uploadStatus := t.monitorServer.GetCircuitBreakStatus(model.ServiceKey{
-		Namespace: inst.GetNamespace(),
-		Service:   inst.GetService(),
-	})
-	var statusChange []*monitorpb.CircuitbreakChange
-	for _, us := range uploadStatus {
-		for _, ch := range us.InstanceCircuitbreak {
-			c.Assert(ch.GetIp(), check.Equals, inst.GetHost())
-			c.Assert(ch.GetPort(), check.Equals, inst.GetPort())
-			for _, cc := range ch.Changes {
-				statusChange = append(statusChange, cc)
-			}
-		}
-	}
-	c.Assert(len(statusChange), check.Equals, 5)
-	sort.Sort(changeArray(statusChange))
-	c.Assert(statusChange[0].Change, check.Equals, monitorpb.StatusChange_CloseToOpen)
-	c.Assert(statusChange[1].Change, check.Equals, monitorpb.StatusChange_OpenToHalfOpen)
-	c.Assert(statusChange[2].Change, check.Equals, monitorpb.StatusChange_HalfOpenToOpen)
-	c.Assert(statusChange[3].Change, check.Equals, monitorpb.StatusChange_OpenToHalfOpen)
-	c.Assert(statusChange[4].Change, check.Equals, monitorpb.StatusChange_HalfOpenToClose)
 }
 
 //通过默认配置来进行熔断测试

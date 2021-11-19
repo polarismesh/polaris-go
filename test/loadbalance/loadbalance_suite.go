@@ -29,7 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 	"google.golang.org/grpc"
@@ -92,9 +91,6 @@ type LBTestingSuite struct {
 	idInstanceCalls   map[instanceKey]int
 	mockServer        mock.NamingServer
 
-	//monitor
-	monitorServer   mock.MonitorServer
-	monitorToken    string
 	grpcMonitor     *grpc.Server
 	monitorListener net.Listener
 }
@@ -137,14 +133,10 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer.RegisterService(lbHealthyService)
 	lbHealthyInstances = t.mockServer.GenTestInstances(lbHealthyService, 10)
 
-	t.monitorServer = mock.NewMonitorServer()
-	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
-	t.mockServer.RegisterServerInstance(lbMonitorIP, lbMonitorPort, config.ServerMonitorService, t.monitorToken, true)
 	t.mockServer.RegisterRouteRule(&namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
 		t.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
-	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
 	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", lbMonitorIP, lbMonitorPort))
 	if nil != err {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))

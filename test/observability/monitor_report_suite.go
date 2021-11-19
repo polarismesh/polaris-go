@@ -19,28 +19,25 @@ package observability
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/polarismesh/polaris-go/pkg/version"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/monitor"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"sort"
 	"time"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
 )
 
 //consumerAPI各种方法的调用次数
@@ -110,16 +107,12 @@ const (
 
 //上报插件测试套件
 type MonitorReportSuite struct {
-	mockServer    mock.NamingServer
-	monitorServer mock.MonitorServer
+	mockServer mock.NamingServer
 	//SERVER
 	grpcServer *grpc.Server
 	//MONITOR
-	grpcMonitor           *grpc.Server
 	discoverLisenter      net.Listener
-	monitorListener       net.Listener
 	discoverToken         string
-	monitorToken          string
 	serviceToken          string
 	instanceId            string
 	instPort              uint32
@@ -143,25 +136,12 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 
 	m.grpcServer = util.GetGrpcServer()
 	m.discoverToken = uuid.New().String()
-	m.grpcMonitor = util.GetGrpcServer()
-
-	m.monitorServer = mock.NewMonitorServer()
 
 	m.mockServer = mock.NewNamingServer()
 	m.mockServer.RegisterServerServices(discoverIp, discoverPort)
 
-	m.monitorToken = m.mockServer.RegisterServerService(config.ServerMonitorService)
-	m.mockServer.RegisterServerInstance(
-		mock.MonitorIp, mock.MonitorPort, config.ServerMonitorService, m.monitorToken, true)
 	m.mockServer.RegisterRouteRule(util.BuildNamingService(config.ServerNamespace, config.ServerMonitorService, ""),
 		m.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
-
-	m.mockServer.RegisterNamespace(&namingpb.Namespace{
-		Name:    &wrappers.StringValue{Value: calledNs},
-		Comment: &wrappers.StringValue{Value: "for service call stat upload"},
-		Owners:  &wrappers.StringValue{Value: "monitor_reporter"},
-		Token:   &wrappers.StringValue{Value: m.monitorToken},
-	})
 
 	m.serviceToken = uuid.New().String()
 	testService := util.BuildNamingService(calledNs, calledSvc, m.serviceToken)
@@ -197,13 +177,6 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	log.Printf("appserver listening on %s:%d\n", discoverIp, discoverPort)
 	util.StartGrpcServer(m.grpcServer, m.discoverLisenter)
 
-	monitorpb.RegisterGrpcAPIServer(m.grpcMonitor, m.monitorServer)
-	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
-		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
-	}
-	log.Printf("appserver listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
-	util.StartGrpcServer(m.grpcMonitor, m.monitorListener)
 }
 
 //设置changeSvc
@@ -256,7 +229,6 @@ func (m MonitorReportSuite) setupChangeSvc() {
 
 //关闭测试套件
 func (m *MonitorReportSuite) TearDownSuite(c *check.C) {
-	m.grpcMonitor.Stop()
 	m.grpcServer.Stop()
 	util.DeleteDir(util.BackupDir)
 }
@@ -294,8 +266,6 @@ func (m *MonitorReportSuite) initStatNum() {
 
 //测试consumerAPI方法的上报
 func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
-	m.monitorServer.SetSdkStat(nil)
-	m.monitorServer.SetSvcStat(nil)
 	log.Printf("Start TestMonitorReportConsumer")
 	consumer, err := api.NewConsumerAPIByFile("testdata/monitor.yaml")
 	c.Assert(err, check.IsNil)
@@ -347,14 +317,6 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 
 	log.Printf("TestMonitorReportConsumer waiting 40s to upload stat\n")
 	time.Sleep(50 * time.Second)
-	sdkStat := m.monitorServer.GetSdkStat()
-	svcStat := m.monitorServer.GetSvcStat()
-	m.checkConsumerStat(sdkStat, svcStat, c)
-	//检测配置信息有没有上传成功
-	sdkCfg := m.monitorServer.GetSdkCfg()
-	m.monitorServer.SetSdkCfg(nil)
-	c.Assert(len(sdkCfg) > 0, check.Equals, true)
-	m.monitorServer.SetPluginStat(nil)
 }
 
 //测试consumer的getOneInstance
@@ -509,318 +471,6 @@ func (m *MonitorReportSuite) checkInitCalleeService(c *check.C, consumer api.Con
 	c.Assert(err, check.IsNil)
 }
 
-//检查consumerAPi调用统计
-func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatistics,
-	svcStat []*monitorpb.ServiceStatistics, c *check.C) {
-	uploadGetInstancesSuccessNum := 0
-	uploadGetInstancesFailNum := 0
-	uploadGetOneInstanceSuccessNum := 0
-	uploadGetOneInstanceFailNum := 0
-	uploadGetRouteRuleSuccessNum := 0
-	uploadGetRouteRuleFailNum := 0
-	uploadServiceCallResultSuccessNum := 0
-	uploadServiceCallResultFailNum := 0
-	//mesh
-	uploadGetMeshSuccessNum := 0
-	uploadGetMeshFailNum := 0
-
-	execptionFailNum := 0
-
-	uploadGetInitCalleeSuccessNum := 0
-	uploadGetInitCalleeFailNum := 0
-
-	for _, s := range sdkStat {
-		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
-		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
-		switch s.GetKey().GetSdkApi().GetValue() {
-		case model.ApiGetInstances.String():
-			//因为获取系统服务时也会使用同步api，
-			//所以成功失败数应该大于等于上报服务调用信息次数
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetInstancesSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetInstancesFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				if s.GetKey().GetResult() == monitorpb.APIResultType_PolarisFail {
-					execptionFailNum++
-				}
-				//c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiGetOneInstance.String():
-			//因为获取系统服务时也会使用同步api，
-			//所以成功失败数应该大于等于上报服务调用信息次数
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetOneInstanceSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetOneInstanceFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				if s.GetKey().GetResult() == monitorpb.APIResultType_PolarisFail {
-					execptionFailNum++
-				}
-				//c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiGetRouteRule.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetRouteRuleSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetRouteRuleFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiUpdateServiceCallResult.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadServiceCallResultSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadServiceCallResultFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiMeshConfig.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetMeshSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetMeshFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiInitCalleeServices.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetInitCalleeSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetInitCalleeFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		}
-
-	}
-	c.Assert(uploadGetInstancesSuccessNum >= GetInstancesSuccessNum, check.Equals, true)
-	c.Assert(uploadGetInstancesFailNum >= 3*GetInstancesFailNum, check.Equals, true)
-	c.Assert(uploadGetOneInstanceSuccessNum >= GetOneInstanceSuccessNum, check.Equals, true)
-	log.Printf("uploadGetOneInstanceFailNum: %d, GetOneInstanceFailNum: %d", uploadGetOneInstanceFailNum, GetOneInstanceFailNum)
-	c.Assert(uploadGetOneInstanceFailNum >= 3*GetOneInstanceFailNum, check.Equals, true)
-	c.Assert(execptionFailNum, check.Equals, 1)
-	c.Assert(uploadGetRouteRuleSuccessNum >= GetRouteRuleSuccessNum, check.Equals, true)
-	c.Assert(uploadGetRouteRuleFailNum >= GetRouteRuleFailNum, check.Equals, true)
-	c.Assert(uploadGetMeshSuccessNum >= GetMeshSuccessNum, check.Equals, true)
-	c.Assert(uploadGetMeshFailNum >= GetMeshFailNum, check.Equals, true)
-	fmt.Println("===================uploadGetInitCalleeSuccessNum", uploadGetInitCalleeSuccessNum)
-	c.Assert(uploadGetInitCalleeSuccessNum >= uploadGetInitCalleeFailNum, check.Equals, true)
-
-	hasCalledSvcStat := false
-	var svcSuccessNum uint32
-	for _, s := range svcStat {
-		if s.GetKey().GetNamespace().GetValue() == "Polaris" {
-			continue
-		}
-		hasCalledSvcStat = true
-		c.Assert(s.GetKey().GetNamespace().GetValue() == calledNs, check.Equals, true)
-		c.Assert(s.GetKey().GetService().GetValue() == calledSvc, check.Equals, true)
-		if s.GetKey().GetSuccess().GetValue() {
-			svcSuccessNum += s.GetValue().GetTotalRequestPerMinute().GetValue()
-			c.Assert(s.GetKey().ResCode, check.Equals, int32(1))
-		} else {
-			c.Assert(s.GetValue().GetTotalRequestPerMinute().GetValue() == uint32(ServiceCallFailNum),
-				check.Equals, true)
-			c.Assert(s.GetKey().ResCode, check.Equals, int32(-1))
-		}
-	}
-	log.Printf("received svcSuccessNum %d, expected ServiceCallSuccessNum %d", svcSuccessNum, ServiceCallSuccessNum)
-	c.Assert(svcSuccessNum, check.Equals, uint32(ServiceCallSuccessNum))
-	c.Assert(hasCalledSvcStat, check.Equals, true)
-}
-
-//测试providerapi方法上报统计情况
-func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
-	m.monitorServer.SetSdkStat(nil)
-	log.Printf("Start TestMonitorReportProvider")
-	provider, err := api.NewProviderAPIByFile("testdata/monitor.yaml")
-	c.Assert(err, check.IsNil)
-	defer provider.Destroy()
-	defer util.DeleteDir(util.BackupDir)
-
-	log.Printf("TestMonitorReportProvider waiting 30s for system services ready\n")
-	//等待一段时间，让系统服务就绪
-	time.Sleep(30 * time.Second)
-
-	registerReq := &api.InstanceRegisterRequest{}
-	registerReq.Namespace = calledNs
-	registerReq.Service = calledSvc
-	registerReq.ServiceToken = m.serviceToken + "err"
-	registerReq.Host = discoverIp
-	registerReq.Port = 78
-
-	for i := 0; i < RegisterFailNum; i++ {
-		_, err := provider.Register(registerReq)
-		c.Assert(err, check.NotNil)
-	}
-
-	registerReq.ServiceToken = m.serviceToken
-	for i := 0; i < RegisterSuccessNum; i++ {
-		_, err := provider.Register(registerReq)
-		c.Assert(err, check.IsNil)
-	}
-
-	deregReq := &api.InstanceDeRegisterRequest{}
-	deregReq.Namespace = calledNs
-	deregReq.Service = calledSvc
-	deregReq.ServiceToken = m.serviceToken + "err"
-	deregReq.Host = discoverIp
-	deregReq.Port = 56
-
-	for i := 0; i < DeregisterFailNum; i++ {
-		err := provider.Deregister(deregReq)
-		c.Assert(err, check.NotNil)
-	}
-
-	deregReq.ServiceToken = m.serviceToken
-	for i := 0; i < DeregisterSuccessNum; i++ {
-		err := provider.Deregister(deregReq)
-		c.Assert(err, check.IsNil)
-	}
-
-	heartBeatReq := &api.InstanceHeartbeatRequest{}
-	heartBeatReq.Namespace = calledNs
-	heartBeatReq.Service = calledSvc
-	heartBeatReq.Port = int(m.instPort)
-	heartBeatReq.Host = m.instHost
-	heartBeatReq.ServiceToken = m.serviceToken + "err"
-	heartBeatReq.InstanceID = m.instanceId
-
-	for i := 0; i < HeartbeatFailNum; i++ {
-		err := provider.Heartbeat(heartBeatReq)
-		c.Assert(err, check.NotNil)
-	}
-
-	heartBeatReq.ServiceToken = m.serviceToken
-	for i := 0; i < HeartbeatSuccessNum; i++ {
-		err := provider.Heartbeat(heartBeatReq)
-		c.Assert(err, check.IsNil)
-	}
-
-	log.Printf("TestMonitorReportProvider waiting 40s to upload stat\n")
-	time.Sleep(50 * time.Second)
-	sdkStat := m.monitorServer.GetSdkStat()
-	m.checkProviderStat(sdkStat, c)
-	//检测有没有上传配置信息成功
-	sdkCfg := m.monitorServer.GetSdkCfg()
-	m.monitorServer.SetSdkCfg(nil)
-	c.Assert(len(sdkCfg) > 0, check.Equals, true)
-	m.monitorServer.SetPluginStat(nil)
-}
-
-//测试limitAPI方法上报统计情况
-func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
-	m.monitorServer.SetSdkStat(nil)
-	log.Printf("Start TestMonitorReportLimitAPI")
-	limit, err := api.NewLimitAPIByFile("testdata/monitor.yaml")
-	c.Assert(err, check.IsNil)
-	defer limit.Destroy()
-	defer util.DeleteDir(util.BackupDir)
-
-	limitReq := api.NewQuotaRequest()
-	limitReq.SetNamespace(calledNs)
-	limitReq.SetService(calledSvc)
-	//不需要触发限流，只需要获取到限流规则即可
-	limitReq.SetLabels(map[string]string{"noKey": "noValue"})
-
-	//检查上报的错误码个数
-	for i := 0; i < GetQuotaSuccessNum; i++ {
-		_, err = limit.GetQuota(limitReq)
-		fmt.Printf("GetQuota err is %v\n", err)
-		c.Assert(err, check.IsNil)
-	}
-
-	limitReq.SetNamespace(calledNs + "err")
-	for i := 0; i < GetQuotaFailNum; i++ {
-		_, err = limit.GetQuota(limitReq)
-		c.Assert(err, check.NotNil)
-		log.Printf("expected err %v", err)
-	}
-	log.Printf("TestMonitorReportLimitAPI waiting 70s to upload stat\n")
-	time.Sleep(70 * time.Second)
-	sdkStat := m.monitorServer.GetSdkStat()
-	m.checkLimitAPIStat(sdkStat, c)
-	//检测配置信息有没有上传成功
-	sdkCfg := m.monitorServer.GetSdkCfg()
-	m.monitorServer.SetSdkCfg(nil)
-	c.Assert(len(sdkCfg) > 0, check.Equals, true)
-	m.monitorServer.SetPluginStat(nil)
-	m.monitorServer.SetCacheReport(nil)
-}
-
-//检查limitAPI方法调用统计
-func (m *MonitorReportSuite) checkLimitAPIStat(sdkStat []*monitorpb.SDKAPIStatistics, c *check.C) {
-	uploadGetQuotaSuccessNum := 0
-	uploadGetQuotaFailNum := 0
-
-	for _, s := range sdkStat {
-		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
-		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
-		switch s.GetKey().GetSdkApi().GetValue() {
-		case model.ApiGetQuota.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetQuotaSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetQuotaFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			}
-		}
-	}
-	log.Printf("GetQuotaFailNum: %d, uploadGetQuotaFailNum: %d", GetQuotaFailNum, uploadGetQuotaFailNum)
-	log.Printf("GetQuotaSuccessNum: %d, uploadGetQuotaSuccessNum: %d", GetQuotaSuccessNum, uploadGetQuotaSuccessNum)
-	//一次调用会有2个错误码，一个是规则获取失败的错误码，一个是整体接口的错误码
-	c.Assert(uploadGetQuotaFailNum, check.Equals, 2*GetQuotaFailNum)
-	c.Assert(uploadGetQuotaSuccessNum, check.Equals, GetQuotaSuccessNum)
-}
-
-//检测providerAPI调用统计
-func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatistics, c *check.C) {
-	providerNum := 0
-	uploadRegisterFail := 0
-	uploadRegisterSucc := 0
-	uploadDeregisterFail := 0
-	uploadDeregisterSucc := 0
-	uploadHeartbeatFail := 0
-	uploadHeartbeatSucc := 0
-	for _, s := range sdkStat {
-		//统计信息的版本、类型、host要对的上
-		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
-		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
-		switch s.GetKey().GetSdkApi().GetValue() {
-		case model.ApiRegister.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadRegisterSucc += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadRegisterFail += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-			providerNum++
-		case model.ApiDeregister.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadDeregisterSucc += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadDeregisterFail += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-			providerNum++
-		case model.ApiHeartbeat.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadHeartbeatSucc += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadHeartbeatFail += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-			providerNum++
-		}
-	}
-	fmt.Printf("providernum %d\n", providerNum)
-	//必须每种统计都有
-	//c.Assert(providerNum >= 6, check.Equals, true)
-	c.Assert(uploadRegisterSucc, check.Equals, RegisterSuccessNum)
-	c.Assert(uploadRegisterFail, check.Equals, RegisterFailNum)
-	c.Assert(uploadDeregisterSucc, check.Equals, DeregisterSuccessNum)
-	c.Assert(uploadDeregisterFail, check.Equals, DeregisterFailNum)
-	c.Assert(uploadHeartbeatSucc, check.Equals, HeartbeatSuccessNum)
-	c.Assert(uploadHeartbeatFail, check.Equals, HeartbeatFailNum)
-}
-
 //实例状态修改类型
 type changeStatus struct {
 	healthy bool
@@ -911,17 +561,9 @@ func (m *MonitorReportSuite) TestReportCacheInfo(c *check.C) {
 	log.Printf("all routing revisions changed: %v", revisionsOfRouting)
 	log.Printf("sleeping 15s for reporting cache")
 	time.Sleep(15 * time.Second)
-	svcCaches := m.monitorServer.GetCacheReport(model.ServiceKey{Namespace: changedNs, Service: changedSvc})
 	var svcRevisionsReport []string
 	var routingRevisionsReport []string
-	for _, sc := range svcCaches {
-		for _, r := range sc.InstancesHistory.Revision {
-			svcRevisionsReport = append(svcRevisionsReport, r.Revision)
-		}
-		for _, r := range sc.RoutingHistory.Revision {
-			routingRevisionsReport = append(routingRevisionsReport, r.Revision)
-		}
-	}
+
 	c.Assert(len(svcRevisionsReport), check.Equals, len(routingRevisionsReport))
 	c.Assert(len(revisionsOfRouting), check.Equals, len(revisionsOfSvc))
 	fmt.Printf("len of revisionsOfSvc: %d\n", len(revisionsOfSvc))
@@ -937,8 +579,6 @@ func (m *MonitorReportSuite) TestReportCacheInfo(c *check.C) {
 		c.Assert(svcRevisionsReport[i], check.Equals, revisionsOfSvc[i])
 		c.Assert(routingRevisionsReport[i], check.Equals, revisionsOfRouting[i])
 	}
-	m.monitorServer.SetPluginStat(nil)
-	m.monitorServer.SetCacheReport(nil)
 }
 
 //获取测试cacheInfo时使用的配置
@@ -947,44 +587,7 @@ func getCacheInfoConfiguration() (*config.ConfigurationImpl, error) {
 	if err != nil {
 		return nil, err
 	}
-	configuration.GetGlobal().GetStatReporter().SetPluginConfig("serviceCache",
-		&serviceinfo.Config{ReportInterval: model.ToDurationPtr(10 * time.Second)})
-	configuration.GetGlobal().GetStatReporter().SetPluginConfig("stat2Monitor", &monitor.Config{
-		MetricsReportWindow: model.ToDurationPtr(10 * time.Minute),
-		MetricsNumBuckets:   6,
-	})
 	return configuration, nil
-}
-
-//检测实例信息变更情况是否符合预期
-func (m *MonitorReportSuite) checkInstanceChangeInfo(info []*monitorpb.ServiceInfo, c *check.C) {
-	var addInstances []*monitorpb.ChangeInstance
-	var deleteInstances []*monitorpb.ChangeInstance
-	var modifiedInstances []*monitorpb.ChangeInstance
-	for _, sc := range info {
-		for _, rev := range sc.InstancesHistory.Revision {
-			c.Assert(rev.InstanceChange, check.NotNil)
-			if rev.InstanceChange.AddedInstances != nil {
-				addInstances = append(addInstances, rev.InstanceChange.AddedInstances...)
-				c.Assert(rev.InstanceChange.NewCount, check.Equals, rev.InstanceChange.OldCount+4)
-			}
-			if rev.InstanceChange.DeletedInstances != nil {
-				deleteInstances = append(deleteInstances, rev.InstanceChange.DeletedInstances...)
-				c.Assert(rev.InstanceChange.NewCount+4, check.Equals, rev.InstanceChange.OldCount)
-			}
-			if rev.InstanceChange.ModifiedInstances != nil {
-				modifiedInstances = append(modifiedInstances, rev.InstanceChange.ModifiedInstances...)
-			}
-		}
-	}
-	//statusSet := make(map[monitorpb.ModifiedInstanceInstanceStatusChange]bool)
-	c.Assert(len(modifiedInstances), check.Equals, 9)
-	//for _, mod := range modifiedInstances {
-	//	weightChange := mod.GetWeightChange()
-	//	c.Assert(weightChange.NewWeight, check.Equals, weightChange.OldWeight * 2)
-	//	statusSet[mod.GetStatusChange()] = true
-	//}
-	//c.Assert(len(statusSet), check.Equals, 9)
 }
 
 //设置changedSvc服务实例状态
@@ -1000,99 +603,6 @@ func (m *MonitorReportSuite) setRevisionOfInstance(loopCount int, c *check.C) {
 			c.Assert(err, check.IsNil)
 		}
 	}
-}
-
-//测试限流规则的版本号上报
-func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
-	log.Printf("Start TestRateLimitRuleRevisionReport")
-	defer util.DeleteDir(util.BackupDir)
-	defer m.monitorServer.SetCacheReport(nil)
-
-	svcPB := util.BuildNamingService(calledNs, calledSvc, m.serviceToken)
-
-	revisionsOfRateLimit := []string{uuid.New().String(), uuid.New().String(), uuid.New().String(), uuid.New().String()}
-
-	revisionsOfRateLimit1 := []string{uuid.New().String(), uuid.New().String()}
-
-	revisionsOfRateLimit2 := []string{uuid.New().String(), ""}
-
-	originAllRulesMsg, err := readRateLimitRuleFromFile(rateLimitRulesPath, false)
-	c.Assert(err, check.IsNil)
-	originAllRules := originAllRulesMsg.(*namingpb.RateLimit)
-
-	originRule2Msg, err := readRateLimitRuleFromFile(rateLimitRule2Path, true)
-	c.Assert(err, check.IsNil)
-	originRule2 := originRule2Msg.(*namingpb.Rule)
-
-	//设置规则的初始revision，一开始的rateLimit只有一个rule
-	m.setRateLimitRuleRevisions(originAllRules, map[string]string{rateLimitRule1Id: revisionsOfRateLimit1[0]},
-		revisionsOfRateLimit[0])
-
-	//注册初始的rateLimit
-	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
-
-	configuration, err := config.LoadConfigurationByFile("testdata/monitor.yaml")
-	c.Assert(err, check.IsNil)
-	configuration.GetGlobal().GetStatReporter().SetPluginConfig("serviceCache",
-		&serviceinfo.Config{ReportInterval: model.ToDurationPtr(15 * time.Second)})
-	configuration.GetGlobal().GetStatReporter().SetPluginConfig("stat2Monitor", &monitor.Config{
-		MetricsReportWindow: model.ToDurationPtr(10 * time.Minute),
-		MetricsNumBuckets:   6,
-	})
-	//m.mockServer.SetPrintDiscoverReturn(true)
-	configuration.Consumer.LocalCache.ServiceRefreshInterval = model.ToDurationPtr(100 * time.Millisecond)
-	limitAPI, err := api.NewLimitAPIByConfig(configuration)
-	c.Assert(err, check.IsNil)
-	defer limitAPI.Destroy()
-	limitReq := api.NewQuotaRequest()
-	limitReq.SetNamespace(calledNs)
-	limitReq.SetService(calledSvc)
-	//不需要触发限流，只需要获取到限流规则即可
-	limitReq.SetLabels(map[string]string{"noKey": "noValue"})
-	_, err = limitAPI.GetQuota(limitReq)
-	//往rateLimit添加第二个rule
-	m.setSingleRateLimitRule(originAllRules, originRule2, map[string]string{rateLimitRule2Id: revisionsOfRateLimit2[0]},
-		revisionsOfRateLimit[1])
-	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
-	time.Sleep(4 * time.Second)
-	m.setRateLimitRuleRevisions(originAllRules, map[string]string{rateLimitRule1Id: revisionsOfRateLimit1[1]},
-		revisionsOfRateLimit[2])
-	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
-	time.Sleep(4 * time.Second)
-	newRules := []*namingpb.Rule{originAllRules.Rules[0]}
-	originAllRules.Rules = newRules
-	m.setRateLimitRuleRevisions(originAllRules, nil, revisionsOfRateLimit[3])
-	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
-	time.Sleep(4 * time.Second)
-	log.Printf("sleep 5s to wait rateLimit cache report")
-	time.Sleep(5 * time.Second)
-
-	svcCaches := m.monitorServer.GetCacheReport(model.ServiceKey{Namespace: calledNs, Service: calledSvc})
-	var totalRevisions, rule1Revisions, rule2Revisions []string
-	//从monitor获取到的cache上报中提取限流规则的版本号变化
-	for _, sc := range svcCaches {
-		for _, totalRevision := range sc.GetRateLimitHistory().GetRevision() {
-			totalRevisions = append(totalRevisions, totalRevision.GetRevision())
-		}
-		for _, ruleRevision := range sc.GetSingleRateLimitHistories() {
-			if ruleRevision.RuleId == rateLimitRule1Id {
-				for _, revision := range ruleRevision.GetRevision() {
-					rule1Revisions = append(rule1Revisions, revision.Revision)
-				}
-			}
-			if ruleRevision.RuleId == rateLimitRule2Id {
-				for _, revision := range ruleRevision.GetRevision() {
-					rule2Revisions = append(rule2Revisions, revision.Revision)
-				}
-			}
-		}
-	}
-	log.Printf("revisionsOfRateLimit: %v, totalRevisions: %v", revisionsOfRateLimit, totalRevisions)
-	m.checkStringArrayEqual(revisionsOfRateLimit, totalRevisions, c)
-	log.Printf("revisionsOfRateLimit1: %v, rule1Revisions: %v", revisionsOfRateLimit1, rule1Revisions)
-	m.checkStringArrayEqual(revisionsOfRateLimit1, rule1Revisions, c)
-	log.Printf("revisionsOfRateLimit2: %v, rule2Revisions: %v", revisionsOfRateLimit2, rule2Revisions)
-	m.checkStringArrayEqual(revisionsOfRateLimit2, rule2Revisions, c)
 }
 
 //检测两个[]string是否相等
@@ -1158,8 +668,6 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	configuration, err := config.LoadConfigurationByFile("testdata/monitor.yaml")
 	c.Assert(err, check.IsNil)
-	configuration.GetGlobal().GetStatReporter().SetPluginConfig("serviceCache",
-		&serviceinfo.Config{ReportInterval: model.ToDurationPtr(5 * time.Second)})
 	configuration.Global.StatReporter.Chain = []string{config.DefaultCacheReporter}
 	configuration.Consumer.LocalCache.ServiceRefreshInterval = model.ToDurationPtr(10 * time.Millisecond)
 	percent := 0.5
@@ -1183,19 +691,6 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 	_, err = consumer.GetInstances(svcRequests)
 	c.Assert(err, check.IsNil)
 	time.Sleep(6 * time.Second)
-	records := m.monitorServer.GetCircuitBreakStatus(model.ServiceKey{
-		Namespace: recoverAllNs,
-		Service:   recoverAllSvc,
-	})
-	var recovers []monitorpb.RecoverAllStatus
-	for _, r := range records {
-		for _, c := range r.RecoverAll {
-			recovers = append(recovers, c.Change)
-		}
-	}
-	//应该有两个记录，一次开启，一次关闭全死全后
-	c.Assert(len(recovers), check.Equals, 2)
-	m.monitorServer.SetPluginStat(nil)
 }
 
 ////检测插件接口统计信息
@@ -1208,55 +703,6 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 //		}
 //	}
 //}
-
-// 检查是否有 UpdateServiceCallReport 的monitor上报
-func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
-	m.monitorServer.SetSdkStat(nil)
-	m.monitorServer.SetSvcStat(nil)
-	log.Printf("Start TestUpdateServiceCallReport")
-	consumer, err := api.NewConsumerAPIByFile("testdata/monitor.yaml")
-	c.Assert(err, check.IsNil)
-	defer consumer.Destroy()
-	defer util.DeleteDir(util.BackupDir)
-
-	request := &api.GetOneInstanceRequest{}
-	request.FlowID = 1111
-
-	//预热获取monitor
-	request.Namespace = "Polaris"
-	request.Service = "polaris.monitor"
-	resp, err := consumer.GetOneInstance(request)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(resp.GetInstances()) > 0, check.Equals, true)
-	targetInstance := resp.GetInstances()[0]
-
-	//请求一个实例的请求（错误的）
-	svcCallResult := &api.ServiceCallResult{}
-	//设置被调的实例信息
-	svcCallResult.SetCalledInstance(targetInstance)
-	//设置服务调用结果，枚举，成功或者失败
-	svcCallResult.SetRetStatus(api.RetSuccess)
-	//设置服务调用返回码
-	svcCallResult.SetRetCode(0)
-	//设置服务调用时延信息
-	svcCallResult.SetDelay(100)
-
-	err = consumer.UpdateServiceCallResult(svcCallResult)
-	//不会发生路由错误
-	c.Assert(err, check.IsNil)
-
-	log.Printf("TestUpdateServiceCallReport waiting 40s to upload stat\n")
-	time.Sleep(50 * time.Second)
-	sdkStat := m.monitorServer.GetSdkStat()
-	has := false
-	for _, s := range sdkStat {
-		if s.GetKey().GetSdkApi().GetValue() == model.ApiUpdateServiceCallResult.String() {
-			has = true
-		}
-	}
-	c.Assert(has, check.Equals, true)
-	c.Assert(len(sdkStat) >= 2, check.Equals, true)
-}
 
 //检测当前添加的错误码不会返回ErrCodeUnknown
 func (m *MonitorReportSuite) TestErrorCodeUnknown(c *check.C) {

@@ -302,13 +302,16 @@ func (e *Engine) Destroy() error {
 }
 
 //上报统计数据到统计插件中
-func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) error {
+func (e *Engine) SyncReportStat(typ model.MetricType, gauge model.InstanceGauge) error {
 	if !model.ValidMetircType(typ) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid report metric type")
 	}
+
+	stat := convertInstanceGaugeToStatInfo(gauge)
+
 	if len(e.reporterChain) > 0 {
 		for _, reporter := range e.reporterChain {
-			err := reporter.ReportStat(typ, stat)
+			err := reporter.ReportStat(stat)
 			if nil != err {
 				return err
 			}
@@ -325,4 +328,8 @@ func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 //上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
+}
+
+func convertInstanceGaugeToStatInfo(stat model.InstanceGauge) *model.StatInfo {
+	return nil
 }

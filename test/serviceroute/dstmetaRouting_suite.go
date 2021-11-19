@@ -19,20 +19,19 @@ package serviceroute
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
-	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"time"
 )
 
 const (
@@ -68,12 +67,10 @@ const (
 
 //元数据过滤路由插件测试用例
 type DstMetaTestingSuite struct {
-	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
 	testService  *namingpb.Service
-	mockMonitor  mock.MonitorServer
 	grpcMonitor  *grpc.Server
 }
 
@@ -96,25 +93,12 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	var err error
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
-	t.mockServer = mock.NewNamingServer()
-	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
-	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
-		Name:    &wrappers.StringValue{Value: dstMetaNamespace},
-		Comment: &wrappers.StringValue{Value: "for consumer api test"},
-		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
-	})
-	t.mockServer.RegisterServerServices(ipAddr, shopPort)
+
 	t.testService = &namingpb.Service{
 		Name:      &wrappers.StringValue{Value: dstMetaService},
 		Namespace: &wrappers.StringValue{Value: dstMetaNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
-	t.mockServer.RegisterService(t.testService)
-	t.mockServer.GenTestInstances(t.testService, normalInstances)
-	t.mockServer.GenTestInstancesWithMeta(t.testService, addMetaCount, map[string]string{addMetaKey: addMetaValue})
-
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if nil != err {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -123,18 +107,6 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
-
-	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
-		Namespace: config.ServerNamespace,
-		Service:   config.ServerMonitorService,
-	}, util.RegisteredInstance{
-		IP:      dstMetaMonitorAddress,
-		Port:    dstMetaMonitorPort,
-		Healthy: true,
-	})
-	if err != nil {
-		log.Fatalf("fail to setup monitor, err %v", err)
-	}
 }
 
 //SetUpSuite 结束测试套程序
@@ -151,7 +123,6 @@ func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
 	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter, &serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -165,18 +136,7 @@ func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, addMetaCount)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试正常获取元数据实例
@@ -186,7 +146,6 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
 	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter, &serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
@@ -200,18 +159,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeDstMetaMismatch)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeDstMetaMismatch",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略正确设置类型
@@ -224,17 +172,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithType(c *check.C) {
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeAPIInvalidArgument)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeAPIInvalidArgument",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略：通配所有可用ip实例
@@ -247,17 +185,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithGetOneHealth(c *c
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略：匹配不带 metaData key路由
@@ -270,17 +198,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithNotContainMeta(c 
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略：自定义meta
@@ -297,17 +215,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithCustomMeta(c *che
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	c.Assert(resp.Instances[0].GetMetadata()[addMetaKey], check.Equals, addMetaValue)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略：自定义meta
@@ -321,17 +229,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithCustomMeta01(c *ch
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeAPIInvalidArgument)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeAPIInvalidArgument",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 //测试元数据路由兜底策略：自定义meta
@@ -348,17 +246,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithCustomMeta02(c *ch
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeDstMetaMismatch)
 	time.Sleep(2 * time.Second)
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: dstMetaNamespace,
-			Service:   dstMetaService,
-			Plugin:    config.DefaultServiceRouterDstMeta,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "ErrCodeDstMetaMismatch",
-		}: 1},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
+
 }
 
 func (t *DstMetaTestingSuite) buildFaultOverConsumer() (api.ConsumerAPI, error) {
@@ -367,8 +255,6 @@ func (t *DstMetaTestingSuite) buildFaultOverConsumer() (api.ConsumerAPI, error) 
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
 	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	_ = cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	return consumer, err
 }

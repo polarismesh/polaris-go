@@ -19,22 +19,21 @@ package util
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
 )
 
 const (
@@ -185,25 +184,6 @@ type RegisteredInstance struct {
 	Port    int
 	Listen  bool
 	Healthy bool
-}
-
-//注册并启动一个mock monitor
-func SetupMonitor(mockServer mock.NamingServer, svcKey model.ServiceKey, instances RegisteredInstance) (mock.MonitorServer, *grpc.Server, string, error) {
-	monitorToken := uuid.New().String()
-	monitorService := BuildNamingService(svcKey.Namespace, svcKey.Service, monitorToken)
-	mockServer.RegisterService(monitorService)
-	mockServer.RegisterRouteRule(monitorService, mockServer.BuildRouteRule(svcKey.Namespace, svcKey.Service))
-	mockServer.RegisterServerInstance(instances.IP, instances.Port, svcKey.Service, monitorToken, instances.Healthy)
-	monitorServer := mock.NewMonitorServer()
-	grpcMonitor := GetGrpcServer()
-	monitorpb.RegisterGrpcAPIServer(grpcMonitor, monitorServer)
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", instances.IP, instances.Port))
-	if err != nil {
-		return nil, nil, "", err
-	}
-	log.Printf("monitor server lietening on: %s", listener.Addr().String())
-	StartGrpcServer(grpcMonitor, listener)
-	return monitorServer, grpcMonitor, monitorToken, nil
 }
 
 //初始化mock namingServer

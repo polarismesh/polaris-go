@@ -15,22 +15,13 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package util
+package statreporter
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"time"
 )
 
-//将model sdktoken 转化为 pb形式的
-func GetPBSDkToken(t model.SDKToken) *monitorpb.SDKToken {
-	return &monitorpb.SDKToken{
-		Ip:       t.IP,
-		Pid:      uint32(t.PID),
-		Uid:      t.UID,
-		Client:   t.Client,
-		Version:  t.Version,
-		PodName:  t.PodName,
-		HostName: t.HostName,
-	}
-}
+const (
+	opReportStat      = "ReportStat"
+	MinReportInterval = 1 * time.Second
+)
