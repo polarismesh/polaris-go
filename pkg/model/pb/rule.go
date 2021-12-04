@@ -19,20 +19,22 @@ package pb
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/proto"
 	"regexp"
 	"sync/atomic"
+
+	"github.com/golang/protobuf/proto"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-//助手接口
+// 助手接口
 type ServiceRuleAssistant interface {
-	//解析出具体的规则值
+	// 解析出具体的规则值
 	ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string)
-	//设置默认值
+	// 设置默认值
 	SetDefault(message proto.Message)
-	//规则校验
+	// 规则校验
 	Validate(message proto.Message, cache model.RuleCache) error
 }
 
@@ -43,7 +45,7 @@ var (
 	}
 )
 
-//网格规则
+// 网格规则
 type MeshConfigProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -54,7 +56,7 @@ type MeshConfigProto struct {
 	CacheLoaded int32
 }
 
-//新建网格规则
+// 新建网格规则
 func NewMeshConfigInProto(resp *namingpb.DiscoverResponse) *MeshConfigProto {
 	value := &MeshConfigProto{}
 	if nil == resp {
@@ -74,37 +76,37 @@ func NewMeshConfigInProto(resp *namingpb.DiscoverResponse) *MeshConfigProto {
 
 }
 
-//获取规则类型
+// 获取规则类型
 func (s *MeshConfigProto) GetType() model.EventType {
 	return s.eventType
 }
 
-//缓存是否已经初始化
+// 缓存是否已经初始化
 func (s *MeshConfigProto) IsInitialized() bool {
 	return s.initialized
 }
 
-//缓存版本号，标识缓存是否更新
+// 缓存版本号，标识缓存是否更新
 func (s *MeshConfigProto) GetRevision() string {
 	return s.revision
 }
 
-//获取值
+// 获取值
 func (s *MeshConfigProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-//获取Namespace
+// 获取Namespace
 func (s *MeshConfigProto) GetNamespace() string {
 	return s.Namespace
 }
 
-//获取Service
+// 获取Service
 func (s *MeshConfigProto) GetService() string {
 	return s.Service
 }
 
-//网格
+// 网格
 type MeshProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -115,7 +117,7 @@ type MeshProto struct {
 	CacheLoaded int32
 }
 
-//新建网格
+// 新建网格
 func NewMeshInProto(resp *namingpb.DiscoverResponse) *MeshProto {
 	value := &MeshProto{}
 	if nil == resp {
@@ -134,37 +136,37 @@ func NewMeshInProto(resp *namingpb.DiscoverResponse) *MeshProto {
 	return value
 }
 
-//获取类型
+// 获取类型
 func (s *MeshProto) GetType() model.EventType {
 	return s.eventType
 }
 
-//缓存是否已经初始化
+// 缓存是否已经初始化
 func (s *MeshProto) IsInitialized() bool {
 	return s.initialized
 }
 
-//缓存版本号，标识缓存是否更新
+// 缓存版本号，标识缓存是否更新
 func (s *MeshProto) GetRevision() string {
 	return s.revision
 }
 
-//获取值
+// 获取值
 func (s *MeshProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-//获取Namespace
+// 获取Namespace
 func (s *MeshProto) GetNamespace() string {
 	return s.Namespace
 }
 
-//获取Service
+// 获取Service
 func (s *MeshProto) GetService() string {
 	return s.Service
 }
 
-//路由规则配置对象
+// 路由规则配置对象
 type ServiceRuleInProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -174,11 +176,11 @@ type ServiceRuleInProto struct {
 	eventType   model.EventType
 	assistant   ServiceRuleAssistant
 	CacheLoaded int32
-	//规则的校验错误缓存
+	// 规则的校验错误缓存
 	validateError error
 }
 
-//创建路由规则配置对象
+// 创建路由规则配置对象
 func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto {
 	value := &ServiceRuleInProto{}
 	if nil == resp {
@@ -197,37 +199,37 @@ func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto 
 	return value
 }
 
-//pb的值是否从缓存文件中加载
+// pb的值是否从缓存文件中加载
 func (s *ServiceRuleInProto) IsCacheLoaded() bool {
 	return atomic.LoadInt32(&s.CacheLoaded) > 0
 }
 
-//校验路由规则，以及构建正则表达式缓存
+// 校验路由规则，以及构建正则表达式缓存
 func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 	s.assistant.SetDefault(s.ruleValue)
 	if err := s.assistant.Validate(s.ruleValue, s.ruleCache); nil != err {
-		//缓存规则解释失败异常
+		// 缓存规则解释失败异常
 		s.validateError = err
 		return err
 	}
 	return nil
 }
 
-//通过metadata来构建缓存
+// 通过metadata来构建缓存
 func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache model.RuleCache) error {
 	if len(metadata) == 0 {
 		return nil
 	}
 	for _, metaValue := range metadata {
 		valueRawStr := metaValue.GetValue().GetValue()
-		//如果是 variable 类型，但是value 是空的，此时无法通过 value 获取环境变量，报错
-		if metaValue.ValueType == namingpb.MatchString_VARIABLE && valueRawStr == ""{
+		// 如果是 variable 类型，但是value 是空的，此时无法通过 value 获取环境变量，报错
+		if metaValue.ValueType == namingpb.MatchString_VARIABLE && valueRawStr == "" {
 			return fmt.Errorf("value of variable type can not be empty")
 		}
 		if metaValue.Type != namingpb.MatchString_REGEX || metaValue.ValueType != namingpb.MatchString_TEXT {
 			continue
 		}
-		//如果是正则匹配类型，并且 value 是 text 模式，事先校验正则表达式是否合法
+		// 如果是正则匹配类型，并且 value 是 text 模式，事先校验正则表达式是否合法
 		if pattern := ruleCache.GetRegexMatcher(valueRawStr); nil != pattern {
 			continue
 		}
@@ -240,7 +242,7 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 	return nil
 }
 
-//获取命名空间
+// 获取命名空间
 func (s *ServiceRuleInProto) GetNamespace() string {
 	if s.initialized {
 		return s.Namespace
@@ -248,7 +250,7 @@ func (s *ServiceRuleInProto) GetNamespace() string {
 	return ""
 }
 
-//获取服务名
+// 获取服务名
 func (s *ServiceRuleInProto) GetService() string {
 	if s.initialized {
 		return s.Service
@@ -256,32 +258,32 @@ func (s *ServiceRuleInProto) GetService() string {
 	return ""
 }
 
-//获取通用规则值
+// 获取通用规则值
 func (s *ServiceRuleInProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-//获取规则类型
+// 获取规则类型
 func (s *ServiceRuleInProto) GetType() model.EventType {
 	return s.eventType
 }
 
-//缓存是否已经初始化
+// 缓存是否已经初始化
 func (s *ServiceRuleInProto) IsInitialized() bool {
 	return s.initialized
 }
 
-//缓存版本号，标识缓存是否更新
+// 缓存版本号，标识缓存是否更新
 func (s *ServiceRuleInProto) GetRevision() string {
 	return s.revision
 }
 
-//获取规则缓存信息
+// 获取规则缓存信息
 func (s *ServiceRuleInProto) GetRuleCache() model.RuleCache {
 	return s.ruleCache
 }
 
-//获取规则校验错误
+// 获取规则校验错误
 func (s *ServiceRuleInProto) GetValidateError() error {
 	return s.validateError
 }

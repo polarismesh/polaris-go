@@ -19,6 +19,10 @@ package serviceroute
 
 import (
 	"context"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -31,9 +35,6 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/uuid"
-	"time"
 )
 
 type Reporter struct {
@@ -42,17 +43,17 @@ type Reporter struct {
 	statData *routeStatData
 }
 
-//Type 插件类型
+// Type 插件类型
 func (s *Reporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (s *Reporter) Name() string {
 	return "serviceRoute"
 }
 
-//创建一个clientStream的方法
+// 创建一个clientStream的方法
 func (s *Reporter) createRouteReportStream(conn monitorpb.GrpcAPIClient) (client basereporter.CloseAbleStream,
 	cancelFunc context.CancelFunc, err error) {
 	var ctx context.Context
@@ -61,7 +62,7 @@ func (s *Reporter) createRouteReportStream(conn monitorpb.GrpcAPIClient) (client
 	return
 }
 
-//初始化插件
+// 初始化插件
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	ctx.Plugins.RegisterEventSubscriber(common.OnServiceLocalValueCreated, common.PluginEventHandler{
 		Callback: s.generateStatData,
@@ -92,7 +93,7 @@ func (s *Reporter) Start() error {
 	return nil
 }
 
-//定时上报服务的路由记录到monitor
+// 定时上报服务的路由记录到monitor
 func (g *Reporter) uploadRouteRecord() {
 	ticker := time.NewTicker(*g.cfg.ReportInterval)
 	defer ticker.Stop()
@@ -136,7 +137,7 @@ var ruleTypeMap = map[servicerouter.RuleType]monitorpb.RouteRecord_RuleType{
 	servicerouter.DestRule:    monitorpb.RouteRecord_DestRule,
 }
 
-//根据数据构造记录并发送到monitor
+// 根据数据构造记录并发送到monitor
 func (s *Reporter) constructRecordAndSend(namespace string, service string, data map[ruleKey]map[resultKey]uint32,
 	skipMonitor bool) {
 	if len(data) == 0 {
@@ -226,7 +227,7 @@ func (s *Reporter) Destroy() error {
 	return nil
 }
 
-//ReportStat 上报统计信息
+// ReportStat 上报统计信息
 func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	if t != model.RouteStat {
 		return nil
@@ -239,14 +240,14 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	}
 	localValue := pbInstances.GetServiceLocalValue()
 	data := localValue.GetServiceDataByPluginId(s.ID())
-	//if data == nil {
+	// if data == nil {
 	//	return nil
-	//}
+	// }
 	data.(*routeStatData).putNewStat(gauge)
 	return nil
 }
 
-//为服务创建路由调用统计信息的存储数据
+// 为服务创建路由调用统计信息的存储数据
 func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 	lv := event.EventObject.(local.ServiceLocalValue)
 	stat := &routeStatData{}

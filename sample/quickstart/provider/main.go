@@ -19,9 +19,10 @@ package main
 
 import (
 	"flag"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (

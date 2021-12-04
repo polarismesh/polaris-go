@@ -1,4 +1,5 @@
-//+build ignore
+//go:build ignore
+// +build ignore
 
 /**
  * Tencent is pleased to support the open source community by making polaris-go available.

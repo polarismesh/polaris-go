@@ -19,7 +19,7 @@ package loadbalancer
 
 import "github.com/polarismesh/polaris-go/pkg/model"
 
-//执行负载均衡
+// 执行负载均衡
 func ChooseInstance(ctx model.ValueContext, loadbalancer LoadBalancer,
 	criteria *Criteria, instances model.ServiceInstances) (model.Instance, model.SDKError) {
 	var sdkErr model.SDKError

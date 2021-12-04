@@ -13,10 +13,13 @@
 直接依赖go mod进行构建
 
 - linux/mac构建命令
+
 ```
 go build -o consumer
 ```
+
 - windows构建命令
+
 ```
 go build -o consumer.exe
 ```
@@ -43,11 +46,13 @@ global:
 直接执行生成的可执行程序
 
 - linux/mac运行命令
+
 ```
 ./consumer --service="your service name" --namespace="your namespace name"
 ```
 
 - windows运行命令
+
 ```
 ./consumer.exe --service="your service name" --namespace="your namespace name"
 ```

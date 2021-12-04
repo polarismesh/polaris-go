@@ -22,32 +22,32 @@ import (
 	"time"
 )
 
-//全局时钟
+// 全局时钟
 var globalClock *clockImpl
 
-//时钟接口
+// Clock 时钟接口
 type Clock interface {
-	//当前集群
+	// Now 当前集群
 	Now() time.Time
 }
 
-//时钟的实现
+// 时钟的实现
 type clockImpl struct {
 	currentTime atomic.Value
 }
 
-//获取当前时间
+// Now 获取当前时间
 func (c *clockImpl) Now() time.Time {
 	nowPtr := c.currentTime.Load().(*time.Time)
 	return *nowPtr
 }
 
-//时间轮的步长
+// TimeStep 时间轮的步长
 func TimeStep() time.Duration {
 	return 10 * time.Millisecond
 }
 
-//定期更新时间
+// 定期更新时间
 func (c *clockImpl) updateTime() {
 	ticker := time.NewTicker(TimeStep())
 	defer ticker.Stop()
@@ -61,12 +61,12 @@ func (c *clockImpl) updateTime() {
 
 }
 
-//获取全局时钟
+// GetClock 获取全局时钟
 func GetClock() Clock {
 	return globalClock
 }
 
-//初始化全局时钟
+// 初始化全局时钟
 func init() {
 	globalClock = &clockImpl{}
 	now := time.Now()

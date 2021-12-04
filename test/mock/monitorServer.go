@@ -20,43 +20,45 @@ package mock
 import (
 	"context"
 	"fmt"
+	"io"
+	"sync"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"io"
-	"sync"
 )
 
 const (
-	//monitor的ip端口
+	// monitor的ip端口
 	MonitorIp   = "127.0.0.1"
 	MonitorPort = 8090
 )
 
-//监控server
+// 监控server
 type MonitorServer interface {
 	monitorpb.GrpcAPIServer
-	//获取monitor接收到的熔断状态
+	// 获取monitor接收到的熔断状态
 	GetCircuitBreakStatus(svcKey model.ServiceKey) []*monitorpb.ServiceCircuitbreak
-	//设置monitor接收到的熔断状态
+	// 设置monitor接收到的熔断状态
 	SetCircuitBreakCache(data []*monitorpb.ServiceCircuitbreak)
-	//获取上报的缓存信息
+	// 获取上报的缓存信息
 	GetCacheReport(svcKey model.ServiceKey) []*monitorpb.ServiceInfo
-	//设置monitor中上报的缓存信息
+	// 设置monitor中上报的缓存信息
 	SetCacheReport(data []*monitorpb.ServiceInfo)
-	//获取服务统计
+	// 获取服务统计
 	GetSvcStat() []*monitorpb.ServiceStatistics
-	//获取sdk统计
+	// 获取sdk统计
 	GetSdkStat() []*monitorpb.SDKAPIStatistics
-	//获取sdk配置统计
+	// 获取sdk配置统计
 	GetSdkCfg() []*monitorpb.SDKConfig
-	//设置配置统计
+	// 设置配置统计
 	SetSdkCfg(data []*monitorpb.SDKConfig)
-	//设置服务统计
+	// 设置服务统计
 	SetSvcStat(data []*monitorpb.ServiceStatistics)
-	//设置sdk统计
+	// 设置sdk统计
 	SetSdkStat(data []*monitorpb.SDKAPIStatistics)
 	SetPluginStat(data []*monitorpb.PluginAPIStatistics)
 	GetPluginStat() []*monitorpb.PluginAPIStatistics
@@ -70,7 +72,7 @@ type MonitorServer interface {
 	SetMeshConfigRecords(data []*monitorpb.MeshResourceInfo)
 }
 
-//模拟monitor
+// 模拟monitor
 type monitorServer struct {
 	svcStat     []*monitorpb.ServiceStatistics
 	sdkStat     []*monitorpb.SDKAPIStatistics
@@ -93,12 +95,12 @@ type monitorServer struct {
 	meshMutex   sync.Mutex
 }
 
-//创建monitor
+// 创建monitor
 func NewMonitorServer() *monitorServer {
 	return &monitorServer{}
 }
 
-//获取服务统计
+// 获取服务统计
 func (m *monitorServer) GetSvcStat() []*monitorpb.ServiceStatistics {
 	m.svcMutex.Lock()
 	res := make([]*monitorpb.ServiceStatistics, 0, len(m.svcStat))
@@ -107,7 +109,7 @@ func (m *monitorServer) GetSvcStat() []*monitorpb.ServiceStatistics {
 	return res
 }
 
-//获取sdk统计
+// 获取sdk统计
 func (m *monitorServer) GetSdkStat() []*monitorpb.SDKAPIStatistics {
 	m.sdkMutex.Lock()
 	res := make([]*monitorpb.SDKAPIStatistics, 0, len(m.sdkStat))
@@ -116,7 +118,7 @@ func (m *monitorServer) GetSdkStat() []*monitorpb.SDKAPIStatistics {
 	return res
 }
 
-//获取sdk配置统计
+// 获取sdk配置统计
 func (m *monitorServer) GetSdkCfg() []*monitorpb.SDKConfig {
 	m.cfgMutex.Lock()
 	res := make([]*monitorpb.SDKConfig, 0, len(m.sdkStat))
@@ -125,33 +127,33 @@ func (m *monitorServer) GetSdkCfg() []*monitorpb.SDKConfig {
 	return res
 }
 
-//设置配置统计
+// 设置配置统计
 func (m *monitorServer) SetSdkCfg(data []*monitorpb.SDKConfig) {
 	m.cfgMutex.Lock()
 	m.sdkCfg = data
 	m.cfgMutex.Unlock()
 }
 
-//设置服务统计
+// 设置服务统计
 func (m *monitorServer) SetSvcStat(data []*monitorpb.ServiceStatistics) {
 	m.svcMutex.Lock()
 	m.svcStat = data
 	m.svcMutex.Unlock()
 }
 
-//设置sdk统计
+// 设置sdk统计
 func (m *monitorServer) SetSdkStat(data []*monitorpb.SDKAPIStatistics) {
 	m.sdkMutex.Lock()
 	m.sdkStat = data
 	m.sdkMutex.Unlock()
 }
 
-//s
+// s
 func (m *monitorServer) CollectServerStatistics(monitorpb.GrpcAPI_CollectServerStatisticsServer) error {
 	return nil
 }
 
-//收集sdk统计
+// 收集sdk统计
 func (m *monitorServer) CollectSDKAPIStatistics(server monitorpb.GrpcAPI_CollectSDKAPIStatisticsServer) error {
 	for {
 		req, err := server.Recv()
@@ -175,7 +177,7 @@ func (m *monitorServer) CollectSDKAPIStatistics(server monitorpb.GrpcAPI_Collect
 	}
 }
 
-//收集服务统计
+// 收集服务统计
 func (m *monitorServer) CollectServiceStatistics(server monitorpb.GrpcAPI_CollectServiceStatisticsServer) error {
 	for {
 		req, err := server.Recv()
@@ -199,7 +201,7 @@ func (m *monitorServer) CollectServiceStatistics(server monitorpb.GrpcAPI_Collec
 	}
 }
 
-//采集sdk配置信息
+// 采集sdk配置信息
 func (m *monitorServer) CollectSDKConfiguration(ctx context.Context,
 	req *monitorpb.SDKConfig) (*monitorpb.StatResponse, error) {
 	fmt.Printf("receive sdk config id %v\n", req.Token)
@@ -215,7 +217,7 @@ func (m *monitorServer) CollectSDKConfiguration(ctx context.Context,
 	return resp, nil
 }
 
-//采集服务信息的变更
+// 采集服务信息的变更
 func (m *monitorServer) CollectSDKCache(server monitorpb.GrpcAPI_CollectSDKCacheServer) error {
 	for {
 		req, err := server.Recv()
@@ -240,7 +242,7 @@ func (m *monitorServer) CollectSDKCache(server monitorpb.GrpcAPI_CollectSDKCache
 	}
 }
 
-//采集熔断状态变化
+// 采集熔断状态变化
 func (m *monitorServer) CollectCircuitBreak(server monitorpb.GrpcAPI_CollectCircuitBreakServer) error {
 	for {
 		req, err := server.Recv()
@@ -265,7 +267,7 @@ func (m *monitorServer) CollectCircuitBreak(server monitorpb.GrpcAPI_CollectCirc
 	}
 }
 
-//收集插件调用信息
+// 收集插件调用信息
 func (m *monitorServer) CollectPluginStatistics(server monitorpb.GrpcAPI_CollectPluginStatisticsServer) error {
 	for {
 		req, err := server.Recv()
@@ -289,7 +291,7 @@ func (m *monitorServer) CollectPluginStatistics(server monitorpb.GrpcAPI_Collect
 	}
 }
 
-//获取插件接口调用信息
+// 获取插件接口调用信息
 func (m *monitorServer) GetPluginStat() []*monitorpb.PluginAPIStatistics {
 	var res []*monitorpb.PluginAPIStatistics
 	m.pluginMutex.Lock()
@@ -300,14 +302,14 @@ func (m *monitorServer) GetPluginStat() []*monitorpb.PluginAPIStatistics {
 	return res
 }
 
-//设置插件接口调用信息
+// 设置插件接口调用信息
 func (m *monitorServer) SetPluginStat(data []*monitorpb.PluginAPIStatistics) {
 	m.pluginMutex.Lock()
 	defer m.pluginMutex.Unlock()
 	m.pluginStat = data
 }
 
-//获取上报的缓存信息
+// 获取上报的缓存信息
 func (m *monitorServer) GetCacheReport(svcKey model.ServiceKey) []*monitorpb.ServiceInfo {
 	var res []*monitorpb.ServiceInfo
 	m.svcMutex.Lock()
@@ -320,14 +322,14 @@ func (m *monitorServer) GetCacheReport(svcKey model.ServiceKey) []*monitorpb.Ser
 	return res
 }
 
-//设置monitor中上报的缓存信息
+// 设置monitor中上报的缓存信息
 func (m *monitorServer) SetCacheReport(data []*monitorpb.ServiceInfo) {
 	m.svcMutex.Lock()
 	defer m.svcMutex.Unlock()
 	m.svcCache = data
 }
 
-//获取monitor接收到的熔断状态
+// 获取monitor接收到的熔断状态
 func (m *monitorServer) GetCircuitBreakStatus(svcKey model.ServiceKey) []*monitorpb.ServiceCircuitbreak {
 	var res []*monitorpb.ServiceCircuitbreak
 	m.cbMutex.Lock()
@@ -340,14 +342,14 @@ func (m *monitorServer) GetCircuitBreakStatus(svcKey model.ServiceKey) []*monito
 	return res
 }
 
-//设置monitor接收到的熔断状态
+// 设置monitor接收到的熔断状态
 func (m *monitorServer) SetCircuitBreakCache(data []*monitorpb.ServiceCircuitbreak) {
 	m.cbMutex.Lock()
 	defer m.cbMutex.Unlock()
 	m.cbCache = data
 }
 
-//采集负载均衡统计
+// 采集负载均衡统计
 func (m *monitorServer) CollectLoadBalanceInfo(server monitorpb.GrpcAPI_CollectLoadBalanceInfoServer) error {
 	for {
 		req, err := server.Recv()
@@ -371,7 +373,7 @@ func (m *monitorServer) CollectLoadBalanceInfo(server monitorpb.GrpcAPI_CollectL
 	}
 }
 
-//获取收集到的负载均衡统计数据
+// 获取收集到的负载均衡统计数据
 func (m *monitorServer) GetLbStat() []*monitorpb.ServiceLoadBalanceInfo {
 	var res []*monitorpb.ServiceLoadBalanceInfo
 	m.lbMutex.Lock()
@@ -382,14 +384,14 @@ func (m *monitorServer) GetLbStat() []*monitorpb.ServiceLoadBalanceInfo {
 	return res
 }
 
-//设置负载均衡数据
+// 设置负载均衡数据
 func (m *monitorServer) SetLbStat(data []*monitorpb.ServiceLoadBalanceInfo) {
 	m.lbMutex.Lock()
 	m.lbStat = data
 	m.lbMutex.Unlock()
 }
 
-//获取采集到的限流记录
+// 获取采集到的限流记录
 func (m *monitorServer) CollectRateLimitRecord(server monitorpb.GrpcAPI_CollectRateLimitRecordServer) error {
 	for {
 		req, err := server.Recv()
@@ -413,7 +415,7 @@ func (m *monitorServer) CollectRateLimitRecord(server monitorpb.GrpcAPI_CollectR
 	}
 }
 
-//获取限流记录
+// 获取限流记录
 func (m *monitorServer) GetRateLimitRecords() []*monitorpb.RateLimitRecord {
 	var res []*monitorpb.RateLimitRecord
 	m.rlMutex.Lock()
@@ -424,14 +426,14 @@ func (m *monitorServer) GetRateLimitRecords() []*monitorpb.RateLimitRecord {
 	return res
 }
 
-//设置限流记录
+// 设置限流记录
 func (m *monitorServer) SetRateLimitRecords(data []*monitorpb.RateLimitRecord) {
 	m.rlMutex.Lock()
 	m.rlStat = data
 	m.rlMutex.Unlock()
 }
 
-//接收路由调用记录请求
+// 接收路由调用记录请求
 func (m *monitorServer) CollectRouteRecord(svr monitorpb.GrpcAPI_CollectRouteRecordServer) error {
 	for {
 		req, err := svr.Recv()
@@ -455,7 +457,7 @@ func (m *monitorServer) CollectRouteRecord(svr monitorpb.GrpcAPI_CollectRouteRec
 	}
 }
 
-//获取路由调用记录
+// 获取路由调用记录
 func (m *monitorServer) GetServiceRouteRecords() []*monitorpb.ServiceRouteRecord {
 	var res []*monitorpb.ServiceRouteRecord
 	m.srMutex.Lock()
@@ -466,14 +468,14 @@ func (m *monitorServer) GetServiceRouteRecords() []*monitorpb.ServiceRouteRecord
 	return res
 }
 
-//设置路由调用记录
+// 设置路由调用记录
 func (m *monitorServer) SetServiceRouteRecords(data []*monitorpb.ServiceRouteRecord) {
 	m.srMutex.Lock()
 	m.srStat = data
 	m.srMutex.Unlock()
 }
 
-//或许网格规则变更记录
+// 或许网格规则变更记录
 func (m *monitorServer) GetMeshConfigRecords() []*monitorpb.MeshResourceInfo {
 	var res []*monitorpb.MeshResourceInfo
 	m.meshMutex.Lock()
@@ -484,14 +486,14 @@ func (m *monitorServer) GetMeshConfigRecords() []*monitorpb.MeshResourceInfo {
 	return res
 }
 
-//设置网格变更记录
+// 设置网格变更记录
 func (m *monitorServer) SetMeshConfigRecords(data []*monitorpb.MeshResourceInfo) {
 	m.meshMutex.Lock()
 	m.meshStat = data
 	m.meshMutex.Unlock()
 }
 
-//接收网格规则变更记录
+// 接收网格规则变更记录
 func (m *monitorServer) CollectMeshResource(svr monitorpb.GrpcAPI_CollectMeshResourceServer) error {
 	for {
 		req, err := svr.Recv()

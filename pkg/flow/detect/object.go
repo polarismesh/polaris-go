@@ -18,8 +18,9 @@
 package detect
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // healthCheckingStatus 实现接口HealthCheckingStatus

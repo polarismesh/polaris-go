@@ -19,10 +19,13 @@
 直接依赖go mod进行构建
 
 - linux/mac构建命令
+
 ```
 go build -o activehealthcheck
 ```
+
 - windows构建命令
+
 ```
 go build -o activehealthcheck.exe
 ```
@@ -49,11 +52,13 @@ global:
 直接执行生成的可执行程序
 
 - linux/mac运行命令
+
 ```
 ./activehealthcheck --service="your service name" --namespace="your namespace name"
 ```
 
 - windows运行命令
+
 ```
 ./activehealthcheck.exe --service="your service name" --namespace="your namespace name"
 ```

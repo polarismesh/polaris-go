@@ -19,23 +19,25 @@ package pb
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-//兼容接口, trpc-go依赖项
+// 兼容接口, trpc-go依赖项
 func NewRoutingRuleInProto(resp *namingpb.DiscoverResponse) model.ServiceRule {
 	return NewServiceRuleInProto(resp)
 }
 
-//路由规则解析助手
+// 路由规则解析助手
 type RoutingAssistant struct {
 }
 
-//解析出具体的规则值
+// 解析出具体的规则值
 func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	routingValue := resp.Routing
@@ -45,7 +47,7 @@ func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (prot
 	return routingValue, revision
 }
 
-//规则校验
+// 规则校验
 func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	if reflect2.IsNil(message) {
 		return nil
@@ -61,7 +63,7 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 	return nil
 }
 
-//校验路由规则
+// 校验路由规则
 func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Route, ruleCache model.RuleCache) error {
 	if len(routes) == 0 {
 		return nil
@@ -91,7 +93,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 	return nil
 }
 
-//设置默认值
+// 设置默认值
 func (r *RoutingAssistant) SetDefault(message proto.Message) {
 	// do nothing
 }

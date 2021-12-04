@@ -20,10 +20,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (

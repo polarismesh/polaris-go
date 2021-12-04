@@ -19,6 +19,8 @@ package flow
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -27,44 +29,43 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"time"
 )
 
-//结果上报及归还请求实例请求对象
+// 结果上报及归还请求实例请求对象
 func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstancesRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonInstancesRequest(commonRequest)
 }
 
-//结果上报及归还限流请求对象
+// 结果上报及归还限流请求对象
 func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
 
-//结果上报及归还请求实例规则对象
+// 结果上报及归还请求实例规则对象
 func (e *Engine) syncRuleReportAndFinalize(commonRequest *data.CommonRuleRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonRuleRequest(commonRequest)
 }
 
 func (e *Engine) syncMeshConfigAndFinalize(commonRequest *data.MeshConfigRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutMeshConfigRequest(commonRequest)
 }
 
 func (e *Engine) syncMeshAndFinalize(commonRequest *data.MeshRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutMeshRequest(commonRequest)
 }
 
 func (e *Engine) syncServicesAndFinalize(commonRequest *data.ServicesRequest) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutServicesRequest(commonRequest)
 }
@@ -78,9 +79,9 @@ func (e *Engine) syncConsumerInitCallServiceAndFinalize(commonRequest *data.Cons
 	e.reportAPIStat(&commonRequest.CallResult)
 }
 
-//SyncGetOneInstance 同步获取服务实例
+// SyncGetOneInstance 同步获取服务实例
 func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.OneInstanceResponse, error) {
-	//方法开始时间
+	// 方法开始时间
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetOneRequest(req, e.configuration)
 	resp, err := e.doSyncGetOneInstance(commonRequest)
@@ -88,7 +89,7 @@ func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.On
 	return resp, err
 }
 
-//操作主要业务逻辑
+// 操作主要业务逻辑
 func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
@@ -122,7 +123,7 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 	return &model.OneInstanceResponse{InstancesResponse: *instancesResp}, nil
 }
 
-//同步加载资源
+// 同步加载资源
 func (e *Engine) SyncGetResources(req model.CacheValueQuery) error {
 	var err error
 	var retryTimes = -1
@@ -133,20 +134,20 @@ func (e *Engine) SyncGetResources(req model.CacheValueQuery) error {
 outLoop:
 	for retryTimes < param.MaxRetry {
 		startTime := e.globalCtx.Now()
-		//尝试获取本地缓存的值
+		// 尝试获取本地缓存的值
 		combineContext, err = getAndLoadCacheValues(e.registry, req, retryTimes < param.MaxRetry)
 		if nil != err {
 			break outLoop
 		}
-		//本地缓存已经加载完成，退出
+		// 本地缓存已经加载完成，退出
 		if nil == combineContext {
 			return nil
 		}
-		//发起并等待远程的结果
+		// 发起并等待远程的结果
 		retryTimes++
 		syncCtx := combineContext
 		exceedTimeout := syncCtx.Wait(param.Timeout)
-		//计算请求耗时
+		// 计算请求耗时
 		consumedTime := e.globalCtx.Since(startTime)
 		totalConsumedTime += consumedTime
 		sdkErrs := syncCtx.Errs()
@@ -159,20 +160,20 @@ outLoop:
 				fmt.Sprintf("multierrs received for GetInstances request, serviceKey: %s", *dstService))
 		}
 		if exceedTimeout {
-			//只有网络错误才可以重试
+			// 只有网络错误才可以重试
 			time.Sleep(param.RetryInterval)
 			totalSleepTime += param.RetryInterval
-			//log.GetBaseLogger().Warnf("retry GetInstances for timeout, consume time %v,"+
+			// log.GetBaseLogger().Warnf("retry GetInstances for timeout, consume time %v,"+
 			//	" serviceKey: %s, retry times: %d",
 			//	consumedTime, *dstService, retryTimes)
 			continue
 		}
-		//没有发生远程错误，直接走下一轮获取本地缓存
+		// 没有发生远程错误，直接走下一轮获取本地缓存
 		log.GetBaseLogger().Debugf("requests for instances and rules finished,"+
 			" serviceKey: %s, time consume is %v, retryTimes: %v", *dstService, consumedTime, retryTimes)
 		continue
 	}
-	//超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
+	// 超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
 	var success bool
 	if nil == err {
 		success, err = tryGetServiceValuesFromCache(e.registry, req)
@@ -190,7 +191,7 @@ outLoop:
 	return model.NewSDKError(model.ErrCodeAPITimeoutError, err, errMsg)
 }
 
-//上报在获取实例信息时可能发生的多个错误
+// 上报在获取实例信息时可能发生的多个错误
 func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime time.Duration,
 	errs map[ContextKey]model.SDKError) {
 	origDelay := *apiRes.GetDelay()
@@ -207,7 +208,7 @@ func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime ti
 	apiRes.RetStatus = origStatus
 }
 
-//getServiceRoutedInstances 过滤经过规则路由后的服务实例
+// getServiceRoutedInstances 过滤经过规则路由后的服务实例
 func (e *Engine) getServiceRoutedInstances(
 	req *data.CommonInstancesRequest) (routeResult *servicerouter.RouteResult, err model.SDKError) {
 	var routerChain = e.getRouterChain(req.DstInstances)
@@ -215,7 +216,7 @@ func (e *Engine) getServiceRoutedInstances(
 		req.DstInstances.GetServiceClusters())
 }
 
-//同步获取封装的服务实例应答
+// 同步获取封装的服务实例应答
 func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 	var redirectedTimes = 0
 	var cluster *model.Cluster
@@ -226,10 +227,10 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 			return err
 		}
 		if req.FetchAll {
-			//获取全量服务实例
+			// 获取全量服务实例
 			cluster = model.NewCluster(req.DstInstances.GetServiceClusters(), nil)
 		} else {
-			//走就近路由
+			// 走就近路由
 			cluster, redirectedService, err = e.afterLazyGetInstances(req)
 			if nil != err {
 				return err
@@ -248,13 +249,13 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 		config.MaxRedirectTimes, req.DstService.Service, req.DstService.Namespace)
 }
 
-//缓存对账，确保cluster的根与当前查询出来的服务实例一致
+// 缓存对账，确保cluster的根与当前查询出来的服务实例一致
 func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster) *model.Cluster {
 	clsServices := cluster.GetClusters().GetServiceInstances()
 	if clsServices.GetRevision() == svcInstances.GetRevision() {
 		return cluster
 	}
-	//对账失败，需要重建cluster
+	// 对账失败，需要重建cluster
 	log.GetBaseLogger().Warnf("cluster invalid, namespace: %s, service:%s cluster revision %s,   "+
 		"namespace: %s, service:%s services revision %s, rebuild cluster",
 		clsServices.GetService(), clsServices.GetNamespace(), clsServices.GetRevision(),
@@ -264,7 +265,7 @@ func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster) 
 	return newCls
 }
 
-//SyncGetInstances 同步获取服务实例
+// SyncGetInstances 同步获取服务实例
 func (e *Engine) SyncGetInstances(req *model.GetInstancesRequest) (*model.InstancesResponse, error) {
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetMultiRequest(req, e.configuration)
@@ -273,7 +274,7 @@ func (e *Engine) SyncGetInstances(req *model.GetInstancesRequest) (*model.Instan
 	return resp, err
 }
 
-//SyncGetInstances 同步获取服务实例
+// SyncGetInstances 同步获取服务实例
 func (e *Engine) SyncGetAllInstances(req *model.GetAllInstancesRequest) (*model.InstancesResponse, error) {
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetAllRequest(req, e.configuration)
@@ -282,7 +283,7 @@ func (e *Engine) SyncGetAllInstances(req *model.GetAllInstancesRequest) (*model.
 	return resp, err
 }
 
-//doSyncGetAllInstances 同步获取全量服务实例
+// doSyncGetAllInstances 同步获取全量服务实例
 func (e *Engine) doSyncGetAllInstances(commonRequest *data.CommonInstancesRequest) (*model.InstancesResponse, error) {
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
@@ -299,7 +300,7 @@ func (e *Engine) doSyncGetAllInstances(commonRequest *data.CommonInstancesReques
 		dstInstances.GetMetadata()), nil
 }
 
-//doSyncGetInstances 同步获取服务实例
+// doSyncGetInstances 同步获取服务实例
 func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) (*model.InstancesResponse, error) {
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
@@ -325,7 +326,7 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
  * @brief 同步进行服务注册
  */
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	//调用api的结果上报
+	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{
 			APIName: model.ApiRegister,
@@ -336,7 +337,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 	defer e.reportAPIStat(apiCallResult)
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
-	//方法开始时间
+	// 方法开始时间
 	startTime := e.globalCtx.Now()
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
 	resp, err := data.RetrySyncCall("register", &svcKey, instance, func(request interface{}) (interface{}, error) {
@@ -355,7 +356,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
  * @brief 同步进行服务反注册
  */
 func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error {
-	//调用api的结果上报
+	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{
 			APIName: model.ApiDeregister,
@@ -366,7 +367,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 	defer e.reportAPIStat(apiCallResult)
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
-	//方法开始时间
+	// 方法开始时间
 	startTime := e.globalCtx.Now()
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
 	_, err := data.RetrySyncCall("deregister", &svcKey, instance, func(request interface{}) (interface{}, error) {
@@ -385,7 +386,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
  * @brief 同步进行心跳上报
  */
 func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
-	//调用api的结果上报
+	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{
 			APIName: model.ApiHeartbeat,
@@ -396,7 +397,7 @@ func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 	defer e.reportAPIStat(apiCallResult)
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
-	//方法开始时间
+	// 方法开始时间
 	startTime := e.globalCtx.Now()
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
 	_, err := data.RetrySyncCall("heartbeat", &svcKey, instance, func(request interface{}) (interface{}, error) {
@@ -433,7 +434,7 @@ func (e *Engine) SyncUpdateServiceCallResult(result *model.ServiceCallResult) er
  * @brief 同步上报调用结果信息 实际处理函数
  */
 func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult) error {
-	//当前处理熔断和服务调用统计上报
+	// 当前处理熔断和服务调用统计上报
 	if err := e.reportSvcStat(result); nil != err {
 		return err
 	}
@@ -471,7 +472,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	return nil
 }
 
-//SyncGetServices
+// SyncGetServices
 func (e *Engine) SyncGetServices(eventType model.EventType,
 	req *model.GetServicesRequest) (*model.ServicesResponse, error) {
 	commonRequest := data.PoolGetServicesRequest()
@@ -490,10 +491,10 @@ func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.
 	return commonRequest.BuildServicesResponse(commonRequest.GetServices()), nil
 }
 
-//SyncGetMeshConfig
+// SyncGetMeshConfig
 func (e *Engine) SyncGetMeshConfig(eventType model.EventType,
 	req *model.GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
-	//方法开始时间
+	// 方法开始时间
 	commonRequest := data.PoolGetMeshConfigRequest()
 	commonRequest.InitByGetRuleRequest(eventType, req, e.configuration)
 	resp, err := e.doSyncGetMeshConfig(commonRequest)
@@ -510,10 +511,10 @@ func (e *Engine) doSyncGetMeshConfig(commonRequest *data.MeshConfigRequest) (
 	return commonRequest.BuildMeshConfigResponse(commonRequest.GetMeshConfig()), nil
 }
 
-//同步获取网格
+// 同步获取网格
 func (e *Engine) SyncGetMesh(eventType model.EventType,
 	req *model.GetMeshRequest) (*model.MeshResponse, error) {
-	//方法开始时间
+	// 方法开始时间
 	commonRequest := data.PoolGetMeshRequest()
 	commonRequest.InitByGetMeshRequest(eventType, req, e.configuration)
 	resp, err := e.doSyncGetMesh(commonRequest)
@@ -530,7 +531,7 @@ func (e *Engine) doSyncGetMesh(commonRequest *data.MeshRequest) (
 	return commonRequest.BuildMeshResponse(commonRequest.GetMesh()), nil
 }
 
-//同步获取服务规则
+// 同步获取服务规则
 func (e *Engine) SyncGetServiceRule(
 	eventType model.EventType, req *model.GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
 	commonRequest := data.PoolGetCommonRuleRequest()
@@ -540,10 +541,10 @@ func (e *Engine) SyncGetServiceRule(
 	return resp, err
 }
 
-//同步获取服务规则
+// 同步获取服务规则
 func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*model.ServiceRuleResponse, error) {
 	maxRetryTimes := commonRequest.ControlParam.MaxRetry
-	//构建规则过滤器
+	// 构建规则过滤器
 	var retryTimes = -1
 	var err error
 	svcRuleKey := &ContextKey{
@@ -566,10 +567,10 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 		singleCtx := NewSingleNotifyContext(svcRuleKey, notifier)
 		retryTimes++
 		exceedTimeout := singleCtx.Wait(commonRequest.ControlParam.Timeout)
-		//计算请求耗时
+		// 计算请求耗时
 		consumedTime := e.globalCtx.Since(startTime)
 		if exceedTimeout {
-			//只有网络错误才可以重试
+			// 只有网络错误才可以重试
 			time.Sleep(commonRequest.ControlParam.RetryInterval)
 			log.GetBaseLogger().Warnf("retry GetRoutes for timeout, consume time %v,"+
 				" Namespace: %s, Service: %s, retry times: %d",
@@ -590,7 +591,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 	log.GetBaseLogger().Warnf("retry GetRoutes from cache loaded from cache files because of timeout, "+
 		" Namespace: %s, Service: %s",
 		commonRequest.DstService.Namespace, commonRequest.DstService.Service)
-	//上面的尝试超时之后，向尝试获取从缓存文件加载的信息
+	// 上面的尝试超时之后，向尝试获取从缓存文件加载的信息
 	svcRule := e.registry.GetServiceRouteRule(&commonRequest.DstService.ServiceKey, true)
 	if svcRule.IsInitialized() {
 		commonRequest.CallResult.SetSuccess(e.globalCtx.Since(apiStartTime))
@@ -603,7 +604,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 		maxRetryTimes, commonRequest.DstService.Service, commonRequest.DstService.Namespace)
 }
 
-//初始化服务运行中需要的被调服务
+// 初始化服务运行中需要的被调服务
 func (e *Engine) InitCalleeService(req *model.InitCalleeServiceRequest) error {
 	commonRequest := &data.ConsumerInitCallServiceResultRequest{}
 	commonRequest.InitByServiceCallResult(req, e.configuration)
@@ -612,7 +613,7 @@ func (e *Engine) InitCalleeService(req *model.InitCalleeServiceRequest) error {
 	return err
 }
 
-//初始化服务运行中需要的被调服务
+// 初始化服务运行中需要的被调服务
 func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 	reportReq *data.ConsumerInitCallServiceResultRequest) error {
 	getAllReq := model.GetAllInstancesRequest{

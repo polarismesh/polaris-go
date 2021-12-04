@@ -19,10 +19,12 @@ package pb
 
 import (
 	"fmt"
+	"reflect"
+
+	"github.com/golang/protobuf/jsonpb"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/jsonpb"
-	"reflect"
 )
 
 var (
@@ -30,22 +32,22 @@ var (
 		model.EventInstances:    namingpb.DiscoverRequest_INSTANCE,
 		model.EventRouting:      namingpb.DiscoverRequest_ROUTING,
 		model.EventRateLimiting: namingpb.DiscoverRequest_RATE_LIMIT,
-		model.EventMeshConfig: namingpb.DiscoverRequest_MESH_CONFIG,
-		model.EventMesh: namingpb.DiscoverRequest_MESH,
-		model.EventServices:  namingpb.DiscoverRequest_SERVICES,
+		model.EventMeshConfig:   namingpb.DiscoverRequest_MESH_CONFIG,
+		model.EventMesh:         namingpb.DiscoverRequest_MESH,
+		model.EventServices:     namingpb.DiscoverRequest_SERVICES,
 	}
 
 	protoRespTypeToEventType = map[namingpb.DiscoverResponse_DiscoverResponseType]model.EventType{
-		namingpb.DiscoverResponse_INSTANCE:   model.EventInstances,
-		namingpb.DiscoverResponse_ROUTING:    model.EventRouting,
-		namingpb.DiscoverResponse_RATE_LIMIT: model.EventRateLimiting,
+		namingpb.DiscoverResponse_INSTANCE:    model.EventInstances,
+		namingpb.DiscoverResponse_ROUTING:     model.EventRouting,
+		namingpb.DiscoverResponse_RATE_LIMIT:  model.EventRateLimiting,
 		namingpb.DiscoverResponse_MESH_CONFIG: model.EventMeshConfig,
-		namingpb.DiscoverResponse_MESH: model.EventMesh,
-		namingpb.DiscoverResponse_SERVICES: model.EventServices,
+		namingpb.DiscoverResponse_MESH:        model.EventMesh,
+		namingpb.DiscoverResponse_SERVICES:    model.EventServices,
 	}
 )
 
-//通过事件类型获取请求类型
+// 通过事件类型获取请求类型
 func GetProtoRequestType(event model.EventType) namingpb.DiscoverRequest_DiscoverRequestType {
 	if reqType, ok := eventTypeToProtoRequestType[event]; ok {
 		return reqType
@@ -53,7 +55,7 @@ func GetProtoRequestType(event model.EventType) namingpb.DiscoverRequest_Discove
 	return namingpb.DiscoverRequest_UNKNOWN
 }
 
-//通过应答类型获取事件类型
+// 通过应答类型获取事件类型
 func GetEventType(respType namingpb.DiscoverResponse_DiscoverResponseType) model.EventType {
 	if eventType, ok := protoRespTypeToEventType[respType]; ok {
 		return eventType
@@ -61,13 +63,13 @@ func GetEventType(respType namingpb.DiscoverResponse_DiscoverResponseType) model
 	return model.EventUnknown
 }
 
-//从discover获取到了类似500的错误码
+// 从discover获取到了类似500的错误码
 type DiscoverError struct {
 	Code    int32
 	Message string
 }
 
-//获取server错误码类型的map
+// 获取server错误码类型的map
 var ServerErrorCodeTypeMap = map[uint32]model.ErrCode{
 	200: model.ErrCodeSuccess,
 	400: model.ErrCodeInvalidRequest,
@@ -77,7 +79,7 @@ var ServerErrorCodeTypeMap = map[uint32]model.ErrCode{
 	500: model.ErrCodeServerError,
 }
 
-//将server返回码转化为服务调用的返回码
+// 将server返回码转化为服务调用的返回码
 func ConvertServerErrorToRpcError(code uint32) model.ErrCode {
 	typCode := code / 1000
 	rpcCode, ok := ServerErrorCodeTypeMap[typCode]
@@ -87,13 +89,13 @@ func ConvertServerErrorToRpcError(code uint32) model.ErrCode {
 	return rpcCode
 }
 
-//将错误信息转化为string
+// 将错误信息转化为string
 func (d *DiscoverError) Error() string {
 	return fmt.Sprintf("receive %d from discover, message is %s", d.Code, d.Message)
 }
 
-//校验消息
-//校验返回码为500或者消息类型不对
+// 校验消息
+// 校验返回码为500或者消息类型不对
 func ValidateMessage(eventKey *model.ServiceEventKey, message interface{}) error {
 	respValue, ok := message.(*namingpb.DiscoverResponse)
 	if !ok {

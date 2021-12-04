@@ -18,62 +18,65 @@
 package api
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//配额查询请求
+// QuotaRequest 配额查询请求
 type QuotaRequest interface {
-	//设置命名空间
+	// SetNamespace 设置命名空间
 	SetNamespace(string)
-	//设置服务名
+	// SetService 设置服务名
 	SetService(string)
-	//设置集群名
+	// SetCluster 设置集群名
 	SetCluster(string)
-	//设置业务标签信息
+	// SetLabels 设置业务标签信息
 	SetLabels(map[string]string)
-	//设置单次请求超时时间
+	// SetTimeout 设置单次请求超时时间
 	SetTimeout(timeout time.Duration)
-	//设置最大重试次数
+	// SetRetryCount 设置最大重试次数
 	SetRetryCount(retryCount int)
 }
 
-//创建配额查询请求
+// NewQuotaRequest 创建配额查询请求
 func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
 
-//实时/延时分配future
+// QuotaFuture 实时/延时分配future
 type QuotaFuture interface {
-	//标识分配是否结束
+	// Done 标识分配是否结束
 	Done() <-chan struct{}
-	//获取分配结果
+	// Get 获取分配结果
 	Get() *model.QuotaResponse
-	//释放资源，仅用于并发数限流的场景
+	// Release 释放资源，仅用于并发数限流的场景
 	Release()
 }
 
 const (
-	QuotaResultOk      = model.QuotaResultOk
+	// QuotaResultOk 限流状态值
+	QuotaResultOk = model.QuotaResultOk
+	// QuotaResultLimited 限流结果
 	QuotaResultLimited = model.QuotaResultLimited
 )
 
-// 限流相关的API相关接口
+// LimitAPI 限流相关的API相关接口
 type LimitAPI interface {
 	SDKOwner
-	// 获取限流配额，一次接口只获取一个配额
+	// GetQuota 获取限流配额，一次接口只获取一个配额
 	GetQuota(request QuotaRequest) (QuotaFuture, error)
-	//销毁API，销毁后无法再进行调用
+	// Destroy 销毁API，销毁后无法再进行调用
 	Destroy()
 }
 
 var (
-	//通过以默认域名为埋点server的默认配置创建LimitAPI
+	// NewLimitAPI 通过以默认域名为埋点server的默认配置创建LimitAPI
 	NewLimitAPI = newLimitAPI
-	//通过配置对象创建LimitAPI
+	// NewLimitAPIByConfig 通过配置对象创建LimitAPI
 	NewLimitAPIByConfig = newLimitAPIByConfig
-	//通过sdkContext创建LimitAPI
+	// NewLimitAPIByContext 通过sdkContext创建LimitAPI
 	NewLimitAPIByContext = newLimitAPIByContext
-	//通过配置文件创建SDK LimitAPI对象
+	// NewLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
 	NewLimitAPIByFile = newLimitAPIByFile
 )

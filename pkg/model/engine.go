@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-//通知开关，标识本次需要获取哪些资源
+// 通知开关，标识本次需要获取哪些资源
 type NotifyTrigger struct {
 	EnableDstInstances bool
 	EnableDstRoute     bool
@@ -32,7 +32,7 @@ type NotifyTrigger struct {
 	EnableMesh         bool
 }
 
-//清理缓存信息
+// 清理缓存信息
 func (n *NotifyTrigger) Clear() {
 	n.EnableDstInstances = false
 	n.EnableDstRoute = false
@@ -43,34 +43,34 @@ func (n *NotifyTrigger) Clear() {
 	n.EnableMesh = false
 }
 
-//单次查询的控制参数
+// 单次查询的控制参数
 type ControlParam struct {
 	Timeout       time.Duration
 	MaxRetry      int
 	RetryInterval time.Duration
 }
 
-//缓存查询请求对象
+// 缓存查询请求对象
 type CacheValueQuery interface {
-	//获取目标服务
+	// 获取目标服务
 	GetDstService() *ServiceKey
-	//获取源服务
+	// 获取源服务
 	GetSrcService() *ServiceKey
-	//获取缓存查询触发器
+	// 获取缓存查询触发器
 	GetNotifierTrigger() *NotifyTrigger
-	//设置目标服务实例
+	// 设置目标服务实例
 	SetDstInstances(instances ServiceInstances)
-	//设置目标服务路由规则
+	// 设置目标服务路由规则
 	SetDstRoute(rule ServiceRule)
-	//设置目标服务限流规则
+	// 设置目标服务限流规则
 	SetDstRateLimit(rule ServiceRule)
-	//设置源服务路由规则
+	// 设置源服务路由规则
 	SetSrcRoute(rule ServiceRule)
-	//获取API调用控制参数
+	// 获取API调用控制参数
 	GetControlParam() *ControlParam
-	//获取API调用统计
+	// 获取API调用统计
 	GetCallResult() *APICallResult
-	//设置网格规则
+	// 设置网格规则
 	SetMeshConfig(mc MeshConfig)
 }
 

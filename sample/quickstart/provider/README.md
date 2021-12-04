@@ -15,10 +15,13 @@
 直接依赖go mod进行构建
 
 - linux/mac构建命令
+
 ```
 go build -o provider
 ```
+
 - windows构建命令
+
 ```
 go build -o provider.exe
 ```
@@ -45,11 +48,13 @@ global:
 直接执行生成的可执行程序
 
 - linux/mac运行命令
+
 ```
 ./provider --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
 ```
 
 - windows运行命令
+
 ```
 ./provider.exe --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
 ```

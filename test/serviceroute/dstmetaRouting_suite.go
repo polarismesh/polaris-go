@@ -19,8 +19,15 @@ package serviceroute
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -28,45 +35,40 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"time"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	dstMetaNamespace = "dstMetaNs"
-	//测试的默认服务名
+	// 测试的默认服务名
 	dstMetaService = "dstMetaSvc"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	dstMetaIPAddress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	dstMetaPort = 8118
-	//测试monitor的默认地址
+	// 测试monitor的默认地址
 	dstMetaMonitorAddress = "127.0.0.1"
-	//测试monitor的端口
+	// 测试monitor的端口
 	dstMetaMonitorPort = 8119
 )
 
 const (
-	//带元数据的实例数
+	// 带元数据的实例数
 	addMetaCount = 2
-	//直接过滤的实例数
+	// 直接过滤的实例数
 	normalInstances = 3
 )
 
 const (
-	//测试直接过滤的KEY
+	// 测试直接过滤的KEY
 	addMetaKey = "env"
-	//测试直接过滤的Value
+	// 测试直接过滤的Value
 	addMetaValue = "test"
-	//错误的直接过滤的Value
+	// 错误的直接过滤的Value
 	wrongAddMetaValue = "test1"
 )
 
-//元数据过滤路由插件测试用例
+// 元数据过滤路由插件测试用例
 type DstMetaTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -77,12 +79,12 @@ type DstMetaTestingSuite struct {
 	grpcMonitor  *grpc.Server
 }
 
-//套件名字
+// 套件名字
 func (t *DstMetaTestingSuite) GetName() string {
 	return "DstMetaTestingSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -137,14 +139,14 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *DstMetaTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//测试正常获取元数据实例
+// 测试正常获取元数据实例
 func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", dstMetaIPAddress, dstMetaPort)})
@@ -165,7 +167,7 @@ func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, addMetaCount)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: dstMetaNamespace,
@@ -179,7 +181,7 @@ func (t *DstMetaTestingSuite) TestGetMetaNormal(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试正常获取元数据实例
+// 测试正常获取元数据实例
 func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", dstMetaIPAddress, dstMetaPort)})
@@ -200,7 +202,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeDstMetaMismatch)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: dstMetaNamespace,
@@ -214,11 +216,11 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略正确设置类型
+// 测试元数据路由兜底策略正确设置类型
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithType(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
-	//没有设置type
+	// 没有设置type
 	request := t.buildFaultOverDefaultInstancesRequest()
 	_, err = consumer.GetOneInstance(request)
 	c.Assert(err, check.NotNil)
@@ -237,7 +239,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithType(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略：通配所有可用ip实例
+// 测试元数据路由兜底策略：通配所有可用ip实例
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithGetOneHealth(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
@@ -260,7 +262,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithGetOneHealth(c *c
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略：匹配不带 metaData key路由
+// 测试元数据路由兜底策略：匹配不带 metaData key路由
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithNotContainMeta(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
@@ -283,7 +285,7 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithNotContainMeta(c 
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略：自定义meta
+// 测试元数据路由兜底策略：自定义meta
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithCustomMeta(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
@@ -310,12 +312,12 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaNormalWithCustomMeta(c *che
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略：自定义meta
+// 测试元数据路由兜底策略：自定义meta
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithCustomMeta01(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
 	request := t.buildFaultOverDefaultInstancesRequest()
-	//没有设置自定义meta
+	// 没有设置自定义meta
 	request.FailOverDefaultMeta.Type = model.CustomMeta
 	_, err = consumer.GetOneInstance(request)
 	c.Assert(err, check.NotNil)
@@ -334,12 +336,12 @@ func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithCustomMeta01(c *ch
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试元数据路由兜底策略：自定义meta
+// 测试元数据路由兜底策略：自定义meta
 func (t *DstMetaTestingSuite) TestFailOverDefaultMetaWrongWithCustomMeta02(c *check.C) {
 	consumer, err := t.buildFaultOverConsumer()
 	c.Assert(err, check.IsNil)
 	request := t.buildFaultOverDefaultInstancesRequest()
-	//设置错误的自定义meta依旧找不到
+	// 设置错误的自定义meta依旧找不到
 	request.FailOverDefaultMeta.Type = model.CustomMeta
 	request.FailOverDefaultMeta.Meta = map[string]string{
 		addMetaKey: wrongAddMetaValue,

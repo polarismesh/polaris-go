@@ -19,16 +19,18 @@ package serviceroute
 
 import (
 	"fmt"
+	"log"
+	"time"
+
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
-	"gopkg.in/check.v1"
-	"log"
-	"time"
 )
 
-//路由调用记录的key
+// 路由调用记录的key
 type routerKey struct {
 	Namespace     string
 	Service       string
@@ -43,7 +45,7 @@ type recordKey struct {
 	RetCode     string
 }
 
-//将monitor的记录转化成map
+// 将monitor的记录转化成map
 func monitorDataToMap(monitorData []*monitorpb.ServiceRouteRecord) map[routerKey]map[recordKey]uint32 {
 	res := make(map[routerKey]map[recordKey]uint32)
 	templateKey := routerKey{}
@@ -80,7 +82,7 @@ func monitorDataToMap(monitorData []*monitorpb.ServiceRouteRecord) map[routerKey
 	return res
 }
 
-//检测monitor收到的数据是不是期望的
+// 检测monitor收到的数据是不是期望的
 func checkRouteRecord(monitorData map[routerKey]map[recordKey]uint32, checkData map[routerKey]map[recordKey]uint32, c *check.C) {
 	for k, v := range checkData {
 		mdata, ok := monitorData[k]

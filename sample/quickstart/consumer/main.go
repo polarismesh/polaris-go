@@ -19,8 +19,9 @@ package main
 
 import (
 	"flag"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (

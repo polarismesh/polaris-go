@@ -29,7 +29,7 @@ var (
 	scalableRand *ScalableRand
 )
 
-//测试可扩展的随机数
+// BenchmarkScalableRand_Intn 测试可扩展的随机数
 func BenchmarkScalableRand_Intn(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -38,7 +38,7 @@ func BenchmarkScalableRand_Intn(b *testing.B) {
 	})
 }
 
-//测试默认的随机数
+// BenchmarkRand_Intn 测试默认的随机数
 func BenchmarkRand_Intn(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -47,14 +47,14 @@ func BenchmarkRand_Intn(b *testing.B) {
 	})
 }
 
-//测试可扩展随机数功能
+// TestScalableRand_Intn 测试可扩展随机数功能
 func TestScalableRand_Intn(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		scalableRand.Intn(maxInt)
 	}
 }
 
-//初始化
+// 初始化
 func init() {
 	scalableRand = NewScalableRand()
 	rand.Seed(time.Now().UnixNano())

@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -51,18 +52,18 @@ type InstanceAddEvent struct {
 	Instances []Instance
 }
 
-//实例one update struct
+// 实例one update struct
 type OneInstanceUpdate struct {
 	Before Instance
 	After  Instance
 }
 
-//实例Update事件
+// 实例Update事件
 type InstanceUpdateEvent struct {
 	UpdateList []OneInstanceUpdate
 }
 
-//实例Delete事件
+// 实例Delete事件
 type InstanceDeleteEvent struct {
 	Instances []Instance
 }

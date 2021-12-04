@@ -27,12 +27,12 @@ type limitAPI struct {
 	context SDKContext
 }
 
-//获取SDK上下文
+// SDKContext 获取SDK上下文
 func (c *limitAPI) SDKContext() SDKContext {
 	return c.context
 }
 
-//获取限流配额
+// GetQuota 获取限流配额
 func (c *limitAPI) GetQuota(request QuotaRequest) (QuotaFuture, error) {
 	if err := checkAvailable(c); nil != err {
 		return nil, err
@@ -44,19 +44,19 @@ func (c *limitAPI) GetQuota(request QuotaRequest) (QuotaFuture, error) {
 	return c.context.GetEngine().AsyncGetQuota(mRequest)
 }
 
-//销毁API
+// Destroy 销毁API
 func (c *limitAPI) Destroy() {
 	if nil != c.context {
 		c.context.Destroy()
 	}
 }
 
-//通过以默认域名为埋点server的默认配置创建LimitAPI
+// 通过以默认域名为埋点server的默认配置创建LimitAPI
 func newLimitAPI() (LimitAPI, error) {
 	return newLimitAPIByConfig(config.NewDefaultConfigurationWithDomain())
 }
 
-//newLimitAPIByConfig 通过配置对象创建SDK LimitAPI对象
+// newLimitAPIByConfig 通过配置对象创建SDK LimitAPI对象
 func newLimitAPIByConfig(cfg config.Configuration) (LimitAPI, error) {
 	context, err := InitContextByConfig(cfg)
 	if nil != err {
@@ -65,12 +65,12 @@ func newLimitAPIByConfig(cfg config.Configuration) (LimitAPI, error) {
 	return &limitAPI{context}, nil
 }
 
-//newLimitAPIByContext 通过上下文创建SDK LimitAPI对象
+// newLimitAPIByContext 通过上下文创建SDK LimitAPI对象
 func newLimitAPIByContext(context SDKContext) LimitAPI {
 	return &limitAPI{context}
 }
 
-//newLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
+// newLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
 func newLimitAPIByFile(path string) (LimitAPI, error) {
 	context, err := InitContextByFile(path)
 	if nil != err {

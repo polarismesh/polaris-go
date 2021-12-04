@@ -18,6 +18,13 @@
 package quota
 
 import (
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -29,26 +36,21 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	"github.com/modern-go/reflect2"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
-//限流分配窗口的缓存
+// 限流分配窗口的缓存
 type RateLimitWindowSet struct {
-	//更新锁
+	// 更新锁
 	updateMutex sync.RWMutex
-	//限流窗口列表，key为revision，value为WindowContainer
+	// 限流窗口列表，key为revision，value为WindowContainer
 	windowByRule map[string]*WindowContainer
-	//储存FlowQuotaAssistant
+	// 储存FlowQuotaAssistant
 	flowAssistant *FlowQuotaAssistant
-	//最近一次超时检查时间
+	// 最近一次超时检查时间
 	lastPurgeTimeMilli int64
 }
 
-//构造函数
+// 构造函数
 func NewRateLimitWindowSet(assistant *FlowQuotaAssistant) *RateLimitWindowSet {
 	return &RateLimitWindowSet{
 		windowByRule:       make(map[string]*WindowContainer),
@@ -57,7 +59,7 @@ func NewRateLimitWindowSet(assistant *FlowQuotaAssistant) *RateLimitWindowSet {
 	}
 }
 
-//拷贝一份只读数据
+// 拷贝一份只读数据
 func (rs *RateLimitWindowSet) GetRateLimitWindows() []*RateLimitWindow {
 	rs.updateMutex.RLock()
 	defer rs.updateMutex.RUnlock()
@@ -68,9 +70,9 @@ func (rs *RateLimitWindowSet) GetRateLimitWindows() []*RateLimitWindow {
 	return result
 }
 
-//获取限流窗口
+// 获取限流窗口
 func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *namingpb.Rule, flatLabels string) *RateLimitWindow {
-	//访问前进行一次窗口淘汰检查
+	// 访问前进行一次窗口淘汰检查
 	rs.PurgeWindows(model.CurrentMillisecond())
 	rs.updateMutex.RLock()
 	defer rs.updateMutex.RUnlock()
@@ -84,11 +86,11 @@ func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *namingpb.Rule, flatLabels
 	return container.WindowByLabel[flatLabels]
 }
 
-//执行窗口淘汰
+// 执行窗口淘汰
 func (rs *RateLimitWindowSet) PurgeWindows(nowMilli int64) {
 	lastPurgeTimeMilli := atomic.LoadInt64(&rs.lastPurgeTimeMilli)
 	if nowMilli-lastPurgeTimeMilli < rs.flowAssistant.purgeIntervalMilli {
-		//未达到检查时间
+		// 未达到检查时间
 		return
 	}
 	swapped := atomic.CompareAndSwapInt64(&rs.lastPurgeTimeMilli, lastPurgeTimeMilli, nowMilli)
@@ -97,14 +99,14 @@ func (rs *RateLimitWindowSet) PurgeWindows(nowMilli int64) {
 	}
 	windows := rs.GetRateLimitWindows()
 	for _, window := range windows {
-		//超时触发删除操作
+		// 超时触发删除操作
 		if window.Expired(nowMilli) {
 			rs.OnWindowExpired(nowMilli, window)
 		}
 	}
 }
 
-//规则是否还有正则表达式匹配逻辑
+// 规则是否还有正则表达式匹配逻辑
 func HasRegex(rule *namingpb.Rule) bool {
 	labels := rule.GetLabels()
 	if len(labels) == 0 {
@@ -118,10 +120,10 @@ func HasRegex(rule *namingpb.Rule) bool {
 	return false
 }
 
-//添加限流窗口
+// 添加限流窗口
 func (rs *RateLimitWindowSet) AddRateLimitWindow(
 	commonRequest *data.CommonRateLimitRequest, rule *namingpb.Rule, flatLabels string) (*RateLimitWindow, error) {
-	//判断是否正则扩散
+	// 判断是否正则扩散
 	hasRegex := HasRegex(rule)
 	rs.updateMutex.Lock()
 	defer rs.updateMutex.Unlock()
@@ -153,7 +155,7 @@ func (rs *RateLimitWindowSet) AddRateLimitWindow(
 	return window, nil
 }
 
-//窗口过期
+// 窗口过期
 func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitWindow) bool {
 	rs.updateMutex.Lock()
 	defer rs.updateMutex.Unlock()
@@ -175,7 +177,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	return true
 }
 
-//服务更新回调
+// 服务更新回调
 func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEventObject) {
 	var updatedRules *common.RateLimitDiffInfo
 	if svcEventObject.SvcEventKey.Type == model.EventRateLimiting {
@@ -199,7 +201,7 @@ func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEve
 	}
 }
 
-//删除容器对象
+// 删除容器对象
 func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	container := rs.windowByRule[revision]
 	delete(rs.windowByRule, revision)
@@ -222,11 +224,11 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	}
 }
 
-//从RateLimitWindowSet中删除一个RateLimitWindow
+// 从RateLimitWindowSet中删除一个RateLimitWindow
 func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	window.SetStatus(Deleted)
 	rs.flowAssistant.DelWindowCount()
-	//旧有的窗口被删除了，那么进行一次上报
+	// 旧有的窗口被删除了，那么进行一次上报
 	rs.flowAssistant.engine.SyncReportStat(model.RateLimitStat, &RateLimitGauge{
 		EmptyInstanceGauge: model.EmptyInstanceGauge{},
 		Window:             window,
@@ -234,15 +236,15 @@ func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	})
 }
 
-//窗口容器
+// 窗口容器
 type WindowContainer struct {
-	//主窗口，非正则表达式的适用
+	// 主窗口，非正则表达式的适用
 	MainWindow *RateLimitWindow
-	//适用于正则表达式展开的
+	// 适用于正则表达式展开的
 	WindowByLabel map[string]*RateLimitWindow
 }
 
-//获取限流滑窗
+// 获取限流滑窗
 func (w *WindowContainer) GetRateLimitWindows() []*RateLimitWindow {
 	windows := make([]*RateLimitWindow, 0, len(w.WindowByLabel))
 	if nil != w.MainWindow {
@@ -255,7 +257,7 @@ func (w *WindowContainer) GetRateLimitWindows() []*RateLimitWindow {
 	return windows
 }
 
-//创建窗口容器
+// 创建窗口容器
 func NewWindowContainer() *WindowContainer {
 	return &WindowContainer{
 		WindowByLabel: make(map[string]*RateLimitWindow),
@@ -263,13 +265,13 @@ func NewWindowContainer() *WindowContainer {
 }
 
 const (
-	//刚创建， 无需进行后台调度
+	// 刚创建， 无需进行后台调度
 	Created int64 = iota
-	//已获取调度权，准备开始调度
+	// 已获取调度权，准备开始调度
 	Initializing
-	//已经在远程初始化结束
+	// 已经在远程初始化结束
 	Initialized
-	//已经删除
+	// 已经删除
 	Deleted
 )
 
@@ -281,11 +283,11 @@ type RemoteSyncParam struct {
 
 // 配额使用信息
 type UsageInfo struct {
-	//配额使用时间
+	// 配额使用时间
 	CurTimeMilli int64
-	//配额使用详情
+	// 配额使用详情
 	Passed map[int64]uint32
-	//限流情况
+	// 限流情况
 	Limited map[int64]uint32
 }
 
@@ -301,42 +303,42 @@ type RemoteQuotaResult struct {
 type RemoteAwareBucket interface {
 	// 父接口，执行用户配额分配操作
 	model.QuotaAllocator
-	//设置通过限流服务端获取的远程配额
+	// 设置通过限流服务端获取的远程配额
 	SetRemoteQuota(*RemoteQuotaResult)
 	// 获取已经分配的配额
 	GetQuotaUsed(curTimeMilli int64) *UsageInfo
-	//获取TokenBuckets
+	// 获取TokenBuckets
 	GetTokenBuckets() TokenBuckets
-	//更新时间间隔
+	// 更新时间间隔
 	UpdateTimeDiff(timeDiff int64)
 }
 
 // 限流窗口
 type RateLimitWindow struct {
-	//配额窗口集合
+	// 配额窗口集合
 	WindowSet *RateLimitWindowSet
 	// 服务信息
 	SvcKey model.ServiceKey
 	// 正则对应的label
 	Labels string
-	//窗口的唯一标识，服务名+labels
+	// 窗口的唯一标识，服务名+labels
 	uniqueKey string
-	//通过服务名+labels计算出来的hash值，用于选上报服务器
+	// 通过服务名+labels计算出来的hash值，用于选上报服务器
 	hashValue uint64
-	//最后一次获取限流配额时间
+	// 最后一次获取限流配额时间
 	lastQuotaAccessNano int64
-	//最近一次拉取远程配额返回的时间,单位ms
+	// 最近一次拉取远程配额返回的时间,单位ms
 	lastRecvTimeNano int64
-	//最近一次发送acquire远程同步配额的时间, 单位ns
+	// 最近一次发送acquire远程同步配额的时间, 单位ns
 	lastSentTimeNano int64
-	//最近一次获取配额时间
+	// 最近一次获取配额时间
 	lastAccessTimeMilli int64
 	// 已经匹配到的限流规则，没有匹配则为空
 	// 由于可能会出现规则并没有发生变化，但是缓存对象更新的情况，因此这里使用原子变量
 	Rule *namingpb.Rule
-	//其他插件在这里添加的相关数据，一般是统计插件使用
+	// 其他插件在这里添加的相关数据，一般是统计插件使用
 	PluginData map[int32]interface{}
-	//淘汰周期，取最大统计周期+1s
+	// 淘汰周期，取最大统计周期+1s
 	expireDuration time.Duration
 	// 远程同步参数
 	syncParam RemoteSyncParam
@@ -346,15 +348,15 @@ type RateLimitWindow struct {
 	allocatingBucket RemoteAwareBucket
 	// 限流插件
 	rateLimiter ratelimiter.ServiceRateLimiter
-	//初始化后指定的限流模式（本地或远程）
+	// 初始化后指定的限流模式（本地或远程）
 	configMode model.ConfigMode
-	//远程同步的集群，本地限流无此配置
+	// 远程同步的集群，本地限流无此配置
 	remoteCluster model.ServiceKey
 	// 窗口状态
 	status int64
 }
 
-//超过多长时间后进行淘汰，淘汰后需要重新init
+// 超过多长时间后进行淘汰，淘汰后需要重新init
 var (
 	// 淘汰因子，过期时间=MaxDuration + ExpireFactor
 	ExpireFactor = 1 * time.Second
@@ -362,12 +364,12 @@ var (
 	DefaultStatisticReportPeriod = 1 * time.Second
 )
 
-//计算淘汰周期
+// 计算淘汰周期
 func getExpireDuration(rule *namingpb.Rule) time.Duration {
 	return getMaxDuration(rule) + ExpireFactor
 }
 
-//获取最大的限流周期
+// 获取最大的限流周期
 func getMaxDuration(rule *namingpb.Rule) time.Duration {
 	var maxDuration time.Duration
 	for _, amount := range rule.GetAmounts() {
@@ -395,7 +397,7 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	window.syncParam.ControlParam = commonRequest.ControlParam
 
 	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, rule.GetAction().GetValue())
-	//初始化流量整形窗口
+	// 初始化流量整形窗口
 	var err error
 	criteria := &commonRequest.Criteria
 	window.trafficShapingBucket, err = window.rateLimiter.InitQuota(criteria)
@@ -410,7 +412,7 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	window.PluginData = make(map[int32]interface{})
 	window.buildRemoteConfigMode(windowSet, rule)
 
-	//创建对应
+	// 创建对应
 	handlers := windowSet.flowAssistant.supplier.GetEventSubscribers(common.OnRateLimitWindowCreated)
 	if len(handlers) > 0 {
 		eventObj := &common.PluginEvent{
@@ -424,9 +426,9 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	return window, nil
 }
 
-//构建限流模式及集群
+// 构建限流模式及集群
 func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *namingpb.Rule) {
-	//解析限流集群配置
+	// 解析限流集群配置
 	if rule.GetType() == namingpb.Rule_LOCAL {
 		r.configMode = model.ConfigQuotaLocalMode
 		return
@@ -446,9 +448,9 @@ func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, r
 	}
 }
 
-//构建限流窗口的索引值
+// 构建限流窗口的索引值
 func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
-	//<服务名>#<命名空间>#<labels if exists>
+	// <服务名>#<命名空间>#<labels if exists>
 	builder := &strings.Builder{}
 	builder.WriteString(r.SvcKey.Service)
 	builder.WriteString(config.DefaultNamesSeparator)
@@ -462,14 +464,14 @@ func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 	return uniqueKey, value
 }
 
-//根据限流行为名获取限流算法插件
+// 根据限流行为名获取限流算法插件
 func createBehavior(supplier plugin.Supplier, behaviorName string) ratelimiter.ServiceRateLimiter {
-	//因为构造缓存时候已经校验过，所以这里可以直接忽略错误
+	// 因为构造缓存时候已经校验过，所以这里可以直接忽略错误
 	plug, _ := supplier.GetPlugin(common.TypeRateLimiter, behaviorName)
 	return plug.(ratelimiter.ServiceRateLimiter)
 }
 
-//校验输入的元数据是否符合规则
+// 校验输入的元数据是否符合规则
 func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	labels map[string]string, ruleCache model.RuleCache) bool {
 	if len(labels) == 0 {
@@ -478,7 +480,7 @@ func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	var value string
 	var ok bool
 	if value, ok = labels[ruleMetaKey]; !ok {
-		//集成的路由规则不包含这个key，就不匹配
+		// 集成的路由规则不包含这个key，就不匹配
 		return false
 	}
 	ruleMetaValueStr := ruleMetaValue.GetValue().GetValue()
@@ -494,18 +496,18 @@ func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	}
 }
 
-//上下文的键类型
+// 上下文的键类型
 type contextKey struct {
 	name string
 }
 
-//ToString方法
+// ToString方法
 func (k *contextKey) String() string { return "rateLimit context value " + k.name }
 
-//key，用于共享错误信息
+// key，用于共享错误信息
 var errKey = &contextKey{name: "ctxError"}
 
-//错误容器，用于传递上下文错误信息
+// 错误容器，用于传递上下文错误信息
 type errContainer struct {
 	err atomic.Value
 }
@@ -513,15 +515,15 @@ type errContainer struct {
 // 初始化限流窗口
 func (r *RateLimitWindow) Init() {
 	if !r.CasStatus(Created, Initializing) {
-		//确保初始化一次
+		// 确保初始化一次
 		return
 	}
 	if r.configMode == model.ConfigQuotaLocalMode {
-		//本地限流，则直接可用
+		// 本地限流，则直接可用
 		r.SetStatus(Initialized)
 		return
 	}
-	//加入轮询队列，走异步调度
+	// 加入轮询队列，走异步调度
 	r.WindowSet.flowAssistant.taskValues.AddValue(r.uniqueKey, r)
 }
 
@@ -534,17 +536,17 @@ func (r *RateLimitWindow) buildInitTargetStr() string {
 	return target.String()
 }
 
-//获取SDK引擎
+// 获取SDK引擎
 func (r *RateLimitWindow) Engine() model.Engine {
 	return r.WindowSet.flowAssistant.engine
 }
 
-//获取异步连接器
+// 获取异步连接器
 func (r *RateLimitWindow) AsyncRateLimitConnector() serverconnector.AsyncRateLimitConnector {
 	return r.WindowSet.flowAssistant.asyncRateLimitConnector
 }
 
-//转换成限流PB初始化消息
+// 转换成限流PB初始化消息
 func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
 	clientId := r.Engine().GetContext().GetClientId()
 	initReq := &rlimitV2.RateLimitInitRequest{}
@@ -572,18 +574,18 @@ type RemoteErrorContainer struct {
 	sdkErr atomic.Value
 }
 
-//比较两个窗口是否相同
+// 比较两个窗口是否相同
 func (r *RateLimitWindow) CompareTo(another interface{}) int {
 	return strings.Compare(r.uniqueKey, another.(*RateLimitWindow).uniqueKey)
 }
 
-//删除前进行检查，返回true才删除，该检查是同步操作
+// 删除前进行检查，返回true才删除，该检查是同步操作
 func (r *RateLimitWindow) EnsureDeleted(value interface{}) bool {
-	//只有过期才删除
+	// 只有过期才删除
 	return r.GetStatus() == Deleted
 }
 
-//转换成限流PB上报消息
+// 转换成限流PB上报消息
 func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportRequest {
 	reportReq := &rlimitV2.ClientRateLimitReportRequest{
 		Service:   r.SvcKey.Service,
@@ -628,8 +630,8 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 	}
 	deadline := time.Unix(0, nowMilli*1e6)
 	if shapingResult.Code == model.QuotaResultLimited {
-		//如果结果是拒绝了分配，那么进行一次上报
-		//TODO：检查是否上报了充足信息
+		// 如果结果是拒绝了分配，那么进行一次上报
+		// TODO：检查是否上报了充足信息
 		mode := r.Rule.GetType()
 		var limitType LimitMode
 		if mode == namingpb.Rule_GLOBAL {
@@ -658,12 +660,12 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 	return model.NewQuotaFuture(nil, deadline, r.allocatingBucket), nil
 }
 
-//获取最近访问时间
+// 获取最近访问时间
 func (r *RateLimitWindow) GetLastAccessTimeMilli() int64 {
 	return atomic.LoadInt64(&r.lastAccessTimeMilli)
 }
 
-//是否已经过期
+// 是否已经过期
 func (r *RateLimitWindow) Expired(nowMilli int64) bool {
 	return nowMilli-r.GetLastAccessTimeMilli() > model.ToMilliSeconds(r.expireDuration)
 }

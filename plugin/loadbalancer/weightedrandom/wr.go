@@ -27,41 +27,41 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-//weightedrandom负载均衡插件
+// weightedrandom负载均衡插件
 type WRLoadBalancer struct {
 	*plugin.PluginBase
 	scalableRand *rand.ScalableRand
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *WRLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *WRLoadBalancer) Name() string {
 	return config.DefaultLoadBalancerWR
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *WRLoadBalancer) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.scalableRand = rand.NewScalableRand()
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *WRLoadBalancer) Destroy() error {
 	return nil
 }
 
-//ChooseInstance 获取单个服务实例
+// ChooseInstance 获取单个服务实例
 func (g *WRLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	svcInstances model.ServiceInstances) (model.Instance, error) {
 	return g.clusterBasedChooseInstance(criteria.IgnoreHalfOpen, criteria.Cluster, svcInstances.GetServiceClusters())
 }
 
-//基于集群进行负载均衡选择，性能最高
+// 基于集群进行负载均衡选择，性能最高
 func (g *WRLoadBalancer) clusterBasedChooseInstance(ignoreHalfOpen bool,
 	cluster *model.Cluster, svcClusters model.ServiceClusters) (model.Instance, error) {
 	clusterValue := cluster.GetClusterValue()
@@ -74,10 +74,10 @@ func (g *WRLoadBalancer) clusterBasedChooseInstance(ignoreHalfOpen bool,
 			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance, includeHalfOpen: %v",
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count(), cluster.IncludeHalfOpen)
 	}
-	//优化进行随机半开节点的分配
+	// 优化进行随机半开节点的分配
 	instance = g.clusterBasedSelectWeightedInstance(svcInstances, targetInstances)
 	if nil == instance {
-		//一般不会走到这一步，除非BUG，这里只是做个预案
+		// 一般不会走到这一步，除非BUG，这里只是做个预案
 		selector := g.getSelector(targetInstances.Count())
 		instanceIndex := targetInstances.GetInstances()[selector]
 		instance = svcInstances.GetInstances()[instanceIndex.Index]
@@ -85,12 +85,12 @@ func (g *WRLoadBalancer) clusterBasedChooseInstance(ignoreHalfOpen bool,
 	return instance, nil
 }
 
-//获取随机数的selector
+// 获取随机数的selector
 func (g *WRLoadBalancer) getSelector(totalWeight int) int {
 	return g.scalableRand.Intn(totalWeight)
 }
 
-//基于集群进行权重随机选择合适权重的服务实例
+// 基于集群进行权重随机选择合适权重的服务实例
 func (g *WRLoadBalancer) clusterBasedSelectWeightedInstance(
 	svcInstances model.ServiceInstances, instances *model.InstanceSet) model.Instance {
 	index := rand.SelectWeightedRandItem(g.scalableRand, instances)
@@ -101,7 +101,7 @@ func (g *WRLoadBalancer) clusterBasedSelectWeightedInstance(
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&WRLoadBalancer{})
 }

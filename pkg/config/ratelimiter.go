@@ -20,42 +20,43 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"strconv"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//限流配置对象
+// 限流配置对象
 type RateLimitConfigImpl struct {
-	//是否启动限流
+	// 是否启动限流
 	Enable *bool `yaml:"enable" json:"enable"`
-	//各个限流插件的配置
+	// 各个限流插件的配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 	// mode  0: local  1: global
 	Mode string `yaml:"mode" json:"mode"`
 	// rateLimitCluster
 	RateLimitCluster *ServerClusterConfigImpl `yaml:"rateLimitCluster" json:"rateLimitCluster"`
-	//最大限流窗口数量
+	// 最大限流窗口数量
 	MaxWindowSize int `yaml:"maxWindowSize" json:"maxWindowSize"`
-	//超时window检查周期
+	// 超时window检查周期
 	PurgeInterval time.Duration `yaml:"purgeInterval" json:"purgeInterval"`
 }
 
-//是否启用限流能力
+// 是否启用限流能力
 func (r *RateLimitConfigImpl) IsEnable() bool {
 	return *r.Enable
 }
 
-//设置是否启用限流能力
+// 设置是否启用限流能力
 func (r *RateLimitConfigImpl) SetEnable(value bool) {
 	r.Enable = &value
 }
 
-//已经禁用的限流集群名
+// 已经禁用的限流集群名
 const ForbidServerMetricService = "polaris.metric"
 
-//校验配置参数
+// 校验配置参数
 func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r {
 		return errors.New("RateLimitConfig is nil")
@@ -72,7 +73,7 @@ func (r *RateLimitConfigImpl) Verify() error {
 	return r.Plugin.Verify()
 }
 
-//获取插件配置
+// 获取插件配置
 func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := r.Plugin[pluginName]
 	if !ok {
@@ -81,7 +82,7 @@ func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-//设置默认参数
+// 设置默认参数
 func (r *RateLimitConfigImpl) SetDefault() {
 	if nil == r.Enable {
 		r.Enable = &DefaultRateLimitEnable
@@ -96,7 +97,7 @@ func (r *RateLimitConfigImpl) SetDefault() {
 	r.RateLimitCluster.SetDefault()
 }
 
-//设置插件配置
+// 设置插件配置
 func (r *RateLimitConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return r.Plugin.SetPluginConfig(common.TypeRateLimiter, pluginName, value)
 }
@@ -127,7 +128,7 @@ func (r *RateLimitConfigImpl) GetRateLimitCluster() ServerClusterConfig {
 	return r.RateLimitCluster
 }
 
-//配置初始化
+// 配置初始化
 func (r *RateLimitConfigImpl) Init() {
 	r.Plugin = PluginConfigs{}
 	r.Plugin.Init(common.TypeRateLimiter)
@@ -138,22 +139,22 @@ func (r *RateLimitConfigImpl) Init() {
 	}
 }
 
-//GetMaxWindowSize
+// GetMaxWindowSize
 func (r *RateLimitConfigImpl) GetMaxWindowSize() int {
 	return r.MaxWindowSize
 }
 
-//SetMaxWindowSize
+// SetMaxWindowSize
 func (r *RateLimitConfigImpl) SetMaxWindowSize(maxSize int) {
 	r.MaxWindowSize = maxSize
 }
 
-//GetMaxWindowSize
+// GetMaxWindowSize
 func (r *RateLimitConfigImpl) GetPurgeInterval() time.Duration {
 	return r.PurgeInterval
 }
 
-//SetMaxWindowSize
+// SetMaxWindowSize
 func (r *RateLimitConfigImpl) SetPurgeInterval(v time.Duration) {
 	r.PurgeInterval = v
 }
