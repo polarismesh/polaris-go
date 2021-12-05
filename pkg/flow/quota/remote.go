@@ -62,6 +62,8 @@ type AsyncRateLimitConnector interface {
 	GetMessageSender(svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error)
 	//销毁
 	Destroy()
+	//流数量
+	StreamCount() int
 }
 
 //头信息带给server真实的IP地址

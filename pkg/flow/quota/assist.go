@@ -72,6 +72,10 @@ type FlowQuotaAssistant struct {
 	localRules map[model.ServiceKey]model.ServiceRule
 }
 
+func (f *FlowQuotaAssistant) AsyncRateLimitConnector() AsyncRateLimitConnector {
+	return f.asyncRateLimitConnector
+}
+
 func (f *FlowQuotaAssistant) Destroy() {
 	atomic.StoreUint32(&f.destroyed, 1)
 	f.asyncRateLimitConnector.Destroy()

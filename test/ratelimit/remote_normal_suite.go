@@ -57,28 +57,6 @@ type IndexResult struct {
 	code  model.QuotaResultCode
 }
 
-// 测试不能设置polaris.metric为限流集群
-func (rt *RemoteNormalTestingSuite) TestNoSetPolarisMetric(c *check.C) {
-	log.Printf("Start TestNoSetPolarisMetric")
-	cfg := api.NewConfiguration()
-	consumer, err := api.NewProviderAPIByConfig(cfg)
-	_ = consumer
-	c.Assert(err, check.IsNil)
-	consumer.Destroy()
-
-	cfg = api.NewConfiguration()
-	cfg.GetProvider().GetRateLimit().SetRateLimitCluster(config.ServerNamespace, "polaris.metric.test")
-	consumer, err = api.NewProviderAPIByConfig(cfg)
-	c.Assert(err, check.IsNil)
-	consumer.Destroy()
-
-	cfg = api.NewConfiguration()
-	cfg.GetProvider().GetRateLimit().SetRateLimitCluster(config.ServerNamespace, config.ForbidServerMetricService)
-	consumer, err = api.NewProviderAPIByConfig(cfg)
-	fmt.Println(err)
-	c.Assert(err, check.NotNil)
-}
-
 //测试远程精准匹配限流
 func (rt *RemoteNormalTestingSuite) TestRemoteTwoDuration(c *check.C) {
 	log.Printf("Start TestRemoteTwoDuration")
@@ -270,8 +248,6 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexCombineV2(c *check.C) {
 		go func(idx int) {
 			defer wg.Done()
 			cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-			//测试通过SDK来设置集群名，兼容场景
-			cfg.GetProvider().GetRateLimit().SetRateLimitCluster(config.ServerNamespace, rateLimitSvcName)
 			limitAPI, err := api.NewLimitAPIByConfig(cfg)
 			c.Assert(err, check.IsNil)
 			defer limitAPI.Destroy()
@@ -348,8 +324,6 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 		go func(idx int) {
 			defer wg.Done()
 			cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-			//测试通过SDK来设置集群名，兼容场景
-			cfg.GetProvider().GetRateLimit().SetRateLimitCluster(config.ServerNamespace, rateLimitSvcName)
 			limitAPI, err := api.NewLimitAPIByConfig(cfg)
 			c.Assert(err, check.IsNil)
 			defer limitAPI.Destroy()
@@ -362,7 +336,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 						map[string]string{"appIdShare": "appShare"})
 					atomic.AddInt64(&calledCount, 1)
 					curTime := model.CurrentMillisecond()
-					if curTime - startTime >= 1000 {
+					if curTime-startTime >= 1000 {
 						//前500ms是上下线，不计算
 						codeChan <- IndexResult{
 							index: idx,
