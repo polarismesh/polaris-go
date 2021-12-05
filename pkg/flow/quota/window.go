@@ -28,8 +28,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	"github.com/modern-go/reflect2"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -434,12 +432,6 @@ func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, r
 	r.remoteCluster.Namespace = rule.GetCluster().GetNamespace().GetValue()
 	r.remoteCluster.Service = rule.GetCluster().GetService().GetValue()
 	if len(r.remoteCluster.Namespace) == 0 || len(r.remoteCluster.Service) == 0 {
-		if !reflect2.IsNil(windowSet.flowAssistant.remoteClusterByConfig) {
-			r.remoteCluster.Namespace = windowSet.flowAssistant.remoteClusterByConfig.GetNamespace()
-			r.remoteCluster.Service = windowSet.flowAssistant.remoteClusterByConfig.GetService()
-		}
-	}
-	if len(r.remoteCluster.Namespace) == 0 || len(r.remoteCluster.Service) == 0 {
 		r.configMode = model.ConfigQuotaLocalMode
 	} else {
 		r.configMode = model.ConfigQuotaGlobalMode
@@ -502,9 +494,6 @@ type contextKey struct {
 //ToString方法
 func (k *contextKey) String() string { return "rateLimit context value " + k.name }
 
-//key，用于共享错误信息
-var errKey = &contextKey{name: "ctxError"}
-
 //错误容器，用于传递上下文错误信息
 type errContainer struct {
 	err atomic.Value
@@ -540,7 +529,7 @@ func (r *RateLimitWindow) Engine() model.Engine {
 }
 
 //获取异步连接器
-func (r *RateLimitWindow) AsyncRateLimitConnector() serverconnector.AsyncRateLimitConnector {
+func (r *RateLimitWindow) AsyncRateLimitConnector() AsyncRateLimitConnector {
 	return r.WindowSet.flowAssistant.asyncRateLimitConnector
 }
 

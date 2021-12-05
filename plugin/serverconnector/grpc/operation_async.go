@@ -48,7 +48,6 @@ type Connector struct {
 	connManager           network.ConnectionManager
 	connectionIdleTimeout time.Duration
 	valueCtx              model.ValueContext
-	asyncRLimitConnector  *AsyncRateLimitConnector
 	discoverConnector     *connector.DiscoverConnector
 	//有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
@@ -75,7 +74,6 @@ func (g *Connector) Init(ctx *plugin.InitContext) error {
 	g.connManager = ctx.ConnManager
 	g.connectionIdleTimeout = ctx.Config.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	g.valueCtx = ctx.ValueCtx
-	g.asyncRLimitConnector = NewAsyncRateLimitConnector(g.valueCtx, ctx.ConnManager.GetClientInfo(), ctx.Config)
 	protocol := ctx.Config.GetGlobal().GetServerConnector().GetProtocol()
 	if protocol == g.Name() {
 		log.GetBaseLogger().Infof("set %s plugin as connectionCreator", g.Name())
@@ -116,13 +114,12 @@ func (g *Connector) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable
 func (g *Connector) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 //RegisterServiceHandler 注册服务监听器
@@ -141,10 +138,6 @@ func (g *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 // 异常场景：当地址列表为空，或者地址全部连接失败，则返回error，调用者需进行重试
 func (g *Connector) UpdateServers(key *model.ServiceEventKey) error {
 	return g.discoverConnector.UpdateServers(key)
-}
-
-func (g *Connector) GetAsyncRateLimitConnector() serverconnector.AsyncRateLimitConnector {
-	return g.asyncRLimitConnector
 }
 
 //init 注册插件信息

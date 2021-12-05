@@ -1,5 +1,5 @@
 /**
- * Tencent is pleased to support the open source community by making polaris-go available.
+ * Tencent is pleased to support the open source community by making Polaris available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
  *
@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package grpc
+package quota
 
 import (
 	"context"
@@ -26,15 +26,43 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
-	"github.com/polarismesh/polaris-go/pkg/network"
-	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"io"
+	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+//应答回调函数
+type ResponseCallBack interface {
+	//应答回调函数
+	OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, curTimeMilli int64)
+	//应答回调函数
+	OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64)
+}
+
+//限流消息同步器
+type RateLimitMsgSender interface {
+	//是否已经初始化
+	HasInitialized(svcKey model.ServiceKey, labels string) bool
+	//发送初始化请求
+	SendInitRequest(request *rlimitV2.RateLimitInitRequest, callback ResponseCallBack)
+	//发送上报请求
+	SendReportRequest(request *rlimitV2.ClientRateLimitReportRequest) error
+	//同步时间
+	AdjustTime() int64
+}
+
+//异步限流连接器
+type AsyncRateLimitConnector interface {
+	//初始化限流控制信息
+	GetMessageSender(svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error)
+	//销毁
+	Destroy()
+}
 
 //头信息带给server真实的IP地址
 const headerKeyClientIP = "client-ip"
@@ -42,7 +70,7 @@ const headerKeyClientIP = "client-ip"
 //基于时间段的回调结构
 type DurationBaseCallBack struct {
 	record   *InitializeRecord
-	callBack serverconnector.ResponseCallBack
+	callBack ResponseCallBack
 	duration time.Duration
 }
 
@@ -51,7 +79,7 @@ type InitializeRecord struct {
 	identifier        *CounterIdentifier
 	counterSet        *StreamCounterSet
 	counterKeys       map[time.Duration]uint32
-	callback          serverconnector.ResponseCallBack
+	callback          ResponseCallBack
 	initSendTimeMilli int64
 	lastRecvTimeMilli int64
 }
@@ -91,7 +119,7 @@ type StreamCounterSet struct {
 	//回调函数
 	counters map[uint32]*DurationBaseCallBack
 	//连接器
-	asyncConnector *AsyncRateLimitConnector
+	asyncConnector *asyncRateLimitConnector
 	//上一次连接失败的时间点
 	lastConnectFailTimeMilli int64
 	//创建时间
@@ -103,7 +131,7 @@ type StreamCounterSet struct {
 }
 
 //新建流管理器
-func NewStreamCounterSet(asyncConnector *AsyncRateLimitConnector, identifier *HostIdentifier) *StreamCounterSet {
+func NewStreamCounterSet(asyncConnector *asyncRateLimitConnector, identifier *HostIdentifier) *StreamCounterSet {
 	streamCounterSet := &StreamCounterSet{
 		mutex:           &sync.RWMutex{},
 		asyncConnector:  asyncConnector,
@@ -158,8 +186,8 @@ func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 }
 
 //初始化操作的前置检查
-func (s *StreamCounterSet) preInitCheck(counterIdentifier CounterIdentifier,
-	callback serverconnector.ResponseCallBack) rlimitV2.RateLimitGRPCV2_ServiceClient {
+func (s *StreamCounterSet) preInitCheck(
+	counterIdentifier CounterIdentifier, callback ResponseCallBack) rlimitV2.RateLimitGRPCV2_ServiceClient {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if nil == s.conn {
@@ -175,15 +203,12 @@ func (s *StreamCounterSet) preInitCheck(counterIdentifier CounterIdentifier,
 		s.client = rlimitV2.NewRateLimitGRPCV2Client(s.conn)
 	}
 	if nil == s.serviceStream {
-		selfHost := s.asyncConnector.clientInfo.GetIPString()
-		ctx, cancel := connector.CreateHeaderContext(0, map[string]string{headerKeyClientIP: selfHost})
+		selfHost := s.asyncConnector.getIPString(s.HostIdentifier.host, s.HostIdentifier.port)
+		ctx := createHeaderContext(map[string]string{headerKeyClientIP: selfHost})
 		serviceStream, err := s.client.Service(ctx)
 		if nil != err {
 			log.GetNetworkLogger().Errorf("[RateLimit]fail to create serviceStream to %s:%d, err is %v",
 				s.HostIdentifier.host, s.HostIdentifier.port, err)
-			if nil != cancel {
-				cancel()
-			}
 			s.conn.Close()
 			return nil
 		}
@@ -211,9 +236,15 @@ func (s *StreamCounterSet) preInitCheck(counterIdentifier CounterIdentifier,
 	return s.serviceStream
 }
 
+func createHeaderContext(headers map[string]string) context.Context {
+	md := metadata.New(headers)
+	var ctx context.Context
+	ctx = context.Background()
+	return metadata.NewOutgoingContext(ctx, md)
+}
+
 //发送初始化请求
-func (s *StreamCounterSet) SendInitRequest(
-	initReq *rlimitV2.RateLimitInitRequest, callback serverconnector.ResponseCallBack) {
+func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitRequest, callback ResponseCallBack) {
 	counterIdentifier := CounterIdentifier{
 		service:   initReq.GetTarget().GetService(),
 		namespace: initReq.GetTarget().GetNamespace(),
@@ -544,7 +575,7 @@ func (c CounterIdentifier) String() string {
 }
 
 // 目前只实现了 RateLimit-Acquire的异步 和 metric-report的异步
-type AsyncRateLimitConnector struct {
+type asyncRateLimitConnector struct {
 	//读写锁，守护streams列表
 	mutex *sync.RWMutex
 	//IP端口到Stream的映射，一个IP端口只有一个stream
@@ -555,8 +586,10 @@ type AsyncRateLimitConnector struct {
 	valueCtx model.ValueContext
 	//单次加载
 	once *sync.Once
+	//获取自身IP的互斥锁
+	clientHostMutex *sync.Mutex
 	//自身IP信息
-	clientInfo *network.ClientInfo
+	clientHost string
 	//连接超时时间
 	connTimeout time.Duration
 	//消息超时时间
@@ -574,32 +607,30 @@ type AsyncRateLimitConnector struct {
 }
 
 // NewAsyncRateLimitConnector
-func NewAsyncRateLimitConnector(
-	valueCtx model.ValueContext, clientInfo *network.ClientInfo, cfg config.Configuration) *AsyncRateLimitConnector {
+func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
 	connTimeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
 	msgTimeout := cfg.GetGlobal().GetServerConnector().GetMessageTimeout()
 	protocol := cfg.GetGlobal().GetServerConnector().GetProtocol()
 	purgeInterval := cfg.GetProvider().GetRateLimit().GetPurgeInterval()
 	connIdleTimeout := cfg.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	reconnectInterval := cfg.GetGlobal().GetServerConnector().GetReconnectInterval()
-	connector := &AsyncRateLimitConnector{
+	return &asyncRateLimitConnector{
 		mutex:             &sync.RWMutex{},
 		streams:           make(map[HostIdentifier]*StreamCounterSet),
 		valueCtx:          valueCtx,
-		clientInfo:        clientInfo,
 		connTimeout:       connTimeout,
 		msgTimeout:        msgTimeout,
 		purgeInterval:     purgeInterval,
 		connIdleTimeout:   connIdleTimeout,
 		reconnectInterval: reconnectInterval,
 		once:              &sync.Once{},
+		clientHostMutex:   &sync.Mutex{},
 		protocol:          protocol,
 	}
-	return connector
 }
 
 //淘汰流管理器
-func (a *AsyncRateLimitConnector) dropStreamCounterSet(
+func (a *asyncRateLimitConnector) dropStreamCounterSet(
 	streamCounterSet *StreamCounterSet, serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -611,7 +642,7 @@ func (a *AsyncRateLimitConnector) dropStreamCounterSet(
 }
 
 //获取流计数器
-func (a *AsyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentifier) (*StreamCounterSet, error) {
+func (a *asyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentifier) (*StreamCounterSet, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 	if a.destroyed {
@@ -621,7 +652,7 @@ func (a *AsyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentif
 }
 
 //定时处理过期任务
-func (a *AsyncRateLimitConnector) Process(
+func (a *asyncRateLimitConnector) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	counterSet := taskValue.(*StreamCounterSet)
 	nowMilli := model.CurrentMillisecond()
@@ -646,20 +677,20 @@ func (a *AsyncRateLimitConnector) Process(
 }
 
 //OnTaskEvent 任务事件回调
-func (a *AsyncRateLimitConnector) OnTaskEvent(event model.TaskEvent) {
+func (a *asyncRateLimitConnector) OnTaskEvent(event model.TaskEvent) {
 
 }
 
 //获取stream的数量，用于测试
-func (a *AsyncRateLimitConnector) StreamCount() int {
+func (a *asyncRateLimitConnector) StreamCount() int {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 	return len(a.streams)
 }
 
 //创建流上下文
-func (a *AsyncRateLimitConnector) GetMessageSender(
-	svcKey model.ServiceKey, hashValue uint64) (serverconnector.RateLimitMsgSender, error) {
+func (a *asyncRateLimitConnector) GetMessageSender(
+	svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error) {
 	req := &model.GetOneInstanceRequest{}
 	req.Service = svcKey.Service
 	req.Namespace = svcKey.Namespace
@@ -703,8 +734,25 @@ func (a *AsyncRateLimitConnector) GetMessageSender(
 	return counterSet, nil
 }
 
+func (a *asyncRateLimitConnector) getIPString(remoteHost string, remotePort uint32) string {
+	a.clientHostMutex.Lock()
+	defer a.clientHostMutex.Unlock()
+	if len(a.clientHost) > 0 {
+		return a.clientHost
+	}
+	addr := fmt.Sprintf("%s:%d", remoteHost, remotePort)
+	conn, err := net.Dial("tcp", addr)
+	if nil != err {
+		log.GetNetworkLogger().Errorf("fail to dial %s to get local host, err is %v", err)
+		return ""
+	}
+	localAddr := conn.LocalAddr().String()
+	a.clientHost = strings.Split(localAddr, ":")[0]
+	return a.clientHost
+}
+
 //清理
-func (a *AsyncRateLimitConnector) Destroy() {
+func (a *asyncRateLimitConnector) Destroy() {
 	a.mutex.Lock()
 	a.destroyed = true
 	streams := a.streams
