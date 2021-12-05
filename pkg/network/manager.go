@@ -19,10 +19,10 @@ package network
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/google/uuid"
 	"github.com/modern-go/reflect2"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
 	"sync/atomic"
 	"time"
 )
@@ -71,39 +71,39 @@ func (c *ClientInfo) GetHashKey() []byte {
 //通用的连接管理器
 type ConnectionManager interface {
 
-	//设置当前协议的连接创建器
+	// SetConnCreator 设置当前协议的连接创建器
 	SetConnCreator(creator ConnCreator)
 
-	//销毁并释放连接管理器
+	// Destroy 销毁并释放连接管理器
 	Destroy()
 
-	//获取并占用连接
+	// GetConnection 获取并占用连接
 	GetConnection(opKey string, clusterType config.ClusterType) (*Connection, error)
 
-	//通过传入一致性hashKey的方式获取链接
+	// GetConnectionByHashKey 通过传入一致性hashKey的方式获取链接
 	GetConnectionByHashKey(opKey string, clusterType config.ClusterType, hashKey []byte) (*Connection, error)
 
-	//报告连接故障
+	// ReportConnectionDown 报告连接故障
 	ReportConnectionDown(connID ConnID)
 
-	//上报接口调用成功
+	// ReportSuccess 上报接口调用成功
 	ReportSuccess(connID ConnID, retCode int32, timeout time.Duration)
 
-	//上报接口调用失败
+	// ReportFail 上报接口调用失败
 	ReportFail(connID ConnID, retCode int32, timeout time.Duration)
 
-	//更新服务地址
+	// UpdateServers 更新服务地址
 	UpdateServers(svcEventKey model.ServiceEventKey)
 
-	//获取当前客户端信息
+	// GetClientInfo 获取当前客户端信息
 	GetClientInfo() *ClientInfo
 
-	//discover服务是否已经就绪
+	// IsReady discover服务是否已经就绪
 	IsReady() bool
 
-	//计算hash Key对应的实例
+	// GetHashExpectedInstance 计算hash Key对应的实例
 	GetHashExpectedInstance(clusterType config.ClusterType, hash []byte) (string, model.Instance, error)
 
-	//直接通过addr连接，慎使用
+	// ConnectByAddr 直接通过addr连接，慎使用
 	ConnectByAddr(clusterType config.ClusterType, addr string, instance model.Instance) (*Connection, error)
 }

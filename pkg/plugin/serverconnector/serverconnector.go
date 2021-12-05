@@ -18,13 +18,12 @@
 package serverconnector
 
 import (
+	"github.com/golang/protobuf/proto"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/golang/protobuf/proto"
 	"time"
 )
 
@@ -69,34 +68,6 @@ type MessageCallBack interface {
 	OnResponse(proto.Message)
 }
 
-//应答回调函数
-type ResponseCallBack interface {
-	//应答回调函数
-	OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, curTimeMilli int64)
-	//应答回调函数
-	OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64)
-}
-
-//限流消息同步器
-type RateLimitMsgSender interface {
-	//是否已经初始化
-	HasInitialized(svcKey model.ServiceKey, labels string) bool
-	//发送初始化请求
-	SendInitRequest(request *rlimitV2.RateLimitInitRequest, callback ResponseCallBack)
-	//发送上报请求
-	SendReportRequest(request *rlimitV2.ClientRateLimitReportRequest) error
-	//同步时间
-	AdjustTime() int64
-}
-
-//异步限流连接器
-type AsyncRateLimitConnector interface {
-	//初始化限流控制信息
-	GetMessageSender(svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error)
-	//销毁
-	Destroy()
-}
-
 //ServerConnector 【扩展点接口】server代理，封装了server对接的逻辑
 type ServerConnector interface {
 	plugin.Plugin
@@ -119,8 +90,6 @@ type ServerConnector interface {
 	// 更新服务端地址
 	// 异常场景：当地址列表为空，或者地址全部连接失败，则返回error，调用者需进行重试
 	UpdateServers(key *model.ServiceEventKey) error
-	//获取限流server连接器
-	GetAsyncRateLimitConnector() AsyncRateLimitConnector
 }
 
 //初始化
