@@ -33,7 +33,7 @@ type CircuitBreakerConfigImpl struct {
 	//熔断器定时检查周期
 	CheckPeriod *time.Duration `yaml:"checkPeriod" json:"checkPeriod"`
 	//熔断插件链
-	Chain []string `yaml:"chain"`
+	Chain []string `yaml:"chain" json:"chain"`
 	//熔断周期，被熔断后多久可以变为半开
 	SleepWindow *time.Duration `yaml:"sleepWindow" json:"sleepWindow"`
 	//半开状态后最多分配多少个探测请求

@@ -22,8 +22,6 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
-	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/plugin/serverconnector/grpc"
 	"gopkg.in/check.v1"
 	"time"
 )
@@ -148,9 +146,7 @@ func (rt *WindowExpireTestingSuite) TestUinExpiredRemote(c *check.C) {
 	taskValues := engine.FlowQuotaAssistant().TaskValues()
 	c.Assert(taskValues.Started(), check.Equals, true)
 
-	connector, err := data.GetServerConnector(cfg, engine.PluginSupplier())
-	c.Assert(err, check.IsNil)
-	asyncRateLimitConnector := connector.GetAsyncRateLimitConnector().(*grpc.AsyncRateLimitConnector)
+	asyncRateLimitConnector := engine.FlowQuotaAssistant().AsyncRateLimitConnector()
 	c.Assert(asyncRateLimitConnector.StreamCount(), check.Equals, 1)
 
 	//等待淘汰

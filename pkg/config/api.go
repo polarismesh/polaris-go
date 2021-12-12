@@ -76,17 +76,6 @@ type RateLimitConfig interface {
 	IsEnable() bool
 	//设置是否启用限流能力
 	SetEnable(bool)
-	//返回限流行为使用的插件
-	//GetBehaviorPlugin(behavior RateLimitBehavior) string
-	//设置限流行为使用的插件
-	//SetBehaviorPlugin(behavior RateLimitBehavior, p string)
-	SetMode(string)
-
-	GetMode() model.ConfigMode
-
-	SetRateLimitCluster(namespace string, service string)
-
-	GetRateLimitCluster() ServerClusterConfig
 	//获取最大限流窗口数量
 	GetMaxWindowSize() int
 	//设置最大限流窗口数量
@@ -95,6 +84,10 @@ type RateLimitConfig interface {
 	GetPurgeInterval() time.Duration
 	//设置超时淘汰周期
 	SetPurgeInterval(time.Duration)
+	// GetRules
+	GetRules() []RateLimitRule
+	// SetRules
+	SetRules([]RateLimitRule)
 }
 
 //系统配置信息
