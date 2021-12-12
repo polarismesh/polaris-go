@@ -66,14 +66,14 @@ func main() {
 
 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 	if err != nil {
-		log.Fatalf("send request to %s:%d fail", instance.GetHost(), instance.GetPort(), err)
+		log.Fatalf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 	}
 
 	defer resp.Body.Close()
 
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("read resp from %s:%d fail", instance.GetHost(), instance.GetPort(), err)
+		log.Fatalf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 	}
 	log.Printf("%s", string(data))
 	time.Sleep(time.Second)
