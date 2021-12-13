@@ -20,43 +20,89 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strconv"
+	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 限流配置对象
+// RateLimitConfigImpl 限流配置对象
 type RateLimitConfigImpl struct {
 	// 是否启动限流
 	Enable *bool `yaml:"enable" json:"enable"`
 	// 各个限流插件的配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
-	// mode  0: local  1: global
-	Mode string `yaml:"mode" json:"mode"`
-	// rateLimitCluster
-	RateLimitCluster *ServerClusterConfigImpl `yaml:"rateLimitCluster" json:"rateLimitCluster"`
 	// 最大限流窗口数量
 	MaxWindowSize int `yaml:"maxWindowSize" json:"maxWindowSize"`
 	// 超时window检查周期
 	PurgeInterval time.Duration `yaml:"purgeInterval" json:"purgeInterval"`
+	// 本地限流规则
+	Rules []RateLimitRule `yaml:"rules"`
 }
 
-// 是否启用限流能力
+// RateLimitRule 限流规则
+type RateLimitRule struct {
+	Namespace     string             `yaml:"namespace"`
+	Service       string             `yaml:"service"`
+	Labels        map[string]Matcher `yaml:"labels"`
+	MaxAmount     int                `yaml:"maxAmount"`
+	ValidDuration time.Duration      `yaml:"validDuration"`
+}
+
+// Verify 校验限流规则
+func (r *RateLimitRule) Verify() error {
+	if len(r.Namespace) == 0 {
+		return errors.New("namespace is empty")
+	}
+	if len(r.Service) == 0 {
+		return errors.New("service is empty")
+	}
+	if len(r.Labels) > 0 {
+		for _, matcher := range r.Labels {
+			if len(matcher.Type) > 0 {
+				upperType := strings.ToUpper(matcher.Type)
+				if upperType != TypeExact && upperType != TypeRegex {
+					return fmt.Errorf("matcher.type should be %s or %s", TypeExact, TypeRegex)
+				}
+			}
+		}
+	}
+	if r.ValidDuration < time.Second {
+		return errors.New("validDuration must greater than or equals to 1s")
+	}
+	if r.MaxAmount < 0 {
+		return errors.New("maxAmount must greater than or equals to 0")
+	}
+	return nil
+}
+
+const (
+	// TypeExact .
+	TypeExact = "EXACT"
+	// TypeRegex .
+	TypeRegex = "REGEX"
+)
+
+// Matcher 标签匹配类型
+type Matcher struct {
+	Type  string `yaml:"type"`
+	Value string `yaml:"value"`
+}
+
+// IsEnable 是否启用限流能力
 func (r *RateLimitConfigImpl) IsEnable() bool {
 	return *r.Enable
 }
 
-// 设置是否启用限流能力
+// SetEnable 设置是否启用限流能力
 func (r *RateLimitConfigImpl) SetEnable(value bool) {
 	r.Enable = &value
 }
 
-// 已经禁用的限流集群名
+// ForbidServerMetricService 已经禁用的限流集群名
 const ForbidServerMetricService = "polaris.metric"
 
-// 校验配置参数
+// Verify 校验配置参数
 func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r {
 		return errors.New("RateLimitConfig is nil")
@@ -64,16 +110,17 @@ func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r.Enable {
 		return fmt.Errorf("provider.rateLimit.enable must not be nil")
 	}
-	if r.RateLimitCluster != nil {
-		if r.RateLimitCluster.GetNamespace() == ServerNamespace &&
-			r.RateLimitCluster.GetService() == ForbidServerMetricService {
-			return errors.New("RateLimitCluster can not set to polaris.metric")
+	if len(r.Rules) > 0 {
+		for _, rule := range r.Rules {
+			if err := rule.Verify(); nil != err {
+				return err
+			}
 		}
 	}
 	return r.Plugin.Verify()
 }
 
-// 获取插件配置
+// GetPluginConfig 获取插件配置
 func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := r.Plugin[pluginName]
 	if !ok {
@@ -82,7 +129,7 @@ func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-// 设置默认参数
+// SetDefault 设置默认参数
 func (r *RateLimitConfigImpl) SetDefault() {
 	if nil == r.Enable {
 		r.Enable = &DefaultRateLimitEnable
@@ -94,67 +141,46 @@ func (r *RateLimitConfigImpl) SetDefault() {
 		r.PurgeInterval = DefaultRateLimitPurgeInterval
 	}
 	r.Plugin.SetDefault(common.TypeRateLimiter)
-	r.RateLimitCluster.SetDefault()
 }
 
-// 设置插件配置
+// SetPluginConfig 设置插件配置
 func (r *RateLimitConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return r.Plugin.SetPluginConfig(common.TypeRateLimiter, pluginName, value)
 }
 
-func (r *RateLimitConfigImpl) SetMode(mode string) {
-	r.Mode = mode
-}
-
-func (r *RateLimitConfigImpl) GetMode() model.ConfigMode {
-	if r.Mode == model.RateLimitLocal {
-		return model.ConfigQuotaLocalMode
-	} else if r.Mode == model.RateLimitGlobal {
-		return model.ConfigQuotaGlobalMode
-	} else {
-		return model.ConfigQuotaLocalMode
-	}
-}
-
-func (r *RateLimitConfigImpl) SetRateLimitCluster(namespace string, service string) {
-	if r.RateLimitCluster == nil {
-		r.RateLimitCluster = &ServerClusterConfigImpl{}
-	}
-	r.RateLimitCluster.SetNamespace(namespace)
-	r.RateLimitCluster.SetService(service)
-}
-
-func (r *RateLimitConfigImpl) GetRateLimitCluster() ServerClusterConfig {
-	return r.RateLimitCluster
-}
-
-// 配置初始化
+// Init 配置初始化
 func (r *RateLimitConfigImpl) Init() {
+	r.Rules = []RateLimitRule{}
 	r.Plugin = PluginConfigs{}
 	r.Plugin.Init(common.TypeRateLimiter)
-	r.Mode = strconv.Itoa(int(model.ConfigQuotaGlobalMode))
-	r.RateLimitCluster = &ServerClusterConfigImpl{
-		Namespace: "",
-		Service:   "",
-	}
 }
 
-// GetMaxWindowSize
+// GetMaxWindowSize .
 func (r *RateLimitConfigImpl) GetMaxWindowSize() int {
 	return r.MaxWindowSize
 }
 
-// SetMaxWindowSize
+// SetMaxWindowSize .
 func (r *RateLimitConfigImpl) SetMaxWindowSize(maxSize int) {
 	r.MaxWindowSize = maxSize
 }
 
-// GetMaxWindowSize
+// GetPurgeInterval .
 func (r *RateLimitConfigImpl) GetPurgeInterval() time.Duration {
 	return r.PurgeInterval
 }
 
-// SetMaxWindowSize
+// SetPurgeInterval  .
 func (r *RateLimitConfigImpl) SetPurgeInterval(v time.Duration) {
 	r.PurgeInterval = v
+}
+
+// GetRules 获取规则
+func (r *RateLimitConfigImpl) GetRules() []RateLimitRule {
+	return r.Rules
+}
+
+// SetRules 。设置规则
+func (r *RateLimitConfigImpl) SetRules(rules []RateLimitRule) {
+	r.Rules = rules
 }

@@ -27,32 +27,27 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 )
 
 // 远程配额查询任务
 type RemoteQuotaCallBack struct {
 	registry             localregistry.InstancesRegistry
-	asyncRLimitConnector serverconnector.AsyncRateLimitConnector
+	asyncRLimitConnector AsyncRateLimitConnector
 	engine               model.Engine
 	scalableRand         *rand.ScalableRand
 }
 
 // 创建查询任务
 func NewRemoteQuotaCallback(cfg config.Configuration, supplier plugin.Supplier,
-	engine model.Engine) (*RemoteQuotaCallBack, error) {
+	engine model.Engine, connector AsyncRateLimitConnector) (*RemoteQuotaCallBack, error) {
 	registry, err := data.GetRegistry(cfg, supplier)
-	if nil != err {
-		return nil, err
-	}
-	connector, err := data.GetServerConnector(cfg, supplier)
 	if nil != err {
 		return nil, err
 	}
 	return &RemoteQuotaCallBack{
 		scalableRand:         rand.NewScalableRand(),
 		registry:             registry,
-		asyncRLimitConnector: connector.GetAsyncRateLimitConnector(),
+		asyncRLimitConnector: connector,
 		engine:               engine}, nil
 }
 

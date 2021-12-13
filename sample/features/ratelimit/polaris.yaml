@@ -1,0 +1,12 @@
+global:
+  serverConnector:
+    addresses:
+    - 127.0.0.1:8091
+provider:
+  rateLimit:
+    enable: true
+    rules:
+    - namespace: default
+      service: TestSvc
+      maxAmount: 10
+      validDuration: 1s

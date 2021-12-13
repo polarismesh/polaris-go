@@ -79,7 +79,11 @@
           "maxAmount": 300,
           "validDuration": "1s"
         }
-      ]
+      ],
+      "cluster": {
+        "namespace": "Polaris",
+        "service": "polaris.metric.test.ide"
+      }
     },
     {
       "id": "r0004",

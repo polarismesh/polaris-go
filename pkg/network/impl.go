@@ -429,7 +429,7 @@ func (c *connectionManager) ReportConnectionDown(connID ConnID) {
 		// 已经切换新连接，忽略
 		return
 	}
-	if IsAvailableConnection(curConn) {
+	if nil != curConn && IsAvailableConnection(curConn) {
 		curConn.lazyClose(false)
 	}
 }

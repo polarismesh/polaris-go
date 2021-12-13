@@ -55,7 +55,7 @@ type ConsumerConfig interface {
 	GetLoadbalancer() LoadbalancerConfig
 	// GetCircuitBreaker get circuit breaker config
 	GetCircuitBreaker() CircuitBreakerConfig
-	// GetHealthCheck GetHealthCheckConfig get health check config
+	// GetHealthCheck get health check config
 	GetHealthCheck() HealthCheckConfig
 	// GetSubScribe get subscribe config
 	GetSubScribe() SubscribeConfig
@@ -78,18 +78,6 @@ type RateLimitConfig interface {
 	IsEnable() bool
 	// SetEnable 设置是否启用限流能力
 	SetEnable(bool)
-	// SetMode
-	// 返回限流行为使用的插件
-	// GetBehaviorPlugin(behavior RateLimitBehavior) string
-	// 设置限流行为使用的插件
-	// SetBehaviorPlugin(behavior RateLimitBehavior, p string)
-	SetMode(string)
-
-	GetMode() model.ConfigMode
-
-	SetRateLimitCluster(namespace string, service string)
-
-	GetRateLimitCluster() ServerClusterConfig
 	// GetMaxWindowSize 获取最大限流窗口数量
 	GetMaxWindowSize() int
 	// SetMaxWindowSize 设置最大限流窗口数量
@@ -98,39 +86,36 @@ type RateLimitConfig interface {
 	GetPurgeInterval() time.Duration
 	// SetPurgeInterval 设置超时淘汰周期
 	SetPurgeInterval(time.Duration)
+	// GetRules GetRules
+	GetRules() []RateLimitRule
+	// SetRules SetRules
+	SetRules([]RateLimitRule)
 }
 
 // SystemConfig 系统配置信息
 type SystemConfig interface {
 	BaseConfig
-	// GetMode
-	// global.systemConfig.mode
+	// GetMode global.systemConfig.mode
 	// SDK运行模式，agent还是noagent
 	GetMode() model.RunMode
 	// SetMode 设置SDK运行模式
 	SetMode(model.RunMode)
-	// GetDiscoverCluster
-	// global.systemConfig.discoverCluster
+	// GetDiscoverCluster global.systemConfig.discoverCluster
 	// 服务发现集群
 	GetDiscoverCluster() ServerClusterConfig
-	// GetHealthCheckCluster
-	// global.systemConfig.healthCheckCluster
+	// GetHealthCheckCluster global.systemConfig.healthCheckCluster
 	// 健康检查集群
 	GetHealthCheckCluster() ServerClusterConfig
-	// GetMonitorCluster
-	// global.systemConfig.monitorCluster
+	// GetMonitorCluster global.systemConfig.monitorCluster
 	// 监控上报集群
 	GetMonitorCluster() ServerClusterConfig
-	// GetVariable
-	// global.systemConfig.variables
+	// GetVariable global.systemConfig.variables
 	// 获取一个路由环境变量
 	GetVariable(key string) (string, bool)
-	// SetVariable
-	// global.systemConfig.variables
+	// SetVariable global.systemConfig.variables
 	// 设置一个路由环境变量
 	SetVariable(key, value string)
-	// UnsetVariable .
-	// 取消一个路由环境变量
+	// UnsetVariable 取消一个路由环境变量
 	UnsetVariable(key string)
 }
 
@@ -220,7 +205,7 @@ type ServerConnectorConfig interface {
 	// SetConnectTimeout 设置与server的连接超时时间
 	SetConnectTimeout(time.Duration)
 	// GetMessageTimeout global.registry.messageTimeout
-	// GetMessageTimeout 远程请求超时时间
+	// 远程请求超时时间
 	GetMessageTimeout() time.Duration
 	// SetMessageTimeout 设置远程请求超时时间
 	SetMessageTimeout(time.Duration)
@@ -301,8 +286,10 @@ type NearbyConfig interface {
 	SetMatchLevel(level string)
 	// GetMatchLevel 获取匹配级别，consumer.serviceRouter.plugin.nearbyBasedRouter.matchLevel
 	GetMatchLevel() string
+	// SetLowestMatchLevel .
 	// Deprecated: 设置可以降级的最低匹配级别, 已废弃，请使用SetMaxMatchLevel
 	SetLowestMatchLevel(level string)
+	// GetLowestMatchLevel .
 	// Deprecated: 获取可以降级的最低匹配级别,已废弃，请使用GetMaxMatchLevel
 	GetLowestMatchLevel() string
 	// SetMaxMatchLevel 设置可以降级的最低匹配级别,consumer.serviceRouter.plugin.nearbyBasedRouter.maxMatchLevel
@@ -448,7 +435,7 @@ type HealthCheckConfig interface {
 	SetChain([]string)
 }
 
-// SubscribeConfig .
+// SubscribeConfig .订阅配置
 type SubscribeConfig interface {
 	BaseConfig
 	PluginConfig
@@ -458,12 +445,11 @@ type SubscribeConfig interface {
 	SetType(string)
 }
 
-// ServiceSpecificConfig .
+// ServiceSpecificConfig 配置
 type ServiceSpecificConfig interface {
 	BaseConfig
 
-	// GetServiceCircuitBreaker .
 	GetServiceCircuitBreaker() CircuitBreakerConfig
-	// GetServiceRouter .
+
 	GetServiceRouter() ServiceRouterConfig
 }
