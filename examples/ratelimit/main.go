@@ -99,7 +99,7 @@ func main() {
 		go getQuota(wg, stop, i)
 	}
 	//合建chan
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	//监听所有信号
 	signal.Notify(c)
 	var previousIntervalPass int64
