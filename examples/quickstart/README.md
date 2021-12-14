@@ -1,29 +1,51 @@
 # Polaris Go
 
-## 北极星被调端样例
+## 目录说明
 
-北极星被调端样例包含了最简单的被调端基本操作，包含以下3个操作场景：
+> provider
 
-- 服务实例注册（Register）
+北极星被调端样例包含了最简单的被调端基本操作
 
-- 服务实例心跳上报（Heartbeat）
+> consumer
 
-- 服务实例反注册（Deregister）
+北极星主调端样例包含了最简单的客户端基本操作
+
 
 ## 如何构建
+
+> provider
 
 直接依赖go mod进行构建
 
 - linux/mac构建命令
 
 ```
+cd ./provider
+go mod vendor
 go build -o provider
 ```
 
 - windows构建命令
 
 ```
+cd ./consumer
+go mod vendor
 go build -o provider.exe
+```
+
+> consumer
+
+- linux/mac构建命令
+```
+cd ./consumer
+go mod vendor
+go build -o consumer
+```
+- windows构建命令
+```
+cd ./consumer
+go mod vendor
+go build -o consumer.exe
 ```
 
 ## 如何使用
@@ -47,6 +69,8 @@ global:
 
 直接执行生成的可执行程序
 
+> provider
+
 - linux/mac运行命令
 
 ```
@@ -57,4 +81,17 @@ global:
 
 ```
 ./provider.exe --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
+```
+
+> consumer
+
+
+- linux/mac运行命令
+```
+./consumer --service="your service name" --namespace="your namespace name"
+```
+
+- windows运行命令
+```
+./consumer.exe --service="your service name" --namespace="your namespace name"
 ```

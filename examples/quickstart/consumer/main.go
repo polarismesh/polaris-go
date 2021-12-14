@@ -19,7 +19,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/polarismesh/polaris-go/api"
 )
@@ -47,21 +51,6 @@ func main() {
 	}
 	defer consumer.Destroy()
 
-	log.Printf("start to invoke getAllInstances operation")
-	getAllRequest := &api.GetAllInstancesRequest{}
-	getAllRequest.Namespace = namespace
-	getAllRequest.Service = service
-	allInstResp, err := consumer.GetAllInstances(getAllRequest)
-	if nil != err {
-		log.Fatalf("fail to getAllInstances, err is %v", err)
-	}
-	instances := allInstResp.GetInstances()
-	if len(instances) > 0 {
-		for i, instance := range instances {
-			log.Printf("instance getAllInstances %d is %s:%d", i, instance.GetHost(), instance.GetPort())
-		}
-	}
-
 	log.Printf("start to invoke getOneInstance operation")
 	getOneRequest := &api.GetOneInstanceRequest{}
 	getOneRequest.Namespace = namespace
@@ -74,4 +63,18 @@ func main() {
 	if nil != instance {
 		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
 	}
+
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+	if err != nil {
+		log.Fatalf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+	}
+
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+	}
+	log.Printf("%s", string(data))
+	time.Sleep(time.Second)
 }
