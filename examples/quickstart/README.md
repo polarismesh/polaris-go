@@ -90,3 +90,11 @@ global:
 ```
 ./consumer.exe --service="your service name" --namespace="your namespace name"
 ```
+
+### 验证
+
+```
+curl http://127.0.0.1:8080/echo
+
+Hello, I'm EchoServerGolang Provider
+```

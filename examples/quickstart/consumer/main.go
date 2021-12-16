@@ -35,8 +35,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServer", "service")
-	flag.Int64Var(&port, "poort", 8080, "poort")
+	flag.StringVar(&service, "service", "EchoServerGolang", "service")
 }
 
 type PolarisConsumer struct {
@@ -79,7 +78,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		_, _ = rw.Write(data)
 	})
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", 18080), nil); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}
 }
