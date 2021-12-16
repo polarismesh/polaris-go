@@ -37,7 +37,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "polaris_go_test", "service")
+	flag.StringVar(&service, "service", "EchoServer", "service")
 	flag.StringVar(&host, "host", "127.0.0.1", "host")
 	flag.IntVar(&port, "port", 7879, "port")
 	flag.StringVar(&token, "token", "", "token")
@@ -59,7 +59,7 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("Hello, I'm Provider"))
+		_, _ = rw.Write([]byte("Hello, I'm EchoServer Provider"))
 	})
 
 	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", svr.port), nil); err != nil {
