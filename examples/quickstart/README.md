@@ -20,13 +20,11 @@
 - linux/mac构建命令
 ```
 cd ./provider
-go mod vendor
 go build -o provider
 ```
 - windows构建命令
 ```
 cd ./consumer
-go mod vendor
 go build -o provider.exe
 ```
 
@@ -35,13 +33,11 @@ go build -o provider.exe
 - linux/mac构建命令
 ```
 cd ./consumer
-go mod vendor
 go build -o consumer
 ```
 - windows构建命令
 ```
 cd ./consumer
-go mod vendor
 go build -o consumer.exe
 ```
 
@@ -70,12 +66,12 @@ global:
 
 - linux/mac运行命令
 ```
-./provider --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
+./provider
 ```
 
 - windows运行命令
 ```
-./provider.exe --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
+./provider.exe
 ```
 
 > consumer
@@ -83,18 +79,18 @@ global:
 
 - linux/mac运行命令
 ```
-./consumer --service="your service name" --namespace="your namespace name"
+./consumer
 ```
 
 - windows运行命令
 ```
-./consumer.exe --service="your service name" --namespace="your namespace name"
+./consumer.exe
 ```
 
 ### 验证
 
 ```
-curl http://127.0.0.1:8080/echo
+curl http://127.0.0.1:18080/echo
 
 Hello, I'm EchoServerGolang Provider
 ```
