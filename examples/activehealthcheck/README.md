@@ -52,6 +52,7 @@ global:
 ```
 
 - windows run command
+>>>>>>> upstream/main
 ```
 ./activehealthcheck.exe --service="your service name" --namespace="your namespace name"
 ```

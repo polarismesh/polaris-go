@@ -20,47 +20,49 @@ package ratelimit
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"gopkg.in/check.v1"
 	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gopkg.in/check.v1"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//远程正常用例测试
+// 远程正常用例测试
 type RemoteNormalTestingSuite struct {
 	CommonRateLimitSuite
 }
 
-//用例名称
+// 用例名称
 func (rt *RemoteNormalTestingSuite) GetName() string {
 	return "RemoteNormalTestingSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (rt *RemoteNormalTestingSuite) SetUpSuite(c *check.C) {
 	rt.CommonRateLimitSuite.SetUpSuite(c, true)
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (rt *RemoteNormalTestingSuite) TearDownSuite(c *check.C) {
 	rt.CommonRateLimitSuite.TearDownSuite(c, rt)
 }
 
-//带标识的结果
+// 带标识的结果
 type IndexResult struct {
 	index int
 	label string
 	code  model.QuotaResultCode
 }
 
-//测试远程精准匹配限流
+// 测试远程精准匹配限流
 func (rt *RemoteNormalTestingSuite) TestRemoteTwoDuration(c *check.C) {
 	log.Printf("Start TestRemoteTwoDuration")
-	//多个线程，然后每个线程一个client，每个client跑相同的labels
+	// 多个线程，然后每个线程一个client，每个client跑相同的labels
 	workerCount := 4
 	wg := &sync.WaitGroup{}
 	wg.Add(workerCount)
@@ -129,11 +131,11 @@ func (rt *RemoteNormalTestingSuite) TestRemoteTwoDuration(c *check.C) {
 	fmt.Printf("allocatedTotal is %d\n", allocatedTotal)
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
-			//头部因为时间窗对齐原因，有可能出现不为100
+			// 头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
 		if allocatedPerSecond < 100 {
-			//中间出现了10s区间限流的情况，屏蔽
+			// 中间出现了10s区间限流的情况，屏蔽
 			continue
 		}
 		c.Assert(allocatedPerSecond >= 150 && allocatedPerSecond <= 230, check.Equals, true)
@@ -141,10 +143,10 @@ func (rt *RemoteNormalTestingSuite) TestRemoteTwoDuration(c *check.C) {
 	c.Assert(allocatedTotal >= 800 && allocatedTotal <= 1650, check.Equals, true)
 }
 
-//测试正则表达式的uin限流
+// 测试正则表达式的uin限流
 func (rt *RemoteNormalTestingSuite) TestRemoteRegexV2(c *check.C) {
 	log.Printf("Start TestRemoteRegexV2")
-	//多个线程，然后每个线程一个client，每个client跑相同的labels
+	// 多个线程，然后每个线程一个client，每个client跑相同的labels
 	workerCount := 4
 	wg := &sync.WaitGroup{}
 	wg.Add(workerCount)
@@ -224,7 +226,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexV2(c *check.C) {
 	for _, allocatedPerSeconds := range appIdAllocatedPerSeconds {
 		for i, allocatedPerSecond := range allocatedPerSeconds {
 			if i == 0 {
-				//头部因为时间窗对齐原因，有可能出现不为100
+				// 头部因为时间窗对齐原因，有可能出现不为100
 				continue
 			}
 			c.Assert(allocatedPerSecond >= 90 && allocatedPerSecond <= 120, check.Equals, true)
@@ -232,7 +234,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexV2(c *check.C) {
 	}
 }
 
-//测试正则表达式的uin限流
+// 测试正则表达式的uin限流
 func (rt *RemoteNormalTestingSuite) TestRemoteRegexCombineV2(c *check.C) {
 	log.Printf("Start TestRemoteRegexCombineV2")
 	workerCount := 4
@@ -301,14 +303,14 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexCombineV2(c *check.C) {
 
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
-			//头部因为时间窗对齐原因，有可能出现不为100
+			// 头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
 		c.Assert(allocatedPerSecond >= 280 && allocatedPerSecond <= 350, check.Equals, true)
 	}
 }
 
-//测试单机均摊模式限流
+// 测试单机均摊模式限流
 func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 	log.Printf("Start TestRemoteShareEqually")
 	workerCount := 10
@@ -337,7 +339,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 					atomic.AddInt64(&calledCount, 1)
 					curTime := model.CurrentMillisecond()
 					if curTime-startTime >= 1000 {
-						//前500ms是上下线，不计算
+						// 前500ms是上下线，不计算
 						codeChan <- IndexResult{
 							index: idx,
 							code:  resp.Code,
@@ -378,7 +380,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
-			//头部因为时间窗对齐原因，有可能出现不为100
+			// 头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
 		c.Assert(allocatedPerSecond >= 170 && allocatedPerSecond <= 260, check.Equals, true)

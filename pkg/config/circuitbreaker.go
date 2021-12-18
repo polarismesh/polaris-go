@@ -20,125 +20,127 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"time"
 )
 
-//熔断相关配置
+// CircuitBreakerConfigImpl 熔断相关配置
 type CircuitBreakerConfigImpl struct {
-	//是否启动熔断
+	// Enable 是否启动熔断
 	Enable *bool `yaml:"enable" json:"enable"`
-	//熔断器定时检查周期
+	// CheckPeriod 熔断器定时检查周期
 	CheckPeriod *time.Duration `yaml:"checkPeriod" json:"checkPeriod"`
-	//熔断插件链
-	Chain []string `yaml:"chain" json:"chain"`
-	//熔断周期，被熔断后多久可以变为半开
+	// Chain 熔断插件链
+	Chain []string `yaml:"chain"`
+	// SleepWindow 熔断周期，被熔断后多久可以变为半开
 	SleepWindow *time.Duration `yaml:"sleepWindow" json:"sleepWindow"`
-	//半开状态后最多分配多少个探测请求
+	// RequestCountAfterHalfOpen 半开状态后最多分配多少个探测请求
 	RequestCountAfterHalfOpen int `yaml:"requestCountAfterHalfOpen" json:"requestCountAfterHalfOpen"`
-	//半开状态后多少个成功请求则恢复
+	// SuccessCountAfterHalfOpen 半开状态后多少个成功请求则恢复
 	SuccessCountAfterHalfOpen int `yaml:"successCountAfterHalfOpen" json:"successCountAfterHalfOpen"`
-	//半开后的恢复周期，在这个周期内统计成功数
+	// RecoverWindow 半开后的恢复周期，在这个周期内统计成功数
 	RecoverWindow *time.Duration `yaml:"recoverWindow" json:"recoverWindow"`
-	//半开后的统计的滑窗数
+	// RecoverNumBuckets 半开后的统计的滑窗数
 	RecoverNumBuckets int `yaml:"recoverNumBuckets" json:"recoverNumBuckets"`
-	// 插件配置反序列化后的对象
+	// Plugin 插件配置反序列化后的对象
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-//是否启用熔断
+// IsEnable 是否启用熔断
 func (c *CircuitBreakerConfigImpl) IsEnable() bool {
 	return *c.Enable
 }
 
-//设置是否启用熔断
+// SetEnable 设置是否启用熔断
 func (c *CircuitBreakerConfigImpl) SetEnable(enable bool) {
 	c.Enable = &enable
 }
 
-//熔断器插件链
+// GetChain 熔断器插件链
 func (c *CircuitBreakerConfigImpl) GetChain() []string {
 	return c.Chain
 }
 
-//设置熔断器插件链
+// SetChain 设置熔断器插件链
 func (c *CircuitBreakerConfigImpl) SetChain(chain []string) {
 	c.Chain = chain
 }
 
-//熔断器定时检测时间
+// GetCheckPeriod 熔断器定时检测时间
 func (c *CircuitBreakerConfigImpl) GetCheckPeriod() time.Duration {
 	return *c.CheckPeriod
 }
 
-//设置熔断器定时检测时间
+// SetCheckPeriod 设置熔断器定时检测时间
 func (c *CircuitBreakerConfigImpl) SetCheckPeriod(period time.Duration) {
 	c.CheckPeriod = &period
 }
 
-//获取熔断周期
+// GetSleepWindow 获取熔断周期
 func (c *CircuitBreakerConfigImpl) GetSleepWindow() time.Duration {
 	return *c.SleepWindow
 }
 
-//设置熔断周期
+// SetSleepWindow 设置熔断周期
 func (c *CircuitBreakerConfigImpl) SetSleepWindow(interval time.Duration) {
 	c.SleepWindow = &interval
 }
 
-//获取半开状态后最多分配多少个探测请求
+// GetRequestCountAfterHalfOpen 获取半开状态后最多分配多少个探测请求
 func (c *CircuitBreakerConfigImpl) GetRequestCountAfterHalfOpen() int {
 	return c.RequestCountAfterHalfOpen
 }
 
-//设置半开状态后最多分配多少个探测请求
+// SetRequestCountAfterHalfOpen 设置半开状态后最多分配多少个探测请求
 func (c *CircuitBreakerConfigImpl) SetRequestCountAfterHalfOpen(count int) {
 	c.RequestCountAfterHalfOpen = count
 }
 
-//获取半开状态后多少个成功请求则恢复
+// GetSuccessCountAfterHalfOpen 获取半开状态后多少个成功请求则恢复
 func (c *CircuitBreakerConfigImpl) GetSuccessCountAfterHalfOpen() int {
 	return c.SuccessCountAfterHalfOpen
 }
 
-//设置半开状态后多少个成功请求则恢复
+// SetSuccessCountAfterHalfOpen 设置半开状态后多少个成功请求则恢复
 func (c *CircuitBreakerConfigImpl) SetSuccessCountAfterHalfOpen(count int) {
 	c.SuccessCountAfterHalfOpen = count
 }
 
-//获取半开后的恢复周期，按周期来进行半开放量的统计
+// GetRecoverWindow 获取半开后的恢复周期，按周期来进行半开放量的统计
 func (c *CircuitBreakerConfigImpl) GetRecoverWindow() time.Duration {
 	return *c.RecoverWindow
 }
 
-//设置半开后的恢复周期，按周期来进行半开放量的统计
+// SetRecoverWindow 设置半开后的恢复周期，按周期来进行半开放量的统计
 func (c *CircuitBreakerConfigImpl) SetRecoverWindow(value time.Duration) {
 	c.RecoverWindow = &value
 }
 
-//半开后请求数统计滑桶数量
+// GetRecoverNumBuckets 半开后请求数统计滑桶数量
 func (c *CircuitBreakerConfigImpl) GetRecoverNumBuckets() int {
 	return c.RecoverNumBuckets
 }
 
-//设置半开后请求数统计滑桶数量
+// SetRecoverNumBuckets 设置半开后请求数统计滑桶数量
 func (c *CircuitBreakerConfigImpl) SetRecoverNumBuckets(value int) {
 	c.RecoverNumBuckets = value
 }
 
-//连续错误数熔断配置
+// GetErrorCountConfig 获取连续错误数熔断配置
 func (c *CircuitBreakerConfigImpl) GetErrorCountConfig() ErrorCountConfig {
 	return c.Plugin[DefaultCircuitBreakerErrCount].(ErrorCountConfig)
 }
 
-//错误率熔断配置
+// GetErrorRateConfig 错误率熔断配置
 func (c *CircuitBreakerConfigImpl) GetErrorRateConfig() ErrorRateConfig {
 	return c.Plugin[DefaultCircuitBreakerErrRate].(ErrorRateConfig)
 }
 
-//检验LocalCacheConfig配置
+// Verify 检验LocalCacheConfig配置
 func (c *CircuitBreakerConfigImpl) Verify() error {
 	if nil == c {
 		return errors.New("CircuitBreakerConfig is nil")
@@ -177,7 +179,7 @@ func (c *CircuitBreakerConfigImpl) Verify() error {
 	return errs
 }
 
-//设置CircuitBreakerConfigImpl配置的默认值
+// SetDefault 设置CircuitBreakerConfigImpl配置的默认值
 func (c *CircuitBreakerConfigImpl) SetDefault() {
 	if nil == c.CheckPeriod {
 		c.CheckPeriod = model.ToDurationPtr(DefaultCircuitBreakerCheckPeriod)
@@ -207,7 +209,7 @@ func (c *CircuitBreakerConfigImpl) SetDefault() {
 	c.Plugin.SetDefault(common.TypeCircuitBreaker)
 }
 
-//获取一个熔断器插件配置
+// GetPluginConfig 获取一个熔断器插件配置
 func (c *CircuitBreakerConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfg, ok := c.Plugin[pluginName]
 	if !ok {
@@ -216,12 +218,12 @@ func (c *CircuitBreakerConfigImpl) GetPluginConfig(pluginName string) BaseConfig
 	return cfg.(BaseConfig)
 }
 
-//设置一个熔断器插件配置
+// SetPluginConfig 设置一个熔断器插件配置
 func (c *CircuitBreakerConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return c.Plugin.SetPluginConfig(common.TypeCircuitBreaker, pluginName, value)
 }
 
-//初始化CircuitBreakerConfigImpl配置
+// Init 初始化CircuitBreakerConfigImpl配置
 func (c *CircuitBreakerConfigImpl) Init() {
 	c.Plugin = PluginConfigs{}
 	c.Plugin.Init(common.TypeCircuitBreaker)

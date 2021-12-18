@@ -18,61 +18,63 @@
 package metric
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/modern-go/reflect2"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//回调函数，用于将统计数据入桶
+// 回调函数，用于将统计数据入桶
 type AddBucketFunc func(gauge model.InstanceGauge, bucket *Bucket) int64
 
-//封装类型，封装统计数据，以及添加统计的操作回调
+// 封装类型，封装统计数据，以及添加统计的操作回调
 type GaugeOperation struct {
 	Gauge     model.InstanceGauge
 	Operation AddBucketFunc
 }
 
-//执行统计数据添加
+// 执行统计数据添加
 func (g *GaugeOperation) addBucket(bucket *Bucket) {
 	g.Operation(g.Gauge, bucket)
 }
 
-//滑窗
+// 滑窗
 type SliceWindow struct {
-	//滑窗所属的类型，一般为插件名
+	// 滑窗所属的类型，一般为插件名
 	Type string
-	//滑桶的长度
+	// 滑桶的长度
 	bucketInterval time.Duration
-	//滑桶长度（毫秒结算）
+	// 滑桶长度（毫秒结算）
 	bucketIntervalMilli int64
-	//滑窗总时间
+	// 滑窗总时间
 	windowLength time.Duration
-	//初始化桶的并发锁
+	// 初始化桶的并发锁
 	bucketMutex *sync.Mutex
-	//滑桶个数
+	// 滑桶个数
 	bucketCount int
-	//滑桶序列
+	// 滑桶序列
 	buckets atomic.Value
-	//维度的长度
+	// 维度的长度
 	metricSize int
-	//滑窗开始的时间，以ms为单位，以绝对零时间为起始时间
+	// 滑窗开始的时间，以ms为单位，以绝对零时间为起始时间
 	windowStartTimeMilli int64
-	//最后更新时间，以ns为单位，单位纳秒
+	// 最后更新时间，以ns为单位，单位纳秒
 	lastUpdateTime int64
-	//最后读取时间，以ns为单位
+	// 最后读取时间，以ns为单位
 	lastReadTime int64
 
 	Lock *sync.Mutex
-	//周期开始时间
+	// 周期开始时间
 	PeriodStartTime int64
-	//同一周期已经上报的个数
-	//PeriodAcquired int64
+	// 同一周期已经上报的个数
+	// PeriodAcquired int64
 }
 
-//创建资源滑窗
+// 创建资源滑窗
 func NewSliceWindow(typ string, bucketCount int, bucketInterval time.Duration, metricSize int,
 	curTime int64) *SliceWindow {
 	window := &SliceWindow{
@@ -88,19 +90,19 @@ func NewSliceWindow(typ string, bucketCount int, bucketInterval time.Duration, m
 	window.lastUpdateTime = curTime
 	window.lastReadTime = curTime - 1
 	window.Lock = &sync.Mutex{}
-	//curTime := GetCurrentMilliseconds(startTime)
-	//window.windowStartTimeMilli = curTime
-	//for i := 0; i < window.bucketCount; i++ {
+	// curTime := GetCurrentMilliseconds(startTime)
+	// window.windowStartTimeMilli = curTime
+	// for i := 0; i < window.bucketCount; i++ {
 	//	window.buckets[i].mutex = &sync.RWMutex{}
 	//	window.buckets[i].window = window
 	//	window.buckets[i].startTime = curTime
 	//	window.buckets[i].metrics = NewResMetricArray(metricSize)
 	//	curTime += window.bucketIntervalMilli
-	//}
+	// }
 	return window
 }
 
-//初始化bucket信息
+// 初始化bucket信息
 func (s *SliceWindow) initBucket() []Bucket {
 	buckets := make([]Bucket, s.bucketCount)
 	curTime := s.CalcStartTime(model.ParseMilliSeconds(time.Now().UnixNano()))
@@ -116,12 +118,12 @@ func (s *SliceWindow) initBucket() []Bucket {
 	return buckets
 }
 
-//获取滑桶的长度
+// 获取滑桶的长度
 func (s *SliceWindow) GetBucketInterval() time.Duration {
 	return s.bucketInterval
 }
 
-//计算桶下表
+// 计算桶下表
 func (s *SliceWindow) calcBucketIndex(curMilliseconds int64) int {
 	timeIdx := (curMilliseconds - s.windowStartTimeMilli) / s.bucketIntervalMilli
 	return int(timeIdx) % s.bucketCount
@@ -129,33 +131,33 @@ func (s *SliceWindow) calcBucketIndex(curMilliseconds int64) int {
 
 const milliDivide = 1000 * 1000
 
-//获取当前的相对毫秒值
+// 获取当前的相对毫秒值
 func GetCurrentMilliseconds(startTime time.Time) int64 {
 	return startTime.UnixNano() / milliDivide
 }
 
-//计算对应bucket起始时间戳
+// 计算对应bucket起始时间戳
 func (s *SliceWindow) CalcStartTime(curTime int64) int64 {
 	curStartTimeInWindow := curTime - s.windowStartTimeMilli
 	return s.windowStartTimeMilli + (curStartTimeInWindow - curStartTimeInWindow%s.bucketIntervalMilli)
 }
 
-//获取最近更新时间
+// 获取最近更新时间
 func (s *SliceWindow) GetLastUpdateTime() int64 {
 	return atomic.LoadInt64(&s.lastUpdateTime)
 }
 
-//设置最近读取时间
+// 设置最近读取时间
 func (s *SliceWindow) SetLastReadTime() {
 	atomic.StoreInt64(&s.lastReadTime, clock.GetClock().Now().UnixNano())
 }
 
-//判断是否在上次读取了数据后，又有数据更新
+// 判断是否在上次读取了数据后，又有数据更新
 func (s *SliceWindow) IsMetricUpdate() bool {
 	return s.GetLastUpdateTime() > atomic.LoadInt64(&s.lastReadTime)
 }
 
-//寻找bucket
+// 寻找bucket
 func (s *SliceWindow) lookupBucket(now time.Time) *Bucket {
 	curTime := GetCurrentMilliseconds(now)
 	return s.lookupBucketByMillTime(curTime)
@@ -171,7 +173,7 @@ func (s *SliceWindow) lookupBucketByMillTime(curTime int64) *Bucket {
 	return nil
 }
 
-//获取bucket数组信息
+// 获取bucket数组信息
 func (s *SliceWindow) getBuckets() []Bucket {
 	bucketsValue := s.buckets.Load()
 	if !reflect2.IsNil(bucketsValue) {
@@ -180,7 +182,7 @@ func (s *SliceWindow) getBuckets() []Bucket {
 	return nil
 }
 
-//获取bucket信息
+// 获取bucket信息
 func (s *SliceWindow) getBucket(bucketIndex int) *Bucket {
 	var buckets []Bucket
 	buckets = s.getBuckets()
@@ -197,9 +199,9 @@ func (s *SliceWindow) getBucket(bucketIndex int) *Bucket {
 	return &buckets[bucketIndex]
 }
 
-//寻找bucket，如果找不到，则进行创建
-//入参：当前时间
-//返回1个参数，首个参数为命中的桶
+// 寻找bucket，如果找不到，则进行创建
+// 入参：当前时间
+// 返回1个参数，首个参数为命中的桶
 func (s *SliceWindow) lookupAndCreateBucket(now time.Time) *Bucket {
 	curTime := GetCurrentMilliseconds(now)
 	return s.lookupAndCreateBucketByMillTime(curTime)
@@ -212,24 +214,24 @@ func (s *SliceWindow) lookupAndCreateBucketByMillTime(curTime int64) *Bucket {
 	if atomic.LoadInt64(&bucket.startTime) == startTime {
 		return bucket
 	}
-	//时间已经过期，需要更新bucket
+	// 时间已经过期，需要更新bucket
 	bucket.mutex.Lock()
 	defer bucket.mutex.Unlock()
 	bucketStartTime := atomic.LoadInt64(&bucket.startTime)
 	if bucketStartTime == startTime {
 		return bucket
 	}
-	//重置bucket
+	// 重置bucket
 	bucket.metrics = NewResMetricArray(s.metricSize)
 	atomic.StoreInt64(&bucket.startTime, startTime)
 	return bucket
 }
 
-//限流桶操作函数
+// 限流桶操作函数
 type BucketOperation func(bucket *Bucket) int64
 
-//添加历史数据
-//返回函数运行结果，以及是否命中
+// 添加历史数据
+// 返回函数运行结果，以及是否命中
 func (s *SliceWindow) AddHistoryMetric(now time.Time, operation BucketOperation) (int64, bool) {
 	bucket := s.lookupBucket(now)
 	if nil == bucket {
@@ -246,13 +248,13 @@ func (s *SliceWindow) AddHistoryMetricByMillTime(now int64, operation BucketOper
 	return operation(bucket), true
 }
 
-//添加统计数据
+// 添加统计数据
 func (s *SliceWindow) AddGauge(gauge model.InstanceGauge, operation AddBucketFunc) int64 {
 	value, _ := s.AddGaugeAdvance(gauge, operation)
 	return value
 }
 
-//添加统计数据，返回就近的数据以及bucket起始时间
+// 添加统计数据，返回就近的数据以及bucket起始时间
 func (s *SliceWindow) AddGaugeAdvance(gauge model.InstanceGauge, operation AddBucketFunc) (int64, int64) {
 	curTime := clock.GetClock().Now()
 	atomic.StoreInt64(&s.lastUpdateTime, curTime.UnixNano())
@@ -260,7 +262,7 @@ func (s *SliceWindow) AddGaugeAdvance(gauge model.InstanceGauge, operation AddBu
 	return operation(gauge, bucket), bucket.startTime
 }
 
-//func (s *SliceWindow) GetBucketsTotalNumForReportForAcquire(nowTime int64) int64 {
+// func (s *SliceWindow) GetBucketsTotalNumForReportForAcquire(nowTime int64) int64 {
 //	var retNum int64 = 0
 //	startTime := s.CalcStartTime(nowTime)
 //	for _, v := range s.getBuckets() {
@@ -292,9 +294,9 @@ func (s *SliceWindow) AddGaugeAdvance(gauge model.InstanceGauge, operation AddBu
 //		atomic.StoreInt64(&s.PeriodStartTime, startTime)
 //		return retNum
 //	}
-//}
+// }
 
-//func (s *SliceWindow) GetBucketsTotalNumForReport(nowTime int64) int64 {
+// func (s *SliceWindow) GetBucketsTotalNumForReport(nowTime int64) int64 {
 //	var retNum int64 = 0
 //	startTime := s.CalcStartTime(nowTime)
 //	for _, v := range s.getBuckets() {
@@ -310,9 +312,9 @@ func (s *SliceWindow) AddGaugeAdvance(gauge model.InstanceGauge, operation AddBu
 //		}
 //	}
 //	return retNum
-//}
+// }
 
-//添加统计数据
+// 添加统计数据
 func (s *SliceWindow) AddGaugeByValue(value int64, curTime time.Time) int64 {
 	var bucket *Bucket
 	s.lastUpdateTime = curTime.UnixNano()

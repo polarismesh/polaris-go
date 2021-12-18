@@ -18,6 +18,8 @@
 package quota
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -25,10 +27,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"time"
 )
 
-//远程配额查询任务
+// 远程配额查询任务
 type RemoteQuotaCallBack struct {
 	registry             localregistry.InstancesRegistry
 	asyncRLimitConnector AsyncRateLimitConnector
@@ -36,7 +37,7 @@ type RemoteQuotaCallBack struct {
 	scalableRand         *rand.ScalableRand
 }
 
-//创建查询任务
+// 创建查询任务
 func NewRemoteQuotaCallback(cfg config.Configuration, supplier plugin.Supplier,
 	engine model.Engine, connector AsyncRateLimitConnector) (*RemoteQuotaCallBack, error) {
 	registry, err := data.GetRegistry(cfg, supplier)
@@ -55,7 +56,7 @@ const (
 	intervalRangeMilli = 20
 )
 
-//处理远程配额查询任务
+// 处理远程配额查询任务
 func (r *RemoteQuotaCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	rateLimitWindow := taskValue.(*RateLimitWindow)
@@ -65,14 +66,14 @@ func (r *RemoteQuotaCallBack) Process(
 	if lastProcessMilli > 0 && nowMilli-lastProcessMilli < reportInterval {
 		return model.SKIP
 	}
-	//尝试触发一次清理
+	// 尝试触发一次清理
 	rateLimitWindow.WindowSet.PurgeWindows(nowMilli)
-	//规则变更触发的删除
+	// 规则变更触发的删除
 	if rateLimitWindow.GetStatus() == Deleted {
 		log.GetBaseLogger().Infof("[RateLimit]window %s deleted, start terminate task", taskKey.(string))
 		return model.TERMINATE
 	}
-	//状态机
+	// 状态机
 	switch rateLimitWindow.GetStatus() {
 	case Created:
 		break
@@ -88,7 +89,7 @@ func (r *RemoteQuotaCallBack) Process(
 	return model.CONTINUE
 }
 
-//OnTaskEvent 任务事件回调
+// OnTaskEvent 任务事件回调
 func (r *RemoteQuotaCallBack) OnTaskEvent(event model.TaskEvent) {
 
 }

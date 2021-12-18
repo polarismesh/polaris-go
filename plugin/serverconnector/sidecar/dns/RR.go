@@ -20,15 +20,16 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"net"
+
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 
 	"github.com/golang/protobuf/proto"
 
 	sidecarPb "github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/model/pb"
 )
 
-//标准的DNS IPv4 RR
+// 标准的DNS IPv4 RR
 type A struct {
 	Hdr RR_Header
 	A   net.IP `dns:"a"`
@@ -57,7 +58,7 @@ func (rr *A) GetData() []byte {
 	return rr.A
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *A) PackData(buff *bytes.Buffer) (int, error) {
 	switch len(rr.A) {
 	case net.IPv4len, net.IPv6len:
@@ -83,7 +84,7 @@ func (rr *A) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-//标准的DNS IPv6 RR
+// 标准的DNS IPv6 RR
 type AAAA struct {
 	Hdr  RR_Header
 	AAAA net.IP `dns:"aaaa"`
@@ -107,7 +108,7 @@ func (rr *AAAA) Copy() RR {
 	return &AAAA{rr.Hdr, copyIP(rr.AAAA)}
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *AAAA) PackData(buff *bytes.Buffer) (int, error) {
 	switch len(rr.AAAA) {
 	case net.IPv6len:
@@ -173,7 +174,7 @@ func (rr *PackageCtrlRR) Copy() RR {
 	}
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *PackageCtrlRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	err := packUint16(rr.TotalCount, buff)
@@ -228,7 +229,7 @@ func (rr *PolarisHeaderRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *PolarisHeaderRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len(), nil
 }
@@ -255,7 +256,7 @@ func (rr *LocationRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *LocationRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	bytes, err := proto.Marshal(rr.SideCar)
@@ -293,7 +294,7 @@ func (rr *StreamRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *StreamRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	_, err := buff.Write(rr.Bytes)
@@ -327,7 +328,7 @@ func (rr *DetailErrInfoRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *DetailErrInfoRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 
@@ -373,7 +374,7 @@ func (rr *ResponseRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-//序列化 RR data
+// 序列化 RR data
 func (rr *ResponseRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 

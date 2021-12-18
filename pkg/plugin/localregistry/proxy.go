@@ -18,67 +18,68 @@
 package localregistry
 
 import (
+	"github.com/golang/protobuf/proto"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/golang/protobuf/proto"
 )
 
-//proxy of LocalRegistry
+// proxy of LocalRegistry
 type Proxy struct {
 	LocalRegistry
 	engine model.Engine
 }
 
-//设置
+// 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.LocalRegistry = plug.(LocalRegistry)
 	p.engine = engine
 }
 
-//proxy LocalRegistry LoadInstances
+// proxy LocalRegistry LoadInstances
 func (p *Proxy) LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadInstances(svcKey)
 	return result, err
 }
 
-//proxy LocalRegistry UpdateInstances
+// proxy LocalRegistry UpdateInstances
 func (p *Proxy) UpdateInstances(req *ServiceUpdateRequest) error {
 	err := p.LocalRegistry.UpdateInstances(req)
 	return err
 }
 
-//proxy LocalRegistry PersistMessage
+// proxy LocalRegistry PersistMessage
 func (p *Proxy) PersistMessage(file string, msg proto.Message) error {
 	err := p.LocalRegistry.PersistMessage(file, msg)
 	return err
 }
 
-//func (p *Proxy) LoadPersistedMessage(file string, msg proto.Message) error {
+// func (p *Proxy) LoadPersistedMessage(file string, msg proto.Message) error {
 //	err := p.LocalRegistry.LoadPersistedMessage(file, msg)
 //	stat.ReportPluginStat(p, p.engine, stat.MethodLoadPersistedMessage, err)
 //	return err
-//}
+// }
 
-//proxy LocalRegistry LoadServiceRouteRule
+// proxy LocalRegistry LoadServiceRouteRule
 func (p *Proxy) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadServiceRouteRule(key)
 	return result, err
 }
 
-//加载网格规则
+// 加载网格规则
 func (p *Proxy) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadMeshConfig(key)
 	return result, err
 }
 
-//proxy LocalRegistry LoadServiceRateLimitRule
+// proxy LocalRegistry LoadServiceRateLimitRule
 func (p *Proxy) LoadServiceRateLimitRule(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadServiceRateLimitRule(key)
 	return result, err
 }
 
-//注册proxy
+// 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeLocalRegistry, &Proxy{})
 }

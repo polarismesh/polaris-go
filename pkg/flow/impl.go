@@ -19,6 +19,7 @@ package flow
 
 import (
 	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -42,41 +43,41 @@ import (
  * @brief 编排调度引擎，API相关逻辑在这里执行
  */
 type Engine struct {
-	//服务端连接器
+	// 服务端连接器
 	connector serverconnector.ServerConnector
-	//服务本地缓存
+	// 服务本地缓存
 	registry localregistry.LocalRegistry
-	//全局配置
+	// 全局配置
 	configuration config.Configuration
-	//只做过滤的服务路由插件实例
+	// 只做过滤的服务路由插件实例
 	filterOnlyRouter servicerouter.ServiceRouter
-	//服务路由责任链
+	// 服务路由责任链
 	routerChain *servicerouter.RouterChain
-	//上报插件链
+	// 上报插件链
 	reporterChain []statreporter.StatReporter
-	//负载均衡器
+	// 负载均衡器
 	loadbalancer loadbalancer.LoadBalancer
-	//限流处理协助辅助类
+	// 限流处理协助辅助类
 	flowQuotaAssistant *quota.FlowQuotaAssistant
-	//全局上下文，在reportclient
+	// 全局上下文，在reportclient
 	globalCtx model.ValueContext
-	//系统服务列表
+	// 系统服务列表
 	serverServices config.ServerServices
-	//插件仓库
+	// 插件仓库
 	plugins plugin.Supplier
-	//任务调度协程
+	// 任务调度协程
 	taskRoutines []schedule.TaskRoutine
-	//实时熔断任务队列
+	// 实时熔断任务队列
 	rtCircuitBreakChan chan<- *model.PriorityTask
-	//实时熔断公共任务信息
+	// 实时熔断公共任务信息
 	circuitBreakTask *cbcheck.CircuitBreakCallBack
-	//熔断插件链
+	// 熔断插件链
 	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
-	//修改消息订阅插件链
+	// 修改消息订阅插件链
 	subscribe subscribe.Subscribe
 }
 
-//InitFlowEngine 初始化flowEngine实例
+// InitFlowEngine 初始化flowEngine实例
 func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	var err error
 	cfg := initContext.Config
@@ -84,13 +85,13 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	globalCtx := initContext.ValueCtx
 	flowEngine.configuration = cfg
 	flowEngine.plugins = plugins
-	//加载服务端连接器
+	// 加载服务端连接器
 	flowEngine.connector, err = data.GetServerConnector(cfg, plugins)
 	if nil != err {
 		return err
 	}
 	flowEngine.serverServices = config.GetServerServices(cfg)
-	//加载本地缓存插件
+	// 加载本地缓存插件
 	flowEngine.registry, err = data.GetRegistry(cfg, plugins)
 	if nil != err {
 		return err
@@ -101,19 +102,19 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
-	//加载服务路由链插件
+	// 加载服务路由链插件
 	err = flowEngine.LoadFlowRouteChain()
 	if err != nil {
 		return err
 	}
-	//初始化限流缓存
+	// 初始化限流缓存
 	flowEngine.flowQuotaAssistant = &quota.FlowQuotaAssistant{}
 	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); nil != err {
 		return err
 	}
-	//加载全局上下文
+	// 加载全局上下文
 	flowEngine.globalCtx = globalCtx
-	//启动健康探测
+	// 启动健康探测
 	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
 	disableHealthCheck := when == config.HealthCheckNever
 	if !disableHealthCheck {
@@ -121,7 +122,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
-	//加载熔断器插件
+	// 加载熔断器插件
 	enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable()
 	if enable {
 		flowEngine.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, plugins)
@@ -133,7 +134,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
-	//加载消息订阅插件
+	// 加载消息订阅插件
 	pluginName := cfg.GetConsumer().GetSubScribe().GetType()
 	p, err := flowEngine.plugins.GetPlugin(common.TypeSubScribe, pluginName)
 	if err != nil {
@@ -161,7 +162,7 @@ func (e *Engine) LoadFlowRouteChain() error {
 		return err
 	}
 	e.filterOnlyRouter = filterOnlyRouterPlugin.(servicerouter.ServiceRouter)
-	//加载负载均衡插件
+	// 加载负载均衡插件
 	e.loadbalancer, err = data.GetLoadBalancer(e.configuration, e.plugins)
 	if nil != err {
 		return err
@@ -169,12 +170,12 @@ func (e *Engine) LoadFlowRouteChain() error {
 	return nil
 }
 
-//获取流程辅助类
+// 获取流程辅助类
 func (e *Engine) FlowQuotaAssistant() *quota.FlowQuotaAssistant {
 	return e.flowQuotaAssistant
 }
 
-//获取插件工厂
+// 获取插件工厂
 func (e *Engine) PluginSupplier() plugin.Supplier {
 	return e.plugins
 }
@@ -220,7 +221,7 @@ func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
 }
 
-//serviceUpdate消息订阅回调
+// serviceUpdate消息订阅回调
 func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {
 		err := e.subscribe.DoSubScribe(event)
@@ -232,21 +233,21 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	return nil
 }
 
-//启动引擎
+// 启动引擎
 func (e *Engine) Start() error {
-	//添加客户端定期上报任务
+	// 添加客户端定期上报任务
 	clientReportTaskValues, err := e.addClientReportTask()
 	if nil != err {
 		return err
 	}
-	//添加获取系统服务的任务
+	// 添加获取系统服务的任务
 	serverServiceTaskValues, err := e.addLoadServerServiceTask()
 	if nil != err {
 		return err
 	}
-	//添加上报sdk配置任务
+	// 添加上报sdk配置任务
 	configReportTaskValues := e.addSDKConfigReportTask()
-	//启动协程
+	// 启动协程
 	discoverSvc := e.serverServices.GetClusterService(config.DiscoverCluster)
 	if nil != discoverSvc {
 		schedule.StartTask(
@@ -262,7 +263,7 @@ func (e *Engine) Start() error {
 	return nil
 }
 
-//根据服务获取路由链
+// 根据服务获取路由链
 func (e *Engine) getRouterChain(svcInstances model.ServiceInstances) *servicerouter.RouterChain {
 	svcInstancesProto := svcInstances.(*pb.ServiceInstancesInProto)
 	routerChain := svcInstancesProto.GetServiceRouterChain()
@@ -272,8 +273,8 @@ func (e *Engine) getRouterChain(svcInstances model.ServiceInstances) *servicerou
 	return routerChain
 }
 
-//根据服务获取负载均衡器
-//优先使用被调配置的负载均衡算法，其次选择用户选择的算法
+// 根据服务获取负载均衡器
+// 优先使用被调配置的负载均衡算法，其次选择用户选择的算法
 func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgorithm string) (
 	loadbalancer.LoadBalancer, error) {
 	svcInstancesProto := svcInstances.(*pb.ServiceInstancesInProto)
@@ -288,7 +289,7 @@ func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgo
 	return svcLoadbalancer, nil
 }
 
-//Destroy 销毁流程引擎
+// Destroy 销毁流程引擎
 func (e *Engine) Destroy() error {
 	if len(e.taskRoutines) > 0 {
 		for _, routine := range e.taskRoutines {
@@ -301,7 +302,7 @@ func (e *Engine) Destroy() error {
 	return nil
 }
 
-//上报统计数据到统计插件中
+// 上报统计数据到统计插件中
 func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) error {
 	if !model.ValidMetircType(typ) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid report metric type")
@@ -317,12 +318,12 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 	return nil
 }
 
-//上报api数据
+// 上报api数据
 func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 	return e.SyncReportStat(model.SDKAPIStat, result)
 }
 
-//上报服务数据
+// 上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
 }

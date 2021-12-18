@@ -19,27 +19,31 @@ package monitor
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/hashicorp/go-multierror"
 	"math"
 	"time"
+
+	"github.com/hashicorp/go-multierror"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
+	// DefaultMetricsReportWindow .
 	DefaultMetricsReportWindow = 1 * time.Minute
-	DefaultMetricsNumBuckets   = 12
+	// DefaultMetricsNumBuckets 。
+	DefaultMetricsNumBuckets = 12
 )
 
-//统计类型
+// StatType 统计类型
 type StatType int
 
-//插件配置
+// Config 插件配置
 type Config struct {
 	MetricsReportWindow *time.Duration `yaml:"metricsReportWindow"`
 	MetricsNumBuckets   int            `yaml:"metricsNumBuckets"`
 }
 
-//校验配置
+// Verify 校验配置
 func (c *Config) Verify() error {
 	var errs error
 	if c.MetricsNumBuckets <= 0 {
@@ -53,13 +57,13 @@ func (c *Config) Verify() error {
 	return errs
 }
 
-//获取滑桶数量
+// GetBucketInterval 获取滑桶数量
 func (c *Config) GetBucketInterval() time.Duration {
 	bucketSize := math.Ceil(float64(*c.MetricsReportWindow) / float64(c.MetricsNumBuckets))
 	return time.Duration(bucketSize)
 }
 
-//设置默认值
+// SetDefault 设置默认值
 func (c *Config) SetDefault() {
 	if c.MetricsNumBuckets == 0 {
 		c.MetricsNumBuckets = DefaultMetricsNumBuckets

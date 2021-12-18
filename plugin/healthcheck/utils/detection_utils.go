@@ -19,6 +19,7 @@ package utils
 
 import (
 	"fmt"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -28,7 +29,7 @@ func GetAddressByInstance(ins model.Instance) string {
 }
 
 // ConvertPackageConf 将配置的发送接收package转化为[]byte
-//func ConvertPackageConf(sendPackageConf string, recvPackageConf []string) ([]byte, [][]byte) {
+// func ConvertPackageConf(sendPackageConf string, recvPackageConf []string) ([]byte, [][]byte) {
 //	var sendPackageBytes []byte
 //	if len(sendPackageConf) > 0 {
 //		sendPackageBytes = make([]byte, 4)
@@ -46,4 +47,4 @@ func GetAddressByInstance(ins model.Instance) string {
 //		}
 //	}
 //	return sendPackageBytes, recvPackageByteSlice
-//}
+// }

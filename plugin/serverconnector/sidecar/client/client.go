@@ -20,6 +20,9 @@ package client
 // A client implementation.
 
 import (
+	"sync/atomic"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,8 +30,6 @@ import (
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 	_ "github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
-	"sync/atomic"
-	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 )

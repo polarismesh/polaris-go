@@ -19,6 +19,8 @@ package basereporter
 
 import (
 	"context"
+	"time"
+
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,7 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"time"
 )
 
 const (
@@ -35,7 +36,7 @@ const (
 	MinReportInterval = 1 * time.Second
 )
 
-//一个与monitor连接的stream，用于发送和接收某种统计数据
+// 一个与monitor连接的stream，用于发送和接收某种统计数据
 type ClientStream struct {
 	ConnectFunc CreateClientStreamFunc
 	cancelFunc  context.CancelFunc
@@ -44,7 +45,7 @@ type ClientStream struct {
 	IPString    string
 }
 
-//关闭clientStream
+// 关闭clientStream
 func (cs *ClientStream) DestroyStream() error {
 	if cs.Stream != nil {
 		cs.Stream.CloseSend()
@@ -61,7 +62,7 @@ func (cs *ClientStream) DestroyStream() error {
 	return nil
 }
 
-//创建一个clientStream
+// 创建一个clientStream
 func (cs *ClientStream) CreateStream(conn *network.Connection) error {
 	var err error
 	cs.conn = conn
@@ -77,7 +78,7 @@ func (cs *ClientStream) CreateStream(conn *network.Connection) error {
 	return nil
 }
 
-//连接monitor的reporter的基类，具备一些大多数reporter需要的字段和连接管理方法
+// 连接monitor的reporter的基类，具备一些大多数reporter需要的字段和连接管理方法
 type Reporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -85,9 +86,9 @@ type Reporter struct {
 	ClientStreams []*ClientStream
 	ConnManager   network.ConnectionManager
 
-	//插件工厂
+	// 插件工厂
 	Plugins plugin.Supplier
-	//本地缓存插件
+	// 本地缓存插件
 	Registry localregistry.LocalRegistry
 }
 
@@ -95,11 +96,11 @@ type CloseAbleStream interface {
 	CloseSend() error
 }
 
-//根据与monitor的连接创建clientStream
+// 根据与monitor的连接创建clientStream
 type CreateClientStreamFunc func(conn monitorpb.GrpcAPIClient) (client CloseAbleStream,
 	cancelFunc context.CancelFunc, err error)
 
-//获取一个baseReporter
+// 获取一个baseReporter
 func InitBaseReporter(ctx *plugin.InitContext, streamFunc []CreateClientStreamFunc) (*Reporter, error) {
 	result := &Reporter{
 		PluginBase:  plugin.NewPluginBase(ctx),
@@ -127,7 +128,7 @@ func InitBaseReporter(ctx *plugin.InitContext, streamFunc []CreateClientStreamFu
 	return result, nil
 }
 
-//连接monitor，并且创建对应的clientStream
+// 连接monitor，并且创建对应的clientStream
 func (s *Reporter) CreateStreamWithIndex(idx int) error {
 	var err error
 	if err != nil {
@@ -145,25 +146,25 @@ func (s *Reporter) CreateStreamWithIndex(idx int) error {
 	return nil
 }
 
-//断开与monitor的连接并且销毁所有clientStream
+// 断开与monitor的连接并且销毁所有clientStream
 func (s *Reporter) DestroyStreamWithIndex(idx int) error {
 	cs := s.ClientStreams[idx]
 	cs.DestroyStream()
 	return nil
 }
 
-//获取一个与monitor的连接
+// 获取一个与monitor的连接
 func (s *Reporter) GetMonitorConnection() (*network.Connection, error) {
 	conn, err := s.ConnManager.GetConnection(opReportStat, sysconfig.MonitorCluster)
 	return conn, err
 }
 
-//释放一个与monitor的连接
+// 释放一个与monitor的连接
 func (s *Reporter) ReleaseMonitorConnection(conn *network.Connection) {
 	conn.Release(opReportStat)
 }
 
-//获取对应的clientStream用于发送和接收数据
+// 获取对应的clientStream用于发送和接收数据
 func (s *Reporter) GetClientStream(idx int) CloseAbleStream {
 	return s.ClientStreams[idx].Stream
 }
@@ -172,7 +173,7 @@ func (s *Reporter) GetClientStreamServer(idx int) network.ConnID {
 	return s.ClientStreams[idx].conn.ConnID
 }
 
-//获取客户端的ip地址
+// 获取客户端的ip地址
 func (s *Reporter) GetIPString() string {
 	return s.ConnManager.GetClientInfo().GetIPString()
 }

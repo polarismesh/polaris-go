@@ -19,24 +19,26 @@ package zaplog
 
 import (
 	"fmt"
-	plog "github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/natefinch/lumberjack"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"path/filepath"
 	"sync/atomic"
 	"time"
+
+	"github.com/natefinch/lumberjack"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
+	plog "github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//使用zap框架的log实现
+// 使用zap框架的log实现
 type zapLogger struct {
 	outputLevel int32
 	logger      *zap.Logger
 	logDir      string
 }
 
-//归一化日志级别
+// 归一化日志级别
 func getOutputLevel(level int, defaultLevel int) int {
 	if level >= plog.NoneLog {
 		return plog.NoneLog
@@ -47,7 +49,7 @@ func getOutputLevel(level int, defaultLevel int) int {
 	return level
 }
 
-//配置zapCore日志机制
+// 配置zapCore日志机制
 func prepareZap(name string, options *plog.Options, defaultLevel int) (plog.Logger, error) {
 	encCfg := zapcore.EncoderConfig{
 		TimeKey:        "time",
@@ -110,7 +112,7 @@ func prepareZap(name string, options *plog.Options, defaultLevel int) (plog.Logg
 	}, nil
 }
 
-//时间格式化函数
+// 时间格式化函数
 func formatDate(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	t = t.Local()
 	year, month, day := t.Date()
@@ -150,43 +152,43 @@ func formatDate(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(string(buf))
 }
 
-//打印trace级别的日志
+// 打印trace级别的日志
 func (z *zapLogger) Tracef(format string, args ...interface{}) {
 	z.printf(z.logger.Debug, plog.TraceLog, format, args...)
 }
 
-//打印debug级别的日志
+// 打印debug级别的日志
 func (z *zapLogger) Debugf(format string, args ...interface{}) {
 	z.printf(z.logger.Debug, plog.DebugLog, format, args...)
 }
 
-//打印info级别的日志
+// 打印info级别的日志
 func (z *zapLogger) Infof(format string, args ...interface{}) {
 	z.printf(z.logger.Info, plog.InfoLog, format, args...)
 }
 
-//打印warn级别的日志
+// 打印warn级别的日志
 func (z *zapLogger) Warnf(format string, args ...interface{}) {
 	z.printf(z.logger.Warn, plog.WarnLog, format, args...)
 }
 
-//打印error级别的日志
+// 打印error级别的日志
 func (z *zapLogger) Errorf(format string, args ...interface{}) {
 	z.printf(z.logger.Error, plog.ErrorLog, format, args...)
 }
 
-//打印fatalf级别的日志
+// 打印fatalf级别的日志
 func (z *zapLogger) Fatalf(format string, args ...interface{}) {
 	z.printf(z.logger.Fatal, plog.FatalLog, format, args...)
 }
 
-//判断当前级别是否满足日志打印的最低级别
+// 判断当前级别是否满足日志打印的最低级别
 func (z *zapLogger) IsLevelEnabled(l int) bool {
 	outputLevel := atomic.LoadInt32(&z.outputLevel)
 	return int32(l) >= outputLevel
 }
 
-//动态设置日志级别
+// 动态设置日志级别
 func (z *zapLogger) SetLogLevel(l int) error {
 	if err := plog.VerifyLogLevel(l); nil != err {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify log level")
@@ -195,12 +197,12 @@ func (z *zapLogger) SetLogLevel(l int) error {
 	return nil
 }
 
-//返回日志的目录
+// 返回日志的目录
 func (z *zapLogger) GetLogDir() string {
 	return z.logDir
 }
 
-//通用打印函数
+// 通用打印函数
 func (z *zapLogger) printf(
 	logFun func(msg string, fields ...zap.Field), level int, format string, args ...interface{}) {
 	if !z.IsLevelEnabled(level) {
@@ -213,7 +215,7 @@ func (z *zapLogger) printf(
 	logFun(msg)
 }
 
-//初始化
+// 初始化
 func init() {
 	plog.RegisterLoggerCreator(plog.LoggerZap, prepareZap)
 }

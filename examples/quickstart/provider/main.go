@@ -42,6 +42,7 @@ func initArgs() {
 	flag.IntVar(&port, "port", 7879, "port")
 }
 
+// PolarisProvider .
 type PolarisProvider struct {
 	provider  api.ProviderAPI
 	namespace string
@@ -50,6 +51,7 @@ type PolarisProvider struct {
 	port      int
 }
 
+// Run . execute
 func (svr *PolarisProvider) Run() {
 	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
 	if nil != err {

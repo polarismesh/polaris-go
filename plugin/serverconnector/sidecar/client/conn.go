@@ -20,10 +20,11 @@ package client
 import (
 	"errors"
 	_ "fmt"
-	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 	"net"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
 // conn interface

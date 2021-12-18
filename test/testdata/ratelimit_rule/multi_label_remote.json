@@ -1,97 +1,97 @@
 {
-    "rules": [
-      {
-        "id": "mr1111",
-        "service": "testRateLimitMultiRemoteSvc",
-        "namespace": "Test",
-        "labels": {
-          "operation": {
-            "type": "EXACT",
-            "value": "query"
-          },
-          "user": {
-            "type": "REGEX",
-            "value": "xx*"
-          }
+  "rules": [
+    {
+      "id": "mr1111",
+      "service": "testRateLimitMultiRemoteSvc",
+      "namespace": "Test",
+      "labels": {
+        "operation": {
+          "type": "EXACT",
+          "value": "query"
         },
-        "resource": "QPS",
-        "type": "GLOBAL",
-        "action": "reject",
-        "amounts": [
-          {
-            "maxAmount": 100,
-            "validDuration": "1s"
-          },
-          {
-            "maxAmount": 500,
-            "validDuration": "30s"
-          }
-        ],
-        "report": {
-          "interval": "100ms"
-        },
-        "ctime": "2020-4-7 16:47:14",
-        "mtime": "2020-4-7 16:47:14",
-        "revision": "i8dc47b4b5954b0292112f9f9843f701"
+        "user": {
+          "type": "REGEX",
+          "value": "xx*"
+        }
       },
-      {
-        "id": "mr2222",
-        "service": "testRateLimitMultiRemoteSvc",
-        "namespace": "Test",
-        "labels": {
-          "operation": {
-            "type": "EXACT",
-            "value": "write"
-          },
-          "user": {
-            "type": "REGEX",
-            "value": "yy*"
-          }
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 100,
+          "validDuration": "1s"
         },
-        "resource": "QPS",
-        "type": "GLOBAL",
-        "action": "reject",
-        "amounts": [
-          {
-            "maxAmount": 200,
-            "validDuration": "1s"
-          },
-          {
-            "maxAmount": 1000,
-            "validDuration": "30s"
-          }
-        ],
-        "report": {
-          "interval": "100ms"
-        },
-        "ctime": "2020-4-7 16:47:14",
-        "mtime": "2020-4-7 16:47:14",
-        "revision": "68dc47b4b5954b0292112f9f9843f702"
+        {
+          "maxAmount": 500,
+          "validDuration": "30s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
       },
-      {
-        "id": "mr3333",
-        "service": "testRateLimitMultiRemoteSvc",
-        "namespace": "Test",
-        "resource": "QPS",
-        "type": "GLOBAL",
-        "action": "reject",
-        "amounts": [
-          {
-            "maxAmount": 500,
-            "validDuration": "1s"
-          },
-          {
-            "maxAmount": 2000,
-            "validDuration": "30s"
-          }
-        ],
-        "report": {
-          "interval": "100ms"
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "i8dc47b4b5954b0292112f9f9843f701"
+    },
+    {
+      "id": "mr2222",
+      "service": "testRateLimitMultiRemoteSvc",
+      "namespace": "Test",
+      "labels": {
+        "operation": {
+          "type": "EXACT",
+          "value": "write"
         },
-        "ctime": "2020-4-7 16:47:14",
-        "mtime": "2020-4-7 16:47:14",
-        "revision": "68dc47b485954b0292112f9f9843f703"
-      }
-    ],
+        "user": {
+          "type": "REGEX",
+          "value": "yy*"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 200,
+          "validDuration": "1s"
+        },
+        {
+          "maxAmount": 1000,
+          "validDuration": "30s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "68dc47b4b5954b0292112f9f9843f702"
+    },
+    {
+      "id": "mr3333",
+      "service": "testRateLimitMultiRemoteSvc",
+      "namespace": "Test",
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 500,
+          "validDuration": "1s"
+        },
+        {
+          "maxAmount": 2000,
+          "validDuration": "30s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "68dc47b485954b0292112f9f9843f703"
+    }
+  ],
   "revision": "5bdc47b4b5954b0212112f9f9863f702"
 }

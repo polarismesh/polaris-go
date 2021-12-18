@@ -23,12 +23,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//服务上下线监听回调
+// 服务上下线监听回调
 type ServiceEventHandler struct {
 	TaskValues model.TaskValues
 }
 
-//解析服务主键
+// 解析服务主键
 func (s *ServiceEventHandler) parseSvcKey(eventObject interface{}) *model.ServiceKey {
 	c := eventObject.(model.RegistryValue)
 	if !c.IsInitialized() {
@@ -44,7 +44,7 @@ func (s *ServiceEventHandler) parseSvcKey(eventObject interface{}) *model.Servic
 	}
 }
 
-//服务上线回调
+// 服务上线回调
 func (s *ServiceEventHandler) OnServiceAdded(event *common.PluginEvent) error {
 	svcKey := s.parseSvcKey(event.EventObject.(*common.ServiceEventObject).NewValue)
 	if nil == svcKey {
@@ -54,7 +54,7 @@ func (s *ServiceEventHandler) OnServiceAdded(event *common.PluginEvent) error {
 	return nil
 }
 
-//服务下线回调
+// 服务下线回调
 func (s *ServiceEventHandler) OnServiceDeleted(event *common.PluginEvent) error {
 	svcObject := event.EventObject.(*common.ServiceEventObject).OldValue
 	svcKey := s.parseSvcKey(svcObject)

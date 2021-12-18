@@ -22,38 +22,38 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//Alarm2FileReporter 默认告警处理器，打印本地告警日志
+// Alarm2FileReporter 默认告警处理器，打印本地告警日志
 type Alarm2FileReporter struct {
 	*plugin.PluginBase
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *Alarm2FileReporter) Type() common.Type {
 	return common.TypeAlarmReporter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *Alarm2FileReporter) Name() string {
 	return "alarm2file"
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *Alarm2FileReporter) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *Alarm2FileReporter) Destroy() error {
 	return nil
 }
 
-//ReportAlarm 上报告警
+// ReportAlarm 上报告警
 func (g *Alarm2FileReporter) ReportAlarm(level int, message string) error {
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&Alarm2FileReporter{})
 }

@@ -23,19 +23,19 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of AlarmReporter
+// Proxy  of AlarmReporter
 type Proxy struct {
 	AlarmReporter
 	engine model.Engine
 }
 
-//设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.AlarmReporter = plug.(AlarmReporter)
 	p.engine = engine
 }
 
-//注册proxy
+// 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeAlarmReporter, &Proxy{})
 }

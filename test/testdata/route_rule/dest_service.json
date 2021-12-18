@@ -39,7 +39,7 @@
           "namespace": "namespace1",
           "metadata": {
             "logic_set": {
-              "type" : 1,
+              "type": 1,
               "value": "set2"
             }
           },

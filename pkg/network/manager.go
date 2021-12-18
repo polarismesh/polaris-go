@@ -19,38 +19,40 @@ package network
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/modern-go/reflect2"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//连接标识
+// ConnID 连接标识
 type ConnID struct {
-	//唯一ID
+	// ID 唯一ID
 	ID uint32
-	//所属服务
+	// Service 所属服务
 	Service config.ClusterService
-	//目标server地址
+	// Address 目标server地址
 	Address string
-	//所属的实例信息
+	// instance 所属的实例信息
 	instance model.Instance
 }
 
-//TOString方法
+// String TOString方法
 func (c ConnID) String() string {
 	return fmt.Sprintf("{ID: %d, Address: %s}", c.ID, c.Address)
 }
 
-//当前客户端相关信息
+// ClientInfo 当前客户端相关信息
 type ClientInfo struct {
 	IP      atomic.Value
 	HashKey atomic.Value
 }
 
-//获取IP值
+// GetIPString 获取IP值
 func (c *ClientInfo) GetIPString() string {
 	ipValue := c.IP.Load()
 	if reflect2.IsNil(ipValue) {
@@ -59,7 +61,7 @@ func (c *ClientInfo) GetIPString() string {
 	return ipValue.(string)
 }
 
-//获取Hash值
+// GetHashKey 获取Hash值
 func (c *ClientInfo) GetHashKey() []byte {
 	hashKeyValue := c.HashKey.Load()
 	if reflect2.IsNil(hashKeyValue) {
@@ -68,7 +70,7 @@ func (c *ClientInfo) GetHashKey() []byte {
 	return hashKeyValue.([]byte)
 }
 
-//通用的连接管理器
+// ConnectionManager 通用的连接管理器
 type ConnectionManager interface {
 
 	// SetConnCreator 设置当前协议的连接创建器

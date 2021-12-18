@@ -18,6 +18,8 @@
 package errorrate
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -29,27 +31,26 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	common2 "github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/common"
-	"time"
 )
 
-//CircuitBreaker 基于错误率的默认熔断规则
+// CircuitBreaker 基于错误率的默认熔断规则
 type CircuitBreaker struct {
 	*plugin.PluginBase
 	cfg             config.ErrorRateConfig
 	halfOpenHandler *common.HalfOpenConversionHandler
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *CircuitBreaker) Type() common2.Type {
 	return common2.TypeCircuitBreaker
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *CircuitBreaker) Name() string {
 	return config.DefaultCircuitBreakerErrRate
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.cfg = ctx.Config.GetConsumer().GetCircuitBreaker().GetErrorRateConfig()
@@ -60,36 +61,35 @@ func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *CircuitBreaker) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable enable
 func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 const (
-	//错误率统计窗口下标
+	// 错误率统计窗口下标
 	metricIdxErrRate = iota
-	//半开统计窗口下标
+	// 半开统计窗口下标
 	metricIdxHalfOpen
-	//最大窗口下标
+	// 最大窗口下标
 	metricIdxMax
 )
 
-//统计维度
+// 统计维度
 const (
-	//总请求数
+	// 总请求数
 	keyRequestCount = iota
-	//错误数
+	// 错误数
 	keyFailCount
-	//总统计维度
+	// 总统计维度
 	maxDimension
 )
 
@@ -103,23 +103,23 @@ var (
 	}
 )
 
-//正常状态下的统计
+// 正常状态下的统计
 func (g *CircuitBreaker) regularStat(gauge model.InstanceGauge, metricWindow *metric.SliceWindow) {
 	metricWindow.AddGauge(gauge, addMetricWindow)
 }
 
-//获取实例的滑窗
+// 获取实例的滑窗
 func (g *CircuitBreaker) getSliceWindows(instance model.Instance) []*metric.SliceWindow {
 	instanceInProto := instance.(*pb.InstanceInProto)
 	return instanceInProto.GetSliceWindows(g.ID())
 }
 
-//实时上报健康状态并进行失败率统计
+// Stat 实时上报健康状态并进行失败率统计
 func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	instance := gauge.GetCalledInstance()
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil != cbStatus && cbStatus.GetStatus() == model.Open {
-		//熔断状态不进行统计
+		// 熔断状态不进行统计
 		return false, nil
 	}
 	metricWindows := g.getSliceWindows(gauge.GetCalledInstance())
@@ -130,13 +130,13 @@ func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	return false, nil
 }
 
-//熔断器从关闭到打开
+// 熔断器从关闭到打开
 func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metric.SliceWindow, now time.Time) bool {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil != cbStatus && cbStatus.GetStatus() != model.Close {
 		return false
 	}
-	//统计错误率
+	// 统计错误率
 	timeRange := &metric.TimeRange{
 		Start: now.Add(0 - g.cfg.GetMetricStatTimeWindow()),
 		End:   now.Add(metricWindow.GetBucketInterval()),
@@ -145,13 +145,13 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 	reqCount := values[0]
 	failCount := values[1]
 	if reqCount == 0 || reqCount < int64(g.cfg.GetRequestVolumeThreshold()) {
-		//未达到其实请求数阈值
+		// 未达到其实请求数阈值
 		return false
 	}
 	failRatio := float64(failCount) / float64(reqCount)
 	errRateThreshold := ToErrorRateThreshold(g.cfg.GetErrorRatePercent())
 	if failRatio >= errRateThreshold {
-		//错误率达标
+		// 错误率达标
 		log.GetDetectLogger().Infof(
 			"closeToOpen %s: instance(id=%s, address=%s:%d) match condition for failRatio=%.2f(threshold=%.2f)",
 			g.Name(), instance.GetId(), instance.GetHost(), instance.GetPort(), failRatio, errRateThreshold)
@@ -160,12 +160,12 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 	return false
 }
 
-//转换成熔断错误率阈值
+// ToErrorRateThreshold 转换成熔断错误率阈值
 func ToErrorRateThreshold(errorRatePercent int) float64 {
 	return float64(errorRatePercent) / 100
 }
 
-//生成滑窗
+// 生成滑窗
 func (g *CircuitBreaker) generateSliceWindow(event *common2.PluginEvent) error {
 	localValue := event.EventObject.(*local.DefaultInstanceLocalValue)
 	metricWindows := make([]*metric.SliceWindow, metricIdxMax)
@@ -176,8 +176,9 @@ func (g *CircuitBreaker) generateSliceWindow(event *common2.PluginEvent) error {
 	return nil
 }
 
-//定期进行熔断计算，返回需要进行状态转换的实例ID
-//入参包括全量服务实例，以及当前周期的健康探测结果
+// CircuitBreak .熔断
+// 定期进行熔断计算，返回需要进行状态转换的实例ID
+// 入参包括全量服务实例，以及当前周期的健康探测结果
 func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreaker.Result, error) {
 	result := circuitbreaker.NewCircuitBreakerResult(clock.GetClock().Now())
 	for _, instance := range instances {
@@ -218,7 +219,7 @@ func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreak
 	return result, nil
 }
 
-//init 插件注册
+// init 插件注册
 func init() {
 	plugin.RegisterConfigurablePlugin(&CircuitBreaker{}, &Config{})
 }

@@ -19,6 +19,7 @@ package ringhash
 
 import (
 	"fmt"
+
 	mconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -27,37 +28,37 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-//l5一致性算法的hash负载均衡器
+// l5一致性算法的hash负载均衡器
 type L5CSTLoadBalancer struct {
 	*plugin.PluginBase
 }
 
-//插件类型
+// 插件类型
 func (l *L5CSTLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-//插件名，一个类型下插件名唯一
+// 插件名，一个类型下插件名唯一
 func (l *L5CSTLoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerL5CST
 }
 
-//初始化插件
+// 初始化插件
 func (l *L5CSTLoadBalancer) Init(ctx *plugin.InitContext) error {
 	l.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
 }
 
-//构建一次性hash环
+// 构建一次性hash环
 func (l *L5CSTLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (model.ExtendedSelector, error) {
 	selector := instSet.GetSelector(l.ID())
 	if nil != selector {
 		return selector, nil
 	}
-	//防止服务刚上线或重建hash环时，由于selector为空，大量并发请求进入创建continuum逻辑，出现OOM
+	// 防止服务刚上线或重建hash环时，由于selector为空，大量并发请求进入创建continuum逻辑，出现OOM
 	instSet.GetLock().Lock()
 	defer instSet.GetLock().Unlock()
-	//获取锁后再次检查selector是否已经被创建
+	// 获取锁后再次检查selector是否已经被创建
 	selector = instSet.GetSelector(l.ID())
 	if nil != selector {
 		return selector, nil
@@ -67,7 +68,7 @@ func (l *L5CSTLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (mode
 	return continuum, err
 }
 
-//ChooseInstance 获取单个服务实例
+// ChooseInstance 获取单个服务实例
 func (l *L5CSTLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
 	cluster := criteria.Cluster
@@ -97,7 +98,7 @@ func (l *L5CSTLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	return instance, nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&L5CSTLoadBalancer{})
 }

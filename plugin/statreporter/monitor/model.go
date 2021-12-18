@@ -18,12 +18,13 @@
 package monitor
 
 import (
+	"sync/atomic"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"sync/atomic"
 )
 
-//记录相关维度值
+// 记录相关维度值
 type dimensionRecord struct {
 	data32         []uint32
 	data64         []int64
@@ -31,17 +32,17 @@ type dimensionRecord struct {
 	lastReadTime   int64
 }
 
-//检查是否更新过
+// 检查是否更新过
 func (d *dimensionRecord) IsMetricUpdate() bool {
 	return atomic.LoadInt64(&d.lastUpdateTime) > atomic.LoadInt64(&d.lastReadTime)
 }
 
-//设置更新时间
+// 设置更新时间
 func (d *dimensionRecord) SetLastReadTime() {
 	atomic.StoreInt64(&d.lastUpdateTime, clock.GetClock().Now().UnixNano())
 }
 
-//创建维度记录
+// 创建维度记录
 func newDimensionRecord(size32 int, size64 int) *dimensionRecord {
 	res := &dimensionRecord{}
 	if size32 > 0 {
@@ -53,7 +54,7 @@ func newDimensionRecord(size32 int, size64 int) *dimensionRecord {
 	return res
 }
 
-//获取某些32位维度下面的值
+// 获取某些32位维度下面的值
 func (d *dimensionRecord) getDimension32Values(dimensions []int) []uint32 {
 	res := make([]uint32, len(dimensions))
 	for _, idx := range dimensions {
@@ -65,7 +66,7 @@ func (d *dimensionRecord) getDimension32Values(dimensions []int) []uint32 {
 	return res
 }
 
-//获取某些64位维度下面的值
+// 获取某些64位维度下面的值
 func (d *dimensionRecord) getDimensions64Values(dimensions []int) []int64 {
 	res := make([]int64, len(dimensions))
 	for _, idx := range dimensions {
@@ -77,22 +78,22 @@ func (d *dimensionRecord) getDimensions64Values(dimensions []int) []int64 {
 	return res
 }
 
-//为32位记录添加值
+// 为32位记录添加值
 func (d *dimensionRecord) add32Dimensions(idx int, value uint32) {
 	atomic.AddUint32(&d.data32[idx], value)
 	atomic.StoreInt64(&d.lastUpdateTime, clock.GetClock().Now().UnixNano())
 }
 
-//为64位记录添加值
+// 为64位记录添加值
 func (d *dimensionRecord) add64Dimensions(idx int, value int64) {
 	atomic.AddInt64(&d.data64[idx], value)
 	atomic.StoreInt64(&d.lastUpdateTime, clock.GetClock().Now().UnixNano())
 }
 
-//往某些维度添加值
+// 往某些维度添加值
 func (d *dimensionRecord) AddValue(gauge model.InstanceGauge, addFunc addDimensionFunc) {
 	addFunc(gauge, d)
 }
 
-//为dimensionRecord添加值
+// 为dimensionRecord添加值
 type addDimensionFunc func(gauge model.InstanceGauge, d *dimensionRecord)

@@ -21,6 +21,7 @@ Polaris main tuning terminal sample contains the simplest basic client operation
 cd ./provider
 go build -o provider
 ```
+
 - windows build command
 ```
 cd ./consumer
