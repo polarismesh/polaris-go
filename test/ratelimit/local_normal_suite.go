@@ -287,6 +287,6 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 		if allocatedPerSecond < 5 {
 			continue
 		}
-		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1000, check.Equals, true)
+		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1005, check.Equals, true)
 	}
 }
