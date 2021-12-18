@@ -238,7 +238,7 @@ func (g *Connector) waitDiscoverReady() error {
 	}
 }
 
-// 上报客户端信息
+// ReportClient 上报客户端信息
 // 异常场景：当sdk已经退出过程中，则返回error
 // 异常场景：当服务端不可用或者上报失败，则返回error，调用者需进行重试
 func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportClientResponse, error) {

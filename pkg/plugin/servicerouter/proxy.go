@@ -25,13 +25,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// proxy of ServiceRouter
+// Proxy proxy of ServiceRouter
 type Proxy struct {
 	ServiceRouter
 	engine model.Engine
 }
 
-// 路由调用统计数据
+// RouteGauge 路由调用统计数据
 type RouteGauge struct {
 	model.EmptyInstanceGauge
 	PluginID         int32
@@ -97,13 +97,13 @@ func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 	poolPutRouteStat(gauge)
 }
 
-// 设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.ServiceRouter = plug.(ServiceRouter)
 	p.engine = engine
 }
 
-// proxy ServiceRouter GetFilteredInstances
+// GetFilteredInstances proxy ServiceRouter GetFilteredInstances
 func (p *Proxy) GetFilteredInstances(
 	routeInfo *RouteInfo, serviceClusters model.ServiceClusters, withinCluster *model.Cluster) (*RouteResult, error) {
 	result, err := p.ServiceRouter.GetFilteredInstances(routeInfo, serviceClusters, withinCluster)

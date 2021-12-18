@@ -53,7 +53,7 @@ const (
 	testCacheDir = "testdata/test_cache/"
 )
 
-// 系统服务缓存测试套
+// DefaultServerSuite 系统服务缓存测试套
 type DefaultServerSuite struct {
 	grpcServer        *grpc.Server
 	grpcListener      net.Listener
@@ -67,7 +67,7 @@ type DefaultServerSuite struct {
 	serverReq         *api.GetInstancesRequest
 }
 
-// 初始化套件
+// SetUpSuite 初始化套件
 func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -152,18 +152,18 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-// 套件名字
+// GetName 套件名字
 func (t *DefaultServerSuite) GetName() string {
 	return "DefaultServer"
 }
 
-// 销毁套件
+// TearDownSuite 销毁套件
 func (t *DefaultServerSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-// 测试预埋server挂了一个后能否快速切换，以及预埋server都挂了后，能否使用本地缓存恢复
+// TestDefaultFailOver 测试预埋server挂了一个后能否快速切换，以及预埋server都挂了后，能否使用本地缓存恢复
 func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	// 测试预埋server挂了一个后能否快速切换
 	cfg := config.NewDefaultConfiguration(
@@ -219,7 +219,7 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	// failConsumer.Destroy()
 }
 
-// 测试当部分或全部polaris-server实例不可用时的情景，其中埋点server可用
+// TestPolarisServerDown 测试当部分或全部polaris-server实例不可用时的情景，其中埋点server可用
 func (t *DefaultServerSuite) TestPolarisServerDown(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 	serverKey := &model.ServiceKey{Namespace: config.ServerNamespace, Service: config.ServerDiscoverService}
@@ -308,6 +308,7 @@ func (t *DefaultServerSuite) TestPolarisServerDown(c *check.C) {
 	t.mockServer.SetServiceInstances(serverKey, t.upPolarisServer)
 }
 
+// TestHealthyServerDown .
 // 测试健康检测服务器挂掉或者部分挂掉后的情景
 // 如果服务器全挂的话，heartbeat多次该服务器就会被熔断
 // 在服务器全挂之后，重新上线了可用的服务器，依然可以正常心跳

@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 )
 
-// 实时熔断任务
+// RealTimeLimitTask 实时熔断任务
 type RealTimeLimitTask struct {
 	// 服务信息
 	SvcKey model.ServiceKey
@@ -39,7 +39,7 @@ type RealTimeLimitTask struct {
 	CbName string
 }
 
-// 创建实时熔断任务
+// NewCircuitBreakRealTimeCallBack 创建实时熔断任务
 func NewCircuitBreakRealTimeCallBack(
 	callBack *CircuitBreakCallBack, task *RealTimeLimitTask) *CircuitBreakRealTimeCallBack {
 	return &CircuitBreakRealTimeCallBack{
@@ -48,13 +48,13 @@ func NewCircuitBreakRealTimeCallBack(
 	}
 }
 
-// 实时熔断任务回调
+// CircuitBreakRealTimeCallBack 实时熔断任务回调
 type CircuitBreakRealTimeCallBack struct {
 	commonCallBack *CircuitBreakCallBack
 	task           *RealTimeLimitTask
 }
 
-// 处理实时任务
+// Process 处理实时任务
 func (c *CircuitBreakRealTimeCallBack) Process() {
 	svcInstances := c.commonCallBack.registry.GetInstances(&c.task.SvcKey, false, true)
 	if !svcInstances.IsInitialized() {

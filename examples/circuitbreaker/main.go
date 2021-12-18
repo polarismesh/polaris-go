@@ -77,7 +77,7 @@ func main() {
 				Namespace: namespace,
 				Service:   service,
 			},
-			InstanceId: errInstance.GetId(),
+			InstanceID: errInstance.GetId(),
 			IP:         errInstance.GetHost(),
 			Port:       uint16(errInstance.GetPort()),
 		})

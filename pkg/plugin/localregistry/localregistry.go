@@ -35,7 +35,7 @@ const (
 	PropertyHealthCheckStatus = "HealthCheckStatus"
 )
 
-// 待更新的实例属性
+// InstanceProperties 待更新的实例属性
 type InstanceProperties struct {
 	Service    *model.ServiceKey
 	ID         string
@@ -55,13 +55,13 @@ func (i InstanceProperties) String() string {
 	return fmt.Sprintf("{ID: %s, Properties: %s}", i.ID, propBuilder.String())
 }
 
-// 服务更新请求体
+// ServiceUpdateRequest 服务更新请求体
 type ServiceUpdateRequest struct {
 	model.ServiceKey
 	Properties []InstanceProperties
 }
 
-// ServiceUpdateRequest: ToString方法
+// String ToString方法
 func (s ServiceUpdateRequest) String() string {
 	propBuilder := strings.Builder{}
 	if len(s.Properties) == 0 {
@@ -79,27 +79,27 @@ func (s ServiceUpdateRequest) String() string {
 
 // InstancesRegistry 实例缓存
 type InstancesRegistry interface {
-	// 获取服务列表，返回结果为一个hashSet, key为类型plugin.ServiceKey
+	// GetServices 获取服务列表，返回结果为一个hashSet, key为类型plugin.ServiceKey
 	GetServices() model.HashSet
-	// 非阻塞获取服务实例列表，只读取缓存
+	// GetInstances 非阻塞获取服务实例列表，只读取缓存
 	GetInstances(svcKey *model.ServiceKey, includeCache bool, isInternalRequest bool) model.ServiceInstances
-	// 非阻塞发起一次缓存远程加载操作
+	// LoadInstances 非阻塞发起一次缓存远程加载操作
 	// 如果已经加载过了，那就直接进行notify
 	// 否则，加载完毕后调用notify函数
 	LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error)
-	// 批量更新服务实例状态，properties存放的是状态值，当前支持2个key
+	// UpdateInstances 批量更新服务实例状态，properties存放的是状态值，当前支持2个key
 	// 1. ReadyToServe: 故障熔断标识，true or false
 	// 2. DynamicWeight：动态权重值
 	UpdateInstances(*ServiceUpdateRequest) error
-	// 对PB缓存进行持久化
+	// PersistMessage 对PB缓存进行持久化
 	PersistMessage(file string, msg proto.Message) error
-	// 从文件中加载PB缓存
+	// LoadPersistedMessage 从文件中加载PB缓存
 	LoadPersistedMessage(file string, msg proto.Message) error
-	// 服务订阅
+	// WatchService 服务订阅
 	WatchService(svcKey *model.ServiceEventKey) error
 }
 
-// 用于在向缓存获取实例时进行过滤
+// InstancesFilter 用于在向缓存获取实例时进行过滤
 type InstancesFilter struct {
 	Service           string
 	Namespace         string
@@ -113,32 +113,32 @@ type LocalRegistry interface {
 	RuleRegistry
 }
 
-// 配置获取的过滤器
+// RuleFilter 配置获取的过滤器
 type RuleFilter struct {
 	model.ServiceEventKey
 }
 
-// ConfigRegistry 配置缓存
+// RuleRegistry ConfigRegistry 配置缓存
 type RuleRegistry interface {
-	// 非阻塞获取配置信息
+	// GetServiceRouteRule 非阻塞获取配置信息
 	GetServiceRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
-	// 非阻塞发起配置加载
+	// LoadServiceRouteRule 非阻塞发起配置加载
 	LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error)
-	// 非阻塞获取网格规则
+	// GetMeshConfig 非阻塞获取网格规则
 	GetMeshConfig(key *model.ServiceKey, includeCache bool) model.MeshConfig
-	// 非阻塞发起网格规则加载
+	// LoadMeshConfig 非阻塞发起网格规则加载
 	LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error)
-	// 非阻塞获取网格
+	// GetMesh 非阻塞获取网格
 	GetMesh(key *model.ServiceKey, includeCache bool) model.Mesh
-	// 非阻塞发起网格加载
+	// LoadMesh 非阻塞发起网格加载
 	LoadMesh(key *model.ServiceKey) (*common.Notifier, error)
-	// 非阻塞获取限流规则
+	// GetServiceRateLimitRule 非阻塞获取限流规则
 	GetServiceRateLimitRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
-	// 非阻塞发起限流规则加载
+	// LoadServiceRateLimitRule 非阻塞发起限流规则加载
 	LoadServiceRateLimitRule(key *model.ServiceKey) (*common.Notifier, error)
-	// 非阻塞获取批量服务
+	// GetServicesByMeta 非阻塞获取批量服务
 	GetServicesByMeta(key *model.ServiceKey, includeCache bool) model.Services
-	// 非阻塞加载批量服务
+	// LoadServices 非阻塞加载批量服务
 	LoadServices(key *model.ServiceKey) (*common.Notifier, error)
 }
 

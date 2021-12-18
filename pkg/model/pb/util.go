@@ -24,7 +24,7 @@ import (
 	"github.com/golang/protobuf/ptypes/duration"
 )
 
-// convertDuration converts to golang duration and logs errors
+// ConvertDuration converts to golang duration and logs errors
 func ConvertDuration(d *duration.Duration) (time.Duration, error) {
 	if d == nil {
 		return 0, nil
@@ -32,7 +32,7 @@ func ConvertDuration(d *duration.Duration) (time.Duration, error) {
 	return ptypes.Duration(d)
 }
 
-// pb时间段转毫秒
+// ProtoDurationToMS pb时间段转毫秒
 func ProtoDurationToMS(dur *duration.Duration) int64 {
 	timeDuration, _ := ConvertDuration(dur)
 	return int64(timeDuration / time.Millisecond)

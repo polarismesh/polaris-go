@@ -52,7 +52,7 @@ var (
 	builtinPort = 10095
 )
 
-// 服务切换测试套
+// ServerSwitchSuite 服务切换测试套
 type ServerSwitchSuite struct {
 	builtinServer mock.NamingServer
 	mockServers   []mock.NamingServer
@@ -134,7 +134,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite SetUpSuite 结束测试套程序
 func (t *ServerSwitchSuite) TearDownSuite(c *check.C) {
 	for _, grpcServer := range t.grpcServers {
 		grpcServer.Stop()
@@ -145,7 +145,7 @@ func (t *ServerSwitchSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-// 获取用例名
+// GetName 获取用例名
 func (t *ServerSwitchSuite) GetName() string {
 	return "ServiceUpdateSuite"
 }
@@ -155,7 +155,7 @@ type managerGetter interface {
 	GetConnectionManager() network.ConnectionManager
 }
 
-// 测试切换后台sever，以及在获取到了discover之后，是否会继续向埋点server请求
+// TestSwitchServer 测试切换后台sever，以及在获取到了discover之后，是否会继续向埋点server请求
 func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 	log.Printf("start to TestSwitchServer")
 	defer util.DeleteDir(util.BackupDir)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -37,6 +38,7 @@ import (
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 )
 
+// Reporter .
 type Reporter struct {
 	*basereporter.Reporter
 	cfg      *Config
@@ -62,7 +64,7 @@ func (s *Reporter) createRouteReportStream(conn monitorpb.GrpcAPIClient) (client
 	return
 }
 
-// 初始化插件
+// Init 初始化插件
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	ctx.Plugins.RegisterEventSubscriber(common.OnServiceLocalValueCreated, common.PluginEventHandler{
 		Callback: s.generateStatData,
@@ -87,44 +89,44 @@ func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// 启动上报协程
+// Start 启动上报协程
 func (s *Reporter) Start() error {
 	go s.uploadRouteRecord()
 	return nil
 }
 
 // 定时上报服务的路由记录到monitor
-func (g *Reporter) uploadRouteRecord() {
-	ticker := time.NewTicker(*g.cfg.ReportInterval)
+func (s *Reporter) uploadRouteRecord() {
+	ticker := time.NewTicker(*s.cfg.ReportInterval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-g.Done():
-			log.GetBaseLogger().Infof("%s, uploadRouteRecord of statReporter serviceRoute terminated", g.GetSDKContextID())
+		case <-s.Done():
+			log.GetBaseLogger().Infof("%s, uploadRouteRecord of statReporter serviceRoute terminated", s.GetSDKContextID())
 			return
 		case <-ticker.C:
 			log.GetStatReportLogger().Infof("start to upload service route record to monitor")
-			err := g.CreateStreamWithIndex(0)
+			err := s.CreateStreamWithIndex(0)
 			skipMonitor := false
 			if err != nil {
 				skipMonitor = true
 				log.GetStatReportLogger().Errorf("fail to connect monitor, err: %v, skip upload record", err)
 			}
-			services := g.Registry.GetServices()
-			for svc, _ := range services {
+			services := s.Registry.GetServices()
+			for svc := range services {
 				svcKey := svc.(model.ServiceKey)
-				svcInstances := g.Registry.GetInstances(&svcKey, false, true)
+				svcInstances := s.Registry.GetInstances(&svcKey, false, true)
 				if !svcInstances.IsInitialized() {
 					continue
 				}
 				actualSvcInstances := svcInstances.(*pb.ServiceInstancesInProto)
 				localValue := actualSvcInstances.GetServiceLocalValue()
-				data := localValue.GetServiceDataByPluginId(g.ID())
-				g.constructRecordAndSend(svcInstances.GetNamespace(), svcInstances.GetService(),
+				data := localValue.GetServiceDataByPluginId(s.ID())
+				s.constructRecordAndSend(svcInstances.GetNamespace(), svcInstances.GetService(),
 					data.(*routeStatData).getRouteRecord(), skipMonitor)
 			}
 			if !skipMonitor {
-				g.DestroyStreamWithIndex(0)
+				s.DestroyStreamWithIndex(0)
 			}
 			log.GetStatReportLogger().Infof("end upload service route record to monitor")
 		}
@@ -200,7 +202,7 @@ func (s *Reporter) constructRecordAndSend(namespace string, service string, data
 	}
 }
 
-// enable
+// IsEnable 是否启用
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -214,7 +216,7 @@ func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	return false
 }
 
-// destroy
+// Destroy 销毁
 func (s *Reporter) Destroy() error {
 	err := s.PluginBase.Destroy()
 	if err != nil {

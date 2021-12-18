@@ -26,6 +26,7 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
@@ -33,11 +34,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 限流解析助手
+// RateLimitingAssistant 限流解析助手
 type RateLimitingAssistant struct {
 }
 
-// 解析出具体的规则值
+// ParseRuleValue 解析出具体的规则值
 func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	rateLimitValue := resp.RateLimit
@@ -47,7 +48,7 @@ func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) 
 	return rateLimitValue, revision
 }
 
-// 规则PB缓存
+// RateLimitRuleCache 规则PB缓存
 type RateLimitRuleCache struct {
 	MaxDuration time.Duration
 }
@@ -55,12 +56,12 @@ type RateLimitRuleCache struct {
 // 限流规则集合
 type rateLimitRules []*namingpb.Rule
 
-// 数组长度
+// Len 数组长度
 func (rls rateLimitRules) Len() int {
 	return len(rls)
 }
 
-// 比较数组成员大小
+// Less 比较数组成员大小
 func (rls rateLimitRules) Less(i, j int) bool {
 	// 先按照优先级来比较，数值小的优先级高
 	if rls[i].GetPriority().GetValue() < rls[j].GetPriority().GetValue() {
@@ -73,12 +74,12 @@ func (rls rateLimitRules) Less(i, j int) bool {
 	return strings.Compare(rls[i].GetId().GetValue(), rls[j].GetId().GetValue()) < 0
 }
 
-// 交换数组成员
+// Swap 交换数组成员
 func (rls rateLimitRules) Swap(i, j int) {
 	rls[i], rls[j] = rls[j], rls[i]
 }
 
-// 设置默认值
+// SetDefault 设置默认值
 func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 	rateLimiting := message.(*namingpb.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
@@ -104,7 +105,7 @@ func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 	}
 }
 
-// 规则校验
+// Validate 规则校验
 func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	rateLimiting := message.(*namingpb.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
@@ -160,7 +161,7 @@ func validateAmount(amounts []*namingpb.Amount) error {
 	return nil
 }
 
-// 获取最大校验周期
+// GetMaxValidDuration 获取最大校验周期
 func GetMaxValidDuration(rule *namingpb.Rule) (time.Duration, error) {
 	var maxValidDura time.Duration
 	amounts := rule.GetAmounts()

@@ -28,12 +28,12 @@ import (
 // 存放路由结果对象的全局池
 var routeResultPool = &sync.Pool{}
 
-// 获取路由结果对象池
+// GetRouteResultPool 获取路由结果对象池
 func GetRouteResultPool() *sync.Pool {
 	return routeResultPool
 }
 
-// 根据服务路由链，过滤服务节点，返回对应的服务列表
+// GetFilterInstances 根据服务路由链，过滤服务节点，返回对应的服务列表
 func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	serviceInstances model.ServiceInstances) ([]model.Instance, *model.Cluster, *model.ServiceInfo, error) {
 	if len(routers) == 0 {
@@ -99,7 +99,7 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 	return result, nil
 }
 
-// 根据服务理由链，过滤服务节点，返回对应的cluster
+// GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
 func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
 	if err := routeInfo.Validate(); nil != err {
@@ -148,7 +148,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 	return result, nil
 }
 
-// 通过池子获取路由结果
+// PoolGetRouteResult 通过池子获取路由结果
 func PoolGetRouteResult(ctx model.ValueContext) *RouteResult {
 	value := GetRouteResultPool().Get()
 	if nil == value {

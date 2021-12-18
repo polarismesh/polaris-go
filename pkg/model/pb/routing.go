@@ -28,16 +28,16 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-// 兼容接口, trpc-go依赖项
+// NewRoutingRuleInProto 兼容接口, trpc-go依赖项
 func NewRoutingRuleInProto(resp *namingpb.DiscoverResponse) model.ServiceRule {
 	return NewServiceRuleInProto(resp)
 }
 
-// 路由规则解析助手
+// RoutingAssistant 路由规则解析助手
 type RoutingAssistant struct {
 }
 
-// 解析出具体的规则值
+// ParseRuleValue 解析出具体的规则值
 func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	routingValue := resp.Routing
@@ -47,7 +47,7 @@ func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (prot
 	return routingValue, revision
 }
 
-// 规则校验
+// Validate 规则校验
 func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	if reflect2.IsNil(message) {
 		return nil
@@ -93,7 +93,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 	return nil
 }
 
-// 设置默认值
+// SetDefault 设置默认值
 func (r *RoutingAssistant) SetDefault(message proto.Message) {
 	// do nothing
 }

@@ -46,7 +46,7 @@ const (
 	keyExpireDuration = 3 * time.Hour
 )
 
-// 上报缓存信息的插件
+// Reporter 上报缓存信息的插件
 type Reporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -74,17 +74,17 @@ type Reporter struct {
 	recoverAllEndReason   string
 }
 
-// 插件类型
+// Type 插件类型
 func (s *Reporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-// 插件名称
+// Name 插件名称
 func (s *Reporter) Name() string {
 	return "serviceCache"
 }
 
-// enable
+// IsEnable enable
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -98,7 +98,7 @@ func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	return false
 }
 
-// 初始化
+// Init 初始化
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.globalCtx = ctx.ValueCtx
@@ -136,13 +136,13 @@ func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// 启动上报协程
+// Start 启动上报协程
 func (s *Reporter) Start() error {
 	go s.uploadStatusHistory()
 	return nil
 }
 
-// 这个插件不实现ReportStat接口，按照服务变化来收集统计信息
+// ReportStat 这个插件不实现ReportStat接口，按照服务变化来收集统计信息
 func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	if t != model.CircuitBreakStat {
 		return nil
@@ -808,7 +808,7 @@ func (s *Reporter) createSvcLocalValue(event *common.PluginEvent) error {
 	return nil
 }
 
-// destroy 解决匿名组合中该函数二义性问题
+// Destroy 解决匿名组合中该函数二义性问题
 func (s *Reporter) Destroy() error {
 	err := s.PluginBase.Destroy()
 	if err != nil {

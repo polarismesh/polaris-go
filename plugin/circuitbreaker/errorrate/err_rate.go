@@ -66,13 +66,12 @@ func (g *CircuitBreaker) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable enable
 func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 const (
@@ -115,7 +114,7 @@ func (g *CircuitBreaker) getSliceWindows(instance model.Instance) []*metric.Slic
 	return instanceInProto.GetSliceWindows(g.ID())
 }
 
-// 实时上报健康状态并进行失败率统计
+// Stat 实时上报健康状态并进行失败率统计
 func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	instance := gauge.GetCalledInstance()
 	cbStatus := instance.GetCircuitBreakerStatus()
@@ -161,7 +160,7 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 	return false
 }
 
-// 转换成熔断错误率阈值
+// ToErrorRateThreshold 转换成熔断错误率阈值
 func ToErrorRateThreshold(errorRatePercent int) float64 {
 	return float64(errorRatePercent) / 100
 }
@@ -177,6 +176,7 @@ func (g *CircuitBreaker) generateSliceWindow(event *common2.PluginEvent) error {
 	return nil
 }
 
+// CircuitBreak .熔断
 // 定期进行熔断计算，返回需要进行状态转换的实例ID
 // 入参包括全量服务实例，以及当前周期的健康探测结果
 func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreaker.Result, error) {

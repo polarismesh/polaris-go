@@ -47,7 +47,7 @@ var (
 	}
 )
 
-// 通过事件类型获取请求类型
+// GetProtoRequestType 通过事件类型获取请求类型
 func GetProtoRequestType(event model.EventType) namingpb.DiscoverRequest_DiscoverRequestType {
 	if reqType, ok := eventTypeToProtoRequestType[event]; ok {
 		return reqType
@@ -55,7 +55,7 @@ func GetProtoRequestType(event model.EventType) namingpb.DiscoverRequest_Discove
 	return namingpb.DiscoverRequest_UNKNOWN
 }
 
-// 通过应答类型获取事件类型
+// GetEventType 通过应答类型获取事件类型
 func GetEventType(respType namingpb.DiscoverResponse_DiscoverResponseType) model.EventType {
 	if eventType, ok := protoRespTypeToEventType[respType]; ok {
 		return eventType
@@ -63,13 +63,13 @@ func GetEventType(respType namingpb.DiscoverResponse_DiscoverResponseType) model
 	return model.EventUnknown
 }
 
-// 从discover获取到了类似500的错误码
+// DiscoverError 从discover获取到了类似500的错误码
 type DiscoverError struct {
 	Code    int32
 	Message string
 }
 
-// 获取server错误码类型的map
+// ServerErrorCodeTypeMap 获取server错误码类型的map
 var ServerErrorCodeTypeMap = map[uint32]model.ErrCode{
 	200: model.ErrCodeSuccess,
 	400: model.ErrCodeInvalidRequest,
@@ -79,7 +79,7 @@ var ServerErrorCodeTypeMap = map[uint32]model.ErrCode{
 	500: model.ErrCodeServerError,
 }
 
-// 将server返回码转化为服务调用的返回码
+// ConvertServerErrorToRpcError 将server返回码转化为服务调用的返回码
 func ConvertServerErrorToRpcError(code uint32) model.ErrCode {
 	typCode := code / 1000
 	rpcCode, ok := ServerErrorCodeTypeMap[typCode]
@@ -89,12 +89,12 @@ func ConvertServerErrorToRpcError(code uint32) model.ErrCode {
 	return rpcCode
 }
 
-// 将错误信息转化为string
+// Error 将错误信息转化为string
 func (d *DiscoverError) Error() string {
 	return fmt.Sprintf("receive %d from discover, message is %s", d.Code, d.Message)
 }
 
-// 校验消息
+// ValidateMessage 校验消息
 // 校验返回码为500或者消息类型不对
 func ValidateMessage(eventKey *model.ServiceEventKey, message interface{}) error {
 	respValue, ok := message.(*namingpb.DiscoverResponse)

@@ -65,7 +65,7 @@ var (
 	mu sync.Mutex
 )
 
-// Connector cl5服务端代理，使用GRPC协议对接
+// DiscoverConnector cl5服务端代理，使用GRPC协议对接
 type DiscoverConnector struct {
 	*common.RunContext
 	ServiceConnector      *plugin.PluginBase
@@ -118,7 +118,7 @@ func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverC
 	}
 }
 
-// 初始化connector调度主协程
+// StartUpdateRoutines 初始化connector调度主协程
 func (g *DiscoverConnector) StartUpdateRoutines() {
 	g.updateTaskSet = &sync.Map{}
 	g.taskChannel = make(chan *clientTask, g.queueSize)
@@ -161,7 +161,7 @@ func (g *DiscoverConnector) doLog() {
 	}
 }
 
-// 用于recv协程通知send协程关于链路故障的问题
+// ClientFailEvent 用于recv协程通知send协程关于链路故障的问题
 type ClientFailEvent struct {
 	connID uint32
 }
@@ -369,7 +369,7 @@ func (g *DiscoverConnector) onClientTask(streamingClient *StreamingClient, clien
 	return streamingClient
 }
 
-// 流式客户端，带连接
+// StreamingClient 流式客户端，带连接
 type StreamingClient struct {
 	// 所属的discoverConnector
 	connector *DiscoverConnector
@@ -393,7 +393,7 @@ type StreamingClient struct {
 	cancel context.CancelFunc
 }
 
-// 关闭流并释放连接
+// CloseStream 关闭流并释放连接
 func (s *StreamingClient) CloseStream(closeSend bool) bool {
 	endStreamOk := atomic.CompareAndSwapUint32(&s.endStream, 0, 1)
 	if endStreamOk {
@@ -452,7 +452,7 @@ func (s *StreamingClient) getSvcUpdateTasks(key *model.ServiceEventKey) (tasks [
 //	return endStreamOk
 // }
 
-// 设置流关闭
+// IsEndStream 设置流关闭
 func (s *StreamingClient) IsEndStream() bool {
 	return atomic.LoadUint32(&s.endStream) > 0
 }
@@ -472,10 +472,9 @@ func (s *StreamingClient) checkErrorReport(grpcErr error, resp *namingpb.Discove
 			// 如果doSend发现有错误，allTaskTimeout或者idle，那么上报超时错误
 			if atomic.LoadUint32(&s.hasError) == 1 {
 				return true, int32(model.ErrorCodeRpcTimeout), discoverErr
-			} else {
-				// 如果doSend没发现错误，也进行了CloseStream，那么就是进行了切换连接，不进行上报
-				return false, 0, discoverErr
 			}
+			// 如果doSend没发现错误，也进行了CloseStream，那么就是进行了切换连接，不进行上报
+			return false, 0, discoverErr
 		}
 		// 如果receiveAndNotify由于错误关闭了streamingClient，那么就是由于Recv过程中出现了错误，
 		// 现在统一返回ErrCodeInvalidServerResponse，表示discover没有返回正常的数据
@@ -861,7 +860,7 @@ type serviceUpdateTask struct {
 	retryLock *sync.Mutex
 }
 
-// 将一个更新任务格式化为string
+// String 将一个更新任务格式化为string
 func (s *serviceUpdateTask) String() string {
 	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v, longRun: %s}",
 		s.Namespace, s.Service, s.Type, longRunMap[atomic.LoadUint32(&s.longRun)])
@@ -956,7 +955,7 @@ func (g *DiscoverConnector) addFirstTask(updateTask *serviceUpdateTask) error {
 	return nil
 }
 
-// DeRegisterEventHandler 反注册事件监听器
+// DeRegisterServiceHandler 反注册事件监听器
 // 异常场景：当sdk已经退出过程中，则返回error
 func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 	updateTask := &serviceUpdateTask{}
@@ -980,7 +979,7 @@ func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey)
 	return nil
 }
 
-// 更新服务端地址
+// UpdateServers 更新服务端地址
 // 异常场景：当地址列表为空，或者地址全部连接失败，则返回error，调用者需进行重试
 func (g *DiscoverConnector) UpdateServers(key *model.ServiceEventKey) error {
 	if nil != g.connManager {

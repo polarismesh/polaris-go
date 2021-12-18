@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/common"
 )
 
-// 熔断器
+// CircuitBreaker 熔断器
 type CircuitBreaker struct {
 	*plugin.PluginBase
 	wholeCfg        config.Configuration
@@ -74,13 +74,12 @@ func (g *CircuitBreaker) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable enable
 func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 const (
@@ -127,7 +126,7 @@ func (g *CircuitBreaker) regularStat(gauge model.InstanceGauge, metricWindow *me
 	return false
 }
 
-// 实时上报健康状态并进行连续失败熔断判断，返回当前实例是否需要进行立即熔断
+// Stat 实时上报健康状态并进行连续失败熔断判断，返回当前实例是否需要进行立即熔断
 func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	instance := gauge.GetCalledInstance()
 	cbStatus := instance.GetCircuitBreakerStatus()
@@ -142,6 +141,7 @@ func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	return g.regularStat(gauge, metricWindows[metricIdxErrCount]), nil
 }
 
+// GetErrorCountConfig .获取错误的连续错误数熔断配置
 func (g *CircuitBreaker) GetErrorCountConfig(namespace string, service string) config.ErrorCountConfig {
 	cfg := g.cfg
 	serviceSp := g.wholeCfg.GetConsumer().GetServiceSpecific(namespace, service)
@@ -179,6 +179,7 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 	return false
 }
 
+// CircuitBreak 熔断计算
 // 定期或触发式进行熔断计算，返回需要进行状态转换的实例ID
 // 入参包括全量服务实例，以及当前周期的健康探测结果
 func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreaker.Result, error) {
