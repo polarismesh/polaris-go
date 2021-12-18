@@ -1,37 +1,39 @@
 # Polaris Go
 
-[中文文档](./README-zh.md)
+[English Document](./README.md)
 
-## Polaris uses service fuse function
+## 北极星使用服务熔断功能
 
-Polaris supports fusing abnormal services, interfaces, instances, or instance groups in a timely manner to reduce the request failure rate.
+北极星支持及时熔断异常的服务、接口、实例或者实例分组，降低请求失败率。
 
-## How To Build
+## 如何构建
 
-- linux/mac build command
+直接依赖go mod进行构建
+
+- linux/mac构建命令
 ```
 go build -o circuitbreaker
 ```
-- windows build command
+- windows构建命令
 ```
 go build -o circuitbreaker.exe
 ```
 
-## How To Use
+## 如何使用
 
-### Create Service
+### 创建服务
 
-Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
+预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
 
 ![create_service](./image/create_service.png)
 
-### Create Service Instance
+### 创建服务实例
 
 ![create_service_instances](./image/create_service_instances.png)
 
-### Change setting
+### 修改配置
 
-To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
+指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
 
 ```
 global:
@@ -40,23 +42,23 @@ global:
     - 127.0.0.1:8091
 ```
 
-### Execute Program
+### 执行程序
 
-Directly execute the generated executable program
+直接执行生成的可执行程序
 
-- linux/mac run command
+- linux/mac运行命令
 ```
 ./circuitbreaker --service="your service name" --namespace="your namespace name"
 ```
 
-- windows run command
+- windows运行命令
 ```
 ./circuitbreaker.exe --service="your service name" --namespace="your namespace name"name"
 ```
 
-### Desired result
+### 期望结果
 
-After running, only the unbroken instances will be printed out in the end
+运行后，最终只会打印出没有被熔断的实例
 
 ```
 ➜  circuitbreaker git:(feat_demo) ✗ ./circuitbreaker --service=polaris_go_provider

@@ -1,41 +1,43 @@
-# QuickStart
+# Polaris Go
 
-[中文文档](./README-zh.md)
+[English Document](./README.md)
 
-## Polaris uses the service current limit function 
+## 北极星使用服务限流功能
 
-Polaris supports access current limiting for different request sources and system resources to prevent services from being overwhelmed. 
+北极星支持针对不同的请求来源和系统资源进行访问限流，避免服务被压垮。
 
-## How To Build
+## 如何构建
 
-- linux/mac build command
+直接依赖go mod进行构建
+
+- linux/mac构建命令
 ```
 go build -o ratelimit
 ```
-- windows build command
+- windows构建命令
 ```
 go build -o ratelimit.exe
 ```
 
-## How To Use
+## 如何使用
 
-### Create Service
+### 创建服务
 
-Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
+预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
 
 ![create_service](./image/create_service.png)
 
-### Create RateLimit Rule
+### 创建限流规则
 
 ![create_service_ratelimit](./image/create_service_ratelimit.png)
 
-### Create Service Instance
+### 创建服务实例
 
 ![create_service_instances](./image/create_service_instances.png)
 
-### Change setting
+### 修改配置
 
-To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
+指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
 
 ```
 global:
@@ -44,21 +46,23 @@ global:
     - 127.0.0.1:8091
 ```
 
-### Execute Program
+### 执行程序
 
-- linux/mac run command
+直接执行生成的可执行程序
+
+- linux/mac运行命令
 ```
 ./ratelimit --service={your service name} --namespace={your namespace name} --labels={your labels, ex: k1:v1,k2:v2} --concurrency={your request concurrency}
 ```
 
-- windows run command
+- windows运行命令
 ```
 ./ratelimit.exe --service={your service name} --namespace={your namespace name} --labels={your labels, ex: k1:v1,k2:v2} --concurrency={your request concurrency}
 ```
 
-### Desired result
+### 期望结果
 
-After running, the three coroutines will finally print `quota-ret: 0`, indicating that they have obtained the requested quota; the two coroutines will print `quota-ret: -1`, indicating that the current flow is restricted 
+运行后，最终三个协程将打印`quota-ret : 0`，表示获得了请求配额；两个协程打印`quota-ret : -1`，标识当前被限流
 
 ```
 ➜  ratelimit git:(feat_demo) ✗ ./ratelimit --service=polaris_go_provider --labels="env:test,method:GetUser" --concurrency=5 
