@@ -1,41 +1,41 @@
 # Polaris Go
 
-## 北极星主动探测功能实例
+[中文文档](./README-zh.md)
 
-北极星支持主调端触发的主动探测能力，支持两种探测模式
+## Examples of Polaris Active Detection Function
 
-- 持续探测：对客户端缓存的所有的服务实例，进行持续探测，探测失败则被熔断，探测成功则半开
+Polaris supports the active detection capability triggered by the main tuning terminal, and supports two detection modes
 
-- 故障时探测：当服务实例被熔断后，进行探测，探测成功则半开
+- Continuous detection: Perform continuous detection on all service instances cached by the client. If the detection fails, it will be fused, and if the detection succeeds, it will be half-open.
 
-支持以下2种探测协议，可同时使用，也可只使用其中一种
+- Detection during failure: When the service instance is blown, it will be detected, and the detection will be half-open if it succeeds.
 
-- HTTP协议：支持针对被调端的HTTP接口进行探测，用户可以指定http path, header等信息
+Support the following two detection protocols, which can be used at the same time, or only one of them can be used
 
-- TCP协议：支持tcp connect模式的端口探测
+- HTTP protocol: Supports detection of the HTTP interface of the called end, and the user can specify http path, header and other information
 
-## 如何构建
+- TCP protocol: support port detection in tcp connect mode 
 
-直接依赖go mod进行构建
+## How To Build
 
-- linux/mac构建命令
+- linux/mac build command
 ```
 go build -o activehealthcheck
 ```
-- windows构建命令
+- windows build command
 ```
 go build -o activehealthcheck.exe
 ```
 
-## 如何使用
+## How To Use
 
-### 创建服务
+### Create Service
 
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
+Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
 
-### 修改配置
+### Change setting
 
-指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
+To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
 
 ```
 global:
@@ -44,25 +44,22 @@ global:
     - 127.0.0.1:8091
 ```
 
-### 执行程序
+### Execute Program
 
-直接执行生成的可执行程序
-
-- linux/mac运行命令
+- linux/mac run command
 ```
 ./activehealthcheck --service="your service name" --namespace="your namespace name"
 ```
 
-- windows运行命令
+- windows run command
 ```
 ./activehealthcheck.exe --service="your service name" --namespace="your namespace name"
 ```
 
-### 期望结果
+### Desired result
 
-运行后，最终会打印出每个实例的熔断状态，状态为open，代表的是被熔断，状态为close，代表是可继续提供服务。
-
-经过健康检查后，只有一个实例的状态为close，其他都是open
+After running, it will finally print out the fusing status of each instance. The status is open, which means it is fused, and the status is close, which means it can continue to provide services.
+After the health check, only one instance is closed, the others are open 
 
 ```
 2021/09/18 16:58:02 instance after activehealthcheck 0 is 127.0.0.1:2003, status is open

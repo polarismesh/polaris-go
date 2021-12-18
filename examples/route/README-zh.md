@@ -1,41 +1,43 @@
-# QuickStart
+# Polaris Go
 
-[中文文档](./README-zh.md)
+[English Document](./README.md)
 
-## Polaris uses service routing function 
+## 北极星使用服务路由功能
 
-Polaris supports dynamic scheduling of online traffic based on request tags, instance tags, and tag matching rules, which can be applied to various scenarios such as geographical proximity, unitized isolation, and canary release. 
+北极星支持根据请求标签、实例标签和标签匹配规则，对线上流量进行动态调度，可以应用于按地域就近、单元化隔离和金丝雀发布等多种场景。
 
-## How To Build
+## 如何构建
 
-- linux/mac build command
+直接依赖go mod进行构建
+
+- linux/mac构建命令
 ```
 go build -o route
 ```
-- windows build command
+- windows构建命令
 ```
 go build -o route.exe
 ```
 
-## How To Use
+## 如何使用
 
-### Create Service
+### 创建服务
 
-Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
+预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
 
 ![create_service](./image/create_service.png)
 
-### Create Route Rule
+### 创建路由规则
 
 ![create_service_rule](./image/create_service_rule.png)
 
-### Create Service Instance
+### 创建服务实例
 
 ![create_service_instances](./image/create_service_instances.png)
 
-### Change setting
+### 修改配置
 
-To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
+指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
 
 ```
 global:
@@ -44,21 +46,23 @@ global:
     - 127.0.0.1:8091
 ```
 
-### Execute Program
+### 执行程序
 
-- linux/mac run command
+直接执行生成的可执行程序
+
+- linux/mac运行命令
 ```
 ./route --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
 ```
 
-- windows run command
+- windows运行命令
 ```
 ./route.exe --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
 ```
 
-### Desired result
+### 期望结果
 
-After running, it will finally print the service instance with the label `env=test` 
+运行后，最终会打印具有标签`env=test`的服务实例
 
 ```
 ➜  route git:(feat_demo) ✗ ./route --service="polaris_go_provider"
