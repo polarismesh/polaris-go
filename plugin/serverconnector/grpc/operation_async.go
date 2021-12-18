@@ -86,13 +86,13 @@ func (g *Connector) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// 启动插件
+// Start 启动插件
 func (g *Connector) Start() error {
 	g.discoverConnector.StartUpdateRoutines()
 	return nil
 }
 
-// 获取连接管理器
+// GetConnectionManager 获取连接管理器
 func (g *Connector) GetConnectionManager() network.ConnectionManager {
 	return g.connManager
 }
@@ -115,7 +115,7 @@ func (g *Connector) Destroy() error {
 	return nil
 }
 
-// IsEnable
+// IsEnable .插件开关
 func (g *Connector) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -129,27 +129,19 @@ func (g *Connector) RegisterServiceHandler(svcEventHandler *serverconnector.Serv
 	return g.discoverConnector.RegisterServiceHandler(svcEventHandler)
 }
 
-// DeRegisterEventHandler 反注册事件监听器
+// DeRegisterServiceHandler 反注册事件监听器
 // 异常场景：当sdk已经退出过程中，则返回error
 func (g *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 	return g.discoverConnector.DeRegisterServiceHandler(key)
 }
 
-// 更新服务端地址
+// UpdateServers 更新服务端地址
 // 异常场景：当地址列表为空，或者地址全部连接失败，则返回error，调用者需进行重试
 func (g *Connector) UpdateServers(key *model.ServiceEventKey) error {
 	return g.discoverConnector.UpdateServers(key)
 }
 
-<<<<<<< HEAD
-func (g *Connector) GetAsyncRateLimitConnector() serverconnector.AsyncRateLimitConnector {
-	return g.asyncRLimitConnector
-}
-
 // init 注册插件信息
-=======
-//init 注册插件信息
->>>>>>> upstream/main
 func init() {
 	plugin.RegisterConfigurablePlugin(&Connector{}, &networkConfig{})
 }
