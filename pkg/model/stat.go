@@ -96,9 +96,9 @@ type InstanceGauge interface {
 	ServiceSimple
 	//获取调用api
 	GetAPI() ApiOperation
-	// 实例的节点信息
+	//实例的节点信息
 	GetHost() string
-	// 实例的端口信息
+	//实例的端口信息
 	GetPort() int
 	// GetInstance get instance info
 	// GetInstance() Instance
@@ -106,13 +106,13 @@ type InstanceGauge interface {
 	GetRetStatus() RetStatus
 	//实例的返回码
 	GetRetCodeValue() int32
-	// 调用时延
+	//调用时延
 	GetDelay() *time.Duration
-	// 调用时延
+	//调用时延
 	GetDelayRange() ApiDelayRange
-	// 获取被调节点
+	//获取被调节点
 	GetCalledInstance() Instance
-	// 检测指标是否合法
+	//检测指标是否合法
 	Validate() error
 }
 

@@ -97,7 +97,6 @@ func (svr *PolarisProvider) doHeartbeat() {
 	ticker := time.NewTicker(time.Duration(10 * time.Second))
 	for range ticker.C {
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.InstanceID = resp.InstanceID
 		heartbeatRequest.Namespace = namespace
 		heartbeatRequest.Service = service
 		heartbeatRequest.Host = host

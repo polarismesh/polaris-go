@@ -303,7 +303,7 @@ func (e *Engine) Destroy() error {
 }
 
 // 上报统计数据到统计插件中
-func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) error {
+func (e *Engine) SyncReportStat(typ model.MetricType, gauge model.InstanceGauge) error {
 	if !model.ValidMetircType(typ) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid report metric type")
 	}
