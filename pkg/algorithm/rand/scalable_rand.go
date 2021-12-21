@@ -25,13 +25,13 @@ import (
 	"time"
 )
 
-// 可水平扩展的随机数发生器
+// ScalableRand 可水平扩展的随机数发生器
 type ScalableRand struct {
 	initSeed int64
 	randPool *sync.Pool
 }
 
-// 初始化随机数发生器
+// NewScalableRand 初始化随机数发生器
 func NewScalableRand() *ScalableRand {
 	scalableRand := &ScalableRand{
 		randPool: &sync.Pool{},
@@ -65,7 +65,7 @@ func (s *ScalableRand) getAndSetInitSeed(seed int64) bool {
 	return atomic.CompareAndSwapInt64(&s.initSeed, initSeed, seed)
 }
 
-// 获取随机数
+// Intn 获取随机数
 func (s *ScalableRand) Intn(n int) int {
 	var randSeed *rand.Rand
 	value := s.randPool.Get()
@@ -79,15 +79,15 @@ func (s *ScalableRand) Intn(n int) int {
 	return randValue
 }
 
-//全局随机种子
+// 全局随机种子
 var globalRand *ScalableRand
 
-//返回全局随机数
+// Intn 返回全局随机数
 func Intn(n int) int {
 	return globalRand.Intn(n)
 }
 
-//初始化全局随机种子
+// 初始化全局随机种子
 func init() {
 	globalRand = NewScalableRand()
 }

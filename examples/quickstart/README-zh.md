@@ -1,23 +1,45 @@
 # Polaris Go
 
-## 北极星主调端样例
+[English Document](./README.md)
 
-北极星主调端样例包含了最简单的客户端基本操作，包含以下2个操作场景：
+## 目录说明
 
-- 根据服务名获取全量服务实例（GetAllInstances）
+> provider
 
-- 根据服务名获取单个服务实例（GetOneInstance）
+北极星被调端样例包含了最简单的被调端基本操作
+
+> consumer
+
+北极星主调端样例包含了最简单的客户端基本操作
+
 
 ## 如何构建
+
+> provider
 
 直接依赖go mod进行构建
 
 - linux/mac构建命令
 ```
+cd ./provider
+go build -o provider
+```
+- windows构建命令
+```
+cd ./consumer
+go build -o provider.exe
+```
+
+> consumer
+
+- linux/mac构建命令
+```
+cd ./consumer
 go build -o consumer
 ```
 - windows构建命令
 ```
+cd ./consumer
 go build -o consumer.exe
 ```
 
@@ -42,12 +64,35 @@ global:
 
 直接执行生成的可执行程序
 
+> provider
+
 - linux/mac运行命令
 ```
-./consumer --service="your service name" --namespace="your namespace name"
+./provider
 ```
 
 - windows运行命令
 ```
-./consumer.exe --service="your service name" --namespace="your namespace name"
+./provider.exe
+```
+
+> consumer
+
+
+- linux/mac运行命令
+```
+./consumer
+```
+
+- windows运行命令
+```
+./consumer.exe
+```
+
+### 验证
+
+```
+curl http://127.0.0.1:18080/echo
+
+Hello, I'm EchoServerGolang Provider
 ```

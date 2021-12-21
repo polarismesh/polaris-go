@@ -13,9 +13,6 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissionsr and limitations under the License.
 //
-//@Author: springliao
-//@Description:
-//@Time: 2021/10/19 14:57
 
 package prometheus
 

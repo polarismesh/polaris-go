@@ -7,5 +7,6 @@ polaris/log/*
 
 angevil_test/
 test/other/other_test_suit.go
+*.log
 
-vendor/
+/vendor/

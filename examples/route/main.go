@@ -19,18 +19,25 @@ package main
 
 import (
 	"flag"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
-	namespace string
-	service   string
+	namespace     string
+	service       string
+	selfNamespace string
+	selfService   string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "", "service")
+
+	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
+	flag.StringVar(&selfService, "selfService", "", "selfService")
 }
 
 func main() {
@@ -46,31 +53,26 @@ func main() {
 	}
 	defer consumer.Destroy()
 
-	log.Printf("start to invoke getAllInstances operation")
-	getAllRequest := &api.GetAllInstancesRequest{}
-	getAllRequest.Namespace = namespace
-	getAllRequest.Service = service
-	allInstResp, err := consumer.GetAllInstances(getAllRequest)
+	log.Printf("start to invoke GetInstancesRequest operation")
+	getInstancesRequest := &api.GetInstancesRequest{}
+	getInstancesRequest.Namespace = namespace
+	getInstancesRequest.Service = service
+	getInstancesRequest.SourceService = &model.ServiceInfo{
+		Service:   selfNamespace,
+		Namespace: selfService,
+		Metadata: map[string]string{
+			"env": "dev",
+		},
+	}
+	allInstResp, err := consumer.GetInstances(getInstancesRequest)
 	if nil != err {
-		log.Fatalf("fail to getAllInstances, err is %v", err)
+		log.Fatalf("fail to GetInstancesRequest, err is %v", err)
 	}
 	instances := allInstResp.GetInstances()
 	if len(instances) > 0 {
 		for i, instance := range instances {
-			log.Printf("instance getAllInstances %d is %s:%d", i, instance.GetHost(), instance.GetPort())
+			log.Printf("instance GetInstances %d is %s:%d metadata=>%#v", i, instance.GetHost(), instance.GetPort(), instance.GetMetadata())
 		}
 	}
 
-	log.Printf("start to invoke getOneInstance operation")
-	getOneRequest := &api.GetOneInstanceRequest{}
-	getOneRequest.Namespace = namespace
-	getOneRequest.Service = service
-	oneInstResp, err := consumer.GetOneInstance(getOneRequest)
-	if nil != err {
-		log.Fatalf("fail to getOneInstance, err is %v", err)
-	}
-	instance := oneInstResp.GetInstance()
-	if nil != instance {
-		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-	}
 }

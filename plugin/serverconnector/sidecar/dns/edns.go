@@ -120,9 +120,9 @@ type EDNS0 interface {
 	// the length of the slice as the length of the option data.
 	UnpackData([]byte) error
 	// String returns the string representation of the option.
-	//String() string
+	// String() string
 	// copy returns a deep-copy of the option.
-	//copy() EDNS0
+	// copy() EDNS0
 }
 
 // Base EDNS data common
@@ -174,13 +174,13 @@ func (b *BaseEDNSData) PackData() ([]byte, error) {
 	return b.OptionData, nil
 }
 
-//UnpackData
+// UnpackData
 func (b *BaseEDNSData) UnpackData(data []byte) error {
 	b.OptionData = data
 	return nil
 }
 
-//Option() uint16
+// Option() uint16
 func (b *BaseEDNSData) Option() uint16 {
 	return 0
 }

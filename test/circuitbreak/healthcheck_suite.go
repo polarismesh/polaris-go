@@ -20,34 +20,36 @@ package circuitbreak
 import (
 	"bytes"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model/local"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model/local"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	detectNamespace = "testod"
-	//测试的默认服务名
+	// 测试的默认服务名
 	detectService = "svc1"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	detectIPAdress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	detectPort = 8008
 )
 
@@ -63,7 +65,7 @@ func (t *HealthCheckTestingSuite) GetName() string {
 	return "HealthCheckSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *HealthCheckTestingSuite) SetUpSuite(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -156,7 +158,7 @@ func Logic(c *check.C,
 	c.Assert(err, check.IsNil)
 	defer sdkCtx.Destroy()
 	consumerAPI := api.NewConsumerAPIByContext(sdkCtx)
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.Namespace = detectNamespace
 	request.Service = detectService
@@ -184,7 +186,7 @@ func Logic(c *check.C,
 	time.Sleep(2 * time.Second)
 	c.Assert(respInstance.GetCircuitBreakerStatus(), check.NotNil)
 	c.Assert(respInstance.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//openTime := localValues.GetCircuitBreakerStatus().GetStartTime()
+	// openTime := localValues.GetCircuitBreakerStatus().GetStartTime()
 	CheckInstanceAvailable(c, consumerAPI, respInstance, false, detectNamespace, detectService)
 
 	if checkFlag {
@@ -222,7 +224,7 @@ func startTCPServer(address string, sTime int, retByte []byte) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		fmt.Println("Error listening", err.Error())
-		return err //终止程序
+		return err // 终止程序
 	}
 	defer listener.Close()
 	// 监听并接受来自客户端的连接

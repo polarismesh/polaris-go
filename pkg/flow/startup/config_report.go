@@ -18,13 +18,14 @@
 package startup
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"time"
 )
 
-//创建配置上报回调
+// 创建配置上报回调
 func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext) *ConfigReportCallBack {
 	return &ConfigReportCallBack{
 		engine:    engine,
@@ -33,14 +34,14 @@ func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext) 
 	}
 }
 
-//自身配置上报任务回调
+// 自身配置上报任务回调
 type ConfigReportCallBack struct {
 	engine    model.Engine
 	globalCtx model.ValueContext
 	interval  time.Duration
 }
 
-//执行任务
+// 执行任务
 func (c *ConfigReportCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < c.interval {
@@ -52,13 +53,13 @@ func (c *ConfigReportCallBack) Process(
 	if nil != err {
 		log.GetBaseLogger().Errorf("report sdk config info, IP: %s, PID: %d, UID: %s, error:%s",
 			token.IP, token.PID, token.UID, err)
-		//发生错误则进行重试，直到上报成功为止
+		// 发生错误则进行重试，直到上报成功为止
 		return model.SKIP
 	}
 	return model.CONTINUE
 }
 
-//OnTaskEvent 任务事件回调
+// OnTaskEvent 任务事件回调
 func (c *ConfigReportCallBack) OnTaskEvent(event model.TaskEvent) {
 
 }

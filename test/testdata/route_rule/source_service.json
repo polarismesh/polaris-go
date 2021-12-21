@@ -9,7 +9,7 @@
           "namespace": "namespace1",
           "metadata": {
             "client": {
-              "type" : 1,
+              "type": 1,
               "value": "and*"
             }
           }
@@ -33,7 +33,7 @@
           "namespace": "namespace1",
           "metadata": {
             "logic_set": {
-              "type" : 1,
+              "type": 1,
               "value": "set1"
             }
           },

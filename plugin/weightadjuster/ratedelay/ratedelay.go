@@ -23,33 +23,33 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//Adjuster 根据错误率和时延来进行动态权重调整
+// Adjuster 根据错误率和时延来进行动态权重调整
 type Adjuster struct {
 	*plugin.PluginBase
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *Adjuster) Type() common.Type {
 	return common.TypeWeightAdjuster
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *Adjuster) Name() string {
 	return "rateDelayAdjuster"
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *Adjuster) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *Adjuster) Destroy() error {
 	return nil
 }
 
-//实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
+// 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
 func (g *Adjuster) RealTimeAdjustDynamicWeight(model.InstanceGauge) (bool, error) {
 	return false, nil
 }
@@ -59,7 +59,7 @@ func (g *Adjuster) TimingAdjustDynamicWeight(service model.ServiceInstances) ([]
 	return nil, nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&Adjuster{})
 }

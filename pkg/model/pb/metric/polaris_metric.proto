@@ -7,132 +7,132 @@ import "google/protobuf/wrappers.proto";
 
 // 统计类型
 enum MetricType {
-   // 请求数
-   ReqCount = 0;
-   // 被限流数
-   LimitCount = 1;
-   // 按时延来进行上报
-   ReqCountByDelay = 2;
-   // 通用错误数
-   ErrorCount = 3;
-   // 通过错误类型来统计上报
-   ErrorCountByType = 4;
+  // 请求数
+  ReqCount = 0;
+  // 被限流数
+  LimitCount = 1;
+  // 按时延来进行上报
+  ReqCountByDelay = 2;
+  // 通用错误数
+  ErrorCount = 3;
+  // 通过错误类型来统计上报
+  ErrorCountByType = 4;
 }
 
 // 统计维度
 // 这里直接使用基础类型可以避免转换过程
 message MetricDimension {
-    //维度类型
-    MetricType type = 1;
-    //维度的具体值，比如具体错误类型
-    string value = 2;
+  //维度类型
+  MetricType type = 1;
+  //维度的具体值，比如具体错误类型
+  string value = 2;
 }
 
 // 统计标识，用于唯一关联一种类型的统计滑窗
 // 这里直接使用基础类型可以避免转换过程
 message MetricKey {
-    // 服务名
-    string service = 1;
-    // 命名空间
-    string namespace = 2;
-    // 服务子集群，格式为key1:value1|key2:value2
-    // 如果要查询服务下面所有的subSet信息，subset字段可以填*
-    string subset = 3;
-    // 业务标签信息，格式为key1:value1|key2:value2
-    // 如果要查询服务下面所有的labels信息，labels字段可以填*
-    string labels = 4;
-    // 当前上报的角色类型，主调或者被调
-    enum Role {
-        // 主调
-        Caller = 0;
-        //被调
-        Callee = 1;
-    }
-    Role role = 5;
+  // 服务名
+  string service = 1;
+  // 命名空间
+  string namespace = 2;
+  // 服务子集群，格式为key1:value1|key2:value2
+  // 如果要查询服务下面所有的subSet信息，subset字段可以填*
+  string subset = 3;
+  // 业务标签信息，格式为key1:value1|key2:value2
+  // 如果要查询服务下面所有的labels信息，labels字段可以填*
+  string labels = 4;
+  // 当前上报的角色类型，主调或者被调
+  enum Role {
+    // 主调
+    Caller = 0;
+    //被调
+    Callee = 1;
+  }
+  Role role = 5;
 }
- 
+
 //统计初始化请求
 message MetricInitRequest {
-    //消息ID，用于和应答相对应
-    google.protobuf.Int64Value msgId = 1;
-    // 标识
-    MetricKey key = 2;
-    // 统计类型
-    repeated MetricDimension dimensions = 3;
-    // 统计滑窗
-    message MetricWindow {
-       // 滑窗统计周期，单位ms
-      int64 duration = 1;
-       // 滑窗统计精度
-       uint32 precision = 2;
-    }
-    repeated MetricWindow windows = 4;
+  //消息ID，用于和应答相对应
+  google.protobuf.Int64Value msgId = 1;
+  // 标识
+  MetricKey key = 2;
+  // 统计类型
+  repeated MetricDimension dimensions = 3;
+  // 统计滑窗
+  message MetricWindow {
+    // 滑窗统计周期，单位ms
+    int64 duration = 1;
+    // 滑窗统计精度
+    uint32 precision = 2;
+  }
+  repeated MetricWindow windows = 4;
 }
- 
+
 //统计查询请求
 message MetricQueryRequest {
-    //消息ID，用于和应答相对应
-    google.protobuf.Int64Value msgId = 1;
-    // 标识
-    MetricKey key = 2;
-    // 统计类型
-    repeated MetricDimension dimensions = 3;
-    // 查询周期，单位ms
-    // 该查询周期必须不大于初始化时候给的window信息，按最近的一个精度滑窗向上取整
-    int64 duration = 4;
+  //消息ID，用于和应答相对应
+  google.protobuf.Int64Value msgId = 1;
+  // 标识
+  MetricKey key = 2;
+  // 统计类型
+  repeated MetricDimension dimensions = 3;
+  // 查询周期，单位ms
+  // 该查询周期必须不大于初始化时候给的window信息，按最近的一个精度滑窗向上取整
+  int64 duration = 4;
 }
- 
+
 //周期统计上报请求
 message MetricRequest {
-    //消息ID，用于和应答相对应
-    google.protobuf.Int64Value msgId = 1;
-    // 标识
-    MetricKey key = 2;
-    // 上报的数据
-    // 可一次同时上报多种类型的统计数据
-    message MetricIncrement {
-       // 滑窗统计周期，单位ms
-       int64 duration = 1;
-       // 单次上报的统计数据
-       message Values {
-          // 统计类型
-          MetricDimension dimension = 1;
-          // 上报的统计值，按步长为最小单位，包含2次上报之间的增量数据
-          // 下标越小，则数据是越近
-          repeated int64 values = 2;
-       }
-       repeated Values values = 2;
-       // 滑窗统计精度
-       uint32 precision = 3;
+  //消息ID，用于和应答相对应
+  google.protobuf.Int64Value msgId = 1;
+  // 标识
+  MetricKey key = 2;
+  // 上报的数据
+  // 可一次同时上报多种类型的统计数据
+  message MetricIncrement {
+    // 滑窗统计周期，单位ms
+    int64 duration = 1;
+    // 单次上报的统计数据
+    message Values {
+      // 统计类型
+      MetricDimension dimension = 1;
+      // 上报的统计值，按步长为最小单位，包含2次上报之间的增量数据
+      // 下标越小，则数据是越近
+      repeated int64 values = 2;
     }
-    repeated MetricIncrement increments = 3;
-     // 上报数据最后发生的时间（统计server绝对时间），单位unixnano
-    google.protobuf.Int64Value timestamp = 4;
+    repeated Values values = 2;
+    // 滑窗统计精度
+    uint32 precision = 3;
+  }
+  repeated MetricIncrement increments = 3;
+  // 上报数据最后发生的时间（统计server绝对时间），单位unixnano
+  google.protobuf.Int64Value timestamp = 4;
 }
- 
+
 //统计应答
 message MetricResponse {
-    // 返回码
-    google.protobuf.UInt32Value code = 1;
-    // 返回码详情
-    google.protobuf.StringValue info = 2;
-    //消息ID，用于和应答相对应
-    google.protobuf.Int64Value msgId = 3;
-    // 统计滑窗汇总值
-    message MetricSum {
-       // 滑窗统计周期，单位ms
-       int64 duration =1;
-       // 单次上报的统计数据
-       // 一次可以同时上报多种类型的统计数据
-       message Value {
-          // 统计类型
-         MetricDimension dimension = 1;
-          // 上报的统计值，按步长为最小单位，包含2次上报之间的增量数据
-         int64 value = 2;
-       }
-       repeated Value values = 2;
+  // 返回码
+  google.protobuf.UInt32Value code = 1;
+  // 返回码详情
+  google.protobuf.StringValue info = 2;
+  //消息ID，用于和应答相对应
+  google.protobuf.Int64Value msgId = 3;
+  // 统计滑窗汇总值
+  message MetricSum {
+    // 滑窗统计周期，单位ms
+    int64 duration = 1;
+    // 单次上报的统计数据
+    // 一次可以同时上报多种类型的统计数据
+    message Value {
+      // 统计类型
+      MetricDimension dimension = 1;
+      // 上报的统计值，按步长为最小单位，包含2次上报之间的增量数据
+      int64 value = 2;
     }
-    repeated MetricSum summaries = 4;
-    // 统计server绝对时间，单位unixnano
-    google.protobuf.Int64Value timestamp = 5;
+    repeated Value values = 2;
+  }
+  repeated MetricSum summaries = 4;
+  // 统计server绝对时间，单位unixnano
+  google.protobuf.Int64Value timestamp = 5;
 }

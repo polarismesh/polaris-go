@@ -19,7 +19,7 @@ package api
 
 import (
 	"fmt"
-	"github.com/modern-go/reflect2"
+	"io/ioutil"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -27,6 +27,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
+	"github.com/modern-go/reflect2"
+	"gopkg.in/yaml.v2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -35,66 +38,61 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"gopkg.in/yaml.v2"
 
-	"io/ioutil"
-
-	//加载插件注册函数
+	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
 const (
-	//权重随机负载均衡策略
+	// LBPolicyWeightedRandom 权重随机负载均衡策略
 	LBPolicyWeightedRandom = config.DefaultLoadBalancerWR
-	//权重一致性hash负载均衡策略
+	// LBPolicyRingHash 权重一致性hash负载均衡策略
 	LBPolicyRingHash = config.DefaultLoadBalancerRingHash
-	//Maglev算法的一致性hash负载均衡策略
+	// LBPolicyMaglev Maglev算法的一致性hash负载均衡策略
 	LBPolicyMaglev = config.DefaultLoadBalancerMaglev
-	//L5一致性Hash兼容算法，保证和L5产生相同的结果
+	// LBPolicyL5CST L5一致性Hash兼容算法，保证和L5产生相同的结果
 	LBPolicyL5CST = config.DefaultLoadBalancerL5CST
 )
 
-/**
- * @brief SDK配置对象，每个API实例都会挂载一个context，包含：
- * 插件实例列表
- * 配置实例
- * 执行流程引擎，包括定时器等
- */
+// SDKContext .
+// @brief SDK配置对象，每个API实例都会挂载一个context，包含：
+// 插件实例列表
+// 配置实例
+// 执行流程引擎，包括定时器等
+//
 type SDKContext interface {
-	/**
-	 * @brief 销毁SDK上下文
-	 */
+	// Destroy
+	// @brief 销毁SDK上下文
 	Destroy()
-	/**
-	 * @brief SDK上下文是否已经销毁
-	 */
+
+	// IsDestroyed
+	// @brief SDK上下文是否已经销毁
 	IsDestroyed() bool
-	/**
-	 * @brief 获取全局配置信息
-	 */
+
+	// GetConfig
+	// @brief 获取全局配置信息
 	GetConfig() config.Configuration
-	/**
-	 * @brief 获取插件列表
-	 */
+
+	// GetPlugins
+	// @brief 获取插件列表
 	GetPlugins() plugin.Manager
-	/**
-	 * @brief 获取执行引擎
-	 */
+
+	// GetEngine
+	// @brief 获取执行引擎
 	GetEngine() model.Engine
 
-	/**
-	 * @brief 获取值上下文
-	 */
+	// GetValueContext
+	// @brief 获取值上下文
 	GetValueContext() model.ValueContext
 }
 
-//获取SDK上下文接口
+// SDKOwner 获取SDK上下文接口
 type SDKOwner interface {
-	//获取SDK上下文
+	// SDKContext 获取SDK上下文
 	SDKContext() SDKContext
 }
 
-//判断API是否可用
+// 判断API是否可用
 func checkAvailable(owner SDKOwner) error {
 	if reflect2.IsNil(owner) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "API can not be nil")
@@ -114,7 +112,7 @@ type sdkContext struct {
 	plugins      plugin.Manager
 	engine       model.Engine
 	valueContext model.ValueContext
-	//标识是否已经销毁，0未销毁，1已销毁
+	// 标识是否已经销毁，0未销毁，1已销毁
 	destroyed uint32
 }
 
@@ -169,7 +167,7 @@ func (s *sdkContext) GetValueContext() model.ValueContext {
 	return s.valueContext
 }
 
-//InitContextByFile 通过配置文件新建服务消费者配置
+// InitContextByFile 通过配置文件新建服务消费者配置
 func InitContextByFile(path string) (SDKContext, error) {
 	if !model.IsFile(path) {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid context file %s", path)
@@ -181,7 +179,7 @@ func InitContextByFile(path string) (SDKContext, error) {
 	return InitContextByStream(buff)
 }
 
-//InitContextByStream 通过YAML流新建服务消费者配置
+// InitContextByStream 通过YAML流新建服务消费者配置
 func InitContextByStream(buf []byte) (SDKContext, error) {
 	cfg, err := config.LoadConfiguration(buf)
 	if nil != err {
@@ -190,7 +188,7 @@ func InitContextByStream(buf []byte) (SDKContext, error) {
 	return InitContextByConfig(cfg)
 }
 
-//检查日志目录是否可写
+// 检查日志目录是否可写
 func checkLoggersDir() error {
 	var errs error
 	var err error
@@ -232,7 +230,7 @@ func checkLoggersDir() error {
 	return errs
 }
 
-//获取进程所处容器名字
+// 获取进程所处容器名字
 func getPodName() string {
 	var container string
 	envList := config.GetContainerNameEnvList()
@@ -245,13 +243,13 @@ func getPodName() string {
 	return container
 }
 
-//从环境变量中获取HOSTNAME
+// 从环境变量中获取HOSTNAME
 func getHostName() string {
 	hostName := os.Getenv("HOSTNAME")
 	return hostName
 }
 
-//InitContextByStream 通过配置对象新建上下文
+// InitContextByConfig InitContextByStream 通过配置对象新建上下文
 func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	startTime := time.Now()
 	globalCtx := model.NewValueContext()
@@ -295,9 +293,9 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		SDKContextID: token.UID}
 	engine := &flow.Engine{}
 	var finalErrs error
-	//初始化插件链
+	// 初始化插件链
 	err = plugManager.InitPlugins(initCtx, common.LoadedPluginTypes, engine, func() error {
-		//初始化流程引擎
+		// 初始化流程引擎
 		return flow.InitFlowEngine(engine, initCtx)
 	})
 	if err != nil {
@@ -314,7 +312,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		return nil, finalErrs
 	}
 	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
-	//启动所有插件
+	// 启动所有插件
 	err = plugManager.StartPlugins()
 	if err != nil {
 		return nil, err
@@ -335,7 +333,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	return ctx, nil
 }
 
-//在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作
+// 在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作
 func onContextInitialized(ctx SDKContext) error {
 	eventHandlers := ctx.GetPlugins().GetEventSubscribers(common.OnContextStarted)
 	event := &common.PluginEvent{
@@ -350,7 +348,7 @@ func onContextInitialized(ctx SDKContext) error {
 	return nil
 }
 
-//创建默认配置
+// NewConfiguration 创建默认配置
 func NewConfiguration() config.Configuration {
 	return config.NewDefaultConfigurationWithDomain()
 }

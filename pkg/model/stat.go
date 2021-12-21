@@ -96,9 +96,9 @@ type InstanceGauge interface {
 	ServiceSimple
 	//获取调用api
 	GetAPI() ApiOperation
-	//实例的节点信息
+	// 实例的节点信息
 	GetHost() string
-	//实例的端口信息
+	// 实例的端口信息
 	GetPort() int
 	// GetInstance get instance info
 	// GetInstance() Instance
@@ -106,17 +106,17 @@ type InstanceGauge interface {
 	GetRetStatus() RetStatus
 	//实例的返回码
 	GetRetCodeValue() int32
-	//调用时延
+	// 调用时延
 	GetDelay() *time.Duration
-	//调用时延
+	// 调用时延
 	GetDelayRange() ApiDelayRange
-	//获取被调节点
+	// 获取被调节点
 	GetCalledInstance() Instance
-	//检测指标是否合法
+	// 检测指标是否合法
 	Validate() error
 }
 
-//统计类型
+// 统计类型
 type MetricType int
 
 const (
@@ -133,84 +133,84 @@ const (
 
 var metricTypes = HashSet{}
 
-//检测是不是合法的统计类型
+// 检测是不是合法的统计类型
 func ValidMetircType(t MetricType) bool {
 	return metricTypes.Contains(t)
 }
 
-//instangeGauge的空实现
+// instangeGauge的空实现
 type EmptyInstanceGauge struct {
 }
 
-//namesapce
+// namesapce
 func (e EmptyInstanceGauge) GetNamespace() string {
 	return ""
 }
 
-//service
+// service
 func (e EmptyInstanceGauge) GetService() string {
 	return ""
 }
 
-//host
+// host
 func (e EmptyInstanceGauge) GetHost() string {
 	return ""
 }
 
-//port
+// port
 func (e EmptyInstanceGauge) GetPort() int {
 	return -1
 }
 
-//retstatus
+// retstatus
 func (e EmptyInstanceGauge) GetRetStatus() RetStatus {
 	return RetFail
 }
 
-//CircuitBreakerStatus
+// CircuitBreakerStatus
 func (e EmptyInstanceGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return nil
 }
 
-//retcode
+// retcode
 func (e EmptyInstanceGauge) GetRetCodeValue() int32 {
 	return 0
 }
 
-//delay
+// delay
 func (e EmptyInstanceGauge) GetDelay() *time.Duration {
 	return nil
 }
 
-//api
+// api
 func (e EmptyInstanceGauge) GetAPI() ApiOperation {
 	return ApiOperationMax
 }
 
-//校验
+// 校验
 func (e EmptyInstanceGauge) Validate() error {
 	return nil
 }
 
-//获取被调节点
+// 获取被调节点
 func (e EmptyInstanceGauge) GetCalledInstance() Instance {
 	return nil
 }
 
-//调用时延
+// 调用时延
 func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 	return ApiDelayMax
 }
 
-//命名类型，标识具体的API类型
+// 命名类型，标识具体的API类型
 type ApiOperation int
 
-//ToString方法
+// ToString方法
 func (a ApiOperation) String() string {
 	return apiOperationPresents[a]
 }
 
-//API标识
+// API标识
 const (
 	ApiGetOneInstance ApiOperation = iota
 	ApiGetInstances
@@ -224,11 +224,11 @@ const (
 	ApiMeshConfig
 	ApiInitCalleeServices
 	ApiMesh
-	//ApiOperationMax这个必须在最下面
+	// ApiOperationMax这个必须在最下面
 	ApiOperationMax
 )
 
-//API标识到别名
+// API标识到别名
 var (
 	apiOperationPresents = map[ApiOperation]string{
 		ApiGetOneInstance:          "Consumer::GetOneInstance",
@@ -246,10 +246,10 @@ var (
 	}
 )
 
-//API延时范围
+// API延时范围
 type ApiDelayRange int
 
-//API延时范围常量
+// API延时范围常量
 const (
 	ApiDelayBelow50 ApiDelayRange = iota
 	ApiDelayBelow100
@@ -269,7 +269,7 @@ var (
 	}
 )
 
-//ToString方法
+// ToString方法
 func (a ApiDelayRange) String() string {
 	return apiDelayPresents[a]
 }
@@ -279,7 +279,7 @@ const (
 	maxTimeRange = 200 * time.Millisecond
 )
 
-//获取api时延范围
+// 获取api时延范围
 func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	if delay > maxTimeRange {
 		delay = maxTimeRange
@@ -288,7 +288,7 @@ func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	return ApiDelayRange(diff)
 }
 
-//初始化
+// 初始化
 func init() {
 	metricTypes.Add(SDKAPIStat)
 	metricTypes.Add(ServiceStat)

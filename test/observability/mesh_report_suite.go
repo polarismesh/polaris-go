@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"gopkg.in/check.v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 )
 
 const (
@@ -87,13 +89,13 @@ func (m *MonitorReportSuite) TestMeshConfigReport(c *check.C) {
 		Name:      &wrappers.StringValue{Value: model.MeshPrefix + meshID + meshType},
 		Namespace: &wrappers.StringValue{Value: meshNamespace},
 	}
-	//初始只有一个resource
+	// 初始只有一个resource
 	m.mockServer.RegisterMeshConfig(meshService, meshType, copyMeshConfig(meshConfig))
 	_, err = consumer.GetMeshConfig(&meshRequest)
 	c.Assert(err, check.IsNil)
 	time.Sleep(5 * time.Second)
 	secondRevision := time.Now().String()
-	//添加第二个resource
+	// 添加第二个resource
 	meshConfig.Resources = append(meshConfig.Resources, &namingpb.MeshResource{
 		Id:            &wrappers.StringValue{Value: "secondResource"},
 		MeshNamespace: &wrappers.StringValue{Value: meshNamespace},
@@ -107,21 +109,21 @@ func (m *MonitorReportSuite) TestMeshConfigReport(c *check.C) {
 	m.mockServer.RegisterMeshConfig(meshService, meshType, copyMeshConfig(meshConfig))
 	time.Sleep(5 * time.Second)
 	thirdRevision := time.Now().String()
-	//修改了第一个资源的内容
+	// 修改了第一个资源的内容
 	meshConfig.Resources[0].Body = &wrappers.StringValue{Value: "body of first modified"}
 	meshConfig.Resources[0].Revision = &wrappers.StringValue{Value: thirdRevision}
 	meshConfig.Revision = &wrappers.StringValue{Value: thirdRevision}
 	m.mockServer.RegisterMeshConfig(meshService, meshType, copyMeshConfig(meshConfig))
 	time.Sleep(5 * time.Second)
 	forthRevision := time.Now().String()
-	//删除第一个资源
+	// 删除第一个资源
 	meshConfig.Resources = meshConfig.Resources[1:]
 	meshConfig.Revision = &wrappers.StringValue{Value: forthRevision}
 	m.mockServer.RegisterMeshConfig(meshService, meshType, copyMeshConfig(meshConfig))
 	time.Sleep(5 * time.Second)
-	//注销这个网格配置
+	// 注销这个网格配置
 	m.mockServer.DeRegisterMeshConfig(meshService, meshConfig.MeshId.GetValue(), meshType)
-	//等待上传
+	// 等待上传
 	time.Sleep(12 * time.Second)
 }
 

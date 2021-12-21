@@ -19,21 +19,22 @@ package ratelimit
 
 import (
 	"context"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
 
 const (
-	//初始化
+	// 初始化
 	OperationInit = "init"
-	//上报
+	// 上报
 	OperationReport = "report"
 )
 
-//只模拟server异常接口场景，不模拟正常场景
+// 只模拟server异常接口场景，不模拟正常场景
 type MockRateLimitServer struct {
 	mutex            sync.RWMutex
 	operation4xx     map[string]bool
@@ -43,7 +44,7 @@ type MockRateLimitServer struct {
 	clientKeys       map[string]uint32
 }
 
-//创建mock server
+// 创建mock server
 func NewMockRateLimitServer() *MockRateLimitServer {
 	return &MockRateLimitServer{
 		operation4xx:     map[string]bool{},
@@ -54,7 +55,7 @@ func NewMockRateLimitServer() *MockRateLimitServer {
 	}
 }
 
-//重置
+// 重置
 func (m *MockRateLimitServer) Reset() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -65,33 +66,33 @@ func (m *MockRateLimitServer) Reset() {
 	atomic.StoreInt64(&m.mockMaxAmount, 200)
 }
 
-//设置最大限流阈值
+// 设置最大限流阈值
 func (m *MockRateLimitServer) SetMockMaxAmount(v int64) {
 	atomic.StoreInt64(&m.mockMaxAmount, v)
 }
 
-//标识某个接口固定返回4XX
+// 标识某个接口固定返回4XX
 func (m *MockRateLimitServer) MarkOperation4XX(operation string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.operation4xx[operation] = true
 }
 
-//标识某个接口不返回应答
+// 标识某个接口不返回应答
 func (m *MockRateLimitServer) MarkOperationNoReturn(operation string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.responseNoReturn[operation] = true
 }
 
-//标识某个接口延迟一个周期
+// 标识某个接口延迟一个周期
 func (m *MockRateLimitServer) MarkOperationDelay(operation string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.responseDelay[operation] = true
 }
 
-//设置clientKey
+// 设置clientKey
 func (m *MockRateLimitServer) SetClientKey(uid string, key uint32) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -100,7 +101,7 @@ func (m *MockRateLimitServer) SetClientKey(uid string, key uint32) {
 
 const delayDuration = 2 * time.Second
 
-//处理请求
+// 处理请求
 func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest) *rlimitV2.RateLimitResponse {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -122,12 +123,12 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 			}
 		}
 		if m.responseNoReturn[OperationInit] {
-			//忽略请求，不处理
+			// 忽略请求，不处理
 			return nil
 		}
 		timeMilli := model.CurrentMillisecond()
 		if m.responseDelay[OperationInit] {
-			//等待一段时间，再返回
+			// 等待一段时间，再返回
 			time.Sleep(delayDuration)
 		}
 		initResp := &rlimitV2.RateLimitInitResponse{
@@ -162,12 +163,12 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 			}
 		}
 		if m.responseNoReturn[OperationReport] {
-			//忽略请求，不处理
+			// 忽略请求，不处理
 			return nil
 		}
 		timeMilli := model.CurrentMillisecond()
 		if m.responseDelay[OperationReport] {
-			//等待一段时间，再返回
+			// 等待一段时间，再返回
 			time.Sleep(delayDuration)
 		}
 		reportResp := &rlimitV2.RateLimitReportResponse{
@@ -189,7 +190,7 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 	return nil
 }
 
-//消息处理接口
+// 消息处理接口
 func (m *MockRateLimitServer) Service(stream rlimitV2.RateLimitGRPCV2_ServiceServer) error {
 	for {
 		request, err := stream.Recv()
@@ -206,7 +207,7 @@ func (m *MockRateLimitServer) Service(stream rlimitV2.RateLimitGRPCV2_ServiceSer
 	}
 }
 
-//时间对齐接口
+// 时间对齐接口
 func (m *MockRateLimitServer) TimeAdjust(ctx context.Context,
 	adjustReq *rlimitV2.TimeAdjustRequest) (*rlimitV2.TimeAdjustResponse, error) {
 	return &rlimitV2.TimeAdjustResponse{

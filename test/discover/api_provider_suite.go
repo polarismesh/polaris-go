@@ -19,18 +19,20 @@ package discover
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"time"
 )
 
 const (
@@ -42,7 +44,7 @@ const (
 	providerInstancePort = 8848
 )
 
-//Provider测试套件
+// Provider测试套件
 type ProviderTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -51,12 +53,12 @@ type ProviderTestingSuite struct {
 	provider     api.ProviderAPI
 }
 
-//套件名字
+// 套件名字
 func (t *ProviderTestingSuite) GetName() string {
 	return "Provider"
 }
 
-//初始化测试套件
+// 初始化测试套件
 func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	fmt.Printf("ProviderTestingSuite Start\n")
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -83,13 +85,13 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 		Namespace: &wrappers.StringValue{Value: providerNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
-	//注册测试服务
+	// 注册测试服务
 	t.mockServer.RegisterService(testService)
-	//注册系统服务
+	// 注册系统服务
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	//代理到GRPC服务回调
+	// 代理到GRPC服务回调
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
-	//进行端口监听
+	// 进行端口监听
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if nil != err {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -105,14 +107,14 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	time.Sleep(2 * time.Second)
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *ProviderTestingSuite) TearDownSuite(c *check.C) {
 	t.provider.Destroy()
 	t.grpcServer.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//测试以无文件默认配置初始化providerAPI
+// 测试以无文件默认配置初始化providerAPI
 func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 	log.Printf("Start TestInitProviderAPIByDefault")
 	defer util.DeleteDir(util.BackupDir)
@@ -125,21 +127,21 @@ func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 	providerAPI.Destroy()
 }
 
-//测试ProviderAPI的三个功能，register，heartbeat，deregister
+// 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderNormal(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderNormal")
 	t.testProvider(c, false)
 }
 
-//测试ProviderAPI的三个功能，register，heartbeat，deregister
+// 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderTimeout(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderTimeout")
 	t.testProvider(c, true)
 }
 
-//通用的provider接口测试函数
+// 通用的provider接口测试函数
 func (t *ProviderTestingSuite) testProvider(c *check.C, timeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.mockServer.MakeOperationTimeout(mock.OperationRegistry, timeout)
@@ -151,7 +153,7 @@ func (t *ProviderTestingSuite) testProvider(c *check.C, timeout bool) {
 	registerReq.Host = providerInstanceIP
 	registerReq.Port = providerInstancePort
 	registerReq.ServiceToken = t.serviceToken
-	//先注册待心跳的服务实例
+	// 先注册待心跳的服务实例
 	regResp, err := t.provider.Register(registerReq)
 	c.Assert(err, check.IsNil)
 	fmt.Printf("registered instance id: %v\n", regResp.InstanceID)
@@ -161,16 +163,16 @@ func (t *ProviderTestingSuite) testProvider(c *check.C, timeout bool) {
 	heartbeatReq.ServiceToken = t.serviceToken
 	heartbeatReq.Namespace = providerNamespace
 	heartbeatReq.Service = providerService
-	//heartbeatReq.Host = providerInstanceIP
-	//heartbeatReq.Port = providerInstancePort
-	//进行心跳上报
+	// heartbeatReq.Host = providerInstanceIP
+	// heartbeatReq.Port = providerInstancePort
+	// 进行心跳上报
 	err = t.provider.Heartbeat(heartbeatReq)
 	c.Assert(err, check.IsNil)
 
 	deregisterReq := &api.InstanceDeRegisterRequest{}
 	deregisterReq.ServiceToken = t.serviceToken
 	deregisterReq.InstanceID = regResp.InstanceID
-	//反注册服务实例
+	// 反注册服务实例
 	err = t.provider.Deregister(deregisterReq)
 	c.Assert(err, check.IsNil)
 

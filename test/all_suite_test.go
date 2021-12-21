@@ -35,7 +35,7 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-//Test 测试用例主入口
+// Test 测试用例主入口
 func Test(t *testing.T) {
 	go func() {
 		log.Println(http.ListenAndServe("LOCALHOST:6060", nil))
@@ -43,7 +43,7 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
-//初始化测试套
+// 初始化测试套
 func init() {
 	logDir := "testdata/test_log"
 	if err := api.ConfigLoggers(logDir, api.DebugLog); nil != err {
@@ -51,55 +51,55 @@ func init() {
 	}
 	// sdkcontext 销毁测试
 	Suite(&stability.SDKContextDestroySuite{})
-	//consumer api测试
+	// consumer api测试
 	Suite(&discover.ConsumerTestingSuite{})
-	//provider api 测试
+	// provider api 测试
 	Suite(&discover.ProviderTestingSuite{})
-	//负载均衡测试
+	// 负载均衡测试
 	Suite(&loadbalance.LBTestingSuite{})
-	////缓存持久化测试
-	//Suite(&stability.CacheTestingSuite{})
-	//熔断测试
+	// //缓存持久化测试
+	// Suite(&stability.CacheTestingSuite{})
+	// 熔断测试
 	Suite(&circuitbreak.CircuitBreakSuite{})
 	// 健康探测测试
 	Suite(&circuitbreak.HealthCheckTestingSuite{})
 	// 持久探测测试
 	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
-	//就近路由接入测试
+	// 就近路由接入测试
 	Suite(&serviceroute.NearbyTestingSuite{})
-	//服务定时更新测试
+	// 服务定时更新测试
 	Suite(&stability.ServiceUpdateSuite{})
-	//后台server连接切换测试
+	// 后台server连接切换测试
 	Suite(&stability.ServerSwitchSuite{})
-	//规则路由测试
+	// 规则路由测试
 	Suite(&serviceroute.RuleRoutingTestingSuite{})
-	//dstmeta路由插件测试
+	// dstmeta路由插件测试
 	Suite(&serviceroute.DstMetaTestingSuite{})
-	//埋点server可靠性测试
+	// 埋点server可靠性测试
 	Suite(&stability.DefaultServerSuite{})
-	//上报统计测试
+	// 上报统计测试
 	Suite(&observability.MonitorReportSuite{})
-	//缓存快速更新测试
+	// 缓存快速更新测试
 	Suite(&stability.CacheFastUpdateSuite{})
-	//set分组测试
+	// set分组测试
 	Suite(&serviceroute.SetDivisionTestingSuite{})
-	//server异常调用测试
+	// server异常调用测试
 	Suite(&stability.ServerFailOverSuite{})
-	//消息订阅 测试
+	// 消息订阅 测试
 	Suite(&subscribe.EventSubscribeSuit{})
-	////金丝雀路由测试
-	//Suite(&serviceroute.CanaryTestingSuite{})
-	//内部服务结构测试
+	// //金丝雀路由测试
+	// Suite(&serviceroute.CanaryTestingSuite{})
+	// 内部服务结构测试
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
-	//基础本地限流用例测试
+	// 基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
 
-	//基础远程限流用例测试
-	//Suite(&ratelimit.RemoteNormalTestingSuite{})
-	//限流超时淘汰用例测试
-	//Suite(&ratelimit.WindowExpireTestingSuite{})
-	//限流规则变更用例测试
-	//Suite(&ratelimit.RuleChangeTestingSuite{})
-	//限流网络异常用例
-	//Suite(&ratelimit.NetworkFailTestingSuite{})
+	// 基础远程限流用例测试
+	// Suite(&ratelimit.RemoteNormalTestingSuite{})
+	// 限流超时淘汰用例测试
+	// Suite(&ratelimit.WindowExpireTestingSuite{})
+	// 限流规则变更用例测试
+	// Suite(&ratelimit.RuleChangeTestingSuite{})
+	// 限流网络异常用例
+	// Suite(&ratelimit.NetworkFailTestingSuite{})
 }

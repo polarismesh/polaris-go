@@ -19,11 +19,12 @@ package loadbalance
 
 import (
 	"fmt"
-	"github.com/gonum/stat"
 	"math"
+
+	"github.com/gonum/stat"
 )
 
-//计算标准差
+// 计算标准差
 func calStdDev(idInstanceWeights map[instanceKey]int, idInstanceCalls map[instanceKey]int, cbid instanceKey) float64 {
 	var adjustedCalls []float64
 	for id, calls := range idInstanceCalls {
@@ -37,15 +38,15 @@ func calStdDev(idInstanceWeights map[instanceKey]int, idInstanceCalls map[instan
 	return stat.StdDev(adjustedCalls, nil)
 }
 
-//计算各个实例在负载均衡后调用次数比例与权重比例的差距，
+// 计算各个实例在负载均衡后调用次数比例与权重比例的差距，
 // 参数为需要剔除计算的实例id
 func calDiff(idInstanceWeights map[instanceKey]int, idInstanceCalls map[instanceKey]int, cbid instanceKey) float64 {
-	//resFile := "loadDiff.csv"
+	// resFile := "loadDiff.csv"
 	totalDiff := float64(0)
 	totalWeights := 0
 	var keys []instanceKey
 	for k, v := range idInstanceWeights {
-		//fmt.Println(k)
+		// fmt.Println(k)
 		if k == cbid {
 			continue
 		}
@@ -61,7 +62,7 @@ func calDiff(idInstanceWeights map[instanceKey]int, idInstanceCalls map[instance
 	}
 	maxDiff := 0.0
 	for i := 0; i < len(keys); i++ {
-		//fmt.Println(keys[i])
+		// fmt.Println(keys[i])
 		c, ok := idInstanceCalls[keys[i]]
 		if !ok {
 			c = 0
@@ -77,6 +78,6 @@ func calDiff(idInstanceWeights map[instanceKey]int, idInstanceCalls map[instance
 		fmt.Printf("instance %v: weight:%v/%v(total), calls:%v/%v(total)\n", keys[i], w, totalWeights, c, totalCalls)
 	}
 	fmt.Printf("Max diff %v\n", maxDiff)
-	//outWriter.Flush()
+	// outWriter.Flush()
 	return totalDiff
 }

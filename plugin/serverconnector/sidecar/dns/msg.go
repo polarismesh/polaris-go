@@ -60,24 +60,24 @@ var (
 
 // dns协议头
 type MsgHdr struct {
-	//dns session id
+	// dns session id
 	Id uint16
-	//是否为应答
+	// 是否为应答
 	Response bool
-	//操作code
+	// 操作code
 	Opcode int
-	//是否为权威应答
+	// 是否为权威应答
 	Authoritative bool
-	//UDP应答是否被截断
+	// UDP应答是否被截断
 	Truncated bool
-	//请求是否要求递归查询
+	// 请求是否要求递归查询
 	RecursionDesired bool
-	//递归查询是否启用
+	// 递归查询是否启用
 	RecursionAvailable bool
 	Zero               bool
 	AuthenticatedData  bool
 	CheckingDisabled   bool
-	//返回code
+	// 返回code
 	Rcode int
 	// question数量， answer RR数量， 权威信息 RR数量， 额外信息 RR数量
 	Qdcount, Ancount, Nscount, Arcount uint16
@@ -122,7 +122,7 @@ func (h *MsgHdr) String() string {
 	return s
 }
 
-//header反序列化
+// header反序列化
 func (h *MsgHdr) Unpack(msg []byte) (int, error) {
 	var off int
 	var err error
@@ -264,14 +264,14 @@ func (h *MsgHdr) SetDefaultValue(id uint16, opCode int) {
 // 完整的DNS协议
 type Msg struct {
 	MsgHdr
-	//Compress bool       `json:"-"` // If true, the message will be compressed when converted to wire format.
+	// Compress bool       `json:"-"` // If true, the message will be compressed when converted to wire format.
 	Question []Question // Holds the RR(s) of the question section.
 	Answer   []RR       // Holds the RR(s) of the answer section.
 	Ns       []RR       // Holds the RR(s) of the authority section.
 	Extra    []RR       // Holds the RR(s) of the additional section.
 }
 
-//序列化
+// 序列化
 func (dns *Msg) Pack() (*bytes.Buffer, error) {
 	if dns.Opcode == OpcodeQuery {
 		buf := new(bytes.Buffer)
@@ -290,7 +290,7 @@ func (dns *Msg) Pack() (*bytes.Buffer, error) {
 	}
 }
 
-//polaris dns序列化 （answer RR 为 stream RR，用于4层分包, 尚未做严格校验）
+// polaris dns序列化 （answer RR 为 stream RR，用于4层分包, 尚未做严格校验）
 func (dns *Msg) polarisStreamPack(buff *bytes.Buffer) error {
 	if buff == nil {
 		return errors.New("pack buff is nil")
@@ -344,7 +344,7 @@ func (dns *Msg) dnsPack(buff *bytes.Buffer) error {
 	return nil
 }
 
-//反序列化body
+// 反序列化body
 func (dns *Msg) UnpackBody(msg []byte, off int) (err error) {
 	// If we are at the end of the message we should return *just* the
 	// header. This can still be useful to the caller. 9.9.9.9 sends these
@@ -399,7 +399,7 @@ func (dns *Msg) Unpack(msg []byte) (err error) {
 	return dns.UnpackBody(msg, off)
 }
 
-//设置返回
+// 设置返回
 func (dns *Msg) SetReply(request *Msg) {
 	dns.Id = request.Id
 	dns.Response = true
@@ -416,7 +416,7 @@ func (dns *Msg) SetReply(request *Msg) {
 	}
 }
 
-//设置返回，不拷贝question
+// 设置返回，不拷贝question
 func (dns *Msg) SetReplyWithoutQuestions(request *Msg) {
 	dns.Id = request.Id
 	dns.Response = true

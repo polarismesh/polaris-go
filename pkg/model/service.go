@@ -29,13 +29,13 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-//RunMode SDK的运行模式，可以指定为agent或者no-agent模式
+// RunMode SDK的运行模式，可以指定为agent或者no-agent模式
 type RunMode int
 
 const (
-	//ModeNoAgent 以no agent模式运行
+	// ModeNoAgent 以no agent模式运行
 	ModeNoAgent = iota
-	//ModeWithAgent 带agent模式运行
+	// ModeWithAgent 带agent模式运行
 	ModeWithAgent
 )
 
@@ -54,7 +54,7 @@ type ServiceMetadata interface {
 	GetMetadata() map[string]string
 }
 
-//服务元数据的ToString操作
+// 服务元数据的ToString操作
 func ToStringService(svc ServiceMetadata, printMeta bool) string {
 	if reflect2.IsNil(svc) {
 		return "nil"
@@ -66,33 +66,33 @@ func ToStringService(svc ServiceMetadata, printMeta bool) string {
 	return fmt.Sprintf("{service: %s, namespace: %s}", svc.GetService(), svc.GetNamespace())
 }
 
-//ServiceInstances 服务实例列表
+// ServiceInstances 服务实例列表
 type ServiceInstances interface {
 	ServiceMetadata
 	RegistryValue
-	//获取服务实例列表
+	// 获取服务实例列表
 	GetInstances() []Instance
-	//获取全部实例总权重
+	// 获取全部实例总权重
 	GetTotalWeight() int
-	//获取集群索引
+	// 获取集群索引
 	GetServiceClusters() ServiceClusters
-	//重建缓存索引
+	// 重建缓存索引
 	ReloadServiceClusters()
-	//获取单个服务实例
+	// 获取单个服务实例
 	GetInstance(string) Instance
-	//数据是否来自于缓存文件
+	// 数据是否来自于缓存文件
 	IsCacheLoaded() bool
 }
 
-//断路器状态
+// 断路器状态
 type Status int
 
 const (
-	//断路器已打开，代表节点已经被熔断
+	// 断路器已打开，代表节点已经被熔断
 	Open Status = 1
-	//断路器半开，节点处于刚熔断恢复，只允许少量请求通过
+	// 断路器半开，节点处于刚熔断恢复，只允许少量请求通过
 	HalfOpen Status = 2
-	//断路器关闭，节点处于正常工作状态
+	// 断路器关闭，节点处于正常工作状态
 	Close Status = 3
 )
 
@@ -119,29 +119,29 @@ const (
 	Dead HealthCheckStatus = 2
 )
 
-//熔断器状态管理器
+// 熔断器状态管理器
 type CircuitBreakerStatus interface {
-	//标识被哪个熔断器熔断
+	// 标识被哪个熔断器熔断
 	GetCircuitBreaker() string
-	//熔断状态
+	// 熔断状态
 	GetStatus() Status
-	//状态转换的时间
+	// 状态转换的时间
 	GetStartTime() time.Time
-	//是否可以分配请求
+	// 是否可以分配请求
 	IsAvailable() bool
-	//执行请求分配
+	// 执行请求分配
 	Allocate() bool
-	//获取进入半开状态之后分配的请求数
+	// 获取进入半开状态之后分配的请求数
 	GetRequestsAfterHalfOpen() int32
-	//获取进入半开状态之后的失败请求数
+	// 获取进入半开状态之后的失败请求数
 	GetFailRequestsAfterHalfOpen() int32
-	//添加半开状态下面的请求数
+	// 添加半开状态下面的请求数
 	AddRequestCountAfterHalfOpen(n int32, success bool) int32
-	//获取分配了最后配额的时间
+	// 获取分配了最后配额的时间
 	GetFinalAllocateTimeInt64() int64
-	//获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
+	// 获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
 	AcquireStatusLock() bool
-	//获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
+	// 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
 	AllocatedRequestsAfterHalfOpen() int32
 }
 
@@ -153,153 +153,153 @@ type ActiveDetectStatus interface {
 	GetStartTime() time.Time
 }
 
-//服务实例信息
+// 服务实例信息
 type Instance interface {
 	ServiceSimple
 	//获取实例四元组标识
 	GetInstanceKey() InstanceKey
 	//服务实例唯一标识
 	GetId() string
-	//实例的域名/IP信息
+	// 实例的域名/IP信息
 	GetHost() string
-	//实例的监听端口
+	// 实例的监听端口
 	GetPort() uint32
-	//实例的vpcId
+	// 实例的vpcId
 	GetVpcId() string
-	//服务实例的协议
+	// 服务实例的协议
 	GetProtocol() string
-	//实例版本号
+	// 实例版本号
 	GetVersion() string
-	//实例静态权重值
+	// 实例静态权重值
 	GetWeight() int
-	//实例优先级信息
+	// 实例优先级信息
 	GetPriority() uint32
-	//实例元数据信息
+	// 实例元数据信息
 	GetMetadata() map[string]string
-	//实例逻辑分区
+	// 实例逻辑分区
 	GetLogicSet() string
-	//实例的断路器状态，包括：
-	//打开（被熔断）、半开（探测恢复）、关闭（正常运行）
+	// 实例的断路器状态，包括：
+	// 打开（被熔断）、半开（探测恢复）、关闭（正常运行）
 	GetCircuitBreakerStatus() CircuitBreakerStatus
-	//实例是否健康，基于服务端返回的健康数据
+	// 实例是否健康，基于服务端返回的健康数据
 	IsHealthy() bool
-	//实例是否已经被手动隔离
+	// 实例是否已经被手动隔离
 	IsIsolated() bool
-	//实例是否启动了健康检查
+	// 实例是否启动了健康检查
 	IsEnableHealthCheck() bool
-	//实例所属的大区信息
+	// 实例所属的大区信息
 	GetRegion() string
-	//实例所属的地方信息
+	// 实例所属的地方信息
 	GetZone() string
-	//Deprecated，建议使用GetCampus方法
+	// Deprecated，建议使用GetCampus方法
 	GetIDC() string
-	//实例所属的园区信息
+	// 实例所属的园区信息
 	GetCampus() string
-	//获取实例的修订版本信息
-	//与上一次比较，用于确认服务实例是否发生变更
+	// 获取实例的修订版本信息
+	// 与上一次比较，用于确认服务实例是否发生变更
 	GetRevision() string
 }
 
-//InstanceWeight 节点权重
+// InstanceWeight 节点权重
 type InstanceWeight struct {
-	//实例ID
+	// 实例ID
 	InstanceID string
-	//实例动态权重值
+	// 实例动态权重值
 	DynamicWeight uint32
 }
 
-//元数据路由兜底策略
+// 元数据路由兜底策略
 type FailOverHandler int
 
 const (
-	//通配所有可用ip实例，等于关闭meta路由
+	// 通配所有可用ip实例，等于关闭meta路由
 	GetOneHealth FailOverHandler = 1
-	//匹配不带 metaData key路由
+	// 匹配不带 metaData key路由
 	NotContainMetaKey FailOverHandler = 2
-	//匹配自定义meta
+	// 匹配自定义meta
 	CustomMeta FailOverHandler = 3
 )
 
 type FailOverDefaultMetaConfig struct {
-	//元数据路由兜底策略类型
+	// 元数据路由兜底策略类型
 	Type FailOverHandler
-	//仅type==CustomMeta时需要填写
+	// 仅type==CustomMeta时需要填写
 	Meta map[string]string
 }
 
-//单个服务实例查询请求
+// 单个服务实例查询请求
 type GetOneInstanceRequest struct {
-	//可选，流水号，用于跟踪用户的请求，默认0
+	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//可选，元数据信息，仅用于dstMetadata路由插件的过滤
+	// 可选，元数据信息，仅用于dstMetadata路由插件的过滤
 	Metadata map[string]string
-	//是否开启元数据匹配不到时启用自定义匹配规则，仅用于dstMetadata路由插件
+	// 是否开启元数据匹配不到时启用自定义匹配规则，仅用于dstMetadata路由插件
 	EnableFailOverDefaultMeta bool
-	//自定义匹配规则，仅当EnableFailOverDefaultMeta为true时生效
+	// 自定义匹配规则，仅当EnableFailOverDefaultMeta为true时生效
 	FailOverDefaultMeta FailOverDefaultMetaConfig
-	//用户计算hash值的key
+	// 用户计算hash值的key
 	HashKey []byte
-	//已经计算好的hash值，用于一致性hash的负载均衡选择
+	// 已经计算好的hash值，用于一致性hash的负载均衡选择
 	// Deprecated: 已弃用，请直接使用HashKey参数传入key来计算hash
 	HashValue uint64
-	//主调方服务信息
+	// 主调方服务信息
 	SourceService *ServiceInfo
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
-	//可选，备份节点数
-	//对于一致性hash等有状态的负载均衡方式
+	// 可选，备份节点数
+	// 对于一致性hash等有状态的负载均衡方式
 	ReplicateCount int
-	//应答，无需用户填充，由主流程进行填充
+	// 应答，无需用户填充，由主流程进行填充
 	response InstancesResponse
-	//可选，负载均衡算法
+	// 可选，负载均衡算法
 	LbPolicy string
-	//金丝雀
+	// 金丝雀
 	Canary string
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *GetOneInstanceRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *GetOneInstanceRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取服务名
+// 获取服务名
 func (g *GetOneInstanceRequest) GetService() string {
 	return g.Service
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetOneInstanceRequest) GetNamespace() string {
 	return g.Namespace
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetOneInstanceRequest) GetMetadata() map[string]string {
 	return g.Metadata
 }
 
-//获取应答指针
+// 获取应答指针
 func (g *GetOneInstanceRequest) GetResponse() *InstancesResponse {
 	return &g.response
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *GetOneInstanceRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *GetOneInstanceRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
@@ -312,7 +312,7 @@ func (g *GetOneInstanceRequest) SetCanary(canary string) {
 	g.Canary = canary
 }
 
-//校验获取单个服务实例请求对象
+// 校验获取单个服务实例请求对象
 func (g *GetOneInstanceRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetOneInstanceRequest can not be nil")
@@ -324,64 +324,64 @@ func (g *GetOneInstanceRequest) Validate() error {
 	return nil
 }
 
-//获取所有实例的请求
+// 获取所有实例的请求
 type GetAllInstancesRequest struct {
-	//可选，流水号，用于跟踪用户的请求，默认0
+	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
-	//应答，无需用户填充，由主流程进行填充
+	// 应答，无需用户填充，由主流程进行填充
 	response InstancesResponse
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *GetAllInstancesRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *GetAllInstancesRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取服务名
+// 获取服务名
 func (g *GetAllInstancesRequest) GetService() string {
 	return g.Service
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetAllInstancesRequest) GetNamespace() string {
 	return g.Namespace
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetAllInstancesRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-//获取应答指针
+// 获取应答指针
 func (g *GetAllInstancesRequest) GetResponse() *InstancesResponse {
 	return &g.response
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *GetAllInstancesRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *GetAllInstancesRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
-//校验获取全部服务实例请求对象
+// 校验获取全部服务实例请求对象
 func (g *GetAllInstancesRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetAllInstancesRequest can not be nil")
@@ -393,73 +393,73 @@ func (g *GetAllInstancesRequest) Validate() error {
 	return nil
 }
 
-//批量服务实例查询请求
+// 批量服务实例查询请求
 type GetInstancesRequest struct {
-	//可选，流水号，用于跟踪用户的请求，默认0
+	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//可选，元数据信息，仅用于dstMetadata路由插件的过滤
+	// 可选，元数据信息，仅用于dstMetadata路由插件的过滤
 	Metadata map[string]string
-	//主调方服务信息，只用于路由规则匹配
+	// 主调方服务信息，只用于路由规则匹配
 	SourceService *ServiceInfo
-	//可选，是否包含被熔断的服务实例，默认false
+	// 可选，是否包含被熔断的服务实例，默认false
 	// Deprecated: 已弃用，1.0版本后会正式去掉，需要返回全量IP直接设置SkipRouteFilter=true
 	IncludeCircuitBreakInstances bool
-	//可选，是否包含不健康的服务实例，默认false
+	// 可选，是否包含不健康的服务实例，默认false
 	// Deprecated: 已弃用，1.0版本后会正式去掉，需要返回全量IP直接设置SkipRouteFilter=true
 	IncludeUnhealthyInstances bool
-	//可选，是否跳过服务路由筛选，默认false
+	// 可选，是否跳过服务路由筛选，默认false
 	SkipRouteFilter bool
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
-	//应答，无需用户填充，由主流程进行填充
+	// 应答，无需用户填充，由主流程进行填充
 	response InstancesResponse
-	//金丝雀
+	// 金丝雀
 	Canary string
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *GetInstancesRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *GetInstancesRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取服务名
+// 获取服务名
 func (g *GetInstancesRequest) GetService() string {
 	return g.Service
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetInstancesRequest) GetNamespace() string {
 	return g.Namespace
 }
 
-//获取命名空间
+// 获取命名空间
 func (g *GetInstancesRequest) GetMetadata() map[string]string {
 	return g.Metadata
 }
 
-//获取应答指针
+// 获取应答指针
 func (g *GetInstancesRequest) GetResponse() *InstancesResponse {
 	return &g.response
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *GetInstancesRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *GetInstancesRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
@@ -472,7 +472,7 @@ func (g *GetInstancesRequest) SetCanary(canary string) {
 	g.Canary = canary
 }
 
-//校验获取全部服务实例请求对象
+// 校验获取全部服务实例请求对象
 func (g *GetInstancesRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetInstancesRequest can not be nil")
@@ -485,44 +485,44 @@ func (g *GetInstancesRequest) Validate() error {
 }
 
 type GetServicesRequest struct {
-	//可选，流水号，用于跟踪用户的请求，默认0
+	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	//可选，是否使用业务过滤
+	// 可选，是否使用业务过滤
 	EnableBusiness bool
-	//必选，业务名
+	// 必选，业务名
 	Business string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//可选，元数据信息，可用于过滤
+	// 可选，元数据信息，可用于过滤
 	Metadata map[string]string
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *GetServicesRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *GetServicesRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *GetServicesRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *GetServicesRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
-//验证请求参数
+// 验证请求参数
 func (g *GetServicesRequest) Validate() error {
 	var errs error
 	if g.EnableBusiness && len(g.Business) == 0 {
@@ -551,7 +551,7 @@ func (g *InitCalleeServiceRequest) Validate() error {
 	return nil
 }
 
-//批量服务
+// 批量服务
 type Services interface {
 	RegistryValue
 	GetNamespace() string
@@ -559,84 +559,84 @@ type Services interface {
 	GetValue() interface{}
 }
 
-//批量服务应答
+// 批量服务应答
 type ServicesResponse struct {
-	//规则类型
+	// 规则类型
 	Type EventType
-	//所属服务
+	// 所属服务
 	Service ServiceKey
-	//规则对象，不同EventType对应不同类型实例
+	// 规则对象，不同EventType对应不同类型实例
 	Value interface{}
-	//规则版本信息
+	// 规则版本信息
 	Revision string
-	//规则缓存
-	//RuleCache RuleCache
-	//规则校验异常
+	// 规则缓存
+	// RuleCache RuleCache
+	// 规则校验异常
 	ValidateError error
 }
 
-//获取类型
+// 获取类型
 func (s *ServicesResponse) GetType() EventType {
 	return s.Type
 }
 
-//获取值
-//PB场景下，路由规则类型为*Routing
+// 获取值
+// PB场景下，路由规则类型为*Routing
 func (s *ServicesResponse) GetValue() interface{} {
 	return s.Value
 }
 
-//配置规则是否已经加载
+// 配置规则是否已经加载
 func (s *ServicesResponse) IsInitialized() bool {
 	return true
 }
 
-//获取配置规则的修订版本信息
+// 获取配置规则的修订版本信息
 func (s *ServicesResponse) GetRevision() string {
 	return s.Revision
 }
 
-//获取命名空间
+// 获取命名空间
 func (s *ServicesResponse) GetNamespace() string {
 	return s.Service.Namespace
 }
 
-//获取服务名
+// 获取服务名
 func (s *ServicesResponse) GetService() string {
 	return s.Service.Service
 }
 
-//获取规则校验异常
+// 获取规则校验异常
 func (s *ServicesResponse) GetValidateError() error {
 	return s.ValidateError
 }
 
-//服务信息
+// 服务信息
 type ServiceInfo struct {
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//可选，服务元数据信息
+	// 可选，服务元数据信息
 	Metadata map[string]string
 }
 
-//获取服务名
+// 获取服务名
 func (i *ServiceInfo) GetService() string {
 	return i.Service
 }
 
-//获取命名空间
+// 获取命名空间
 func (i *ServiceInfo) GetNamespace() string {
 	return i.Namespace
 }
 
-//获取元数据信息
+// 获取元数据信息
 func (i *ServiceInfo) GetMetadata() map[string]string {
 	return i.Metadata
 }
 
-//格式化输出内容
+// 格式化输出内容
 func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
 }
@@ -645,7 +645,7 @@ type OneInstanceResponse struct {
 	InstancesResponse
 }
 
-//GetInstance get the only instance
+// GetInstance get the only instance
 func (o *OneInstanceResponse) GetInstance() Instance {
 	if len(o.InstancesResponse.Instances) > 0 {
 		return o.InstancesResponse.Instances[0]
@@ -653,33 +653,33 @@ func (o *OneInstanceResponse) GetInstance() Instance {
 	return nil
 }
 
-//服务实例查询应答
+// 服务实例查询应答
 type InstancesResponse struct {
 	ServiceInfo
-	//可选，流水号，用于跟踪用户的请求，默认0
+	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	//服务权重类型
+	// 服务权重类型
 	TotalWeight int
-	//获取实例的修订版本信息
-	//与上一次比较，用于确认服务实例是否发生变更
+	// 获取实例的修订版本信息
+	// 与上一次比较，用于确认服务实例是否发生变更
 	Revision string
-	//服务实例列表
+	// 服务实例列表
 	Instances []Instance
-	//当前查询结果所属的集群，如果是获取GetOneInstance返回的结果，则为nil
+	// 当前查询结果所属的集群，如果是获取GetOneInstance返回的结果，则为nil
 	Cluster *Cluster
 }
 
-//获取配置类型
+// 获取配置类型
 func (i *InstancesResponse) GetType() EventType {
 	return EventInstances
 }
 
-//获取服务实例列表
+// 获取服务实例列表
 func (i *InstancesResponse) GetInstances() []Instance {
 	return i.Instances
 }
 
-//获取单个服务实例
+// 获取单个服务实例
 func (i *InstancesResponse) GetInstance(instanceId string) Instance {
 	for _, v := range i.Instances {
 		if v.GetId() == instanceId {
@@ -689,27 +689,27 @@ func (i *InstancesResponse) GetInstance(instanceId string) Instance {
 	return nil
 }
 
-//服务实例列表是否已经加载
+// 服务实例列表是否已经加载
 func (i *InstancesResponse) IsInitialized() bool {
 	return true
 }
 
-//数据是否来自于缓存文件
+// 数据是否来自于缓存文件
 func (i *InstancesResponse) IsCacheLoaded() bool {
 	return false
 }
 
-//获取服务的修订版本信息
+// 获取服务的修订版本信息
 func (i *InstancesResponse) GetRevision() string {
 	return i.Revision
 }
 
-//获取全部实例总权重
+// 获取全部实例总权重
 func (i *InstancesResponse) GetTotalWeight() int {
 	return i.TotalWeight
 }
 
-//获取集群缓存
+// 获取集群缓存
 func (i *InstancesResponse) GetServiceClusters() ServiceClusters {
 	if nil == i.Cluster {
 		return nil
@@ -717,7 +717,7 @@ func (i *InstancesResponse) GetServiceClusters() ServiceClusters {
 	return i.Cluster.GetClusters()
 }
 
-//重建集群缓存
+// 重建集群缓存
 func (i *InstancesResponse) ReloadServiceClusters() {
 	if nil == i.Cluster {
 		return
@@ -725,40 +725,40 @@ func (i *InstancesResponse) ReloadServiceClusters() {
 	i.Cluster.clusters.GetServiceInstances().ReloadServiceClusters()
 }
 
-//调用结果状态
+// 调用结果状态
 type RetStatus int
 
 const (
-	//调用成功
+	// 调用成功
 	RetSuccess RetStatus = 1
-	//调用失败
+	// 调用失败
 	RetFail RetStatus = 2
 )
 
-//ServiceCallResult 服务调用结果
+// ServiceCallResult 服务调用结果
 type ServiceCallResult struct {
 	EmptyInstanceGauge
-	//上报的服务实例
+	// 上报的服务实例
 	CalledInstance Instance
-	//必选，本地服务调用的状态，正常or异常
+	// 必选，本地服务调用的状态，正常or异常
 	RetStatus RetStatus
-	//必选，本地服务调用的返回码
+	// 必选，本地服务调用的返回码
 	RetCode *int32
-	//必选，被调服务实例获取接口的最大时延
+	// 必选，被调服务实例获取接口的最大时延
 	Delay *time.Duration
 }
 
-//API调用的唯一标识
+// API调用的唯一标识
 type APICallKey struct {
-	//调用的API接口名字
+	// 调用的API接口名字
 	APIName ApiOperation
-	//必选，本地服务调用的错误码
+	// 必选，本地服务调用的错误码
 	RetCode ErrCode
-	//延迟的范围
+	// 延迟的范围
 	DelayRange ApiDelayRange
 }
 
-//校验InstanceDeRegisterRequest
+// 校验InstanceDeRegisterRequest
 func (s *ServiceCallResult) Validate() error {
 	if nil == s {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "ServiceCallResult can not be nil")
@@ -783,54 +783,54 @@ func (s *ServiceCallResult) Validate() error {
 	return nil
 }
 
-//设置返回状态
+// 设置返回状态
 func (s *ServiceCallResult) SetRetStatus(retStatus RetStatus) *ServiceCallResult {
 	s.RetStatus = retStatus
 	return s
 }
 
-//设置实例
+// 设置实例
 func (s *ServiceCallResult) SetCalledInstance(inst Instance) *ServiceCallResult {
 	s.CalledInstance = inst
 	return s
 }
 
-//实例所属服务名
+// 实例所属服务名
 func (s *ServiceCallResult) GetService() string {
 	return s.CalledInstance.GetService()
 }
 
-//实例所属命名空间
+// 实例所属命名空间
 func (s *ServiceCallResult) GetNamespace() string {
 	return s.CalledInstance.GetNamespace()
 }
 
-//实例ID
+// 实例ID
 func (s *ServiceCallResult) GetID() string {
 	return s.CalledInstance.GetId()
 }
 
-//获取被调服务实例
+// 获取被调服务实例
 func (s *ServiceCallResult) GetCalledInstance() Instance {
 	return s.CalledInstance
 }
 
-//实例的节点信息
+// 实例的节点信息
 func (s *ServiceCallResult) GetHost() string {
 	return s.CalledInstance.GetHost()
 }
 
-//实例的端口信息
+// 实例的端口信息
 func (s *ServiceCallResult) GetPort() int {
 	return int(s.CalledInstance.GetPort())
 }
 
-//实例的返回码
+// 实例的返回码
 func (s *ServiceCallResult) GetRetCode() *int32 {
 	return s.RetCode
 }
 
-//实例的返回码
+// 实例的返回码
 func (s *ServiceCallResult) GetRetCodeValue() int32 {
 	if nil == s.RetCode {
 		return 0
@@ -838,137 +838,137 @@ func (s *ServiceCallResult) GetRetCodeValue() int32 {
 	return *s.RetCode
 }
 
-//设置实例返回码
+// 设置实例返回码
 func (s *ServiceCallResult) SetRetCode(value int32) *ServiceCallResult {
 	s.RetCode = &value
 	return s
 }
 
-//调用时延
+// 调用时延
 func (s *ServiceCallResult) GetDelay() *time.Duration {
 	return s.Delay
 }
 
-//设置时延值
+// 设置时延值
 func (s *ServiceCallResult) SetDelay(duration time.Duration) *ServiceCallResult {
 	s.Delay = ToDurationPtr(duration)
 	return s
 }
 
-//获取本地调用状态
+// 获取本地调用状态
 func (s *ServiceCallResult) GetRetStatus() RetStatus {
 	return s.RetStatus
 }
 
-//sdk api调用结果
+// sdk api调用结果
 type APICallResult struct {
 	EmptyInstanceGauge
 	APICallKey
-	//必选，本地服务调用的状态，正常or异常
+	// 必选，本地服务调用的状态，正常or异常
 	RetStatus RetStatus
-	//必选，调用延时
+	// 必选，调用延时
 	delay time.Duration
 }
 
-//设置成功的调用结果
+// 设置成功的调用结果
 func (a *APICallResult) SetSuccess(delay time.Duration) {
 	a.RetStatus = RetSuccess
 	a.RetCode = ErrCodeSuccess
 	a.SetDelay(delay)
 }
 
-//设置失败的调用结果
+// 设置失败的调用结果
 func (a *APICallResult) SetFail(retCode ErrCode, delay time.Duration) {
 	a.RetStatus = RetFail
 	a.RetCode = retCode
 	a.SetDelay(delay)
 }
 
-//获取调用api
+// 获取调用api
 func (a *APICallResult) GetAPI() ApiOperation {
 	return a.APICallKey.APIName
 }
 
-//实例的调用返回状态
+// 实例的调用返回状态
 func (a *APICallResult) GetRetStatus() RetStatus {
 	return a.RetStatus
 }
 
-//实例的返回码
+// 实例的返回码
 func (a *APICallResult) GetRetCode() *int32 {
 	r := int32(a.RetCode)
 	return &r
 }
 
-//实例的返回码
+// 实例的返回码
 func (a *APICallResult) GetRetCodeValue() int32 {
 	return int32(a.RetCode)
 }
 
-//调用时延
+// 调用时延
 func (a *APICallResult) GetDelay() *time.Duration {
 	return &a.delay
 }
 
-//设置调用时延
+// 设置调用时延
 func (a *APICallResult) SetDelay(delay time.Duration) {
 	a.delay = delay
 	a.DelayRange = GetApiDelayRange(a.delay)
 }
 
-//返回延迟范围
+// 返回延迟范围
 func (a *APICallResult) GetDelayRange() ApiDelayRange {
 	return a.DelayRange
 }
 
-//InstanceHeartbeatRequest 心跳上报请求
+// InstanceHeartbeatRequest 心跳上报请求
 type InstanceHeartbeatRequest struct {
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，服务访问Token
+	// 必选，服务访问Token
 	ServiceToken string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//必选，服务实例ID
+	// 必选，服务实例ID
 	InstanceID string
-	//必选，服务实例ip
+	// 必选，服务实例ip
 	Host string
-	//必选，服务实例端口
+	// 必选，服务实例端口
 	Port int
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 }
 
-//打印消息内容
+// 打印消息内容
 func (g InstanceHeartbeatRequest) String() string {
 	return fmt.Sprintf("{service=%s, namespace=%s, host=%s, port=%d, instanceID=%s}",
 		g.Service, g.Namespace, g.Host, g.Port, g.InstanceID)
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *InstanceHeartbeatRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *InstanceHeartbeatRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *InstanceHeartbeatRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *InstanceHeartbeatRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
-//校验InstanceDeRegisterRequest
+// 校验InstanceDeRegisterRequest
 func (i *InstanceHeartbeatRequest) Validate() error {
 	if nil == i {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceHeartbeatRequest can not be nil")
@@ -998,54 +998,54 @@ func (i *InstanceHeartbeatRequest) Validate() error {
 	return nil
 }
 
-//InstanceDeRegisterRequest 反注册服务请求
+// InstanceDeRegisterRequest 反注册服务请求
 type InstanceDeRegisterRequest struct {
-	//服务名
+	// 服务名
 	Service string
-	//服务访问Token
+	// 服务访问Token
 	ServiceToken string
-	//命名空间
+	// 命名空间
 	Namespace string
-	//服务实例ID
+	// 服务实例ID
 	InstanceID string
-	//服务实例ip
+	// 服务实例ip
 	Host string
-	//服务实例端口
+	// 服务实例端口
 	Port int
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 }
 
-//打印消息内容
+// 打印消息内容
 func (g InstanceDeRegisterRequest) String() string {
 	return fmt.Sprintf("{service=%s, namespace=%s, host=%s, port=%d, instanceID=%s}",
 		g.Service, g.Namespace, g.Host, g.Port, g.InstanceID)
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *InstanceDeRegisterRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *InstanceDeRegisterRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *InstanceDeRegisterRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *InstanceDeRegisterRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
-//校验InstanceDeRegisterRequest
+// 校验InstanceDeRegisterRequest
 func (i *InstanceDeRegisterRequest) Validate() error {
 	if nil == i {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceDeRegisterRequest can not be nil")
@@ -1076,100 +1076,100 @@ func (i *InstanceDeRegisterRequest) Validate() error {
 }
 
 const (
-	//最小权重值
+	// 最小权重值
 	MinWeight int = 0
-	//最大权重值
+	// 最大权重值
 	MaxWeight int = 10000
-	//最小优先级
+	// 最小优先级
 	MinPriority = 0
-	//最大优先级
+	// 最大优先级
 	MaxPriority = 9
 )
 
 const (
-	//健康检查类型：心跳
+	// 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
 )
 
-//InstanceRegisterRequest 注册服务请求
+// InstanceRegisterRequest 注册服务请求
 type InstanceRegisterRequest struct {
-	//必选，服务名
+	// 必选，服务名
 	Service string
-	//必选，服务访问Token
+	// 必选，服务访问Token
 	ServiceToken string
-	//必选，命名空间
+	// 必选，命名空间
 	Namespace string
-	//必选，服务监听host，支持IPv6地址
+	// 必选，服务监听host，支持IPv6地址
 	Host string
-	//必选，服务实例监听port
+	// 必选，服务实例监听port
 	Port int
 
-	//以下字段可选，默认nil表示客户端不配置，使用服务端配置
-	//服务协议
+	// 以下字段可选，默认nil表示客户端不配置，使用服务端配置
+	// 服务协议
 	Protocol *string
-	//服务权重，默认100，范围0-10000
+	// 服务权重，默认100，范围0-10000
 	Weight *int
-	//实例优先级，默认为0，数值越小，优先级越高
+	// 实例优先级，默认为0，数值越小，优先级越高
 	Priority *int
-	//实例提供服务版本号
+	// 实例提供服务版本号
 	Version *string
-	//用户自定义metadata信息
+	// 用户自定义metadata信息
 	Metadata map[string]string
-	//该服务实例是否健康，默认健康
+	// 该服务实例是否健康，默认健康
 	Healthy *bool
-	//该服务实例是否隔离，默认不隔离
+	// 该服务实例是否隔离，默认不隔离
 	Isolate *bool
-	//ttl超时时间，如果节点要调用heartbeat上报，则必须填写，否则会400141错误码，单位：秒
+	// ttl超时时间，如果节点要调用heartbeat上报，则必须填写，否则会400141错误码，单位：秒
 	TTL *int
 
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
-	//可选，重试次数，默认直接获取全局的超时配置
+	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 }
 
-//打印消息内容
+// 打印消息内容
 func (g InstanceRegisterRequest) String() string {
 	return fmt.Sprintf("{service=%s, namespace=%s, host=%s, port=%d}", g.Service, g.Namespace, g.Host, g.Port)
 }
 
-//设置实例是否健康
+// 设置实例是否健康
 func (g *InstanceRegisterRequest) SetHealthy(healthy bool) {
 	g.Healthy = &healthy
 }
 
-//设置实例是否隔离
+// 设置实例是否隔离
 func (g *InstanceRegisterRequest) SetIsolate(isolate bool) {
 	g.Isolate = &isolate
 }
 
-//设置超时时间
+// 设置超时时间
 func (g *InstanceRegisterRequest) SetTimeout(duration time.Duration) {
 	g.Timeout = ToDurationPtr(duration)
 }
 
-//设置重试次数
+// 设置重试次数
 func (g *InstanceRegisterRequest) SetRetryCount(retryCount int) {
 	g.RetryCount = &retryCount
 }
 
-//设置服务实例TTL
+// 设置服务实例TTL
 func (g *InstanceRegisterRequest) SetTTL(ttl int) {
 	g.TTL = &ttl
 }
 
-//获取超时值指针
+// 获取超时值指针
 func (g *InstanceRegisterRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
 }
 
-//获取重试次数指针
+// 获取重试次数指针
 func (g *InstanceRegisterRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
-//校验元数据的key是否为空
+// 校验元数据的key是否为空
 func validateMetadata(prefix string, metadata map[string]string) error {
 	if len(metadata) > 0 {
 		for key := range metadata {
@@ -1181,7 +1181,7 @@ func validateMetadata(prefix string, metadata map[string]string) error {
 	return nil
 }
 
-//校验InstanceRegisterRequest
+// 校验InstanceRegisterRequest
 func (g *InstanceRegisterRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceRegisterRequest can not be nil")
@@ -1217,28 +1217,28 @@ func (g *InstanceRegisterRequest) Validate() error {
 	return nil
 }
 
-//InstanceRegisterResponse 注册服务应答
+// InstanceRegisterResponse 注册服务应答
 type InstanceRegisterResponse struct {
-	//实例ID
+	// 实例ID
 	InstanceID string
-	//实例是否已存在
+	// 实例是否已存在
 	Existed bool
 }
 
-//客户端上报请求信息
+// 客户端上报请求信息
 type ReportClientRequest struct {
-	//客户端IP地址
+	// 客户端IP地址
 	Host string
-	//客户端版本信息
+	// 客户端版本信息
 	Version string
-	//可选，单次查询超时时间，默认直接获取全局的超时配置
-	//用户总最大超时时间为(1+RetryCount) * Timeout
+	// 可选，单次查询超时时间，默认直接获取全局的超时配置
+	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout time.Duration
-	//持久化回调
+	// 持久化回调
 	PersistHandler func(message proto.Message) error
 }
 
-//校验ReportClientRequest
+// 校验ReportClientRequest
 func (r *ReportClientRequest) Validate() error {
 	if nil == r {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "ReportClientRequest can not be nil")
@@ -1253,7 +1253,7 @@ func (r *ReportClientRequest) Validate() error {
 	return nil
 }
 
-//客户端上报应答信息
+// 客户端上报应答信息
 type ReportClientResponse struct {
 	Mode    RunMode
 	Version string
@@ -1262,50 +1262,50 @@ type ReportClientResponse struct {
 	Campus  string
 }
 
-//服务路由实例过滤计算
+// 服务路由实例过滤计算
 type routeFilterCounter struct {
 	value int32
 }
 
-//增加偏移值
+// 增加偏移值
 func (r *routeFilterCounter) addValue(diff int32) {
 	atomic.AddInt32(&r.value, diff)
 }
 
-//获取过滤值
+// 获取过滤值
 func (r *routeFilterCounter) getValue() int32 {
 	return atomic.LoadInt32(&r.value)
 }
 
-//本地缓存中过滤的实例数量
+// 本地缓存中过滤的实例数量
 type FilteredInstanceCounter struct {
 	isolatedInstances  int32
 	unhealthyInstances int32
-	//服务路由插件过滤的节点计数器, key pluginName, value
+	// 服务路由插件过滤的节点计数器, key pluginName, value
 	routeFilterCounters sync.Map
 }
 
-//增加过滤的被隔离实例数量
+// 增加过滤的被隔离实例数量
 func (f *FilteredInstanceCounter) AddIsolatedInstances(n int32) {
 	atomic.AddInt32(&f.isolatedInstances, n)
 }
 
-//被隔离实例数量
+// 被隔离实例数量
 func (f *FilteredInstanceCounter) GetIsolatedInstances() int32 {
 	return atomic.LoadInt32(&f.isolatedInstances)
 }
 
-//增加过滤的不健康实例数量
+// 增加过滤的不健康实例数量
 func (f *FilteredInstanceCounter) AddUnhealthyInstances(n int32) {
 	atomic.AddInt32(&f.unhealthyInstances, n)
 }
 
-//不健康实例数量
+// 不健康实例数量
 func (f *FilteredInstanceCounter) GetUnhealthyInstances() int32 {
 	return atomic.LoadInt32(&f.unhealthyInstances)
 }
 
-//增加被就近接入路由过滤的实例数量
+// 增加被就近接入路由过滤的实例数量
 func (f *FilteredInstanceCounter) AddRouteFilteredInstances(routerName string, n int32) {
 	value, loaded := f.routeFilterCounters.LoadOrStore(routerName, &routeFilterCounter{value: n})
 	if loaded {
@@ -1313,7 +1313,7 @@ func (f *FilteredInstanceCounter) AddRouteFilteredInstances(routerName string, n
 	}
 }
 
-//就近接入路由过滤的实例数量
+// 就近接入路由过滤的实例数量
 func (f *FilteredInstanceCounter) getRouteFilteredInstances(routerName string) int32 {
 	value, loaded := f.routeFilterCounters.Load(routerName)
 	if loaded {
@@ -1322,7 +1322,7 @@ func (f *FilteredInstanceCounter) getRouteFilteredInstances(routerName string) i
 	return 0
 }
 
-//校验服务元数据信息
+// 校验服务元数据信息
 func validateServiceMetadata(prefix string, svcMeta ServiceMetadata) error {
 	var errs error
 	if len(svcMeta.GetService()) == 0 {

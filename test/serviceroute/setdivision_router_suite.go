@@ -19,32 +19,35 @@ package serviceroute
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
 	"log"
 	"net"
 	"time"
+
+	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 )
 
 const (
-	setDivisionServerIPAddr        = "127.0.0.1"
-	setDivisionServerPort          = 8011 // 需要跟配置文件一致(sr_setdivision.yaml)
-	setDivisionMonitorIPAddr       = "127.0.0.1"
-	setDivisionMonitorPort         = 8012
-	internalSetEnableKey           = "internal-enable-set"
-	setEnable                      = "Y"
-	internalSetNameKey             = "internal-set-name"
-	serverService           string = "trpc.settestapp.settestserver"
-	clientService           string = "trpc.settestapp.settestclient"
+	setDivisionServerIPAddr         = "127.0.0.1"
+	setDivisionServerPort           = 8011 // 需要跟配置文件一致(sr_setdivision.yaml)
+	setDivisionMonitorIPAddr        = "127.0.0.1"
+	setDivisionMonitorPort          = 8012
+	internalSetEnableKey            = "internal-enable-set"
+	setEnable                       = "Y"
+	internalSetNameKey              = "internal-set-name"
+	serverService            string = "trpc.settestapp.settestserver"
+	clientService            string = "trpc.settestapp.settestclient"
 	// 服务默认命名空间
 	setNamespace = "setnamespace"
 )
@@ -101,7 +104,17 @@ func (t *SetDivisionTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
-
+	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
+		Namespace: config.ServerNamespace,
+		Service:   config.ServerMonitorService,
+	}, util.RegisteredInstance{
+		IP:      setDivisionMonitorIPAddr,
+		Port:    setDivisionMonitorPort,
+		Healthy: true,
+	})
+	if err != nil {
+		log.Fatalf("fail to setup monitor, err %v", err)
+	}
 }
 
 // TearDownSuite 结束测试套程序
@@ -189,6 +202,20 @@ func (t *SetDivisionTestingSuite) TestSetExcatMatch(c *check.C) {
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	c.Assert(resp.Instances[0].GetMetadata()[internalSetNameKey], check.Equals, "a.b.c")
 	time.Sleep(2 * time.Second)
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcService:   clientService,
+			SrcNamespace: setNamespace,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestSameGroup 测试没有本分组，匹配最后的情况
@@ -206,7 +233,20 @@ func (t *SetDivisionTestingSuite) TestSameGroup(c *check.C) {
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	c.Assert(resp.Instances[0].GetMetadata()[internalSetNameKey], check.Equals, "a.b.*")
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcNamespace: setNamespace,
+			SrcService:   clientService,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 
 }
 
@@ -223,7 +263,20 @@ func (t *SetDivisionTestingSuite) TestNoSet(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, 4)
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcService:   clientService,
+			SrcNamespace: setNamespace,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestDstNotSet 测试被调没启用set的情况
@@ -239,7 +292,20 @@ func (t *SetDivisionTestingSuite) TestDstNotSet(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances), check.Equals, 4)
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcNamespace: setNamespace,
+			SrcService:   clientService,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestAllGroup 测试主调的 set分组为*的情况
@@ -262,7 +328,20 @@ func (t *SetDivisionTestingSuite) TestAllGroup(c *check.C) {
 		c.Assert(ok, check.Equals, true)
 	}
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+			SrcService:   clientService,
+			SrcNamespace: setNamespace,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestSetNotMatch 启用set了，但set不匹配，返回空
@@ -278,7 +357,20 @@ func (t *SetDivisionTestingSuite) TestSetNotMatch(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances) == 0, check.Equals, true)
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcNamespace: setNamespace,
+			SrcService:   clientService,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestDestinationSet 测试使用了destination  set的情况
@@ -309,7 +401,20 @@ func (t *SetDivisionTestingSuite) TestDestinationSet(c *check.C) {
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	c.Assert(resp.Instances[0].GetMetadata()[internalSetNameKey], check.Equals, dstInstanceMeta[3][internalSetNameKey])
 	time.Sleep(2 * time.Second)
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:    setNamespace,
+			Service:      serverService,
+			SrcNamespace: setNamespace,
+			SrcService:   clientService,
+			Plugin:       config.DefaultServiceRouterSetDivision,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // GetName 套件名字

@@ -19,9 +19,6 @@ package serviceroute
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
 	"io/ioutil"
 	"log"
 	"math"
@@ -31,19 +28,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
+
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 )
 
 const (
 	ruleServerIPAddr  = "127.0.0.1"
-	ruleServerPort    = 8010 //需要跟配置文件一致(sr_rule.yaml)
+	ruleServerPort    = 8010 // 需要跟配置文件一致(sr_rule.yaml)
 	ruleMonitorIPAddr = "127.0.0.1"
 	ruleMonitorPort   = 8011
 )
@@ -60,11 +64,11 @@ const (
 	newCalledService = "new_dest_service"
 	// 用于测试错误路由规则的新被调服务
 	badCalledService = "bad_dest_service"
-	//入规则没有sources为空
+	// 入规则没有sources为空
 	badCalledService1 = "bad_dest_service1"
 )
 
-//异常测试相关的服务及命名空间
+// 异常测试相关的服务及命名空间
 const (
 	productionNamespace = "Production"
 	onlyInboundService  = "onlyInboundService"
@@ -284,7 +288,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 			isHealthy = true
 			metadata["logic_set"] = metaSet2
 		default:
-			//增加一个没有元数据的健康实例
+			// 增加一个没有元数据的健康实例
 			isHealthy = true
 		}
 
@@ -347,7 +351,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 		onlyInboundSvcKey.Namespace, "testdata/route_rule/only_inbound.json", destInstances)
 }
 
-//设置模拟桩服务器
+// 设置模拟桩服务器
 func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	var err error
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -394,7 +398,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 
 	t.callDstService(consumer, c)
 
-	//将路由规则更新成错误的规则
+	// 将路由规则更新成错误的规则
 	calledSvcKey := model.ServiceKey{
 		Namespace: defaultNamespace,
 		Service:   calledService,
@@ -402,22 +406,44 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	err = registerRouteRuleByFile(
 		t.mockServer, t.pbServices[calledSvcKey], "testdata/route_rule/dest_service_false_regex.json")
 	c.Assert(err, check.IsNil)
-	//等待路由更新
+	// 等待路由更新
 	time.Sleep(10 * time.Second)
-	//测试monitor接收的数据对不对
-
-	//校验失败，所以上一个规则仍然有效
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     defaultNamespace,
+			Service:       calledService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
+	// 校验失败，所以上一个规则仍然有效
 	t.callDstService(consumer, c)
 	err = registerRouteRuleByFile(
 		t.mockServer, t.pbServices[calledSvcKey], "testdata/route_rule/dest_service.json")
 	c.Assert(err, check.IsNil)
-	//等待路由更新
+	// 等待路由更新
 	time.Sleep(5 * time.Second)
-	//测试monitor接收的数据对不对
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     defaultNamespace,
+			Service:       calledService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//调用目标服务
+// 调用目标服务
 func (t *RuleRoutingTestingSuite) callDstService(consumer api.ConsumerAPI, c *check.C) {
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
@@ -428,7 +454,7 @@ func (t *RuleRoutingTestingSuite) callDstService(consumer api.ConsumerAPI, c *ch
 	resp, err := consumer.GetInstances(request)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp, check.NotNil)
-	//只能匹配到健康的元数据为version:metaSet2的一个实例
+	// 只能匹配到健康的元数据为version:metaSet2的一个实例
 	c.Assert(len(resp.Instances), check.Equals, 1)
 	for _, instance := range resp.Instances {
 		meta := instance.GetMetadata()
@@ -514,8 +540,19 @@ func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 		}
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     defaultNamespace,
+			Service:       calledService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: uint32(runNum)},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // match inbound & outbound rules
@@ -552,11 +589,24 @@ func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 		c.Assert(ok, check.Equals, true)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     defaultNamespace,
+			Service:       calledService,
+			SrcNamespace:  defaultNamespace,
+			SrcService:    callingService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "Success",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试匹配残缺的路由规则
+// 测试匹配残缺的路由规则
 func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -567,7 +617,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 
 	var request *api.GetInstancesRequest
 
-	//没有源服务查询入规则为空的服务
+	// 没有源服务查询入规则为空的服务
 	request = &api.GetInstancesRequest{}
 	request.Namespace = productionNamespace
 	request.Service = onlyOutboundService
@@ -575,7 +625,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(resp.Instances) > 0, check.Equals, true)
 
-	//指定源服务为出规则为空的服务查询入规则为空的服务
+	// 指定源服务为出规则为空的服务查询入规则为空的服务
 	request = &api.GetInstancesRequest{}
 	request.Namespace = productionNamespace
 	request.Service = onlyOutboundService
@@ -588,7 +638,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(len(resp.Instances) > 0, check.Equals, true)
 	fmt.Println(resp.Instances[0])
 
-	//指定源服务为出规则不为空的服务查询入规则为空的服务
+	// 指定源服务为出规则不为空的服务查询入规则为空的服务
 	request = &api.GetInstancesRequest{}
 	request.Namespace = productionNamespace
 	request.Service = onlyOutboundService
@@ -602,10 +652,23 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(sdkErr.ErrorCode(), check.Equals, model.ErrCodeRouteRuleNotMatch)
 	c.Assert(strings.Contains(sdkErr.Error(), "sourceRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     productionNamespace,
+			Service:       onlyOutboundService,
+			SrcService:    bioService,
+			SrcNamespace:  productionNamespace,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_SrcRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "ErrCodeRouteRuleNotMatch",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 
-
-	//指定错误的metadata查询入规则不为空的服务
+	// 指定错误的metadata查询入规则不为空的服务
 	request = &api.GetInstancesRequest{}
 	request.Namespace = productionNamespace
 	request.Service = onlyInboundService
@@ -622,10 +685,23 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(sdkErr.ErrorCode(), check.Equals, model.ErrCodeRouteRuleNotMatch)
 	c.Assert(strings.Contains(sdkErr.Error(), "dstRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     productionNamespace,
+			Service:       onlyInboundService,
+			SrcService:    bioService,
+			SrcNamespace:  productionNamespace,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "ErrCodeRouteRuleNotMatch",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 
-
-	//不指定source，查询入规则不为空的服务
+	// 不指定source，查询入规则不为空的服务
 	request = &api.GetInstancesRequest{}
 	request.Namespace = productionNamespace
 	request.Service = onlyInboundService
@@ -635,8 +711,19 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	c.Assert(sdkErr.ErrorCode(), check.Equals, model.ErrCodeRouteRuleNotMatch)
 	c.Assert(strings.Contains(sdkErr.Error(), "dstRuleFail"), check.Equals, true)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
-
+	// 测试monitor接收的数据对不对
+	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
+		routerKey{
+			Namespace:     productionNamespace,
+			Service:       onlyInboundService,
+			Plugin:        config.DefaultServiceRouterRuleBased,
+			RouteRuleType: monitorpb.RouteRecord_DestRule,
+		}: {recordKey{
+			RouteStatus: "Normal",
+			RetCode:     "ErrCodeRouteRuleNotMatch",
+		}: 1},
+	}, c)
+	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // inbound rules
@@ -692,7 +779,7 @@ func (t *RuleRoutingTestingSuite) TestOutboundRules(c *check.C) {
 	}
 }
 
-//测试正则匹配inbound rules
+// 测试正则匹配inbound rules
 func (t *RuleRoutingTestingSuite) TestInboundRuleRegex(c *check.C) {
 	fmt.Println("-------TestInboundRuleRegex")
 	defer util.DeleteDir(util.BackupDir)
@@ -718,7 +805,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRuleRegex(c *check.C) {
 		resp, err := consumer.GetOneInstance(request)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(resp.GetInstances()), check.Equals, 1)
-		//fmt.Println("----------------", resp.Instances[0])
+		// fmt.Println("----------------", resp.Instances[0])
 		flag := false
 		if v, ok := resp.Instances[0].GetMetadata()["env"]; ok {
 			flag = strings.Contains(v, "set")
@@ -728,7 +815,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRuleRegex(c *check.C) {
 
 }
 
-//测试目标规则的优先级
+// 测试目标规则的优先级
 func (t *RuleRoutingTestingSuite) TestDestPriority(c *check.C) {
 	fmt.Println("-------TestDestPriority")
 	defer util.DeleteDir(util.BackupDir)
@@ -754,7 +841,7 @@ func (t *RuleRoutingTestingSuite) TestDestPriority(c *check.C) {
 		resp, err := consumer.GetOneInstance(request)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(resp.GetInstances()), check.Equals, 1)
-		//fmt.Println("----------------", resp.Instances[0])
+		// fmt.Println("----------------", resp.Instances[0])
 		flag := false
 		if v, ok := resp.Instances[0].GetMetadata()["env"]; ok {
 			flag = strings.Contains(v, "set1")
@@ -763,7 +850,7 @@ func (t *RuleRoutingTestingSuite) TestDestPriority(c *check.C) {
 	}
 }
 
-//测试目标规则的weight(包括0权重)
+// 测试目标规则的weight(包括0权重)
 func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 	fmt.Println("-------TestDestWeight")
 	defer util.DeleteDir(util.BackupDir)
@@ -790,7 +877,7 @@ func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 		resp, err := consumer.GetOneInstance(request)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(resp.GetInstances()), check.Equals, 1)
-		//fmt.Println("----------------", resp.Instances[0])
+		// fmt.Println("----------------", resp.Instances[0])
 		if v, ok := resp.Instances[0].GetMetadata()["env"]; ok {
 			if v == "set1" {
 				set1Num++
@@ -804,7 +891,7 @@ func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 	c.Assert(math.Abs(600-float64(set1Num)) < 50, check.Equals, true)
 }
 
-//测试inbound no sources
+// 测试inbound no sources
 func (t *RuleRoutingTestingSuite) TestInboundNoSources(c *check.C) {
 	fmt.Println("-------TestInboundNoSources")
 	defer util.DeleteDir(util.BackupDir)
@@ -895,7 +982,7 @@ func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 
 }
 
-//测试只有入流量规则的前提下，不传入sourceService能否成功路由
+// 测试只有入流量规则的前提下，不传入sourceService能否成功路由
 func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	serviceName := "InboundNoSource"
 	service := &namingpb.Service{
@@ -964,7 +1051,7 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	}
 }
 
-//使用parameter路由，进行基线特性环境匹配
+// 使用parameter路由，进行基线特性环境匹配
 func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	serviceName := "OneBaseTwoFeatureCaller"
 	service := &namingpb.Service{
@@ -984,7 +1071,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/one_baseline.json")
 	c.Assert(err, check.IsNil)
 
-	//注册具有相应标签的实例
+	// 注册具有相应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"env": "base"}, 2},
 		{map[string]string{"env": "feature0"}, 1},
@@ -1028,10 +1115,10 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	t.mockServer.DeregisterService(testNamespace, "OneBaseTwoFeatureCallee")
 }
 
-//服务实例：2个基线环境b，2个特性环境f
-//case1：metadata带上特性环境名f，variable设置为基线环境名b，访问到特性环境f
-//case2: metadata不带上环境名，variable设置为基线环境名b，访问到基线环境b
-//case3：metadata不带上环境名，variable设置为不存在的基线环境名b1，返回错误
+// 服务实例：2个基线环境b，2个特性环境f
+// case1：metadata带上特性环境名f，variable设置为基线环境名b，访问到特性环境f
+// case2: metadata不带上环境名，variable设置为基线环境名b，访问到基线环境b
+// case3：metadata不带上环境名，variable设置为不存在的基线环境名b1，返回错误
 func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	log.Printf("start to TestMultiBaseEnvWithVariable")
 	serviceName := "MultiBaseTwoFeatureCaller"
@@ -1052,7 +1139,7 @@ func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/multi_baseline.json")
 	c.Assert(err, check.IsNil)
 
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"env": "base"}, 2},
 		{map[string]string{"env": "feature"}, 2},
@@ -1107,7 +1194,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	t.mockServer.RegisterService(service)
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/multi_parameters.json")
 	c.Assert(err, check.IsNil)
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
 		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
@@ -1172,7 +1259,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	t.mockServer.RegisterService(service)
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/multi_variables.json")
 	c.Assert(err, check.IsNil)
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
 		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
@@ -1180,13 +1267,13 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 		{map[string]string{"k2": "v2", "k4": "v4-0"}, 2},
 	})
 
-	//配置文件里面带有k1:v1的变量
+	// 配置文件里面带有k1:v1的变量
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule_variable.yaml")
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 
-	//cfg.GetGlobal().GetSystem().SetVariable("k1", "v1")
+	// cfg.GetGlobal().GetSystem().SetVariable("k1", "v1")
 	request1 := &api.GetOneInstanceRequest{}
 	request1.Namespace = testNamespace
 	request1.Service = serviceName
@@ -1197,7 +1284,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 			"k1": "v1",
 		},
 	}
-	//使用了variable而不是sourceService里面的值，匹配到一个route
+	// 使用了variable而不是sourceService里面的值，匹配到一个route
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
@@ -1207,12 +1294,12 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	os.Setenv("k2", "v2-1")
 	os.Setenv("k3", "v3")
 	os.Setenv("k4k", "v4")
-	//同时设置k2,优先使用system的配置
+	// 同时设置k2,优先使用system的配置
 	cfg.GetGlobal().GetSystem().SetVariable("k2", "v2")
-	//使之无法匹配到第一个route
+	// 使之无法匹配到第一个route
 	cfg.GetGlobal().GetSystem().UnsetVariable("k1")
 	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k3": "v3"}
-	//匹配到第二个route
+	// 匹配到第二个route
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		c.Assert(err, check.IsNil)
@@ -1223,7 +1310,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	os.Unsetenv("k3")
 	os.Setenv("k4", "v4")
 	request1.SourceService.Metadata = map[string]string{"k2": "v2", "k5": "v5"}
-	//匹配到第三个route
+	// 匹配到第三个route
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
 		log.Printf("err is %v", err)
@@ -1244,7 +1331,7 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	t.mockServer.RegisterService(service)
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/bad_variable.json")
 	c.Assert(err, check.IsNil)
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k1": "v1"}, 2},
 		{map[string]string{"k2": "v2", "k4": "v4"}, 2},
@@ -1252,13 +1339,13 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 		{map[string]string{"k2": "v2", "k4": "v4-0"}, 2},
 	})
 
-	//配置文件里面带有k1:v1的变量
+	// 配置文件里面带有k1:v1的变量
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule_variable.yaml")
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 
-	//cfg.GetGlobal().GetSystem().SetVariable("k1", "v1")
+	// cfg.GetGlobal().GetSystem().SetVariable("k1", "v1")
 	request1 := &api.GetOneInstanceRequest{}
 	request1.Namespace = testNamespace
 	request1.Service = serviceName
@@ -1285,7 +1372,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	t.mockServer.RegisterService(service)
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/regex_parameter.json")
 	c.Assert(err, check.IsNil)
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k2": "v2x"}, 2},
 		{map[string]string{"k2": "v2xx"}, 2},
@@ -1293,7 +1380,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 		{map[string]string{"k2": "v2dd"}, 2},
 	})
 
-	//配置文件里面带有k1:v1的变量
+	// 配置文件里面带有k1:v1的变量
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule_variable.yaml")
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -1327,7 +1414,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	c.Assert(secondValue > 0, check.Equals, true)
 
 	firstValue, secondValue = 0, 0
-	//更换正则表达式
+	// 更换正则表达式
 	request1.SourceService.Metadata = map[string]string{
 		"k1": "v1",
 		"k2": "v2d+",
@@ -1348,7 +1435,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	c.Assert(firstValue > 0, check.Equals, true)
 	c.Assert(secondValue > 0, check.Equals, true)
 
-	//规则中 source 的正则表达式有问题，要进行报错
+	// 规则中 source 的正则表达式有问题，要进行报错
 	request1.SourceService.Metadata = map[string]string{
 		"k1": "*",
 		"k2": "v2d+",
@@ -1357,7 +1444,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	log.Printf("invalid parameter source regex, err is: %v", err)
 	c.Assert(err, check.NotNil)
 
-	//规则中 destination 的正则表达式有问题，要进行报错
+	// 规则中 destination 的正则表达式有问题，要进行报错
 	request1.SourceService.Metadata = map[string]string{
 		"k1": "v1",
 		"k2": "*",
@@ -1378,7 +1465,7 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	t.mockServer.RegisterService(service)
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/regex_variable.json")
 	c.Assert(err, check.IsNil)
-	//注册具有对应标签的实例
+	// 注册具有对应标签的实例
 	t.RegisterInstancesWithMetadataAndNum(service, []*InstanceMetadataAndNum{
 		{map[string]string{"k2": "v2x"}, 2},
 		{map[string]string{"k2": "v2xx"}, 2},
@@ -1386,7 +1473,7 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 		{map[string]string{"k2": "v2dd"}, 2},
 	})
 
-	//配置文件里面带有k1:v1的变量
+	// 配置文件里面带有k1:v1的变量
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule_variable.yaml")
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -1423,7 +1510,7 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	c.Assert(secondValue > 0, check.Equals, true)
 
 	firstValue, secondValue = 0, 0
-	//更改 source 的 metadata，依然能匹配上正则表达式
+	// 更改 source 的 metadata，依然能匹配上正则表达式
 	request1.SourceService.Metadata["k1"] = "v1dd"
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(request1)
@@ -1441,12 +1528,12 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	c.Assert(firstValue > 0, check.Equals, true)
 	c.Assert(secondValue > 0, check.Equals, true)
 
-	//更改 source 的 metadata，不能匹配上正则表达式
+	// 更改 source 的 metadata，不能匹配上正则表达式
 	request1.SourceService.Metadata["k1"] = "v1x"
 	_, err = consumer.GetOneInstance(request1)
 	c.Assert(err, check.NotNil)
 
-	//更换环境变量，匹配第二个规则
+	// 更换环境变量，匹配第二个规则
 	cfg.GetGlobal().GetSystem().UnsetVariable("k1-0")
 	cfg.GetGlobal().GetSystem().UnsetVariable("k2-0")
 	cfg.GetGlobal().GetSystem().SetVariable("k1-1", "v1x+")
@@ -1469,13 +1556,13 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	c.Assert(firstValue > 0, check.Equals, true)
 	c.Assert(secondValue > 0, check.Equals, true)
 
-	//更改环境变量，导致匹配第二个规则的 source的时候会出正则匹配问题
+	// 更改环境变量，导致匹配第二个规则的 source的时候会出正则匹配问题
 	cfg.GetGlobal().GetSystem().SetVariable("k1-1", "*")
 	cfg.GetGlobal().GetSystem().SetVariable("k2-1", "v2x+")
 	_, err = consumer.GetOneInstance(request1)
 	log.Printf("invalid variable source regex, err is: %v", err)
 
-	//更改环境变量，导致匹配第二个规则的destination 的时候会出正则匹配问题
+	// 更改环境变量，导致匹配第二个规则的destination 的时候会出正则匹配问题
 	cfg.GetGlobal().GetSystem().SetVariable("k1-1", "v1x+")
 	cfg.GetGlobal().GetSystem().SetVariable("k2-1", "*")
 	_, err = consumer.GetOneInstance(request1)
@@ -1505,7 +1592,7 @@ func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namin
 	}
 }
 
-//套件名字
+// 套件名字
 func (t *RuleRoutingTestingSuite) GetName() string {
 	return "RuleRouting"
 }

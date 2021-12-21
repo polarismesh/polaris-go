@@ -19,11 +19,11 @@ package data
 
 import "github.com/polarismesh/polaris-go/pkg/model"
 
-//全相同的比较器
+// 全相同的比较器
 type AllEqualsComparable struct {
 }
 
-//比较
+// 比较
 func (a *AllEqualsComparable) CompareTo(value interface{}) int {
 	return 0
 }
@@ -33,12 +33,12 @@ func (a *AllEqualsComparable) EnsureDeleted(value interface{}) bool {
 	return true
 }
 
-//服务主键比较器
+// 服务主键比较器
 type ServiceKeyComparable struct {
 	SvcKey model.ServiceKey
 }
 
-//比较
+// 比较
 func (a *ServiceKeyComparable) CompareTo(value interface{}) int {
 	inComparable, ok := value.(*ServiceKeyComparable)
 	if !ok {

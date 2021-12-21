@@ -13,9 +13,6 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissionsr and limitations under the License.
 //
-//@Author: springliao
-//@Description:
-//@Time: 2021/10/19 17:29
 
 package prometheus
 
@@ -167,7 +164,6 @@ func (strategy *RateLimitRequestTotalStrategy) UpdateMetricValue(targetValue *St
 }
 
 func (strategy *RateLimitRequestTotalStrategy) InitMetricValue(dataSource interface{}) float64 {
-	return 1.0
 	gauge := dataSource.(model.RateLimitGauge)
 	if strings.Compare(model.RateLimitResultForPass, gauge.GetResult()) == 0 {
 

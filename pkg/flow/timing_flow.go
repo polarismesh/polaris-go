@@ -35,14 +35,14 @@ const (
 	taskHealthCheck   = "healthCheckTask"
 )
 
-//调度任务
+// 调度任务
 func (e *Engine) ScheduleTask(task *model.PeriodicTask) (chan<- *model.PriorityTask, model.TaskValues) {
 	routine := schedule.NewTaskRoutine(task)
 	e.taskRoutines = append(e.taskRoutines, routine)
 	return routine.Schedule()
 }
 
-//添加定时熔断任务
+// 添加定时熔断任务
 func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbcheck.CircuitBreakCallBack, error) {
 	callback, err := cbcheck.NewCircuitBreakCallBack(e.configuration, e.plugins)
 	if nil != err {
@@ -56,7 +56,7 @@ func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbc
 		Period:       e.configuration.GetConsumer().GetCircuitBreaker().GetCheckPeriod() / 2,
 	})
 	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
-	//注入服务回调函数
+	// 注入服务回调函数
 	e.plugins.RegisterEventSubscriber(common.OnServiceAdded, common.PluginEventHandler{
 		Callback: svcEventHandler.OnServiceAdded})
 	e.plugins.RegisterEventSubscriber(common.OnServiceDeleted, common.PluginEventHandler{
@@ -64,7 +64,7 @@ func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbc
 	return rtChan, callback, nil
 }
 
-//添加客户端定期上报任务
+// 添加客户端定期上报任务
 func (e *Engine) addClientReportTask() (model.TaskValues, error) {
 	callback, err := startup.NewReportClientCallBack(e.configuration, e.plugins, e.globalCtx)
 	if nil != err {
@@ -80,7 +80,7 @@ func (e *Engine) addClientReportTask() (model.TaskValues, error) {
 	return taskValues, nil
 }
 
-//添加定期上报sdk配置任务
+// 添加定期上报sdk配置任务
 func (e *Engine) addSDKConfigReportTask() model.TaskValues {
 	callback := startup.NewConfigReportCallBack(e, e.globalCtx)
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
@@ -95,7 +95,7 @@ func (e *Engine) addSDKConfigReportTask() model.TaskValues {
 
 const keyDiscoverService = "discoverService"
 
-////添加获取系统服务信息任务（包括路由和实例）
+// //添加获取系统服务信息任务（包括路由和实例）
 func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 	callback, err := startup.NewServerServiceCallBack(e.configuration, e.plugins, e)
 	if nil != err {
@@ -111,7 +111,7 @@ func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 	return taskValues, nil
 }
 
-//添加客户端主动健康检查任务
+// 添加客户端主动健康检查任务
 func (e *Engine) addHealthCheckTask() error {
 	callback, err := detect.NewHealthCheckCallBack(e.configuration, e.plugins)
 	if nil != err {
@@ -125,7 +125,7 @@ func (e *Engine) addHealthCheckTask() error {
 		Period:       e.configuration.GetConsumer().GetHealthCheck().GetInterval() / 2,
 	})
 	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
-	//注入服务回调函数
+	// 注入服务回调函数
 	e.plugins.RegisterEventSubscriber(common.OnServiceAdded, common.PluginEventHandler{
 		Callback: svcEventHandler.OnServiceAdded})
 	e.plugins.RegisterEventSubscriber(common.OnServiceDeleted, common.PluginEventHandler{
