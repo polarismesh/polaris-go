@@ -19,8 +19,6 @@ package model
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/mitchellh/go-homedir"
 	"hash/fnv"
 	"net"
 	"os"
@@ -28,23 +26,26 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/mitchellh/go-homedir"
 )
 
 const (
 	HomeVar = "$HOME"
 )
 
-//Hash集合数据结构
+// Hash集合数据结构
 type HashSet map[interface{}]bool
 
-//往集合添加值
+// 往集合添加值
 func (h HashSet) Add(value interface{}) {
 	if _, ok := h[value]; !ok {
 		h[value] = true
 	}
 }
 
-//往集合删除值
+// 往集合删除值
 func (h HashSet) Delete(value interface{}) bool {
 	if _, ok := h[value]; ok {
 		delete(h, value)
@@ -53,13 +54,13 @@ func (h HashSet) Delete(value interface{}) bool {
 	return false
 }
 
-//值是否存在集合中
+// 值是否存在集合中
 func (h HashSet) Contains(value interface{}) bool {
 	_, ok := h[value]
 	return ok
 }
 
-//复制hashSet
+// 复制hashSet
 func (h HashSet) Copy() HashSet {
 	newSet := make(map[interface{}]bool, len(h))
 	for k, v := range h {
@@ -68,48 +69,48 @@ func (h HashSet) Copy() HashSet {
 	return newSet
 }
 
-//创建协程安全的HashSet
+// 创建协程安全的HashSet
 func NewSyncHashSet() *SyncHashSet {
 	return &SyncHashSet{
 		values: HashSet{},
 	}
 }
 
-//协程安全的HashSet
+// 协程安全的HashSet
 type SyncHashSet struct {
 	values HashSet
 	mutex  sync.Mutex
 }
 
-//往set添加元素
+// 往set添加元素
 func (s *SyncHashSet) Add(value interface{}) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.values.Add(value)
 }
 
-//删除元素
+// 删除元素
 func (s *SyncHashSet) Delete(value interface{}) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.values.Delete(value)
 }
 
-//检查元素存在性
+// 检查元素存在性
 func (s *SyncHashSet) Contains(value interface{}) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.values.Contains(value)
 }
 
-//拷贝列表的元素
+// 拷贝列表的元素
 func (s *SyncHashSet) Copy() HashSet {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.values.Copy()
 }
 
-//IsDir file path is dir
+// IsDir file path is dir
 func IsDir(path string) bool {
 	s, err := os.Stat(path)
 	if err != nil {
@@ -118,12 +119,12 @@ func IsDir(path string) bool {
 	return s.IsDir()
 }
 
-//IsFile file path is dir
+// IsFile file path is dir
 func IsFile(path string) bool {
 	return !IsDir(path)
 }
 
-//对字符串进行hash操作
+// 对字符串进行hash操作
 func HashStr(key string) (uint64, error) {
 	a := fnv.New64()
 	_, err := a.Write([]byte(key))
@@ -133,13 +134,13 @@ func HashStr(key string) (uint64, error) {
 	return a.Sum64(), nil
 }
 
-//对PB消息进行hash
+// 对PB消息进行hash
 func HashMessage(message proto.Message) uint64 {
 	hashCode, _ := HashStr(message.String())
 	return hashCode
 }
 
-//转换时间指针
+// 转换时间指针
 func ToDurationPtr(v time.Duration) *time.Duration {
 	return &v
 }
@@ -191,7 +192,7 @@ func GetIP(name string) (string, error) {
 	return "", fmt.Errorf("net interfaces is empty")
 }
 
-//IsNearbyMatch 判断是否满足就近条件
+// IsNearbyMatch 判断是否满足就近条件
 func IsNearbyMatch(dst, src string) bool {
 	if len(dst) == 0 || len(src) == 0 {
 		return true
@@ -199,7 +200,7 @@ func IsNearbyMatch(dst, src string) bool {
 	return dst == src
 }
 
-//替换相对路径
+// 替换相对路径
 func ReplaceHomeVar(path string) string {
 	if !strings.HasPrefix(path, HomeVar) {
 		return path
@@ -211,7 +212,7 @@ func ReplaceHomeVar(path string) string {
 	return strings.Replace(path, HomeVar, homeDir, 1)
 }
 
-//查看文件路径是否存在
+// 查看文件路径是否存在
 func PathExist(path string) bool {
 	_, err := os.Stat(path)
 	if err != nil {
@@ -223,7 +224,7 @@ func PathExist(path string) bool {
 	return true
 }
 
-//检测缓存目录，不存在则创建
+// 检测缓存目录，不存在则创建
 func EnsureAndVerifyDir(dir string) error {
 	if !PathExist(dir) {
 		err := os.MkdirAll(dir, 0744)
@@ -239,7 +240,7 @@ func EnsureAndVerifyDir(dir string) error {
 	return nil
 }
 
-//从错误中获取错误码
+// 从错误中获取错误码
 func GetErrorCodeFromError(e error) ErrCode {
 	if e == nil {
 		return ErrCodeSuccess
@@ -251,7 +252,7 @@ func GetErrorCodeFromError(e error) ErrCode {
 	return sdkErr.ErrorCode()
 }
 
-//服务实例是否可用
+// 服务实例是否可用
 func IsInstanceAvailable(instance Instance) bool {
 	if !instance.IsHealthy() {
 		return false
@@ -263,8 +264,8 @@ func IsInstanceAvailable(instance Instance) bool {
 	return true
 }
 
-//对map进行排序, keys的长度必须等于map的长度
-//返回已经排序的key，以及map中总字符串长度
+// 对map进行排序, keys的长度必须等于map的长度
+// 返回已经排序的key，以及map中总字符串长度
 func SortMap(values map[string]string, keys []string) ([]string, int) {
 	if len(values) == 0 {
 		return keys, 0
@@ -285,7 +286,7 @@ func SortMap(values map[string]string, keys []string) ([]string, int) {
 	return keys, count
 }
 
-//将uint32类型转化为ipv4地址
+// 将uint32类型转化为ipv4地址
 func ToNetIP(val uint32) net.IP {
 	return net.IPv4(byte(val>>24), byte(val>>16&0xFF), byte(val>>8)&0xFF, byte(val&0xFF))
 }

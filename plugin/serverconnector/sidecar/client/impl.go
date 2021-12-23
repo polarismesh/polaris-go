@@ -24,17 +24,17 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
-//RegisterServiceHandler 注册服务监听
+// RegisterServiceHandler 注册服务监听
 func (g *Connector) RegisterServiceHandler(svcEventHandler *serverconnector.ServiceEventHandler) error {
 	return g.discoverConnector.RegisterServiceHandler(svcEventHandler)
 }
 
-//DeRegisterEventHandler 反注册事件监听器
+// DeRegisterEventHandler 反注册事件监听器
 func (g *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 	return g.discoverConnector.DeRegisterServiceHandler(key)
 }
 
-//RegisterInstance 同步注册服务
+// RegisterInstance 同步注册服务
 func (g *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisRegisterInstance
@@ -57,7 +57,7 @@ func (g *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*m
 	return registerRsp, nil
 }
 
-//DeregisterInstance 同步反注册服务
+// DeregisterInstance 同步反注册服务
 func (g *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest) error {
 	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisDeregisterInstance

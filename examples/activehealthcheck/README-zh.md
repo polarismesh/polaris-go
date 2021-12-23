@@ -1,5 +1,7 @@
 # Polaris Go
 
+[English Document](./README.md)
+
 ## 北极星主动探测功能实例
 
 北极星支持主调端触发的主动探测能力，支持两种探测模式

@@ -96,7 +96,7 @@ global:
     #描述：是否将统计信息上报至monitor
     #类型：bool
     #默认值：true
-    enable: true
+    enable: false
     #描述：启用的统计上报插件类型
     #类型：list
     #范围：已经注册的统计上报插件的名字

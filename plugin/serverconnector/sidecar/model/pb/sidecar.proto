@@ -14,55 +14,55 @@ import "response.proto";
 
 // polaris 获取单个实例请求
 message GetOneInstanceRequest {
-    google.protobuf.StringValue namespace = 1;
-    google.protobuf.StringValue service_name = 2;
+  google.protobuf.StringValue namespace = 1;
+  google.protobuf.StringValue service_name = 2;
 }
 
 // polaris 获取单个实例返回
 message GetOneInstanceResponse {
-    v1.Instance instance = 1;
+  v1.Instance instance = 1;
 }
 
 // 通用response返回
 message response {
-    int32 dns_code = 1;
-    int32 polaris_code = 2;
-    string polaris_detail_info = 3;
+  int32 dns_code = 1;
+  int32 polaris_code = 2;
+  string polaris_detail_info = 3;
 }
 
 // 用于用户调用结果上报
 message ServiceCallResult {
-    v1.Instance instance = 1;
-    //必选，本地服务调用的状态，正常or异常
-    int32 ret_status = 2;
-    //必选，本地服务调用的返回码
-    int32 ret_code = 3;
-    //必选，被调服务实例获取接口的最大时延
-    int64 time_delay = 4;
+  v1.Instance instance = 1;
+  //必选，本地服务调用的状态，正常or异常
+  int32 ret_status = 2;
+  //必选，本地服务调用的返回码
+  int32 ret_code = 3;
+  //必选，被调服务实例获取接口的最大时延
+  int64 time_delay = 4;
 }
 
 // 批量发送用户调用结果
 message BatchServiceCallResult {
-    repeated ServiceCallResult call_results = 1;
+  repeated ServiceCallResult call_results = 1;
 }
 
 // 注册服务
 message RegisterInstanceRequest {
-    v1.Instance instance = 1;
+  v1.Instance instance = 1;
 }
 
 // 反注册服务
 message DeregisterInstanceRequest {
-    v1.Instance instance = 1;
+  v1.Instance instance = 1;
 }
 
 // 心跳
 message InstanceHeartbeatRequest {
-    v1.Instance instance =1;
+  v1.Instance instance = 1;
 }
 
 // 详细的错误信息
 message DetailErrInfo {
-    uint32 err_code = 1;
-    string err_msg = 2;
+  uint32 err_code = 1;
+  string err_msg = 2;
 }

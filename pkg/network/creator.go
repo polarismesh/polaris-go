@@ -21,10 +21,10 @@ import (
 	"time"
 )
 
-//连接创建器
+// ConnCreator 连接创建器
 type ConnCreator interface {
-	//插件名
+	// Name 插件名
 	Name() string
-	//创建实际的连接
+	// CreateConnection 创建实际的连接
 	CreateConnection(address string, timeout time.Duration, clientInfo *ClientInfo) (ClosableConn, error)
 }

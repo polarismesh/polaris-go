@@ -19,8 +19,9 @@ package http
 
 import (
 	"fmt"
-	"github.com/hashicorp/go-multierror"
 	"strings"
+
+	"github.com/hashicorp/go-multierror"
 )
 
 // RequestHeader request header key and value
@@ -61,7 +62,7 @@ func (r *Config) SetDefault() {
 	}
 }
 
-// verify 检验健康探测配置
+// Verify 检验健康探测配置
 func (r *Config) Verify() error {
 	var errs error
 	// http 如果配置了pattern，校验一下

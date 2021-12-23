@@ -22,18 +22,20 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"io"
 	log2 "log"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 const (
@@ -42,7 +44,7 @@ const (
 )
 
 var (
-	//请求与应答的类型转换
+	// 请求与应答的类型转换
 	namingTypeReqToResp = map[namingpb.DiscoverRequest_DiscoverRequestType]namingpb.DiscoverResponse_DiscoverResponseType{
 		namingpb.DiscoverRequest_UNKNOWN:     namingpb.DiscoverResponse_UNKNOWN,
 		namingpb.DiscoverRequest_ROUTING:     namingpb.DiscoverResponse_ROUTING,
@@ -55,122 +57,122 @@ var (
 	}
 )
 
-//操作类型
+// 操作类型
 type OperationType string
 
 const (
-	//服务发现实例接口操作
+	// 服务发现实例接口操作
 	OperationDiscoverInstance OperationType = "discoverInstance"
-	//服务发现路由接口操作
+	// 服务发现路由接口操作
 	OperationDiscoverRouting OperationType = "discoverRouting"
-	//服务注册接口
+	// 服务注册接口
 	OperationRegistry OperationType = "registry"
-	//服务反注册接口
+	// 服务反注册接口
 	OperationDeRegistry OperationType = "deregistry"
-	//健康检查接口
+	// 健康检查接口
 	OperationHeartbeat OperationType = "heartbeat"
-	//同步等待时间
+	// 同步等待时间
 	syncWaitTime = 3 * time.Second
 )
 
-//测试桩相关接口
+// 测试桩相关接口
 type NamingServer interface {
 	namingpb.PolarisGRPCServer
-	//设置模拟某个方法进行超时
+	// 设置模拟某个方法进行超时
 	MakeOperationTimeout(operation OperationType, enable bool)
-	//设置强制模拟方法超时
+	// 设置强制模拟方法超时
 	MakeForceOperationTimeout(operation OperationType, enable bool)
-	//设置方法超时时间
+	// 设置方法超时时间
 	SetMethodInterval(interval time.Duration)
-	//设置打印返回的服务列表信息
+	// 设置打印返回的服务列表信息
 	SetPrintDiscoverReturn(v bool)
-	//设置mockserver是否返回异常
+	// 设置mockserver是否返回异常
 	SetReturnException(e bool)
-	//设置是否自动注册网格的辅助服务
+	// 设置是否自动注册网格的辅助服务
 	SetNotRegisterAssistant(e bool)
-	//注册服务
+	// 注册服务
 	RegisterService(svc *namingpb.Service) string
-	//反注册服务
+	// 反注册服务
 	DeregisterService(namespace, service string) *namingpb.Service
-	//注册限流规则
+	// 注册限流规则
 	RegisterRateLimitRule(svc *namingpb.Service, rateLimit *namingpb.RateLimit) error
-	//注销限流规则
+	// 注销限流规则
 	DeRegisterRateLimitRule(svc *namingpb.Service)
-	//注册网格规则
+	// 注册网格规则
 	RegisterMeshConfig(svc *namingpb.Service, mtype string, mc *namingpb.MeshConfig)
 	RegisterMesh(svc *namingpb.Service, mtype string, mc *namingpb.Mesh)
-	//注销网格规则
+	// 注销网格规则
 	DeRegisterMeshConfig(svc *namingpb.Service, meshID, mtype string)
-	//注册路由规则
+	// 注册路由规则
 	RegisterRouteRule(svc *namingpb.Service, routing *namingpb.Routing) error
-	//反注册路由规则
+	// 反注册路由规则
 	DeregisterRouteRule(svc *namingpb.Service)
-	//注册命名空间
+	// 注册命名空间
 	RegisterNamespace(namespace *namingpb.Namespace)
-	//反注册命名空间
+	// 反注册命名空间
 	DeregisterNamespace(name string)
-	//构建系统服务的路由规则
+	// 构建系统服务的路由规则
 	BuildRouteRule(namespace string, name string) *namingpb.Routing
-	//注册服务实例
+	// 注册服务实例
 	RegisterServerInstance(host string, port int, name string, token string, health bool) *namingpb.Instance
 
 	RegisterServerInstanceReturnId(host string, port int, name string, token string, health bool) string
-	//批量注册服务实例
+	// 批量注册服务实例
 	RegisterServiceInstances(svc *namingpb.Service, instances []*namingpb.Instance)
-	//直接获取服务实例
+	// 直接获取服务实例
 	GetServiceInstances(key *model.ServiceKey) []*namingpb.Instance
-	//注册系统服务，返回服务token
+	// 注册系统服务，返回服务token
 	RegisterServerService(name string) string
-	//注册所有系统服务以及对应的服务实例
+	// 注册所有系统服务以及对应的服务实例
 	RegisterServerServices(host string, port int)
-	//清空某个测试服务的实例
+	// 清空某个测试服务的实例
 	ClearServiceInstances(svc *namingpb.Service)
-	//设置服务的元数据信息
+	// 设置服务的元数据信息
 	SetServiceMetadata(token string, key string, value string)
-	//为服务生成N个随机服务实例
+	// 为服务生成N个随机服务实例
 	GenTestInstances(svc *namingpb.Service, num int) []*namingpb.Instance
-	//删除测试实例
+	// 删除测试实例
 	DeleteServerInstance(namespace string, service string, id string)
-	//修改系统服务实例权重
+	// 修改系统服务实例权重
 	UpdateServerInstanceWeight(namespace string, service string, id string, weight uint32)
-	//修改系统服务实例健康状态
+	// 修改系统服务实例健康状态
 	UpdateServerInstanceHealthy(namespace string, service string, id string, healthy bool)
-	//修改系统服务实例隔离状态
+	// 修改系统服务实例隔离状态
 	UpdateServerInstanceIsolate(namespace string, service string, id string, isolate bool)
-	//产生测试用实例，带上地址端口号，权重随机生成
+	// 产生测试用实例，带上地址端口号，权重随机生成
 	GenTestInstancesWithHostPort(svc *namingpb.Service, num int, host string, startPort int) []*namingpb.Instance
 
 	GenTestInstancesWithHostPortAndMeta(
 		svc *namingpb.Service, num int, host string, startPort int, metadata map[string]string) []*namingpb.Instance
-	//产生测试用实例，带上元数据，权重随机生成
+	// 产生测试用实例，带上元数据，权重随机生成
 	GenTestInstancesWithMeta(svc *namingpb.Service, num int, metadata map[string]string) []*namingpb.Instance
-	//产生测试用实例，带上状态信息，权重随机生成
+	// 产生测试用实例，带上状态信息，权重随机生成
 	GenInstancesWithStatus(svc *namingpb.Service, num int, st int, startPort int) []*namingpb.Instance
-	//设置地域信息
+	// 设置地域信息
 	SetLocation(region, zone, campus string)
-	//设置某个服务的实例
+	// 设置某个服务的实例
 	SetServiceInstances(key *model.ServiceKey, insts []*namingpb.Instance)
-	//获取地域信息
+	// 获取地域信息
 	GetLocation() (region, zone, campus string)
-	//获取服务请求
+	// 获取服务请求
 	GetServiceRequests(key *model.ServiceKey) int
-	//清空服务请求
+	// 清空服务请求
 	ClearServiceRequests(key *model.ServiceKey)
-	//获取服务token
+	// 获取服务token
 	GetServiceToken(key *model.ServiceKey) string
-	//设置服务版本号
+	// 设置服务版本号
 	SetServiceRevision(token string, revision string, k model.ServiceEventKey)
-	//插入一个路由信息
+	// 插入一个路由信息
 	InsertRouting(svcKey model.ServiceKey, routing *namingpb.Routing)
-	//设置某个服务的某个实例的状态（健康、隔离、权重）
+	// 设置某个服务的某个实例的状态（健康、隔离、权重）
 	SetInstanceStatus(svcKey model.ServiceKey, idx int, healthy bool, isolate bool, weight uint32) error
-	//设置首次不返回某个请求
+	// 设置首次不返回某个请求
 	SetFirstNoReturn(svcKey model.ServiceEventKey)
-	//反设置首次不返回某个请求
+	// 反设置首次不返回某个请求
 	UnsetFirstNoReturn(svcKey model.ServiceEventKey)
 }
 
-//Polaris server模拟桩
+// Polaris server模拟桩
 type namingServer struct {
 	rwMutex               sync.RWMutex
 	printReturn           bool
@@ -197,7 +199,7 @@ type namingServer struct {
 	scalableRand          *rand.ScalableRand
 }
 
-//创建NamingServer模拟桩
+// 创建NamingServer模拟桩
 func NewNamingServer() NamingServer {
 	//
 	//
@@ -231,21 +233,21 @@ func NewNamingServer() NamingServer {
 	return ns
 }
 
-//设置是否跳过第一次的请求回复
+// 设置是否跳过第一次的请求回复
 func (n *namingServer) SetFirstNoReturn(svcKey model.ServiceEventKey) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	n.firstNoReturnMap[svcKey] = true
 }
 
-//反设置是否跳过第一次的请求回复
+// 反设置是否跳过第一次的请求回复
 func (n *namingServer) UnsetFirstNoReturn(svcKey model.ServiceEventKey) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	delete(n.firstNoReturnMap, svcKey)
 }
 
-//设置某个服务的某个实例的状态（健康、隔离、权重）
+// 设置某个服务的某个实例的状态（健康、隔离、权重）
 func (n *namingServer) SetInstanceStatus(svcKey model.ServiceKey, idx int, healthy bool, isolate bool, weight uint32) error {
 	n.rwMutex.Lock()
 	instances, ok := n.svcInstances[svcKey]
@@ -262,7 +264,7 @@ func (n *namingServer) SetInstanceStatus(svcKey model.ServiceKey, idx int, healt
 	return nil
 }
 
-//设置模拟某个方法进行超时
+// 设置模拟某个方法进行超时
 func (n *namingServer) MakeOperationTimeout(operation OperationType, enable bool) {
 	//
 	//
@@ -270,17 +272,17 @@ func (n *namingServer) MakeOperationTimeout(operation OperationType, enable bool
 	n.timeoutOperation[operation] = enable
 }
 
-//设置强制模拟方法超时
+// 设置强制模拟方法超时
 func (n *namingServer) MakeForceOperationTimeout(operation OperationType, enable bool) {
 	n.forceTimeoutOperation[operation] = enable
 }
 
-//设置方法超时时间
+// 设置方法超时时间
 func (n *namingServer) SetMethodInterval(interval time.Duration) {
 	n.methodInterval = interval
 }
 
-//注册实例
+// 注册实例
 func (n *namingServer) RegisterInstance(ctx context.Context,
 	req *namingpb.Instance) (*namingpb.Response, error) {
 	//
@@ -333,7 +335,7 @@ func (n *namingServer) RegisterInstance(ctx context.Context,
 	}, nil
 }
 
-//反注册实例
+// 反注册实例
 func (n *namingServer) DeregisterInstance(ctx context.Context,
 	req *namingpb.Instance) (*namingpb.Response, error) {
 	//
@@ -395,7 +397,7 @@ func (n *namingServer) DeregisterInstance(ctx context.Context,
 	}, nil
 }
 
-//心跳上报
+// 心跳上报
 func (n *namingServer) Heartbeat(ctx context.Context, req *namingpb.Instance) (*namingpb.Response, error) {
 	fmt.Printf("%v, Heartbeat in server, %v\n", time.Now(), req)
 	if n.skipRequest(OperationHeartbeat) {
@@ -455,7 +457,7 @@ func (n *namingServer) Heartbeat(ctx context.Context, req *namingpb.Instance) (*
 	}, nil
 }
 
-//是否忽略当前请求
+// 是否忽略当前请求
 func (n *namingServer) skipRequest(operation OperationType) bool {
 	//
 	//
@@ -485,7 +487,7 @@ var pbTypeToEvent = map[namingpb.DiscoverRequest_DiscoverRequestType]model.Event
 	namingpb.DiscoverRequest_MESH:        model.EventMesh,
 }
 
-//检验是否首次不返回
+// 检验是否首次不返回
 func (n *namingServer) checkFirstNoReturn(svcEventKey model.ServiceEventKey) bool {
 	res := false
 	n.rwMutex.Lock()
@@ -501,7 +503,7 @@ func (n *namingServer) checkFirstNoReturn(svcEventKey model.ServiceEventKey) boo
 }
 
 func (n *namingServer) RegisterAssistant(req *namingpb.DiscoverRequest) {
-	//如果service不存在那么注册一个辅助服务
+	// 如果service不存在那么注册一个辅助服务
 	key := &model.ServiceKey{
 		Namespace: req.Service.Namespace.GetValue(),
 		Service:   req.Service.Name.GetValue(),
@@ -517,7 +519,7 @@ func (n *namingServer) RegisterAssistant(req *namingpb.DiscoverRequest) {
 		fmt.Println("MESH_CONFIG RegisterService", *key)
 	}
 	if namingpb.DiscoverRequest_MESH_CONFIG == req.Type {
-		//根据客户端命令更新server网格数据
+		// 根据客户端命令更新server网格数据
 		busis := strings.Split(req.MeshConfig.MeshName.GetValue(), ".")
 		if len(busis) == 3 {
 
@@ -527,7 +529,7 @@ func (n *namingServer) RegisterAssistant(req *namingpb.DiscoverRequest) {
 
 }
 
-//服务实例发现
+// 服务实例发现
 func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) error {
 	//
 	//
@@ -604,7 +606,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 			if n.printReturn {
 				log2.Printf("send resp for notFoundResource, type %v, %v", req.Type, req.Service)
 			}
-			//找不到服务，返回错误信息，继续收取后续的请求
+			// 找不到服务，返回错误信息，继续收取后续的请求
 			if err = server.Send(&namingpb.DiscoverResponse{
 				Service: req.Service,
 				Code:    &wrappers.UInt32Value{Value: namingpb.NotFoundResource},
@@ -616,11 +618,11 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 			}
 			continue
 		}
-		//等待超时间隔
+		// 等待超时间隔
 		if n.methodInterval > 0 {
 			time.Sleep(n.methodInterval)
 		}
-		//构造应答并返回
+		// 构造应答并返回
 		var instances []*namingpb.Instance
 		var routing *namingpb.Routing
 		var ratelimit *namingpb.RateLimit
@@ -629,7 +631,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 		var meshs *namingpb.MeshConfig
 		var services []*namingpb.Service
 		var mesh *namingpb.Mesh
-		//根据不同类型返回不同的数据
+		// 根据不同类型返回不同的数据
 		switch req.Type {
 		case namingpb.DiscoverRequest_INSTANCE:
 			n.rwMutex.RLock()
@@ -645,26 +647,26 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 			n.rwMutex.RUnlock()
 		case namingpb.DiscoverRequest_MESH_CONFIG:
 			mr := req.GetMeshConfig()
-			//mkey := mr.Namespace.GetValue() + "." + mr.Business.GetValue() + "." + mr.TypeUrl.GetValue()
-			//log.GetBaseLogger().Debugf("DiscoverRequest_MESH_CONFIG mkey:", mkey, mr)
+			// mkey := mr.Namespace.GetValue() + "." + mr.Business.GetValue() + "." + mr.TypeUrl.GetValue()
+			// log.GetBaseLogger().Debugf("DiscoverRequest_MESH_CONFIG mkey:", mkey, mr)
 			keyMesh := model.ServiceKey{
 				Namespace: req.Service.Namespace.GetValue(),
-				//Service:   model.MeshPrefix + model.MeshKeySpliter + svc.Business.GetValue() + model.MeshKeySpliter + mtype,
+				// Service:   model.MeshPrefix + model.MeshKeySpliter + svc.Business.GetValue() + model.MeshKeySpliter + mtype,
 				Service: model.MeshPrefix + mr.MeshId.GetValue() + mr.TypeUrl.GetValue(),
 			}
 			log2.Printf("keyMesh: %v", keyMesh)
 			n.rwMutex.RLock()
 			if n.mesh[keyMesh] != nil {
 				meshs = n.mesh[keyMesh]
-				//判断
-				//for _, iter := range n.mesh[*key] {
+				// 判断
+				// for _, iter := range n.mesh[*key] {
 				//	if len(iter.Resources) > 0 && iter.Resources[0].TypeUrl.GetValue() == mr.TypeUrl.GetValue() {
 				//		meshs = iter
 				//		break
 				//	}
-				//}
-				//meshs = n.mesh[*key][0]
-				//n.mesh[*key][0].Resources = append(n.mesh[*key][0].Resources, &namingpb.MeshResource{})
+				// }
+				// meshs = n.mesh[*key][0]
+				// n.mesh[*key][0].Resources = append(n.mesh[*key][0].Resources, &namingpb.MeshResource{})
 			} else {
 				code = namingpb.NotFoundMeshConfig
 			}
@@ -682,7 +684,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 			log.GetBaseLogger().Debugf("DiscoverRequest_SERVICES", *key, busi, len(services), req.Service)
 		case namingpb.DiscoverRequest_MESH:
 			key := model.ServiceKey{
-				//Namespace: "mesh",
+				// Namespace: "mesh",
 				Namespace: req.Service.Namespace.GetValue(),
 				Service:   req.Mesh.Id.GetValue(),
 			}
@@ -749,7 +751,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 	}
 }
 
-//注册服务信息
+// 注册服务信息
 func (n *namingServer) RegisterService(svc *namingpb.Service) string {
 	//
 	//
@@ -766,7 +768,7 @@ func (n *namingServer) RegisterService(svc *namingpb.Service) string {
 	return token
 }
 
-//删除服务信息
+// 删除服务信息
 func (n *namingServer) DeregisterService(namespace, service string) *namingpb.Service {
 	//
 	//
@@ -787,7 +789,7 @@ func (n *namingServer) DeregisterService(namespace, service string) *namingpb.Se
 	return svc
 }
 
-//注册限流规则
+// 注册限流规则
 func (n *namingServer) RegisterRateLimitRule(svc *namingpb.Service, rateLimit *namingpb.RateLimit) error {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -806,7 +808,7 @@ func (n *namingServer) RegisterRateLimitRule(svc *namingpb.Service, rateLimit *n
 	return nil
 }
 
-//注销限流规则
+// 注销限流规则
 func (n *namingServer) DeRegisterRateLimitRule(svc *namingpb.Service) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -858,7 +860,7 @@ func (n *namingServer) DeregisterRouteRule(svc *namingpb.Service) {
 	}
 }
 
-//注册命名空间
+// 注册命名空间
 func (n *namingServer) RegisterNamespace(namespace *namingpb.Namespace) {
 	//
 	//
@@ -868,7 +870,7 @@ func (n *namingServer) RegisterNamespace(namespace *namingpb.Namespace) {
 	n.namespaces[namespace.Name.GetValue()] = namespace
 }
 
-//删除命名空间
+// 删除命名空间
 func (n *namingServer) DeregisterNamespace(name string) {
 	//
 	//
@@ -881,19 +883,19 @@ func (n *namingServer) DeregisterNamespace(name string) {
 	}
 }
 
-//构建系统服务的路由规则
+// 构建系统服务的路由规则
 func (n *namingServer) BuildRouteRule(namespace string, name string) *namingpb.Routing {
-	//构造GRPC实例匹配规则
+	// 构造GRPC实例匹配规则
 	protocolMatchString := &namingpb.MatchString{
 		Type:  namingpb.MatchString_EXACT,
 		Value: &wrappers.StringValue{Value: "grpc"},
 	}
 	routing := &namingpb.Routing{}
-	//设置基础属性
+	// 设置基础属性
 	routing.Namespace = &wrappers.StringValue{Value: namespace}
 	routing.Service = &wrappers.StringValue{Value: name}
 	protocolRoute := &namingpb.Route{}
-	//构造源服务过滤规则
+	// 构造源服务过滤规则
 	protocolRoute.Sources = []*namingpb.Source{
 		{
 			Service:   &wrappers.StringValue{Value: "*"},
@@ -901,7 +903,7 @@ func (n *namingServer) BuildRouteRule(namespace string, name string) *namingpb.R
 			Metadata:  map[string]*namingpb.MatchString{"protocol": protocolMatchString},
 		},
 	}
-	//构造目标服务过滤规则
+	// 构造目标服务过滤规则
 	protocolRoute.Destinations = []*namingpb.Destination{
 		{
 			Service:   &wrappers.StringValue{Value: name},
@@ -912,7 +914,7 @@ func (n *namingServer) BuildRouteRule(namespace string, name string) *namingpb.R
 			},
 		},
 	}
-	//设置入规则
+	// 设置入规则
 	routing.Inbounds = append(routing.Inbounds, protocolRoute)
 	routing.Revision = &wrappers.StringValue{
 		Value: fmt.Sprintf("%X", model.HashMessage(routing)),
@@ -920,7 +922,7 @@ func (n *namingServer) BuildRouteRule(namespace string, name string) *namingpb.R
 	return routing
 }
 
-//注册系统服务实例
+// 注册系统服务实例
 func (n *namingServer) RegisterServerInstance(
 	host string, port int, name string, token string, health bool) *namingpb.Instance {
 	//
@@ -968,7 +970,7 @@ func (n *namingServer) RegisterServerInstanceReturnId(host string, port int, nam
 	return instId
 }
 
-//删除系统服务实例
+// 删除系统服务实例
 func (n *namingServer) DeleteServerInstance(namespace string, service string, id string) {
 	k := model.ServiceKey{
 		Namespace: namespace,
@@ -977,7 +979,7 @@ func (n *namingServer) DeleteServerInstance(namespace string, service string, id
 	nowList := n.svcInstances[k]
 	n.svcInstances[k] = []*namingpb.Instance{}
 	for _, v := range nowList {
-		//fmt.Println(v.GetId().Value)
+		// fmt.Println(v.GetId().Value)
 		if v.GetId().Value != id {
 			t := v
 			n.svcInstances[k] = append(n.svcInstances[k], t)
@@ -985,7 +987,7 @@ func (n *namingServer) DeleteServerInstance(namespace string, service string, id
 	}
 }
 
-//修改系统服务实例权重
+// 修改系统服务实例权重
 func (n *namingServer) UpdateServerInstanceWeight(namespace string, service string, id string, weight uint32) {
 	k := model.ServiceKey{
 		Namespace: namespace,
@@ -998,13 +1000,13 @@ func (n *namingServer) UpdateServerInstanceWeight(namespace string, service stri
 			break
 		}
 	}
-	//for _, v := range n.svcInstances[k] {
+	// for _, v := range n.svcInstances[k] {
 	//	//fmt.Println(v.GetId().Value)
 	//	fmt.Println("--------------------weight: ", v.GetWeight().Value)
-	//}
+	// }
 }
 
-//修改系统服务实例健康状态
+// 修改系统服务实例健康状态
 func (n *namingServer) UpdateServerInstanceHealthy(namespace string, service string, id string, healthy bool) {
 	k := model.ServiceKey{
 		Namespace: namespace,
@@ -1017,13 +1019,13 @@ func (n *namingServer) UpdateServerInstanceHealthy(namespace string, service str
 			break
 		}
 	}
-	//for _, v := range n.svcInstances[k] {
+	// for _, v := range n.svcInstances[k] {
 	//	//fmt.Println(v.GetId().Value)
 	//	fmt.Println("--------------------weight: ", v.GetWeight().Value)
-	//}
+	// }
 }
 
-//修改系统服务实例隔离状态
+// 修改系统服务实例隔离状态
 func (n *namingServer) UpdateServerInstanceIsolate(namespace string, service string, id string, isolate bool) {
 	k := model.ServiceKey{
 		Namespace: namespace,
@@ -1036,13 +1038,13 @@ func (n *namingServer) UpdateServerInstanceIsolate(namespace string, service str
 			break
 		}
 	}
-	//for _, v := range n.svcInstances[k] {
+	// for _, v := range n.svcInstances[k] {
 	//	//fmt.Println(v.GetId().Value)
 	//	fmt.Println("--------------------weight: ", v.GetWeight().Value)
-	//}
+	// }
 }
 
-//注册单个系统服务
+// 注册单个系统服务
 func (n *namingServer) registerServerService(name string, token string) {
 	n.rwMutex.Lock()
 	if _, ok := n.namespaces[config.ServerNamespace]; !ok {
@@ -1062,13 +1064,13 @@ func (n *namingServer) registerServerService(name string, token string) {
 	n.RegisterService(svcDiscover)
 }
 
-//注册系统服务
+// 注册系统服务
 func (n *namingServer) RegisterServerService(name string) string {
-	//生成系统服务token
+	// 生成系统服务token
 	tokenDiscover := uuid.New().String()
-	//注册系统服务
+	// 注册系统服务
 	n.registerServerService(name, tokenDiscover)
-	//注册系统服务路由规则则
+	// 注册系统服务路由规则则
 	n.RegisterRouteRule(&namingpb.Service{
 		Name:      &wrappers.StringValue{Value: name},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
@@ -1076,24 +1078,24 @@ func (n *namingServer) RegisterServerService(name string) string {
 	return tokenDiscover
 }
 
-//注册系统服务相关的资源
+// 注册系统服务相关的资源
 func (n *namingServer) RegisterServerServices(host string, port int) {
 	n.RegisterNamespace(&namingpb.Namespace{
 		Name: &wrappers.StringValue{Value: config.ServerNamespace},
 	})
-	//生成系统服务token
+	// 生成系统服务token
 	tokenDiscover := uuid.New().String()
 	tokenHeartBeat := uuid.New().String()
-	//tokenMonitor := uuid.New().String()
-	//注册系统服务
+	// tokenMonitor := uuid.New().String()
+	// 注册系统服务
 	n.registerServerService(config.ServerDiscoverService, tokenDiscover)
 	n.registerServerService(config.ServerHeartBeatService, tokenHeartBeat)
-	//n.registerServerService(config.ServerMonitorService, tokenMonitor)
-	//注册系统服务实例
+	// n.registerServerService(config.ServerMonitorService, tokenMonitor)
+	// 注册系统服务实例
 	n.RegisterServerInstance(host, port, config.ServerDiscoverService, tokenDiscover, true)
 	n.RegisterServerInstance(host, port, config.ServerHeartBeatService, tokenHeartBeat, true)
-	//n.RegisterServerInstance(host, port, config.ServerMonitorService, tokenMonitor)
-	//注册系统服务路由规则则
+	// n.RegisterServerInstance(host, port, config.ServerMonitorService, tokenMonitor)
+	// 注册系统服务路由规则则
 	n.RegisterRouteRule(&namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerDiscoverService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
@@ -1108,13 +1110,13 @@ func (n *namingServer) RegisterServerServices(host string, port int) {
 	//
 	//
 	//
-	//n.RegisterRouteRule(&namingpb.Service{
+	// n.RegisterRouteRule(&namingpb.Service{
 	//	Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 	//	Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
 	//	n.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 }
 
-//注册网格
+// 注册网格
 func (n *namingServer) RegisterMesh(svc *namingpb.Service, mtype string, mc *namingpb.Mesh) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1122,15 +1124,15 @@ func (n *namingServer) RegisterMesh(svc *namingpb.Service, mtype string, mc *nam
 		Namespace: svc.Namespace.GetValue(),
 		Service:   mc.Id.GetValue(),
 	}
-	//if _, exist := n.mesh[key]; !exist {
+	// if _, exist := n.mesh[key]; !exist {
 	//	n.mesh[key] = []*namingpb.MeshConfig{}
-	//}
+	// }
 	n.meshs[key] = mc
 
 	log.GetBaseLogger().Infof("RegisterMesh", n.meshs[key])
 }
 
-//注册网格规则
+// 注册网格规则
 func (n *namingServer) RegisterMeshConfig(svc *namingpb.Service, mtype string, mc *namingpb.MeshConfig) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1138,15 +1140,15 @@ func (n *namingServer) RegisterMeshConfig(svc *namingpb.Service, mtype string, m
 		Namespace: svc.Namespace.GetValue(),
 		Service:   model.MeshPrefix + mc.MeshId.GetValue() + mtype,
 	}
-	//if _, exist := n.mesh[key]; !exist {
+	// if _, exist := n.mesh[key]; !exist {
 	//	n.mesh[key] = []*namingpb.MeshConfig{}
-	//}
+	// }
 	n.mesh[key] = mc
 
 	log2.Printf("RegisterMeshConfig: %v, meshID: %s", key, mc.MeshId.GetValue())
 }
 
-//注销网格规则
+// 注销网格规则
 func (n *namingServer) DeRegisterMeshConfig(svc *namingpb.Service, meshId string, mtype string) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1162,22 +1164,22 @@ func (n *namingServer) DeRegisterMeshConfig(svc *namingpb.Service, meshId string
 	log2.Printf("delte mesh: %v", key)
 }
 
-//产生测试用实例，权重随机生成，传入host和port
+// 产生测试用实例，权重随机生成，传入host和port
 func (n *namingServer) GenTestInstancesWithHostPort(
 	svc *namingpb.Service, num int, host string, startPort int) []*namingpb.Instance {
-	//metadata := make(map[string]string)
-	//metadata["logic_set"] = metaSet2
+	// metadata := make(map[string]string)
+	// metadata["logic_set"] = metaSet2
 	return n.genTestInstancesByMeta(svc, num, host, startPort, nil)
 }
 
 func (n *namingServer) GenTestInstancesWithHostPortAndMeta(
 	svc *namingpb.Service, num int, host string, startPort int, metadata map[string]string) []*namingpb.Instance {
-	//metadata := make(map[string]string)
-	//metadata["logic_set"] = metaSet2
+	// metadata := make(map[string]string)
+	// metadata["logic_set"] = metaSet2
 	return n.genTestInstancesByMeta(svc, num, host, startPort, metadata)
 }
 
-//产生测试用实例，权重随机生成，传入host和port
+// 产生测试用实例，权重随机生成，传入host和port
 func (n *namingServer) genTestInstancesByMeta(
 	svc *namingpb.Service, num int, host string, startPort int, metadata map[string]string) []*namingpb.Instance {
 	n.rwMutex.Lock()
@@ -1224,7 +1226,7 @@ func (n *namingServer) genTestInstancesByMeta(
 			Host:      &wrappers.StringValue{Value: host},
 			Port:      &wrappers.UInt32Value{Value: port},
 			Weight:    &wrappers.UInt32Value{Value: 100 + 10*uint32(rand.Intn(10))},
-			//Weight:    &wrappers.UInt32Value{Value: 100},
+			// Weight:    &wrappers.UInt32Value{Value: 100},
 			HealthCheck: &namingpb.HealthCheck{
 				Type: namingpb.HealthCheck_HEARTBEAT,
 				Heartbeat: &namingpb.HeartbeatHealthCheck{
@@ -1237,23 +1239,23 @@ func (n *namingServer) genTestInstancesByMeta(
 			Revision: &wrappers.StringValue{Value: "beginReversion"},
 		})
 	}
-	//fmt.Printf("id keys for %s:%s is %v\n", svc.GetNamespace().GetValue(), svc.GetName().GetValue(), keys)
+	// fmt.Printf("id keys for %s:%s is %v\n", svc.GetNamespace().GetValue(), svc.GetName().GetValue(), keys)
 	n.svcInstances[*key] = append(n.svcInstances[*key], instances...)
 	return instances
 }
 
-//产生测试用实例，权重随机生成
+// 产生测试用实例，权重随机生成
 func (n *namingServer) GenTestInstances(svc *namingpb.Service, num int) []*namingpb.Instance {
 	return n.GenTestInstancesWithHostPort(svc, num, "127.0.0.9", 1024)
 }
 
-//产生测试用实例，带上元数据，权重随机生成
+// 产生测试用实例，带上元数据，权重随机生成
 func (n *namingServer) GenTestInstancesWithMeta(
 	svc *namingpb.Service, num int, metadata map[string]string) []*namingpb.Instance {
 	return n.genTestInstancesByMeta(svc, num, "127.0.0.9", 4096, metadata)
 }
 
-//生成带有不同状态的实例
+// 生成带有不同状态的实例
 func (n *namingServer) GenInstancesWithStatus(svc *namingpb.Service, num int, st int, startPort int) []*namingpb.Instance {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1297,7 +1299,7 @@ func (n *namingServer) GenInstancesWithStatus(svc *namingpb.Service, num int, st
 	return instances
 }
 
-//产生测试用实例，通过指定的服务实例初始化
+// 产生测试用实例，通过指定的服务实例初始化
 func (n *namingServer) RegisterServiceInstances(svc *namingpb.Service, instances []*namingpb.Instance) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1308,9 +1310,9 @@ func (n *namingServer) RegisterServiceInstances(svc *namingpb.Service, instances
 	n.svcInstances[*key] = append(n.svcInstances[*key], instances...)
 }
 
-//上报客户端情况
+// 上报客户端情况
 func (n *namingServer) ReportClient(ctx context.Context, req *namingpb.Client) (*namingpb.Response, error) {
-	//fmt.Printf("receive report client req, time %v\n", time.Now())
+	// fmt.Printf("receive report client req, time %v\n", time.Now())
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	if n.region == "" || n.zone == "" || n.campus == "" {
@@ -1339,7 +1341,7 @@ func (n *namingServer) ReportClient(ctx context.Context, req *namingpb.Client) (
 	}, nil
 }
 
-//设置地域信息
+// 设置地域信息
 func (n *namingServer) SetLocation(region, zone, campus string) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1348,7 +1350,7 @@ func (n *namingServer) SetLocation(region, zone, campus string) {
 	n.campus = campus
 }
 
-//获取地域信息
+// 获取地域信息
 func (n *namingServer) GetLocation() (region, zone, campus string) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1358,7 +1360,7 @@ func (n *namingServer) GetLocation() (region, zone, campus string) {
 	return
 }
 
-//清空某个测试服务的实例
+// 清空某个测试服务的实例
 func (n *namingServer) ClearServiceInstances(svc *namingpb.Service) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1369,7 +1371,7 @@ func (n *namingServer) ClearServiceInstances(svc *namingpb.Service) {
 	n.svcInstances[*key] = nil
 }
 
-//设置服务的元数据信息
+// 设置服务的元数据信息
 func (n *namingServer) SetServiceMetadata(token string, key string, value string) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
@@ -1382,26 +1384,26 @@ func (n *namingServer) SetServiceMetadata(token string, key string, value string
 	}
 }
 
-//获取某个服务的实例
+// 获取某个服务的实例
 func (n *namingServer) GetServiceInstances(key *model.ServiceKey) []*namingpb.Instance {
 	return n.svcInstances[*key]
 }
 
-//设置某个服务的实例
+// 设置某个服务的实例
 func (n *namingServer) SetServiceInstances(key *model.ServiceKey, insts []*namingpb.Instance) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	n.svcInstances[*key] = insts
 }
 
-//获取服务token
+// 获取服务token
 func (n *namingServer) GetServiceToken(key *model.ServiceKey) string {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	return n.serviceTokens[*key]
 }
 
-//这个server经历的关于某个服务信息的请求次数，包括路由和实例
+// 这个server经历的关于某个服务信息的请求次数，包括路由和实例
 func (n *namingServer) GetServiceRequests(key *model.ServiceKey) int {
 	n.rwMutex.RLock()
 	res, ok := n.serviceRequests[*key]
@@ -1412,21 +1414,21 @@ func (n *namingServer) GetServiceRequests(key *model.ServiceKey) int {
 	return res
 }
 
-//删除某个服务的请求记录
+// 删除某个服务的请求记录
 func (n *namingServer) ClearServiceRequests(key *model.ServiceKey) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	delete(n.serviceRequests, *key)
 }
 
-//设置server在返回response的时候需不需要打印log
+// 设置server在返回response的时候需不需要打印log
 func (n *namingServer) SetPrintDiscoverReturn(v bool) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	n.printReturn = v
 }
 
-//设置服务的版本号
+// 设置服务的版本号
 func (n *namingServer) SetServiceRevision(token string, revision string, k model.ServiceEventKey) {
 	if k.Type == model.EventInstances {
 		n.rwMutex.Lock()
@@ -1445,21 +1447,21 @@ func (n *namingServer) SetServiceRevision(token string, revision string, k model
 	}
 }
 
-//插入一个路由信息
+// 插入一个路由信息
 func (n *namingServer) InsertRouting(svcKey model.ServiceKey, routing *namingpb.Routing) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	n.serviceRoutes[svcKey] = routing
 }
 
-//设置mockserver是否返回异常
+// 设置mockserver是否返回异常
 func (n *namingServer) SetReturnException(e bool) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()
 	n.returnException = e
 }
 
-//设置mockserver是否自动注册网格的辅助服务
+// 设置mockserver是否自动注册网格的辅助服务
 func (n *namingServer) SetNotRegisterAssistant(e bool) {
 	n.rwMutex.Lock()
 	defer n.rwMutex.Unlock()

@@ -19,9 +19,19 @@ package circuitbreak
 
 import (
 	"fmt"
+	log2 "log"
+	"net"
+	"os"
+	"sort"
+	"sync"
+	"time"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -31,14 +41,6 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	log2 "log"
-	"net"
-	"os"
-	"sort"
-	"sync"
-	"time"
 )
 
 const (
@@ -48,7 +50,7 @@ const (
 	cbPORT = 8088
 )
 
-//熔断测试套件
+// CircuitBreakSuite 熔断测试套件
 type CircuitBreakSuite struct {
 	grpcServer      *grpc.Server
 	grpcListener    net.Listener
@@ -61,7 +63,7 @@ type CircuitBreakSuite struct {
 	monitorListener net.Listener
 }
 
-//初始化套件
+// SetUpSuite 初始化套件
 func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -73,7 +75,7 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	t.grpcMonitor = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()
-	//注册系统服务
+	// 注册系统服务
 	t.mockServer.RegisterServerServices(cbIP, cbPORT)
 
 	t.monitorServer = mock.NewMonitorServer()
@@ -118,12 +120,12 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-//套件名字
+// GetName 套件名字
 func (t *CircuitBreakSuite) GetName() string {
 	return "CircuitBreak"
 }
 
-//销毁套件
+// TearDownSuite 销毁套件
 func (t *CircuitBreakSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
@@ -133,19 +135,19 @@ func (t *CircuitBreakSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//测试利用err_Count熔断器熔断实例
+// TestErrCount 测试利用err_Count熔断器熔断实例
 func (t *CircuitBreakSuite) TestErrCount(c *check.C) {
 	t.mockServer.SetPrintDiscoverReturn(true)
 	t.testCircuitBreakByInstance(c, "errorCount", true)
 }
 
-//测试单实例连续错误数熔断
+// 测试单实例连续错误数熔断
 func (t *CircuitBreakSuite) testErrCountByInstance(
 	c *check.C, targetInstance model.Instance, consumerAPI api.ConsumerAPI) {
 	log.GetBaseLogger().Debugf(
 		"The instance to ciucuitbreak by errcount: %s%d", targetInstance.GetHost(), targetInstance.GetPort())
-	//按目前的配置，连续十次上报一个实例出错，
-	//那么就会触发err_count熔断器将其变为熔断开启状态
+	// 按目前的配置，连续十次上报一个实例出错，
+	// 那么就会触发err_count熔断器将其变为熔断开启状态
 	var failCode int32 = 1
 	for i := 0; i < 10; i++ {
 		consumerAPI.UpdateServiceCallResult(
@@ -165,7 +167,7 @@ func (t *CircuitBreakSuite) testErrCountByInstance(
 	t.monitorServer.SetCircuitBreakCache(nil)
 }
 
-//测试利用err_rate熔断器熔断实例
+// TestErrRate 测试利用err_rate熔断器熔断实例
 func (t *CircuitBreakSuite) TestErrRate(c *check.C) {
 	t.testCircuitBreakByInstance(c, "errorRate", true)
 }
@@ -183,7 +185,7 @@ func (t *CircuitBreakSuite) testCircuitBreakByInstance(c *check.C, cbWay string,
 	consumerAPI := api.NewConsumerAPIByContext(sdkCtx)
 	defer consumerAPI.Destroy()
 	var targetInstance model.Instance
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	if oneInstance {
 		request := &api.GetOneInstanceRequest{}
 		request.FlowID = 1111
@@ -214,7 +216,7 @@ func (t *CircuitBreakSuite) testCircuitBreakByInstance(c *check.C, cbWay string,
 	}
 }
 
-//测试单实例错误率熔断
+// 测试单实例错误率熔断
 func (t *CircuitBreakSuite) testErrRateByInstance(
 	c *check.C, targetInstance model.Instance, consumerAPI api.ConsumerAPI) {
 	log.GetBaseLogger().Debugf(
@@ -290,7 +292,7 @@ func CheckInstanceAvailable(c *check.C, consumerAPI api.ConsumerAPI, targetIns m
 	}
 }
 
-//熔断到半开
+// 熔断到半开
 func (t *CircuitBreakSuite) openToHalfOpen(openInstance model.Instance, cbDuration time.Duration, c *check.C,
 	consumerAPI api.ConsumerAPI) {
 	c.Assert(openInstance.GetCircuitBreakerStatus(), check.NotNil)
@@ -302,10 +304,10 @@ func (t *CircuitBreakSuite) openToHalfOpen(openInstance model.Instance, cbDurati
 	fmt.Printf("To be halfopen in %v\n", halfOpenTime)
 	time.Sleep(halfOpenTime.Sub(time.Now()) + 2*time.Second)
 	c.Assert(openInstance.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
-	//CheckInstanceAvailable(c, consumerAPI, openInstance, true, cbNS, cbSVC)
+	// CheckInstanceAvailable(c, consumerAPI, openInstance, true, cbNS, cbSVC)
 }
 
-//半开到熔断
+// 半开到熔断
 func (t *CircuitBreakSuite) halfOpenToOpen(openInstance model.Instance, consumerAPI api.ConsumerAPI, c *check.C) {
 	failCode := int32(1)
 	log.GetBaseLogger().Debugf("start report fail for open instance %s", openInstance.GetId())
@@ -328,13 +330,13 @@ func (t *CircuitBreakSuite) halfOpenToOpen(openInstance model.Instance, consumer
 		RetCode:        &successCode,
 		Delay:          model.ToDurationPtr(1 * time.Second)}})
 	time.Sleep(2 * time.Second)
-	//localValues = regPlug.GetInstanceLocalValue(openInstance.GetId())
+	// localValues = regPlug.GetInstanceLocalValue(openInstance.GetId())
 	c.Assert(openInstance.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//c.Assert(localValues, check.NotNil)
+	// c.Assert(localValues, check.NotNil)
 	CheckInstanceAvailable(c, consumerAPI, openInstance, false, cbNS, cbSVC)
 }
 
-//半开到关闭
+// 半开到关闭
 func (t *CircuitBreakSuite) halfOpenToClose(openInstance model.Instance, consumerAPI api.ConsumerAPI, c *check.C) {
 	successCode := int32(0)
 	for i := 0; i < 3; i++ {
@@ -352,25 +354,25 @@ func (t *CircuitBreakSuite) halfOpenToClose(openInstance model.Instance, consume
 	CheckInstanceAvailable(c, consumerAPI, openInstance, true, cbNS, cbSVC)
 }
 
-//熔断变化数组
+// 熔断变化数组
 type changeArray []*monitorpb.CircuitbreakChange
 
-//熔断比较
+// Less 熔断比较
 func (ca changeArray) Less(i, j int) bool {
 	return ca[i].ChangeSeq < ca[j].ChangeSeq
 }
 
-//熔断交换
+// Swap 熔断交换
 func (ca changeArray) Swap(i, j int) {
 	ca[i], ca[j] = ca[j], ca[i]
 }
 
-//熔断状态数量
+// Len 熔断状态数量
 func (ca changeArray) Len() int {
 	return len(ca)
 }
 
-//检查熔断状态的上报是否正确
+// 检查熔断状态的上报是否正确
 func (t *CircuitBreakSuite) checkCircuitBreakReport(c *check.C, inst model.Instance) {
 	uploadStatus := t.monitorServer.GetCircuitBreakStatus(model.ServiceKey{
 		Namespace: inst.GetNamespace(),
@@ -395,14 +397,14 @@ func (t *CircuitBreakSuite) checkCircuitBreakReport(c *check.C, inst model.Insta
 	c.Assert(statusChange[4].Change, check.Equals, monitorpb.StatusChange_HalfOpenToClose)
 }
 
-//通过默认配置来进行熔断测试
+// 通过默认配置来进行熔断测试
 func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.C) {
 	fmt.Printf("TestCircuitBreakByDefault(skipRouter is %v) started\n", skipRouter)
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 10 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	var err error
@@ -410,9 +412,9 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(1 * time.Second)
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -425,12 +427,12 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 	fmt.Printf("GetInstances: first count is %d\n", len(response.Instances))
 	firstInstance := response.Instances[0]
 	var addressToLimit = fmt.Sprintf("%s:%d", firstInstance.GetHost(), firstInstance.GetPort())
-	//运行30s
+	// 运行30s
 	deadline := time.Now().Add(45 * time.Second)
 	var firstCount = len(response.Instances)
-	//检查是否发生了熔断
+	// 检查是否发生了熔断
 	var hasLimited = false
-	//检查是否进行了熔断恢复
+	// 检查是否进行了熔断恢复
 	var hasResume = false
 	for {
 		if time.Now().After(deadline) {
@@ -448,13 +450,13 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 			address := fmt.Sprintf("%s:%d", instance.GetHost(), instance.GetPort())
 			var callResult = &api.ServiceCallResult{}
 			if address == addressToLimit && !hasLimited {
-				//fmt.Printf("report fail for %s:%d\n", instance.GetHost(), instance.GetPort())
+				// fmt.Printf("report fail for %s:%d\n", instance.GetHost(), instance.GetPort())
 				callResult.RetStatus = model.RetFail
 				callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
 				callResult.RetCode = proto.Int(-1)
 				callResult.CalledInstance = instance
 			} else {
-				//fmt.Printf("report success for %s:%d\n", instance.GetHost(), instance.GetPort())
+				// fmt.Printf("report success for %s:%d\n", instance.GetHost(), instance.GetPort())
 				callResult.RetStatus = model.RetSuccess
 				callResult.Delay = model.ToDurationPtr(10 * time.Millisecond)
 				callResult.RetCode = proto.Int(0)
@@ -466,36 +468,36 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 		time.Sleep(50 * time.Millisecond)
 		response, err = consumerAPI.GetInstances(request)
 		c.Assert(err, check.IsNil)
-		//fmt.Printf("GetInstances: count is %d\n", len(response.Instances))
+		// fmt.Printf("GetInstances: count is %d\n", len(response.Instances))
 	}
 	c.Assert(hasLimited, check.Equals, true)
 	c.Assert(hasResume, check.Equals, true)
 	fmt.Printf("TestCircuitBreakByDefault(skipRouter is %v) terminated\n", skipRouter)
 }
 
-//通过默认配置来进行熔断测试
+// 通过默认配置来进行熔断测试
 func (t *CircuitBreakSuite) TestCircuitBreakByDefault(c *check.C) {
 	t.testCircuitBreakByDefault(false, c)
 }
 
-//测试通过获取多个实例接口分配的实例也可以进行连续错误数熔断半开状态转换
+// 测试通过获取多个实例接口分配的实例也可以进行连续错误数熔断半开状态转换
 func (t *CircuitBreakSuite) TestErrCountByGetInstances(c *check.C) {
 	t.testCircuitBreakByInstance(c, "errorCount", false)
 }
 
-//测试通过获取多个实例接口分配的实例也可以进行错误率熔断半开状态转换
+// 测试通过获取多个实例接口分配的实例也可以进行错误率熔断半开状态转换
 func (t *CircuitBreakSuite) TestErrRateByGetInstances(c *check.C) {
 	t.testCircuitBreakByInstance(c, "errorRate", false)
 }
 
-//连续错误熔断的阈值 测试
+// 连续错误熔断的阈值 测试
 func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	fmt.Println("--TestErrCountTriggerOpenNum")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 2 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(20)
@@ -506,10 +508,10 @@ func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -558,14 +560,14 @@ func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	CheckInstanceAvailable(c, consumerAPI, targetIns, false, cbNS, cbSVC)
 }
 
-//触发错误率熔断的阈值 测试
+// 触发错误率熔断的阈值 测试
 func (t *CircuitBreakSuite) TestErrRateTriggerOpenThreshold(c *check.C) {
 	fmt.Println("--TestErrRateTriggerOpenThreshold")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 2 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(20)
@@ -576,10 +578,10 @@ func (t *CircuitBreakSuite) TestErrRateTriggerOpenThreshold(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -627,16 +629,16 @@ func (t *CircuitBreakSuite) TestErrRateTriggerOpenThreshold(c *check.C) {
 	CheckInstanceAvailable(c, consumerAPI, targetIns, false, cbNS, cbSVC)
 }
 
-//熔断sleepWindow测试, 不启用探测
-//测试半开后最大可以获取实例的次数
-//熔断器半开后恢复所需成功探测数测试
+// 熔断sleepWindow测试, 不启用探测
+// 测试半开后最大可以获取实例的次数
+// 熔断器半开后恢复所需成功探测数测试
 func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 	fmt.Println("--TestSleepWindow")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(10)
@@ -651,10 +653,10 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -686,7 +688,7 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 	CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
 
-	//测试半开后最大可以获取实例的次数
+	// 测试半开后最大可以获取实例的次数
 	request1 := &api.GetOneInstanceRequest{}
 	request1.FlowID = 1111
 	request1.Namespace = cbNS
@@ -703,7 +705,7 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 	log2.Printf("useNum: %d", useNum)
 	c.Assert(useNum <= 2, check.Equals, true)
 
-	//熔断器半开后恢复所需成功探测数测试
+	// 熔断器半开后恢复所需成功探测数测试
 	var callResultOk = &api.ServiceCallResult{}
 	callResultOk.RetStatus = model.RetSuccess
 	callResultOk.Delay = model.ToDurationPtr(10 * time.Millisecond)
@@ -747,16 +749,16 @@ func (t *CircuitBreakSuite) addInstance(srService string, srNamespace string, sr
 	t.mockServer.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
 }
 
-//全部熔断后测试
-//全部熔断后优先获取熔断实例
-//全部不健康,可以触发全死全活
+// 全部熔断后测试
+// 全部熔断后优先获取熔断实例
+// 全部不健康,可以触发全死全活
 func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	fmt.Println("--TestAllCircuitBreaker")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(10)
@@ -766,7 +768,7 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
 	t.testService = &namingpb.Service{
@@ -788,7 +790,7 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	c.Assert(len(response.Instances), check.Equals, 1)
 	targetIns := response.GetInstances()[0]
 
-	//熔断
+	// 熔断
 	var callResult = &api.ServiceCallResult{}
 	callResult.RetStatus = model.RetFail
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
@@ -826,14 +828,14 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	}
 }
 
-//半开后低频率请求测试
+// 半开后低频率请求测试
 func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 	fmt.Println("--TestHalfOpenSlow")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(10)
@@ -849,10 +851,10 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -865,7 +867,7 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 	fmt.Printf("GetInstances: first count is %d\n", len(response.Instances))
 	targetIns := response.Instances[0]
 
-	//熔断
+	// 熔断
 	var callResult = &api.ServiceCallResult{}
 	callResult.RetStatus = model.RetFail
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
@@ -892,10 +894,10 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 		}
 		time.Sleep(time.Second * 2)
 		c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
-		//CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
+		// CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
 	}
 	for i := 0; i < 29; i++ {
-		//log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
+		// log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
 		util.SelectInstanceSpecificNum(c, consumerAPI, targetIns, 1, 2000)
 		err := consumerAPI.UpdateServiceCallResult(callResult)
 		c.Assert(err, check.IsNil)
@@ -915,9 +917,9 @@ const (
 func (t *CircuitBreakSuite) WhenOpenToHalfOpenChangToUnavailable(c *check.C, flag int) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(10)
@@ -933,10 +935,10 @@ func (t *CircuitBreakSuite) WhenOpenToHalfOpenChangToUnavailable(c *check.C, fla
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -949,7 +951,7 @@ func (t *CircuitBreakSuite) WhenOpenToHalfOpenChangToUnavailable(c *check.C, fla
 	fmt.Printf("GetInstances: first count is %d\n", len(response.Instances))
 	targetIns := response.Instances[0]
 
-	//熔断
+	// 熔断
 	var callResult = &api.ServiceCallResult{}
 	callResult.RetStatus = model.RetFail
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
@@ -997,10 +999,10 @@ func (t *CircuitBreakSuite) TestWhenOpenToHalfOpenChangToWeightZero(c *check.C) 
 	t.WhenOpenToHalfOpenChangToUnavailable(c, setWeightZero)
 }
 
-//测试实例转化为半开之后，不会陷入不能分配配额的情况
+// 测试实例转化为半开之后，不会陷入不能分配配额的情况
 func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.ConsumerAPI, cb string, success, fail int) {
 	defer util.DeleteDir(util.BackupDir)
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetOneInstanceRequest{}
 	request.FlowID = 1111
 	request.Namespace = cbNS
@@ -1010,7 +1012,7 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	c.Assert(len(response.Instances) > 0, check.Equals, true)
 	targetIns := response.Instances[0]
 
-	//熔断
+	// 熔断
 	var callResult = &api.ServiceCallResult{}
 	callResult.RetStatus = model.RetFail
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
@@ -1029,7 +1031,7 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 
 	log.GetDetectLogger().Infof("start to circuit break %s when half open", targetIns.GetId())
-	//多线程并发上报失败，导致重新熔断
+	// 多线程并发上报失败，导致重新熔断
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 	for i := 0; i < 3; i++ {
@@ -1046,12 +1048,12 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	time.Sleep(time.Second * 10)
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 
-	//用完配额
+	// 用完配额
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 10, 2000)
-	//但是成功数少于配置要求
+	// 但是成功数少于配置要求
 	t.reportCallStatus(c, consumer, targetIns, 0, model.RetSuccess, 100*time.Millisecond, 9)
 	time.Sleep(12 * time.Second)
-	//重新熔断
+	// 重新熔断
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 
 	// 转为半开状态，并分配9次调用
@@ -1059,11 +1061,11 @@ func (t *CircuitBreakSuite) testHalfOpenMustChange(c *check.C, consumer api.Cons
 	c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 9, 2000)
 	t.reportCallStatus(c, consumer, targetIns, 0, model.RetSuccess, 100*time.Millisecond, 9)
-	//跳过recover时间，继续分配请求
+	// 跳过recover时间，继续分配请求
 	time.Sleep(20 * time.Second)
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 1, 2000)
 	t.reportCallStatus(c, consumer, targetIns, 0, model.RetSuccess, 100*time.Millisecond, 1)
-	//恢复正常
+	// 恢复正常
 	time.Sleep(2 * time.Second)
 	util.SelectInstanceSpecificNum(c, consumer, targetIns, 10, 2000)
 }
@@ -1077,9 +1079,9 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorCount(c *check.C) {
 	fmt.Println("--TestHalfOpenMustChangeErrorCount")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorCountConfig().SetContinuousErrorThreshold(10)
@@ -1095,7 +1097,7 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorCount(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 	t.testHalfOpenMustChange(c, consumerAPI, "errorCount", 0, 15)
 }
@@ -1104,9 +1106,9 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
 	fmt.Println("--TestHalfOpenMustChangeErrorRate")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetRequestVolumeThreshold(10)
@@ -1121,7 +1123,7 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
 	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumerAPI.Destroy()
-	//等待直到完成首次地域信息拉取
+	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 	t.testHalfOpenMustChange(c, consumerAPI, "errorRate", 2, 9)
 }
@@ -1130,9 +1132,9 @@ func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
 	fmt.Println("--TestAllHalfOpenReturn")
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	//enableStat := false
+	// enableStat := false
 	period := 1 * time.Second
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
 	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
 	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetRequestVolumeThreshold(10)
@@ -1166,7 +1168,7 @@ func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
 	for _, inst := range allInstances {
 		c.Assert(inst.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 		for i := 0; i < 10; i++ {
-			//用完所有配额
+			// 用完所有配额
 			inst.GetCircuitBreakerStatus().Allocate()
 		}
 	}

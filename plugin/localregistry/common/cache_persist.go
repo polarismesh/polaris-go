@@ -26,13 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/hashicorp/go-multierror"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
-	"github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -41,7 +41,7 @@ const (
 	PatternGlob    = "svc#?*#?*#?*"
 )
 
-//持久化工具类
+// 持久化工具类
 type CachePersistHandler struct {
 	persistDir    string
 	maxWriteRetry int
@@ -55,7 +55,7 @@ type CacheFileInfo struct {
 	FileInfo os.FileInfo
 }
 
-//创建持久化处理器
+// 创建持久化处理器
 func NewCachePersistHandler(persistDir string, maxWriteRetry int,
 	maxReadRetry int, retryInterval time.Duration) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
@@ -69,7 +69,7 @@ func NewCachePersistHandler(persistDir string, maxWriteRetry int,
 	return handler, nil
 }
 
-//持久化配置初始化
+// 持久化配置初始化
 func (cph *CachePersistHandler) init() error {
 	if nil == cph.marshaler {
 		cph.marshaler = &jsonpb.Marshaler{}
@@ -80,7 +80,7 @@ func (cph *CachePersistHandler) init() error {
 	return nil
 }
 
-//加载目录中所有的缓存文件
+// 加载目录中所有的缓存文件
 func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKey]CacheFileInfo {
 	cacheFiles, _ := filepath.Glob(filepath.Join(cph.persistDir, PatternGlob+CacheSuffix))
 	if len(cacheFiles) == 0 {
@@ -94,7 +94,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 			log.GetBaseLogger().Errorf("fail to load cache from file %s, error is %v", cacheFile, err)
 			continue
 		}
-		//加载缓存时，也要将实例进行排序
+		// 加载缓存时，也要将实例进行排序
 		sort.Sort(pb.InstSlice(msg.Instances))
 		info := CacheFileInfo{
 			Msg:      msg,
@@ -105,7 +105,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 	return values
 }
 
-//从文件中加载服务缓存
+// 从文件中加载服务缓存
 func (cph *CachePersistHandler) loadCacheFromFile(
 	cacheFile string, message proto.Message) (*model.ServiceEventKey, os.FileInfo, error) {
 	svcValueKey, err := cph.fileNameToServiceEventKey(cacheFile)
@@ -126,13 +126,13 @@ func (cph *CachePersistHandler) loadCacheFromFile(
 	return svcValueKey, fileInfo, nil
 }
 
-//从相对文件中加载缓存
+// 从相对文件中加载缓存
 func (cph *CachePersistHandler) LoadMessageFromFile(relativeFile string, message proto.Message) error {
 	absFile := filepath.Join(cph.persistDir, relativeFile)
 	return cph.loadMessageFromAbsoluteFile(absFile, message, cph.maxReadRetry)
 }
 
-//从绝对文件中加载缓存
+// 从绝对文件中加载缓存
 func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, message proto.Message,
 	maxRetry int) error {
 	log.GetBaseLogger().Infof("Start to load cache from %s", cacheFile)
@@ -142,7 +142,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 		cacheJson, err := os.OpenFile(cacheFile, os.O_RDONLY, 0600)
 		if nil != err {
 			lastErr = model.NewSDKError(model.ErrCodeDiskError, err, "fail to read file cache")
-			//文件打开失败的话，重试没有意义，直接失败
+			// 文件打开失败的话，重试没有意义，直接失败
 			break
 		}
 		err = jsonpb.Unmarshal(cacheJson, message)
@@ -150,7 +150,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 		if nil != err {
 			lastErr = multierror.Prefix(err, "Fail to unmarshal file cache: ")
 			time.Sleep(cph.retryInterval)
-			//解码失败可能是读到了部分数据，所以这里可以重试
+			// 解码失败可能是读到了部分数据，所以这里可以重试
 			continue
 		}
 		return nil
@@ -159,7 +159,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 		fmt.Sprintf("load message from %s failed after retry %d times", cacheFile, retryTimes))
 }
 
-//从文件名转化为serviceKey
+// 从文件名转化为serviceKey
 func (cph *CachePersistHandler) fileNameToServiceEventKey(fileName string) (*model.ServiceEventKey, error) {
 	svcKeyFile := fileName[0 : len(fileName)-len(CacheSuffix)]
 	pieces := strings.Split(svcKeyFile, "#")
@@ -182,7 +182,7 @@ func (cph *CachePersistHandler) fileNameToServiceEventKey(fileName string) (*mod
 	return svcValueKey, nil
 }
 
-//删除缓存文件
+// 删除缓存文件
 func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	fileToDelete := filepath.Join(cph.persistDir, fileName)
 	log.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
@@ -205,7 +205,7 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	}
 }
 
-//按服务来进行缓存存储
+// 按服务来进行缓存存储
 func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto.Message) {
 	fileToAdd := filepath.Join(cph.persistDir, fileName)
 	log.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
@@ -229,7 +229,7 @@ func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto
 	}
 }
 
-//实际写文件
+// 实际写文件
 func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error {
 	tempFileName := cacheFile + ".tmp"
 	tmpFile, err := os.OpenFile(tempFileName, os.O_WRONLY|os.O_CREATE, 0600)
@@ -247,7 +247,7 @@ func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error 
 	return nil
 }
 
-//关闭文件
+// 关闭文件
 func (cph *CachePersistHandler) closeTmpFile(tmpFile *os.File, cacheFile string) error {
 	if err := tmpFile.Sync(); err != nil {
 		tmpFile.Close()
@@ -268,7 +268,7 @@ func (cph *CachePersistHandler) closeTmpFile(tmpFile *os.File, cacheFile string)
 	return nil
 }
 
-//服务名转化为文件名
+// 服务名转化为文件名
 func ServiceEventKeyToFileName(svcKey model.ServiceEventKey) string {
 	svcKey.Namespace = url.QueryEscape(svcKey.Namespace)
 	svcKey.Service = url.QueryEscape(svcKey.Service)

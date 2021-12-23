@@ -26,7 +26,7 @@ import (
 // 用于metric report 统计
 type StatisticsBucket struct {
 	periodStartTimeSecond int64
-	//bucketStartTimeSecond int64
+	// bucketStartTimeSecond int64
 
 	totalCount int64
 	limitCount int64

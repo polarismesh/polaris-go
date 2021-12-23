@@ -19,10 +19,11 @@ package client
 
 import (
 	"errors"
-	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
 // msg buffer 用于合并包

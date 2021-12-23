@@ -23,25 +23,25 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of HealthChecker
+// proxy of HealthChecker
 type Proxy struct {
 	HealthChecker
 	engine model.Engine
 }
 
-//设置
+// 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.HealthChecker = plug.(HealthChecker)
 	p.engine = engine
 }
 
-//proxy HealthChecker DetectInstance
+// proxy HealthChecker DetectInstance
 func (p *Proxy) DetectInstance(inst model.Instance) (DetectResult, error) {
 	result, err := p.HealthChecker.DetectInstance(inst)
 	return result, err
 }
 
-//注册proxy
+// 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeHealthCheck, &Proxy{})
 }

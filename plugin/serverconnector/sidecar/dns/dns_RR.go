@@ -36,7 +36,7 @@ var TypeToRR = map[uint16]func() RR{
 	TypeOPT:                    func() RR { return new(OPT) },
 }
 
-//RR的header
+// RR的header
 type RR_Header struct {
 	Name     string `dns:"cdomain-name"`
 	Rrtype   uint16
@@ -51,7 +51,7 @@ func (h *RR_Header) Header() *RR_Header { return h }
 // 深拷贝函数，未实现
 func (h *RR_Header) copy() RR { return nil }
 
-//为了调试输出，非必要实现
+// 为了调试输出，非必要实现
 func (h *RR_Header) String() string {
 	var s string
 
@@ -67,13 +67,13 @@ func (h *RR_Header) String() string {
 	return s
 }
 
-//没有用处，单纯为了实现interface
+// 没有用处，单纯为了实现interface
 func (h *RR_Header) packData(buff *bytes.Buffer) (int, error) {
 	// RR_Header has no RDATA to pack.
 	return 0, nil
 }
 
-//RR header反序列化，此函数未实现，见下面unpackRRHeader
+// RR header反序列化，此函数未实现，见下面unpackRRHeader
 func (h *RR_Header) unpack(msg []byte, off int) (int, error) {
 	panic("dns: internal error: unpack should never be called on RR_Header")
 }
@@ -131,7 +131,7 @@ func unpackRRHeader(msg []byte, off int) (rr RR_Header, off1 int, err error) {
 	if err != nil {
 		return hdr, len(msg), err
 	}
-	//msg, err = truncateMsgFromRdlength(msg, off, hdr.Rdlength)
+	// msg, err = truncateMsgFromRdlength(msg, off, hdr.Rdlength)
 	return hdr, off, err
 }
 

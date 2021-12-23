@@ -27,25 +27,25 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-//基于maglev算法的负载均衡器
-//maglev算法基于论文：https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44824.pdf
+// 基于maglev算法的负载均衡器
+// maglev算法基于论文：https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44824.pdf
 type MaglevLoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
 }
 
-//插件类型
+// 插件类型
 func (m *MaglevLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-//插件名，一个类型下插件名唯一
+// 插件名，一个类型下插件名唯一
 func (m *MaglevLoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerMaglev
 }
 
-//初始化插件
+// 初始化插件
 func (m *MaglevLoadBalancer) Init(ctx *plugin.InitContext) error {
 	m.PluginBase = plugin.NewPluginBase(ctx)
 	m.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(m.Name()).(*Config)
@@ -57,16 +57,16 @@ func (m *MaglevLoadBalancer) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//构建一次性hash环
+// 构建一次性hash环
 func (m *MaglevLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (model.ExtendedSelector, error) {
 	selector := instSet.GetSelector(m.ID())
 	if nil != selector {
 		return selector, nil
 	}
-	//防止服务刚上线或重建Table时，由于selector为空，大量并发请求进入NewTable逻辑，出现OOM
+	// 防止服务刚上线或重建Table时，由于selector为空，大量并发请求进入NewTable逻辑，出现OOM
 	instSet.GetLock().Lock()
 	defer instSet.GetLock().Unlock()
-	//获取锁后再次检查selector是否已经被创建
+	// 获取锁后再次检查selector是否已经被创建
 	selector = instSet.GetSelector(m.ID())
 	if nil != selector {
 		return selector, nil
@@ -76,7 +76,7 @@ func (m *MaglevLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (mod
 	return tableSelector, err
 }
 
-//ChooseInstance 获取单个服务实例
+// ChooseInstance 获取单个服务实例
 func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
 	cluster := criteria.Cluster
@@ -106,12 +106,12 @@ func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	return instance, nil
 }
 
-//销毁插件，可用于释放资源
+// 销毁插件，可用于释放资源
 func (m *MaglevLoadBalancer) Destroy() error {
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterConfigurablePlugin(&MaglevLoadBalancer{}, &Config{})
 }

@@ -1,31 +1,31 @@
 {
-    "rules": [
-      {
-        "id": "sr1111",
-        "service": "testRateLimitSingleRemoteSvc",
-        "namespace": "Test",
-        "labels": {
-          "operation": {
-            "type": "EXACT",
-            "value": "query"
-          }
-        },
-        "resource": "QPS",
-        "type": "GLOBAL",
-        "action": "reject",
-        "amounts": [
-          {
-            "maxAmount": 50,
-            "validDuration": "1s"
-          }
-        ],
-        "report": {
-          "interval": "100ms"
-        },
-        "ctime": "2020-4-7 16:47:14",
-        "mtime": "2020-4-7 16:47:14",
-        "revision": "68dc47b4b5954b0292112f988854451"
-      }
-    ],
+  "rules": [
+    {
+      "id": "sr1111",
+      "service": "testRateLimitSingleRemoteSvc",
+      "namespace": "Test",
+      "labels": {
+        "operation": {
+          "type": "EXACT",
+          "value": "query"
+        }
+      },
+      "resource": "QPS",
+      "type": "GLOBAL",
+      "action": "reject",
+      "amounts": [
+        {
+          "maxAmount": 50,
+          "validDuration": "1s"
+        }
+      ],
+      "report": {
+        "interval": "100ms"
+      },
+      "ctime": "2020-4-7 16:47:14",
+      "mtime": "2020-4-7 16:47:14",
+      "revision": "68dc47b4b5954b0292112f988854451"
+    }
+  ],
   "revision": "58dc47b4b5954b0212112f010913f702"
 }

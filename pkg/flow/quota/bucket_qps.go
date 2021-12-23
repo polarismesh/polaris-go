@@ -18,16 +18,18 @@
 package quota
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/modern-go/reflect2"
 	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 // 创建QPS远程限流窗口
@@ -46,30 +48,30 @@ func NewRemoteAwareQpsBucket(window *RateLimitWindow) *RemoteAwareQpsBucket {
 
 // 远程配额分配的算法桶
 type RemoteAwareQpsBucket struct {
-	//所属的限流窗口
+	// 所属的限流窗口
 	window *RateLimitWindow
 	// 令牌桶数组，时间从小到大排列
 	tokenBuckets TokenBuckets
 	// 令牌桶map，用于索引
 	tokenBucketMap map[int64]*TokenBucket
-	//与服务端的时间差
+	// 与服务端的时间差
 	timeDiff int64
-	//存放[]UpdateIdentifier数据
+	// 存放[]UpdateIdentifier数据
 	identifierPool *sync.Pool
 }
 
-//客户端时间转为服务端时间
+// 客户端时间转为服务端时间
 func (r *RemoteAwareQpsBucket) toServerTimeMilli(timeMilli int64) int64 {
 	timeDiff := atomic.LoadInt64(&r.timeDiff)
 	return timeMilli + timeDiff
 }
 
 const (
-	//单次分配的token数量
+	// 单次分配的token数量
 	tokenPerAlloc = 1
 )
 
-//从池子里获取标识数组
+// 从池子里获取标识数组
 func (r *RemoteAwareQpsBucket) poolGetIdentifier() []UpdateIdentifier {
 	value := r.identifierPool.Get()
 	if !reflect2.IsNil(value) {
@@ -96,13 +98,13 @@ func (r *RemoteAwareQpsBucket) Allocate() *model.QuotaResponse {
 			Info: "rule has no amount config",
 		}
 	}
-	//获取服务端时间
+	// 获取服务端时间
 	nowMill := r.toServerTimeMilli(model.CurrentMillisecond())
 	var stopIndex = -1
 	var mode = Unknown
 	identifiers := r.poolGetIdentifier()
 	defer r.identifierPool.Put(identifiers)
-	//先尝试扣除
+	// 先尝试扣除
 	var left int64
 	for i, tokenBucket := range r.tokenBuckets {
 		left, mode = tokenBucket.TryAllocateToken(tokenPerAlloc, nowMill, &identifiers[i], mode)
@@ -112,15 +114,15 @@ func (r *RemoteAwareQpsBucket) Allocate() *model.QuotaResponse {
 		}
 	}
 	usedRemoteQuota := mode == Remote
-	//有一个扣除不成功，则进行限流
+	// 有一个扣除不成功，则进行限流
 	if stopIndex >= 0 {
-		//出现了限流
+		// 出现了限流
 		tokenBucket := r.tokenBuckets[stopIndex]
 		if usedRemoteQuota {
-			//远程才记录滑窗, 滑窗用于上报
+			// 远程才记录滑窗, 滑窗用于上报
 			tokenBucket.ConfirmLimited(1, nowMill)
 		}
-		//归还配额
+		// 归还配额
 		for i := 0; i < stopIndex; i++ {
 			tokenBucket := r.tokenBuckets[i]
 			tokenBucket.GiveBackToken(&identifiers[i], tokenPerAlloc, mode)
@@ -130,7 +132,7 @@ func (r *RemoteAwareQpsBucket) Allocate() *model.QuotaResponse {
 			Code: model.QuotaResultLimited,
 		}
 	}
-	//记录分配的配额
+	// 记录分配的配额
 	for _, tokenBucket := range r.tokenBuckets {
 		if usedRemoteQuota {
 			tokenBucket.ConfirmPassed(1, nowMill)
@@ -202,9 +204,9 @@ func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas *RemoteQuotaResult) {
 		updateClient = false
 		remoteLeft := remoteQuotas.Left
 		if remoteStartTimeMilli+durationMilli == curStartTimeMilli {
-			//仅仅相差一个周期，可以认为是周期间切换导致，这时候可以直接更新配额为全量配额
+			// 仅仅相差一个周期，可以认为是周期间切换导致，这时候可以直接更新配额为全量配额
 			tokenBucket.UpdateRemoteClientCount(remoteQuotas)
-			//当前周期没有更新，则重置当前周期配额，避免出现时间周期开始时候的误限
+			// 当前周期没有更新，则重置当前周期配额，避免出现时间周期开始时候的误限
 			remoteQuotas.ServerTimeMilli = curStartTimeMilli
 			remoteQuotas.Left = tokenBucket.GetRuleTotal()
 			log.GetBaseLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
@@ -213,7 +215,7 @@ func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas *RemoteQuotaResult) {
 				remoteStartTimeMilli, durationMilli, remoteLeft, remoteQuotas.Left)
 		} else {
 			tokenBucket.UpdateRemoteClientCount(remoteQuotas)
-			//不在一个时间段内，丢弃
+			// 不在一个时间段内，丢弃
 			log.GetBaseLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft %d",
 				clientTime, serverTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli, remoteStartTimeMilli,
@@ -239,7 +241,7 @@ func (r *RemoteAwareQpsBucket) GetQuotaUsed(curTimeMilli int64) *UsageInfo {
 	return result
 }
 
-//更新时间间隔
+// 更新时间间隔
 func (r *RemoteAwareQpsBucket) UpdateTimeDiff(timeDiff int64) {
 	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
 	if lastTimeDiff != timeDiff {
@@ -251,26 +253,26 @@ func (r *RemoteAwareQpsBucket) GetTokenBuckets() TokenBuckets {
 	return r.tokenBuckets
 }
 
-//多久没同步，则变成本地
+// 多久没同步，则变成本地
 const remoteExpireMilli = 1000
 
-//通用信息
+// 通用信息
 type BucketShareInfo struct {
-	//是否单机均摊
+	// 是否单机均摊
 	shareEqual bool
-	//是否本地配额
+	// 是否本地配额
 	local bool
-	//远程实效是否放通
+	// 远程实效是否放通
 	passOnRemoteFail bool
 }
 
-//令牌桶是否进行更新的凭证
+// 令牌桶是否进行更新的凭证
 type UpdateIdentifier struct {
-	//当前周期起始时间，本地限流有效
+	// 当前周期起始时间，本地限流有效
 	stageStartMilli int64
-	//最近一次只更新远程客户端数量的时间点
+	// 最近一次只更新远程客户端数量的时间点
 	lastRemoteClientUpdateMilli int64
-	//最近一次远程完全更新时间点
+	// 最近一次远程完全更新时间点
 	lastRemoteUpdateMilli int64
 }
 
@@ -282,23 +284,23 @@ type TokenBucket struct {
 	validDurationMilli int64
 	// 限流区间 单位秒
 	validDurationSecond uint32
-	//规则中定义的变量
+	// 规则中定义的变量
 	ruleTokenAmount uint32
 	// 每周期分配的配额总量
 	tokenLeft int64
 	// 远程降级到本地的剩余配额数
 	remoteToLocalTokenLeft int64
-	//实例数，通过远程更新
+	// 实例数，通过远程更新
 	instanceCount uint32
-	//本地与远程更新并发控制
+	// 本地与远程更新并发控制
 	mutex *sync.RWMutex
 	// 统计滑窗
 	sliceWindow *SlidingWindow
-	//共享的规则数据
+	// 共享的规则数据
 	shareInfo *BucketShareInfo
 }
 
-//创建令牌桶
+// 创建令牌桶
 func NewTokenBucket(
 	windowKey string, validDuration time.Duration, tokenAmount uint32, shareInfo *BucketShareInfo) *TokenBucket {
 	bucket := &TokenBucket{}
@@ -314,7 +316,7 @@ func NewTokenBucket(
 	return bucket
 }
 
-//获取限流总量
+// 获取限流总量
 func (t *TokenBucket) GetRuleTotal() int64 {
 	if !t.shareInfo.shareEqual || t.shareInfo.local {
 		return int64(t.ruleTokenAmount)
@@ -323,11 +325,11 @@ func (t *TokenBucket) GetRuleTotal() int64 {
 	return int64(t.ruleTokenAmount) * int64(instanceCount)
 }
 
-//归还配额
+// 归还配额
 func (t *TokenBucket) GiveBackToken(identifier *UpdateIdentifier, token int64, mode TokenBucketMode) {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	//相同则归还，否则忽略
+	// 相同则归还，否则忽略
 	switch mode {
 	case Remote:
 		if atomic.LoadInt64(&t.lastRemoteUpdateMilli) == identifier.lastRemoteUpdateMilli {
@@ -344,14 +346,14 @@ func (t *TokenBucket) GiveBackToken(identifier *UpdateIdentifier, token int64, m
 	}
 }
 
-//只更新远程客户端数量，不更新配额
+// 只更新远程客户端数量，不更新配额
 func (t *TokenBucket) UpdateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	t.updateRemoteClientCount(remoteQuotas)
 }
 
-//纯更新客户端数
+// 纯更新客户端数
 func (t *TokenBucket) updateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	lastRemoteClientUpdateMilli := atomic.LoadInt64(&t.lastRemoteClientUpdateMilli)
 	if lastRemoteClientUpdateMilli < remoteQuotas.ServerTimeMilli {
@@ -371,7 +373,7 @@ func (t *TokenBucket) updateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	}
 }
 
-//更新远程配额
+// 更新远程配额
 func (t *TokenBucket) UpdateRemoteToken(remoteQuotas *RemoteQuotaResult, updateClient bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -379,17 +381,17 @@ func (t *TokenBucket) UpdateRemoteToken(remoteQuotas *RemoteQuotaResult, updateC
 		t.updateRemoteClientCount(remoteQuotas)
 	}
 	used, _ := t.sliceWindow.TouchCurrentPassed(remoteQuotas.ServerTimeMilli)
-	//需要减去在上报期间使用的配额数
+	// 需要减去在上报期间使用的配额数
 	atomic.StoreInt64(&t.tokenLeft, remoteQuotas.Left-int64(used))
 	atomic.StoreInt64(&t.lastRemoteUpdateMilli, remoteQuotas.ServerTimeMilli)
 }
 
-//远程配额过期
+// 远程配额过期
 func (t *TokenBucket) remoteExpired(nowMilli int64) bool {
 	return nowMilli-atomic.LoadInt64(&t.lastRemoteUpdateMilli) > remoteExpireMilli
 }
 
-//初始化本地配额
+// 初始化本地配额
 func (t *TokenBucket) initLocalStageOnLocalConfig(nowMilli int64) {
 	nowStageMilli := t.calculateStageStart(nowMilli)
 	if atomic.LoadInt64(&t.stageStartMilli) == nowStageMilli {
@@ -407,12 +409,12 @@ func (t *TokenBucket) initLocalStageOnLocalConfig(nowMilli int64) {
 	atomic.StoreInt64(&t.stageStartMilli, nowStageMilli)
 }
 
-//计算起始滑窗
+// 计算起始滑窗
 func (t *TokenBucket) calculateStageStart(curTimeMs int64) int64 {
 	return curTimeMs - curTimeMs%t.validDurationMilli
 }
 
-//本地分配
+// 本地分配
 func (t *TokenBucket) tryAllocateLocal(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (int64, TokenBucketMode) {
 	t.initLocalStageOnLocalConfig(nowMilli)
@@ -423,21 +425,21 @@ func (t *TokenBucket) tryAllocateLocal(
 	return atomic.AddInt64(&t.tokenLeft, 0-int64(token)), Local
 }
 
-//直接分配远程配额
+// 直接分配远程配额
 func (t *TokenBucket) directAllocateRemoteToken(token uint32) int64 {
 	return atomic.AddInt64(&t.tokenLeft, 0-int64(token))
 }
 
-//尝试只读方式分配远程配额
+// 尝试只读方式分配远程配额
 func (t *TokenBucket) allocateRemoteReadOnly(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (bool, int64, TokenBucketMode) {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	//远程配额，未过期
+	// 远程配额，未过期
 	if !t.remoteExpired(nowMilli) {
 		return true, t.directAllocateRemoteToken(token), Remote
 	}
-	//远程配额过期，配置了直接放通
+	// 远程配额过期，配置了直接放通
 	if t.shareInfo.passOnRemoteFail {
 		return true, 0, RemoteToLocal
 	}
@@ -450,9 +452,9 @@ func (t *TokenBucket) allocateRemoteReadOnly(
 	return false, 0, RemoteToLocal
 }
 
-//以本地退化远程模式来进行分配
+// 以本地退化远程模式来进行分配
 func (t *TokenBucket) allocateRemoteToLocal(token uint32, nowMilli int64, identifier *UpdateIdentifier) int64 {
-	//远程配额过期，配置了直接放通
+	// 远程配额过期，配置了直接放通
 	if t.shareInfo.passOnRemoteFail {
 		return 0
 	}
@@ -471,13 +473,13 @@ func (t *TokenBucket) allocateRemoteToLocal(token uint32, nowMilli int64, identi
 	if success {
 		return left
 	}
-	//重新构建窗口
+	// 重新构建窗口
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.createRemoteToLocalTokens(nowMilli, token, identifier, stageStartMilli)
 }
 
-//创建远程降级的token池
+// 创建远程降级的token池
 func (t *TokenBucket) createRemoteToLocalTokens(
 	nowMilli int64, token uint32, identifier *UpdateIdentifier, stageStartMilli int64) int64 {
 	nowStageMilli := t.calculateStageStart(nowMilli)
@@ -495,14 +497,14 @@ func (t *TokenBucket) createRemoteToLocalTokens(
 	return atomic.AddInt64(&t.remoteToLocalTokenLeft, 0-int64(token))
 }
 
-//本地分配
+// 本地分配
 func (t *TokenBucket) tryAllocateRemote(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (int64, TokenBucketMode) {
 	ok, left, isRemote := t.allocateRemoteReadOnly(token, nowMilli, identifier)
 	if ok {
 		return left, isRemote
 	}
-	//重新构建窗口
+	// 重新构建窗口
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	stageStartMilli := atomic.LoadInt64(&t.stageStartMilli)
@@ -514,7 +516,7 @@ func (t *TokenBucket) tryAllocateRemote(
 	return t.createRemoteToLocalTokens(nowMilli, token, identifier, stageStartMilli), RemoteToLocal
 }
 
-//尝试分配配额
+// 尝试分配配额
 func (t *TokenBucket) TryAllocateToken(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier, mode TokenBucketMode) (int64, TokenBucketMode) {
 	switch mode {
@@ -525,19 +527,19 @@ func (t *TokenBucket) TryAllocateToken(
 	case RemoteToLocal:
 		return t.allocateRemoteToLocal(token, nowMilli, identifier), RemoteToLocal
 	}
-	//自适应计算
+	// 自适应计算
 	if t.shareInfo.local {
 		return t.tryAllocateLocal(token, nowMilli, identifier)
 	}
 	return t.tryAllocateRemote(token, nowMilli, identifier)
 }
 
-//记录真实分配配额
+// 记录真实分配配额
 func (t *TokenBucket) ConfirmPassed(passed uint32, nowMilli int64) {
 	t.sliceWindow.AddAndGetCurrentPassed(nowMilli, passed)
 }
 
-//记录限流分配配额
+// 记录限流分配配额
 func (t *TokenBucket) ConfirmLimited(limited uint32, nowMilli int64) {
 	t.sliceWindow.AddAndGetCurrentLimited(nowMilli, limited)
 }

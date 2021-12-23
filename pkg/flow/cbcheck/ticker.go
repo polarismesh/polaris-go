@@ -18,7 +18,10 @@
 package cbcheck
 
 import (
+	"time"
+
 	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -26,10 +29,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"time"
 )
 
-//创建定时熔断任务回调
+// 创建定时熔断任务回调
 func NewCircuitBreakCallBack(cfg config.Configuration, supplier plugin.Supplier) (*CircuitBreakCallBack, error) {
 	var err error
 	callBack := &CircuitBreakCallBack{}
@@ -43,17 +45,17 @@ func NewCircuitBreakCallBack(cfg config.Configuration, supplier plugin.Supplier)
 	return callBack, nil
 }
 
-//定时熔断任务回调
+// 定时熔断任务回调
 type CircuitBreakCallBack struct {
-	//熔断器
+	// 熔断器
 	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
-	//本地缓存
+	// 本地缓存
 	registry localregistry.LocalRegistry
-	//轮询间隔
+	// 轮询间隔
 	interval time.Duration
 }
 
-//执行任务
+// 执行任务
 func (c *CircuitBreakCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < c.interval {
@@ -82,12 +84,12 @@ func (c *CircuitBreakCallBack) Process(
 	return model.CONTINUE
 }
 
-//OnTaskEvent 任务事件回调
+// OnTaskEvent 任务事件回调
 func (c *CircuitBreakCallBack) OnTaskEvent(event model.TaskEvent) {
 
 }
 
-//对服务进行熔断判断操作
+// 对服务进行熔断判断操作
 func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, svcInstances model.ServiceInstances,
 	instance model.Instance, cbName string) (*localregistry.ServiceUpdateRequest, error) {
 	allResults := make(map[string]*circuitbreaker.Result, 0)
@@ -125,7 +127,7 @@ func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, sv
 			break
 		}
 	}
-	//批量更新状态
+	// 批量更新状态
 	updateRequest := buildServiceUpdateRequest(svc, allResults)
 	if len(updateRequest.Properties) == 0 {
 		return nil, nil
@@ -133,7 +135,7 @@ func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, sv
 	return updateRequest, c.registry.UpdateInstances(updateRequest)
 }
 
-//清理实例集合，剔除重复数
+// 清理实例集合，剔除重复数
 func cleanInstanceSet(instanceSet model.HashSet, allInstances model.HashSet) {
 	for instID := range instanceSet {
 		if allInstances.Contains(instID) {
@@ -144,7 +146,7 @@ func cleanInstanceSet(instanceSet model.HashSet, allInstances model.HashSet) {
 	}
 }
 
-//构建实例更新数据
+// 构建实例更新数据
 func buildInstanceProperty(now time.Time, allowedRequests int, instances model.HashSet,
 	request *localregistry.ServiceUpdateRequest, cbName string, status model.Status) {
 	if len(instances) == 0 {
@@ -165,7 +167,7 @@ func buildInstanceProperty(now time.Time, allowedRequests int, instances model.H
 	}
 }
 
-//构造服务更新数据
+// 构造服务更新数据
 func buildServiceUpdateRequest(
 	svc model.ServiceKey, results map[string]*circuitbreaker.Result) *localregistry.ServiceUpdateRequest {
 	request := &localregistry.ServiceUpdateRequest{

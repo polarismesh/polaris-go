@@ -19,8 +19,16 @@ package stability
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -30,12 +38,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"os"
-	"time"
 )
 
 const (
@@ -50,14 +52,14 @@ var (
 	builtinPort = 10095
 )
 
-//服务切换测试套
+// ServerSwitchSuite 服务切换测试套
 type ServerSwitchSuite struct {
 	builtinServer mock.NamingServer
 	mockServers   []mock.NamingServer
 	grpcServers   []*grpc.Server
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -112,7 +114,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 			grpcServer.Serve(grpcListener)
 		}()
 	}
-	//纯埋点server，只包含系统服务信息，不包含自身实例以及其他服务信息
+	// 纯埋点server，只包含系统服务信息，不包含自身实例以及其他服务信息
 	t.builtinServer = mock.NewNamingServer()
 	t.builtinServer.RegisterService(discoverService)
 	t.builtinServer.SetServiceInstances(&model.ServiceKey{
@@ -132,7 +134,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-//SetUpSuite 结束测试套程序
+// TearDownSuite SetUpSuite 结束测试套程序
 func (t *ServerSwitchSuite) TearDownSuite(c *check.C) {
 	for _, grpcServer := range t.grpcServers {
 		grpcServer.Stop()
@@ -143,17 +145,17 @@ func (t *ServerSwitchSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//获取用例名
+// GetName 获取用例名
 func (t *ServerSwitchSuite) GetName() string {
 	return "ServiceUpdateSuite"
 }
 
-//获取连接管理器的方法
+// 获取连接管理器的方法
 type managerGetter interface {
 	GetConnectionManager() network.ConnectionManager
 }
 
-//测试切换后台sever，以及在获取到了discover之后，是否会继续向埋点server请求
+// TestSwitchServer 测试切换后台sever，以及在获取到了discover之后，是否会继续向埋点server请求
 func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 	log.Printf("start to TestSwitchServer")
 	defer util.DeleteDir(util.BackupDir)
@@ -177,7 +179,7 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 	c.Assert(err, check.IsNil)
 	manager := plug.(*serverconnector.Proxy).ServerConnector.(managerGetter).GetConnectionManager()
 	loopCount := 2000
-	//等待从埋点server中获取得到discover的信息
+	// 等待从埋点server中获取得到discover的信息
 	log.Printf("waiting 20s to get discover service info from builtin server")
 	time.Sleep(20 * time.Second)
 	log.Printf("end waiting")
@@ -205,17 +207,17 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 		}
 	}
 	log.Printf("end to do getInstance")
-	//var hasNotFoundServer bool
+	// var hasNotFoundServer bool
 	for _, allServer := range allServers {
 		if n, ok := switchedServers[allServer]; !ok {
 			fmt.Printf("server %s not found\n", allServer)
-			//hasNotFoundServer = true
+			// hasNotFoundServer = true
 		} else {
 			fmt.Printf("server found %s, %d times\n", allServer, n)
 		}
 	}
-	//c.Assert(hasNotFoundServer, check.Equals, false)
-	//只要有切换就行，后面权重轮询才考虑是否切换到所有的server
+	// c.Assert(hasNotFoundServer, check.Equals, false)
+	// 只要有切换就行，后面权重轮询才考虑是否切换到所有的server
 	c.Assert(len(switchedServers) > 1, check.Equals, true)
 	notBuiltinDiscoverReqs := 0
 	discoverKey := &model.ServiceKey{
@@ -229,14 +231,14 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 		})
 		log.Printf("requests to %s:%d for %s:%s, %d",
 			mockListenHost, mockPorts[i], testNamespace, testSvcName, requests)
-		//c.Assert(requests > 0, check.Equals, true)
+		// c.Assert(requests > 0, check.Equals, true)
 		notBuiltinDiscoverReqs += ms.GetServiceRequests(discoverKey)
 	}
 	log.Printf("request to all not builtin discover servers for discover %d", notBuiltinDiscoverReqs)
 	c.Assert(notBuiltinDiscoverReqs > 0, check.Equals, true)
 	builtinDiscoverReqs := t.builtinServer.GetServiceRequests(discoverKey)
 	log.Printf("request to builtin discover servers for discover %d", builtinDiscoverReqs)
-	//向埋点server请求discover的次数必须小于向discover请求的次数，并且要小于（20 / 2）
+	// 向埋点server请求discover的次数必须小于向discover请求的次数，并且要小于（20 / 2）
 	c.Assert(builtinDiscoverReqs < notBuiltinDiscoverReqs, check.Equals, true)
 	c.Assert(builtinDiscoverReqs < 10, check.Equals, true)
 }

@@ -21,55 +21,57 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
+	"sync/atomic"
+
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	"github.com/polarismesh/polaris-go/pkg/algorithm/search"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
-	"github.com/modern-go/reflect2"
-	"math"
-	"sort"
-	"strconv"
-	"strings"
-	"sync/atomic"
 )
 
-//一致性hash环的节点
+// 一致性hash环的节点
 type continuumPoint struct {
-	//hash的主键
+	// hash的主键
 	hashKey string
-	//hash值
+	// hash值
 	hashValue uint64
-	//实例的数组下标
+	// 实例的数组下标
 	index int
-	//备份节点
+	// 备份节点
 	replicates *atomic.Value
 }
 
-//hash环数组
+// hash环数组
 type points []continuumPoint
 
-//比较环中节点hash值
+// 比较环中节点hash值
 func (c points) Less(i, j int) bool { return c[i].hashValue < c[j].hashValue }
 
-//获取环长度
+// 获取环长度
 func (c points) Len() int { return len(c) }
 
-//交换位置
+// 交换位置
 func (c points) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-//获取数组下标的值
+// 获取数组下标的值
 func (c points) GetValue(idx int) uint64 {
 	return c[idx].hashValue
 }
 
-//数组长度
+// 数组长度
 func (c points) Count() int {
 	return c.Len()
 }
 
-//一致性hash环
+// 一致性hash环
 type ContinuumSelector struct {
 	model.SelectorBase
 	svcClusters model.ServiceClusters
@@ -78,11 +80,11 @@ type ContinuumSelector struct {
 }
 
 const (
-	//最多做多少次rehash
+	// 最多做多少次rehash
 	maxRehashIteration = 5
 )
 
-//创建hash环
+// 创建hash环
 func NewContinuum(
 	instanceSet *model.InstanceSet, vnodeCount int, hashFunc hash.HashFuncWithSeed, id int32) (*ContinuumSelector, error) {
 	var continuum = &ContinuumSelector{
@@ -118,7 +120,7 @@ func NewContinuum(
 				return nil, err
 			}
 			if addr, ok := hashValues[hashValue]; ok {
-				//hash冲突
+				// hash冲突
 				log.GetBaseLogger().Debugf("hash conflict between %s and %s", addr, hashKey)
 				hashValue, hashKey, err = continuum.doRehash(hashValue, hashValues, 1)
 				if nil != err {
@@ -149,7 +151,7 @@ func NewContinuum(
 	return continuum, nil
 }
 
-//打印hash环
+// 打印hash环
 func (c ContinuumSelector) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString("[")
@@ -169,7 +171,7 @@ func (c ContinuumSelector) String() string {
 	return builder.String()
 }
 
-//做rehash
+// 做rehash
 func (c *ContinuumSelector) doRehash(
 	lastHash uint64, hashValues map[uint64]string, iteration int) (uint64, string, error) {
 	if iteration > maxRehashIteration {
@@ -193,7 +195,7 @@ func (c *ContinuumSelector) doRehash(
 	return hashValue, lastHashStr, nil
 }
 
-//选择实例下标
+// 选择实例下标
 func (c *ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNodes, error) {
 	ringLen := len(c.ring)
 	switch ringLen {
@@ -212,7 +214,7 @@ func (c *ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNode
 	}
 }
 
-//通过hash值选择具体的节点
+// 通过hash值选择具体的节点
 func (c *ContinuumSelector) selectByHashValue(hashValue uint64, replicateCount int) (int, *model.ReplicateNodes) {
 	ringIndex := search.BinarySearch(c.ring, hashValue)
 	targetPoint := &c.ring[ringIndex]
@@ -224,7 +226,7 @@ func (c *ContinuumSelector) selectByHashValue(hashValue uint64, replicateCount i
 	if !reflect2.IsNil(replicateNodesValue) {
 		replicateNodes := replicateNodesValue.(*model.ReplicateNodes)
 		if replicateNodes.Count == replicateCount {
-			//个数匹配，则直接获取缓存信息
+			// 个数匹配，则直接获取缓存信息
 			return targetIndex, replicateNodes
 		}
 	}
@@ -245,7 +247,7 @@ func (c *ContinuumSelector) selectByHashValue(hashValue uint64, replicateCount i
 		}
 		replicateIndexes = append(replicateIndexes, replicateIndex)
 	}
-	//加入缓存
+	// 加入缓存
 	replicateNodes := &model.ReplicateNodes{
 		SvcClusters: c.svcClusters,
 		Count:       replicateCount,
@@ -255,7 +257,7 @@ func (c *ContinuumSelector) selectByHashValue(hashValue uint64, replicateCount i
 	return targetIndex, replicateNodes
 }
 
-//查看数组是否包含索引
+// 查看数组是否包含索引
 func containsIndex(replicateIndexes []int, replicateIndex int) bool {
 	for _, idx := range replicateIndexes {
 		if idx == replicateIndex {

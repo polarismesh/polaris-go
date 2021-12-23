@@ -20,8 +20,9 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
 // HealthCheckConfigImpl health check config implementation

@@ -20,6 +20,13 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/uuid"
+
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -32,18 +39,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/uuid"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
 	trafficShapingListName = "trafficShapingAlgorithm"
 )
 
-//限流日志上报插件
+// 限流日志上报插件
 type Reporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -60,18 +62,18 @@ type Reporter struct {
 	valueContext      model.ValueContext
 }
 
-//记录没有命中规则的服务限流记录
+// 记录没有命中规则的服务限流记录
 type noRuleRequests struct {
 	requests int64
 	deleted  uint32
 }
 
-//插件类型
+// 插件类型
 func (s *Reporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-//插件名称
+// 插件名称
 func (s *Reporter) Name() string {
 	return "rateLimitRecord"
 }
@@ -103,7 +105,7 @@ func (s *Reporter) Destroy() error {
 	return nil
 }
 
-//初始化插件
+// 初始化插件
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.connectionManager = ctx.ConnManager
@@ -134,7 +136,7 @@ func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//上报限流发生事件
+// 上报限流发生事件
 func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	if t != model.RateLimitStat {
 		return nil
@@ -175,21 +177,21 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	switch gauge.Type {
 	case quota.TrafficShapingLimited:
 		atomic.AddInt64(&sd.trafficShapingLimited[gauge.LimitModeType].limitedNum, 1)
-		//atomic.AddInt64(&sd.rejectNum, 1)
+		// atomic.AddInt64(&sd.rejectNum, 1)
 	case quota.QuotaLimited:
 		atomic.AddInt64(&sd.amountStats[key].limitedNum, 1)
-		//atomic.AddInt64(&sd.rejectNum, 1)
-	//case quota.QuotaRequested:
+		// atomic.AddInt64(&sd.rejectNum, 1)
+	// case quota.QuotaRequested:
 	//	atomic.AddInt64(&sd.totalNum, 1)
 	case quota.QuotaGranted:
 		atomic.AddInt64(&sd.amountStats[key].passNum, 1)
-		//atomic.AddInt64(&sd.passNum, 1)
+		// atomic.AddInt64(&sd.passNum, 1)
 	}
 
 	return nil
 }
 
-//定时上报限流记录
+// 定时上报限流记录
 func (s *Reporter) uploadRateLimitRecord() {
 	t := time.NewTicker(*s.config.ReportInterval)
 	defer t.Stop()
@@ -218,7 +220,7 @@ func (s *Reporter) uploadRateLimitRecord() {
 	}
 }
 
-//连接monitor
+// 连接monitor
 func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var err error
 	s.connection, err = s.connectionManager.GetConnection("ReportRateLimit", sysconfig.MonitorCluster)
@@ -238,7 +240,7 @@ func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	return nil
 }
 
-//关闭连接
+// 关闭连接
 func (s *Reporter) closeConnection() {
 	s.clientCancel()
 	s.clientCancel = nil
@@ -249,9 +251,9 @@ func (s *Reporter) closeConnection() {
 	s.connection.Release("ReportRateLimit")
 }
 
-//遍历所有的限流窗口，并上报限流记录
+// 遍历所有的限流窗口，并上报限流记录
 func (s *Reporter) iterateRateLimitRecord() {
-	//将那些已经被删除的限流窗口的记录上传
+	// 将那些已经被删除的限流窗口的记录上传
 	windows := make([]*quota.RateLimitWindow, 0)
 	s.deletedWindow.Range(func(key, value interface{}) bool {
 		quotaId := key.(string)
@@ -264,15 +266,15 @@ func (s *Reporter) iterateRateLimitRecord() {
 	flowQuotaAssistant := engine.FlowQuotaAssistant()
 	allWindowSets := flowQuotaAssistant.GetAllWindowSets()
 	for _, windowSet := range allWindowSets {
-		//将这个服务现有的限流窗口的记录上传
+		// 将这个服务现有的限流窗口的记录上传
 		s.iterateWindowMap(windowSet.GetRateLimitWindows())
 	}
 
-	//将那些没有匹配到限流规则的请求进行上报
+	// 将那些没有匹配到限流规则的请求进行上报
 	s.iterateNoRuleService()
 }
 
-//上报没有匹配到限流规则的请求
+// 上报没有匹配到限流规则的请求
 func (s *Reporter) iterateNoRuleService() {
 	record := s.createEmptyRecord()
 	happenTime := time.Now()
@@ -301,7 +303,7 @@ func (s *Reporter) iterateNoRuleService() {
 	})
 }
 
-//创建一个空记录
+// 创建一个空记录
 func (s *Reporter) createEmptyRecord() *monitorpb.RateLimitRecord {
 	record := &monitorpb.RateLimitRecord{
 		Id:          "",
@@ -318,7 +320,7 @@ func (s *Reporter) createEmptyRecord() *monitorpb.RateLimitRecord {
 	return record
 }
 
-//遍历滑窗上报
+// 遍历滑窗上报
 func (s *Reporter) iterateWindowMap(windows []*quota.RateLimitWindow) {
 	record := s.createEmptyRecord()
 	happenTime := time.Now()
@@ -326,21 +328,21 @@ func (s *Reporter) iterateWindowMap(windows []*quota.RateLimitWindow) {
 		sd := window.PluginData[s.ID()].(*statData)
 		record.LimitStats = nil
 		record.RequestsCount = nil
-		//totalNum := GetAtomicInt64(&sd.totalNum)
-		//passNum := GetAtomicInt64(&sd.passNum)
-		//rejectNum := GetAtomicInt64(&sd.rejectNum)
+		// totalNum := GetAtomicInt64(&sd.totalNum)
+		// passNum := GetAtomicInt64(&sd.passNum)
+		// rejectNum := GetAtomicInt64(&sd.rejectNum)
 		reportTime := &timestamp.Timestamp{
 			Seconds: happenTime.Unix(),
 			Nanos:   int32(happenTime.Nanosecond()),
 		}
-		//if totalNum > 0 {
+		// if totalNum > 0 {
 		//	record.RequestsCount = &monitorpb.LimitRequestsCount{
 		//		Time:           reportTime,
 		//		TotalRequests:  uint32(totalNum),
 		//		PassRequests:   uint32(passNum),
 		//		RejectRequests: uint32(rejectNum),
 		//	}
-		//}
+		// }
 		for k, v := range sd.trafficShapingLimited {
 			trafficLimitNum := GetAtomicInt64(&v.limitedNum)
 			if trafficLimitNum > 0 {
@@ -386,7 +388,7 @@ func (s *Reporter) iterateWindowMap(windows []*quota.RateLimitWindow) {
 }
 
 func (s *Reporter) sendRateLimitRecord(record *monitorpb.RateLimitRecord) {
-	//打印到statLog
+	// 打印到statLog
 	log.GetStatLogger().Infof("sdk ratelimit record:%v", record)
 	if !s.uploadToMonitor {
 		log.GetStatReportLogger().Warnf("Skip to report ratelimit record to monitor for connection problem,"+
@@ -394,7 +396,7 @@ func (s *Reporter) sendRateLimitRecord(record *monitorpb.RateLimitRecord) {
 		return
 	}
 
-	//上传到monitor
+	// 上传到monitor
 	err := s.rateLimitClient.Send(record)
 	if nil != err {
 		log.GetStatReportLogger().Errorf("fail to report ratelimit record, id: %s, err %s, monitor server is %s",
@@ -413,8 +415,8 @@ func (s *Reporter) sendRateLimitRecord(record *monitorpb.RateLimitRecord) {
 	}
 }
 
-//从一个timeList获取限流事件列表
-//func getEventsFromList(record *monitorpb.RateLimitRecord, list *timeList, nameAsReason bool) {
+// 从一个timeList获取限流事件列表
+// func getEventsFromList(record *monitorpb.RateLimitRecord, list *timeList, nameAsReason bool) {
 //	recordList := list.getTimes()
 //	if recordList != nil {
 //		for recordList != nil {
@@ -425,9 +427,9 @@ func (s *Reporter) sendRateLimitRecord(record *monitorpb.RateLimitRecord) {
 //			recordList = recordList.nextTime
 //		}
 //	}
-//}
+// }
 
-//在限流窗口里面创建统计数据
+// 在限流窗口里面创建统计数据
 func (s *Reporter) createRateLimitWindowStat(event *common.PluginEvent) error {
 	window := event.EventObject.(*quota.RateLimitWindow)
 	sd := &statData{}
@@ -455,14 +457,14 @@ func (s *Reporter) createRateLimitWindowStat(event *common.PluginEvent) error {
 			}
 		}
 	}
-	//sort.Sort(limitedSlice(sd.amountStats))
+	// sort.Sort(limitedSlice(sd.amountStats))
 	sd.ruleMatchLabels = window.Labels
-	//sd.ruleType = ruleTypesMap[window.Rule.GetType()][window.Rule.GetResource()]
+	// sd.ruleType = ruleTypesMap[window.Rule.GetType()][window.Rule.GetResource()]
 	window.PluginData[s.ID()] = sd
 	return nil
 }
 
-//删除淘汰掉的无规则服务
+// 删除淘汰掉的无规则服务
 func (s *Reporter) deleteNoRuleService(event *common.PluginEvent) error {
 	svcEventObj := event.EventObject.(*common.ServiceEventObject)
 	if svcEventObj.SvcEventKey.Type == model.EventInstances {
@@ -477,7 +479,7 @@ func (s *Reporter) deleteNoRuleService(event *common.PluginEvent) error {
 	return nil
 }
 
-//注册插件和配置
+// 注册插件和配置
 func init() {
 	plugin.RegisterConfigurablePlugin(&Reporter{}, &Config{})
 }
