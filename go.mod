@@ -27,6 +27,7 @@ require (
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.0.0-20200320220750-118fecf932d8
 	google.golang.org/grpc v1.22.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8

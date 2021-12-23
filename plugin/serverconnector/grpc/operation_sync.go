@@ -33,6 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/utils"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // RegisterInstance 同步注册服务
@@ -318,7 +319,7 @@ func fillReportInfoInCloudEnv(reqProto *namingpb.Client) {
 	localL := utils.GetInstanceLocation()
 
 	reqProto.Location = &namingpb.Location{
-		Zone:   &wrapperspb.StringValue{Value: localL.Zone},
-		Campus: &wrapperspb.StringValue{Value: localL.Campus},
+		Zone:   wrapperspb.String(localL.Zone),
+		Campus: wrapperspb.String(localL.Campus),
 	}
 }
