@@ -19,29 +19,31 @@ package flow
 
 import (
 	"fmt"
+
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/hashicorp/go-multierror"
 )
 
-//过滤器参数集合
+// 过滤器参数集合
 type cacheFilters struct {
-	//命名空间
+	// 命名空间
 	namespace string
-	//服务名
+	// 服务名
 	service string
-	//源服务的路由filter，假如源服务为空，则为空
+	// 源服务的路由filter，假如源服务为空，则为空
 	sourceRouteFilter *localregistry.RuleFilter
-	//目标服务的路由filter
+	// 目标服务的路由filter
 	destRouteFilter *localregistry.RuleFilter
-	//实例获取filter
+	// 实例获取filter
 	destInstancesFilter *localregistry.InstancesFilter
 }
 
-//转换为上下文查询标识
+// 转换为上下文查询标识
 func (c *cacheFilters) toContextKey() (dstInstKey *ContextKey, srcRouterKey *ContextKey, dstRouterKey *ContextKey) {
 	if nil != c.destInstancesFilter {
 		dstInstKey = &ContextKey{
@@ -67,7 +69,7 @@ func (c *cacheFilters) toContextKey() (dstInstKey *ContextKey, srcRouterKey *Con
 	return dstInstKey, srcRouterKey, dstRouterKey
 }
 
-//实例请求转换为获取缓存的请求
+// 实例请求转换为获取缓存的请求
 func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesRequest,
 	redirectedService *model.ServiceInfo) *cacheFilters {
 	filters := &cacheFilters{
@@ -105,7 +107,7 @@ func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesReque
 	return filters
 }
 
-//构建重定向服务filter
+// 构建重定向服务filter
 func buildRedirectedFilter(filters *cacheFilters, redirectedService model.ServiceMetadata) {
 	filters.service = redirectedService.GetService()
 	filters.namespace = redirectedService.GetNamespace()
@@ -115,7 +117,7 @@ func buildRedirectedFilter(filters *cacheFilters, redirectedService model.Servic
 	filters.destRouteFilter.Service = redirectedService.GetService()
 }
 
-//同步加载缓存资源，包括实例以及规则
+// 同步加载缓存资源，包括实例以及规则
 func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	request model.CacheValueQuery, load bool) (*CombineNotifyContext, model.SDKError) {
 	var notifiers []*SingleNotifyContext
@@ -123,7 +125,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	trigger := request.GetNotifierTrigger()
 	dstService := request.GetDstService()
 	srcService := request.GetSrcService()
-	//先直接从内存数据获取
+	// 先直接从内存数据获取
 	if trigger.EnableDstInstances {
 		instances := registry.GetInstances(dstService, false, false)
 		if instances.IsInitialized() {
@@ -222,7 +224,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	if trigger.EnableServices {
 		services := registry.GetServicesByMeta(dstService, false)
 		if services.IsInitialized() {
-			//复用接口
+			// 复用接口
 			request.SetMeshConfig(services)
 			log.GetBaseLogger().Debugf("services by meta IsInitialized")
 			trigger.EnableServices = false
@@ -236,16 +238,16 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshConfigKey, notifier))
 		}
 	}
-	//构造远程获取的复合上下文
+	// 构造远程获取的复合上下文
 	if len(notifiers) == 0 {
 		return nil, nil
 	}
-	//deadline为空代表已经超时或者重试次数已经用完，因此无需继续重试获取
+	// deadline为空代表已经超时或者重试次数已经用完，因此无需继续重试获取
 	return NewCombineNotifyContext(dstService, notifiers), nil
 }
 
-//尝试加载服务信息，来源包括缓存文件加载的信息
-//返回值为是否成功加载了所需信息和这个过程中可能发生的错误
+// 尝试加载服务信息，来源包括缓存文件加载的信息
+// 返回值为是否成功加载了所需信息和这个过程中可能发生的错误
 func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request model.CacheValueQuery) (bool, error) {
 	failNum := 0
 	trigger := request.GetNotifierTrigger()
@@ -324,7 +326,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 		if nil != err {
 			return false, err.(model.SDKError)
 		}
-		//复用网格接口
+		// 复用网格接口
 		services := registry.GetMeshConfig(dstService, true)
 		if services.IsInitialized() {
 			request.SetMeshConfig(services)
@@ -354,7 +356,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	return true, nil
 }
 
-//afterLazyGetInstances 懒加载后执行的服务实例筛选流程
+// afterLazyGetInstances 懒加载后执行的服务实例筛选流程
 func (e *Engine) afterLazyGetInstances(
 	req *data.CommonInstancesRequest) (cls *model.Cluster, redirected *model.ServiceInfo, err model.SDKError) {
 	var result *servicerouter.RouteResult
@@ -378,7 +380,7 @@ func (e *Engine) afterLazyGetInstances(
 	return cls, redirected, nil
 }
 
-//把多个SDK error合成一个error
+// 把多个SDK error合成一个error
 func combineSDKErrors(sdkErrs map[ContextKey]model.SDKError) error {
 	var errs error
 	for key, sdkErr := range sdkErrs {

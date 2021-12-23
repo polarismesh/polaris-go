@@ -27,7 +27,7 @@ func CurrentNanosecond() int64 {
 	return CurrentMicrosecond() * 1e3
 }
 
-//获取微秒时间
+// 获取微秒时间
 func CurrentMicrosecond() int64 {
 	var tv syscall.Timeval
 	if err := syscall.Gettimeofday(&tv); err != nil {
@@ -36,7 +36,7 @@ func CurrentMicrosecond() int64 {
 	return int64(tv.Sec)*1e6 + int64(tv.Usec)
 }
 
-//获取微秒时间
+// 获取微秒时间
 func CurrentMillisecond() int64 {
 	var tv syscall.Timeval
 	if err := syscall.Gettimeofday(&tv); err != nil {
@@ -45,7 +45,7 @@ func CurrentMillisecond() int64 {
 	return int64(tv.Sec)*1e3 + int64(tv.Usec)/1e3
 }
 
-//格式化时间戳
+// 格式化时间戳
 func TimestampMsToUtcIso8601(timestamp int64) string {
 	t := time.Unix(0, timestamp*1000000+1)
 	s := t.Format(time.RFC3339Nano)

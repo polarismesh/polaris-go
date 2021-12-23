@@ -19,22 +19,24 @@ package ringhash
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
+
 	"github.com/hashicorp/go-multierror"
+
+	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 )
 
 const (
-	//默认虚拟节点数
+	// 默认虚拟节点数
 	DefaultVnodeCount = 10
 )
 
-//一致性hash配置对象
+// 一致性hash配置对象
 type Config struct {
 	HashFunction string `yaml:"hashFunction" json:"hashFunction"`
 	VnodeCount   int    `yaml:"vnodeCount" json:"vnodeCount"`
 }
 
-//检验一致性hash配置
+// 检验一致性hash配置
 func (c *Config) Verify() error {
 	var errs error
 	if c.VnodeCount <= 0 {
@@ -43,7 +45,7 @@ func (c *Config) Verify() error {
 	return errs
 }
 
-//设置一致性hash默认值
+// 设置一致性hash默认值
 func (c *Config) SetDefault() {
 	if c.VnodeCount == 0 {
 		c.VnodeCount = DefaultVnodeCount

@@ -19,6 +19,7 @@ package dstmeta
 
 import (
 	"fmt"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,7 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-//基于目标服务元数据的服务路由插件
+// 基于目标服务元数据的服务路由插件
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -35,17 +36,17 @@ type InstancesFilter struct {
 	recoverAll            bool
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *InstancesFilter) Type() common.Type {
 	return common.TypeServiceRouter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *InstancesFilter) Name() string {
 	return config.DefaultServiceRouterDstMeta
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.PluginBase = plugin.NewPluginBase(ctx)
@@ -55,12 +56,12 @@ func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *InstancesFilter) Destroy() error {
 	return nil
 }
 
-//GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
+// GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 
@@ -89,7 +90,7 @@ func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 	return g.getResult(targetCluster), nil
 }
 
-//元数据匹配不到时处理自定义匹配规则
+// 元数据匹配不到时处理自定义匹配规则
 func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClusters,
 	withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 
@@ -106,7 +107,7 @@ func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClust
 		"fail to enable failOverDefaultMeta")
 }
 
-//通配所有可用ip实例，等于关闭meta路由
+// 通配所有可用ip实例，等于关闭meta路由
 func (g *InstancesFilter) getOneHealthHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
 	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 
@@ -116,7 +117,7 @@ func (g *InstancesFilter) getOneHealthHandler(clusters model.ServiceClusters, wi
 	return targetCluster, g.validateInstSet(instSet, routeInfo)
 }
 
-//匹配不带 metaData key路由
+// 匹配不带 metaData key路由
 func (g *InstancesFilter) notContainMetaKeyHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
 	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 
@@ -126,7 +127,7 @@ func (g *InstancesFilter) notContainMetaKeyHandler(clusters model.ServiceCluster
 	return targetCluster, g.validateInstSet(instSet, routeInfo)
 }
 
-//匹配自定义meta
+// 匹配自定义meta
 func (g *InstancesFilter) customMetaHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
 	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 
@@ -198,12 +199,12 @@ func validateEmptyKey(m map[string]string) error {
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&InstancesFilter{})
 }
 
-//是否需要启动规则路由
+// 是否需要启动规则路由
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	if len(routeInfo.DestService.GetMetadata()) == 0 {
 		return false

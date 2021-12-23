@@ -20,22 +20,23 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"strings"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//限流配置对象
+// RateLimitConfigImpl 限流配置对象
 type RateLimitConfigImpl struct {
-	//是否启动限流
+	// 是否启动限流
 	Enable *bool `yaml:"enable" json:"enable"`
-	//各个限流插件的配置
+	// 各个限流插件的配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
-	//最大限流窗口数量
+	// 最大限流窗口数量
 	MaxWindowSize int `yaml:"maxWindowSize" json:"maxWindowSize"`
-	//超时window检查周期
+	// 超时window检查周期
 	PurgeInterval time.Duration `yaml:"purgeInterval" json:"purgeInterval"`
-	//本地限流规则
+	// 本地限流规则
 	Rules []RateLimitRule `yaml:"rules"`
 }
 
@@ -61,7 +62,7 @@ func (r *RateLimitRule) Verify() error {
 			if len(matcher.Type) > 0 {
 				upperType := strings.ToUpper(matcher.Type)
 				if upperType != TypeExact && upperType != TypeRegex {
-					return errors.New(fmt.Sprintf("matcher.type should be %s or %s", TypeExact, TypeRegex))
+					return fmt.Errorf("matcher.type should be %s or %s", TypeExact, TypeRegex)
 				}
 			}
 		}
@@ -76,7 +77,9 @@ func (r *RateLimitRule) Verify() error {
 }
 
 const (
+	// TypeExact .
 	TypeExact = "EXACT"
+	// TypeRegex .
 	TypeRegex = "REGEX"
 )
 
@@ -86,20 +89,20 @@ type Matcher struct {
 	Value string `yaml:"value"`
 }
 
-//是否启用限流能力
+// IsEnable 是否启用限流能力
 func (r *RateLimitConfigImpl) IsEnable() bool {
 	return *r.Enable
 }
 
-//设置是否启用限流能力
+// SetEnable 设置是否启用限流能力
 func (r *RateLimitConfigImpl) SetEnable(value bool) {
 	r.Enable = &value
 }
 
-//已经禁用的限流集群名
+// ForbidServerMetricService 已经禁用的限流集群名
 const ForbidServerMetricService = "polaris.metric"
 
-//校验配置参数
+// Verify 校验配置参数
 func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r {
 		return errors.New("RateLimitConfig is nil")
@@ -117,7 +120,7 @@ func (r *RateLimitConfigImpl) Verify() error {
 	return r.Plugin.Verify()
 }
 
-//获取插件配置
+// GetPluginConfig 获取插件配置
 func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := r.Plugin[pluginName]
 	if !ok {
@@ -126,7 +129,7 @@ func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-//设置默认参数
+// SetDefault 设置默认参数
 func (r *RateLimitConfigImpl) SetDefault() {
 	if nil == r.Enable {
 		r.Enable = &DefaultRateLimitEnable
@@ -140,44 +143,44 @@ func (r *RateLimitConfigImpl) SetDefault() {
 	r.Plugin.SetDefault(common.TypeRateLimiter)
 }
 
-//设置插件配置
+// SetPluginConfig 设置插件配置
 func (r *RateLimitConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return r.Plugin.SetPluginConfig(common.TypeRateLimiter, pluginName, value)
 }
 
-//配置初始化
+// Init 配置初始化
 func (r *RateLimitConfigImpl) Init() {
 	r.Rules = []RateLimitRule{}
 	r.Plugin = PluginConfigs{}
 	r.Plugin.Init(common.TypeRateLimiter)
 }
 
-//GetMaxWindowSize
+// GetMaxWindowSize .
 func (r *RateLimitConfigImpl) GetMaxWindowSize() int {
 	return r.MaxWindowSize
 }
 
-//SetMaxWindowSize
+// SetMaxWindowSize .
 func (r *RateLimitConfigImpl) SetMaxWindowSize(maxSize int) {
 	r.MaxWindowSize = maxSize
 }
 
-//GetMaxWindowSize
+// GetPurgeInterval .
 func (r *RateLimitConfigImpl) GetPurgeInterval() time.Duration {
 	return r.PurgeInterval
 }
 
-//SetMaxWindowSize
+// SetPurgeInterval  .
 func (r *RateLimitConfigImpl) SetPurgeInterval(v time.Duration) {
 	r.PurgeInterval = v
 }
 
-// GetRules
+// GetRules 获取规则
 func (r *RateLimitConfigImpl) GetRules() []RateLimitRule {
 	return r.Rules
 }
 
-// GetRules
+// SetRules 。设置规则
 func (r *RateLimitConfigImpl) SetRules(rules []RateLimitRule) {
 	r.Rules = rules
 }

@@ -18,11 +18,12 @@
 package quota
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"time"
 )
 
 // 异步处理发送init
@@ -75,7 +76,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	return nil
 }
 
-//应答回调函数
+// 应答回调函数
 func (r *RateLimitWindow) OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
 	r.SetStatus(Initialized)
 	log.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
@@ -87,7 +88,7 @@ func (r *RateLimitWindow) OnInitResponse(counter *rlimitV2.QuotaCounter, duratio
 	})
 }
 
-//应答回调函数
+// 应答回调函数
 func (r *RateLimitWindow) OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64) {
 	r.allocatingBucket.SetRemoteQuota(&RemoteQuotaResult{
 		Left:            counter.GetLeft(),

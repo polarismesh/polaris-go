@@ -18,37 +18,38 @@
 package http
 
 import (
+	"net/http"
+	"net/url"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"net/http"
-	"net/url"
-	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
 )
 
-//Detector TCP协议的实例健康探测器
+// Detector TCP协议的实例健康探测器
 type Detector struct {
 	*plugin.PluginBase
 	cfg     *Config
 	timeout time.Duration
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *Detector) Type() common.Type {
 	return common.TypeHealthCheck
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *Detector) Name() string {
 	return "http"
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	cfgValue := ctx.Config.GetConsumer().GetHealthCheck().GetPluginConfig(g.Name())
@@ -59,12 +60,12 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *Detector) Destroy() error {
 	return nil
 }
 
-//DetectInstance 探测服务实例健康
+// DetectInstance 探测服务实例健康
 func (g *Detector) DetectInstance(ins model.Instance) (result healthcheck.DetectResult, err error) {
 	start := time.Now()
 	// 得到Http address
@@ -78,13 +79,9 @@ func (g *Detector) DetectInstance(ins model.Instance) (result healthcheck.Detect
 	return result, nil
 }
 
-// enable
+// IsEnable .
 func (g *Detector) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	} else {
-		return true
-	}
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // doHttpDetect 执行一次健康探测逻辑
@@ -126,7 +123,7 @@ func (g *Detector) doHttpDetect(address string) bool {
 	return false
 }
 
-//init 注册插件信息
+// init 注册插件信息
 func init() {
 	plugin.RegisterConfigurablePlugin(&Detector{}, &Config{})
 }

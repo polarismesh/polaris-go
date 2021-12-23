@@ -19,19 +19,20 @@ package model
 
 import (
 	"bytes"
-	"github.com/modern-go/reflect2"
 	"sync"
+
+	"github.com/modern-go/reflect2"
 )
 
 var (
-	//pooling the string slice
-	//key is length, value is sync.Pool
+	// pooling the string slice
+	// key is length, value is sync.Pool
 	stringSlicePools = &sync.Map{}
-	//字符串数组池
+	// 字符串数组池
 	byteBufferPools = &sync.Map{}
 )
 
-//获取字符串数组
+// PoolGetStringSlice 获取字符串数组
 func PoolGetStringSlice(size int) []string {
 	stringSlicePoolValue, ok := stringSlicePools.Load(size)
 	if !ok {
@@ -45,7 +46,7 @@ func PoolGetStringSlice(size int) []string {
 	return sliceValue.([]string)
 }
 
-//归还字符串数组
+// PoolPutStringSlice 归还字符串数组
 func PoolPutStringSlice(size int, slice []string) {
 	stringSlicePoolValue, ok := stringSlicePools.Load(size)
 	if !ok {
@@ -55,7 +56,7 @@ func PoolPutStringSlice(size int, slice []string) {
 	pool.Put(slice)
 }
 
-//通过池子获取字符串队列
+// PoolGetByteBuffer 通过池子获取字符串队列
 func PoolGetByteBuffer(size int) *bytes.Buffer {
 	byteBufferPoolValue, ok := byteBufferPools.Load(size)
 	if !ok {
@@ -71,7 +72,7 @@ func PoolGetByteBuffer(size int) *bytes.Buffer {
 	return buf
 }
 
-//归还字节数组
+// PoolPutByteBuffer 归还字节数组
 func PoolPutByteBuffer(size int, buf *bytes.Buffer) {
 	byteBufferPoolValue, ok := byteBufferPools.Load(size)
 	if !ok {

@@ -18,14 +18,15 @@
 package healthcheck
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//HealthChecker 【扩展点接口】主动健康探测策略
+// HealthChecker 【扩展点接口】主动健康探测策略
 type HealthChecker interface {
 	plugin.Plugin
 	// 对单个实例进行探测，返回探测结果
@@ -65,7 +66,7 @@ func (r *DetectResultImp) GetDetectInstance() model.Instance {
 	return r.DetectInstance
 }
 
-//初始化
+// 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeHealthCheck, new(HealthChecker))
 }

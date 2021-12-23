@@ -18,13 +18,14 @@
 package ratelimit
 
 import (
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"sort"
 	"strings"
 	"sync/atomic"
+
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-//将限流规则的labels转化为string
+// 将限流规则的labels转化为string
 func MarshalRateLimitRuleLabels(labelsMap map[string]*namingpb.MatchString) string {
 	var strSlice []string
 	for k := range labelsMap {
@@ -46,7 +47,7 @@ func MarshalRateLimitRuleLabels(labelsMap map[string]*namingpb.MatchString) stri
 	return builder.String()
 }
 
-//原子地获取一个int64的值，并减去这段时间增加的值
+// 原子地获取一个int64的值，并减去这段时间增加的值
 func GetAtomicInt64(data *int64) int64 {
 	res := atomic.LoadInt64(data)
 	atomic.AddInt64(data, -res)

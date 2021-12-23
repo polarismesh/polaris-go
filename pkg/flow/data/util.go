@@ -19,6 +19,8 @@ package data
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -32,13 +34,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
-	"time"
 )
 
-//加载连接器插件
+// 加载连接器插件
 func GetServerConnector(
 	cfg config.Configuration, supplier plugin.Supplier) (serverconnector.ServerConnector, error) {
-	//加载服务端连接器
+	// 加载服务端连接器
 	protocol := cfg.GetGlobal().GetServerConnector().GetProtocol()
 	targetPlugin, err := supplier.GetPlugin(common.TypeServerConnector, protocol)
 	if nil != err {
@@ -47,7 +48,7 @@ func GetServerConnector(
 	return targetPlugin.(serverconnector.ServerConnector), nil
 }
 
-//加载本地缓存插件
+// 加载本地缓存插件
 func GetRegistry(cfg config.Configuration, supplier plugin.Supplier) (localregistry.LocalRegistry, error) {
 	localCacheType := cfg.GetConsumer().GetLocalCache().GetType()
 	targetPlugin, err := supplier.GetPlugin(common.TypeLocalRegistry, localCacheType)
@@ -57,7 +58,7 @@ func GetRegistry(cfg config.Configuration, supplier plugin.Supplier) (localregis
 	return targetPlugin.(localregistry.LocalRegistry), nil
 }
 
-//获取熔断插件链
+// 获取熔断插件链
 func GetCircuitBreakers(
 	cfg config.Configuration, supplier plugin.Supplier) ([]circuitbreaker.InstanceCircuitBreaker, error) {
 	cbChain := cfg.GetConsumer().GetCircuitBreaker().GetChain()
@@ -86,7 +87,7 @@ func GetCircuitBreakers(
 	return cbreakers, nil
 }
 
-//获取健康探测插件列表
+// 获取健康探测插件列表
 func GetHealthCheckers(cfg config.Configuration, supplier plugin.Supplier) ([]healthcheck.HealthChecker, error) {
 	names := cfg.GetConsumer().GetHealthCheck().GetChain()
 	healthCheckers := make([]healthcheck.HealthChecker, 0, len(names))
@@ -102,7 +103,7 @@ func GetHealthCheckers(cfg config.Configuration, supplier plugin.Supplier) ([]he
 	return healthCheckers, nil
 }
 
-//获取服务路由插件链
+// 获取服务路由插件链
 func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (*servicerouter.RouterChain, error) {
 	filterChain := cfg.GetConsumer().GetServiceRouter().GetChain()
 	filters := &servicerouter.RouterChain{
@@ -120,7 +121,7 @@ func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (
 	return filters, nil
 }
 
-//获取统计上报插件
+// 获取统计上报插件
 func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([]statreporter.StatReporter, error) {
 	reporterNames := cfg.GetGlobal().GetStatReporter().GetChain()
 	reporterChain := make([]statreporter.StatReporter, 0, len(reporterNames))
@@ -136,7 +137,7 @@ func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([
 	return reporterChain, nil
 }
 
-//获取负载均衡插件
+// 获取负载均衡插件
 func GetLoadBalancer(cfg config.Configuration, supplier plugin.Supplier) (loadbalancer.LoadBalancer, error) {
 	lbType := cfg.GetConsumer().GetLoadbalancer().GetType()
 	targetPlugin, err := supplier.GetPlugin(common.TypeLoadBalancer, lbType)
@@ -146,7 +147,7 @@ func GetLoadBalancer(cfg config.Configuration, supplier plugin.Supplier) (loadba
 	return targetPlugin.(loadbalancer.LoadBalancer), nil
 }
 
-//获取负载均衡插件
+// 获取负载均衡插件
 func GetLoadBalancerByLbType(lbType string, supplier plugin.Supplier) (loadbalancer.LoadBalancer, error) {
 	targetPlugin, err := supplier.GetPlugin(common.TypeLoadBalancer, lbType)
 	if nil != err {
@@ -155,10 +156,10 @@ func GetLoadBalancerByLbType(lbType string, supplier plugin.Supplier) (loadbalan
 	return targetPlugin.(loadbalancer.LoadBalancer), nil
 }
 
-//同步调用的通用方法定义
+// 同步调用的通用方法定义
 type SingleInvoke func(request interface{}) (interface{}, error)
 
-//通用的带重试的同步调用逻辑
+// 通用的带重试的同步调用逻辑
 func RetrySyncCall(name string, svcKey *model.ServiceKey,
 	request interface{}, call SingleInvoke, param *model.ControlParam) (interface{}, model.SDKError) {
 	retryTimes := -1

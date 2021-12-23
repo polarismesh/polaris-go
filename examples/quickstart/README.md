@@ -1,59 +1,55 @@
-# Polaris Go
+# QuickStart
 
-## 目录说明
+[中文文档](./README-zh.md)
+
+## Catalog description
 
 > provider
 
-北极星被调端样例包含了最简单的被调端基本操作
+The Polaris adjusted terminal sample contains the simplest basic operation of the adjusted terminal
 
 > consumer
 
-北极星主调端样例包含了最简单的客户端基本操作
+Polaris main tuning terminal sample contains the simplest basic client operation
 
-
-## 如何构建
+## How To Build
 
 > provider
 
-直接依赖go mod进行构建
-
-- linux/mac构建命令
+- linux/mac build command
 ```
 cd ./provider
-go mod vendor
 go build -o provider
 ```
-- windows构建命令
+
+- windows build command
 ```
 cd ./consumer
-go mod vendor
 go build -o provider.exe
 ```
 
 > consumer
 
-- linux/mac构建命令
+- linux/mac build command
 ```
 cd ./consumer
-go mod vendor
 go build -o consumer
 ```
-- windows构建命令
+- windows build command
 ```
 cd ./consumer
-go mod vendor
 go build -o consumer.exe
 ```
 
-## 如何使用
+## How To Use 
 
-### 创建服务
+### Create Service
 
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
+Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
 
-### 修改配置
+### Change setting
 
-指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
+To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
 
 ```
 global:
@@ -62,31 +58,39 @@ global:
     - 127.0.0.1:8091
 ```
 
-### 执行程序
+### Execute Program
 
-直接执行生成的可执行程序
+Directly execute the generated executable program
 
 > provider
 
-- linux/mac运行命令
+- linux/mac run command
 ```
-./provider --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
+./provider
 ```
 
-- windows运行命令
+- windows run command
 ```
-./provider.exe --service="your service name" --namespace="your namespace name" --host="your ip address" --port=your_port
+./provider.exe
 ```
 
 > consumer
 
 
-- linux/mac运行命令
+- linux/mac run command
 ```
-./consumer --service="your service name" --namespace="your namespace name"
+./consumer
 ```
 
-- windows运行命令
+- windows run command
 ```
-./consumer.exe --service="your service name" --namespace="your namespace name"
+./consumer.exe
+```
+
+### Verify
+
+```
+curl http://127.0.0.1:18080/echo
+
+Hello, I'm EchoServerGolang Provider
 ```

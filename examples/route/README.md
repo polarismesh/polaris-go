@@ -1,41 +1,41 @@
-# Polaris Go
+# QuickStart
 
-## 北极星使用服务路由功能
+[中文文档](./README-zh.md)
 
-北极星支持根据请求标签、实例标签和标签匹配规则，对线上流量进行动态调度，可以应用于按地域就近、单元化隔离和金丝雀发布等多种场景。
+## Polaris uses service routing function 
 
-## 如何构建
+Polaris supports dynamic scheduling of online traffic based on request tags, instance tags, and tag matching rules, which can be applied to various scenarios such as geographical proximity, unitized isolation, and canary release. 
 
-直接依赖go mod进行构建
+## How To Build
 
-- linux/mac构建命令
+- linux/mac build command
 ```
 go build -o route
 ```
-- windows构建命令
+- windows build command
 ```
 go build -o route.exe
 ```
 
-## 如何使用
+## How To Use
 
-### 创建服务
+### Create Service
 
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
+Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
 
 ![create_service](./image/create_service.png)
 
-### 创建路由规则
+### Create Route Rule
 
 ![create_service_rule](./image/create_service_rule.png)
 
-### 创建服务实例
+### Create Service Instance
 
 ![create_service_instances](./image/create_service_instances.png)
 
-### 修改配置
+### Change setting
 
-指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
+To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
 
 ```
 global:
@@ -44,23 +44,21 @@ global:
     - 127.0.0.1:8091
 ```
 
-### 执行程序
+### Execute Program
 
-直接执行生成的可执行程序
-
-- linux/mac运行命令
+- linux/mac run command
 ```
 ./route --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
 ```
 
-- windows运行命令
+- windows run command
 ```
 ./route.exe --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
 ```
 
-### 期望结果
+### Desired result
 
-运行后，最终会打印具有标签`env=test`的服务实例
+After running, it will finally print the service instance with the label `env=test` 
 
 ```
 ➜  route git:(feat_demo) ✗ ./route --service="polaris_go_provider"

@@ -18,21 +18,22 @@
 package serviceinfo
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
-	"time"
 )
 
 const (
 	defaultReportInterval = 3 * time.Minute
 )
 
-//上报缓存信息插件的配置
+// 上报缓存信息插件的配置
 type Config struct {
 	ReportInterval *time.Duration `yaml:"reportInterval"`
 }
 
-//校验配置
+// 校验配置
 func (c *Config) Verify() error {
 	if c.ReportInterval == nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, nil,
@@ -46,7 +47,7 @@ func (c *Config) Verify() error {
 	return nil
 }
 
-//设置默认配置值
+// 设置默认配置值
 func (c *Config) SetDefault() {
 	if nil == c.ReportInterval {
 		c.ReportInterval = model.ToDurationPtr(defaultReportInterval)

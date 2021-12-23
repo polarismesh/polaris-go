@@ -21,22 +21,22 @@ import (
 	"testing"
 )
 
-//整形数组
+// IntArray 整形数组
 type IntArray struct {
 	array []uint64
 }
 
-//获取某个下标下面的值
+// GetValue 获取某个下标下面的值
 func (i *IntArray) GetValue(idx int) uint64 {
 	return i.array[idx]
 }
 
-//获取数组长度
+// Count 获取数组长度
 func (i *IntArray) Count() int {
 	return len(i.array)
 }
 
-//测试二分查找
+// TestBinarySearch 测试二分查找
 func TestBinarySearch(t *testing.T) {
 	arrayObj := &IntArray{}
 	var base uint64 = 10000

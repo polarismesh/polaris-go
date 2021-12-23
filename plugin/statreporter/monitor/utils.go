@@ -18,9 +18,10 @@
 package monitor
 
 import (
+	"strconv"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"strconv"
 )
 
 const (
@@ -41,7 +42,7 @@ const (
 	keySvcFailDelay    int = 1
 )
 
-//服务统计指标维度
+// 服务统计指标维度
 var (
 	svcIdx      = []int{keySvcSuccess, keySvcFail, keySvcSuccessDelay, keySvcFailDelay}
 	svcDelayIdx = []int{keySvcSuccessDelay, keySvcFailDelay}
@@ -49,18 +50,18 @@ var (
 	svcSuccess  = []bool{true, false}
 )
 
-//用于将sdk统计信息放入滑桶中
-//SDK存储序列如下：
-//|           ------------                   ApiGetOneInstance                                   ------------ |
-//|           ------------  ErrCodeSuccess   ------------          | ------------ ErrCodeUnknown ------------ |
-//| --<50ms--  | --<100ms-- | --<150ms-- | --<200ms-- |-->=200ms-- |
-//| suc | fail | suc | fail | suc | fail | suc | fail | suc | fail |
+// 用于将sdk统计信息放入滑桶中
+// SDK存储序列如下：
+// |           ------------                   ApiGetOneInstance                                   ------------ |
+// |           ------------  ErrCodeSuccess   ------------          | ------------ ErrCodeUnknown ------------ |
+// | --<50ms--  | --<100ms-- | --<150ms-- | --<200ms-- |-->=200ms-- |
+// | suc | fail | suc | fail | suc | fail | suc | fail | suc | fail |
 func addSDKStatToBucket(gauge model.InstanceGauge, dims *dimensionRecord) {
 	idx := calcSDKMetricIndex(gauge)
 	dims.add32Dimensions(idx, 1)
 }
 
-//计算SDK统计下标
+// 计算SDK统计下标
 func calcSDKMetricIndex(gauge model.InstanceGauge) int {
 	errCode := gauge.GetRetCodeValue()
 	rangeIndex := int(gauge.GetDelayRange())
@@ -78,7 +79,7 @@ const (
 	allIndexDelayRange   = numKeySDK
 )
 
-//用于将sdkmetric计算出来的一维idx还原为多维数组的idx
+// 用于将sdkmetric计算出来的一维idx还原为多维数组的idx
 var reveseIdx = make([][]int, allIndexSize, allIndexSize)
 var sdkDimensions = make([]int, allIndexSize)
 
@@ -88,7 +89,7 @@ const (
 	delayIdx
 )
 
-//计算SDK统计下标
+// 计算SDK统计下标
 func calcSDKMetricIndexByValue(apiOperation int, errCode int, rangeIndex int, statusIndex int) int {
 	var errCodeIndex int
 	if errCode > 0 {
@@ -98,22 +99,22 @@ func calcSDKMetricIndexByValue(apiOperation int, errCode int, rangeIndex int, st
 		(errCodeIndex * allIndexErrCode) + (rangeIndex * allIndexDelayRange) + statusIndex
 }
 
-//用于将server调用信息放入滑桶中
+// 用于将server调用信息放入滑桶中
 func addSvcStatToBucket(gauge model.InstanceGauge, dims *dimensionRecord) {
 	if gauge.GetRetStatus() == model.RetFail {
 		dims.add32Dimensions(keySDKFail, 1)
 		dims.add64Dimensions(keySvcFailDelay, int64(*gauge.GetDelay()))
 		return
-		//bucket.AddMetric(keySvcFailDelay, int64(*gauge.GetDelay()))
-		//return bucket.AddMetric(keySvcFail, 1)
+		// bucket.AddMetric(keySvcFailDelay, int64(*gauge.GetDelay()))
+		// return bucket.AddMetric(keySvcFail, 1)
 	}
 	dims.add32Dimensions(keySDKSuccess, 1)
 	dims.add64Dimensions(keySvcSuccessDelay, int64(*gauge.GetDelay()))
-	//bucket.AddMetric(keySvcSuccessDelay, int64(*gauge.GetDelay()))
-	//return bucket.AddMetric(keySvcSuccess, 1)
+	// bucket.AddMetric(keySvcSuccessDelay, int64(*gauge.GetDelay()))
+	// return bucket.AddMetric(keySvcSuccess, 1)
 }
 
-//sdk统计数据转化为日志形式
+// sdk统计数据转化为日志形式
 func sdkStatToString(data *monitorpb.SDKAPIStatistics) string {
 	return "uid: " + data.GetKey().GetUid() + " | id: " + data.GetId().GetValue() + " | client_type: " +
 		data.GetKey().GetClientType().GetValue() + " | client_version: " + data.GetKey().GetClientVersion().GetValue() +
@@ -123,7 +124,7 @@ func sdkStatToString(data *monitorpb.SDKAPIStatistics) string {
 		" | total_requests_in_minute: " + strconv.Itoa(int(data.GetValue().GetTotalRequestPerMinute().GetValue()))
 }
 
-//服务调用统计数据转化为日志格式
+// 服务调用统计数据转化为日志格式
 func svcStatToString(data *monitorpb.ServiceStatistics) string {
 	return "id: " + data.GetId().GetValue() + " | caller_host: " + data.GetKey().GetCallerHost().GetValue() +
 		" | namespace: " + data.GetKey().GetNamespace().GetValue() + " | service: " +
@@ -134,7 +135,7 @@ func svcStatToString(data *monitorpb.ServiceStatistics) string {
 		strconv.Itoa(int(data.GetValue().GetTotalDelayPerMinute().GetValue())) + "ms"
 }
 
-//初始化reverseIdx
+// 初始化reverseIdx
 func init() {
 	idx := 0
 	for i := 0; i < allIndexSize; i++ {

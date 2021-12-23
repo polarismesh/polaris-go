@@ -21,16 +21,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//选择可用实例集合
-//优先选择健康（close以及存在半开配额实例）
-//如果不满足健康，则选择close+半开实例
+// 选择可用实例集合
+// 优先选择健康（close以及存在半开配额实例）
+// 如果不满足健康，则选择close+半开实例
 func SelectAvailableInstanceSet(clsValue *model.ClusterValue, hasLimitedInstances bool,
 	includeHalfOpen bool) *model.InstanceSet {
-	//targetInstances := clsValue.GetInstancesSet(hasLimitedInstances, false)
-	//if targetInstances.TotalWeight() == 0 {
+	// targetInstances := clsValue.GetInstancesSet(hasLimitedInstances, false)
+	// if targetInstances.TotalWeight() == 0 {
 	//	return clsValue.GetInstancesSet(hasLimitedInstances, true)
-	//}
-	//return targetInstances
+	// }
+	// return targetInstances
 	targetInstances := clsValue.GetInstancesSet(hasLimitedInstances, includeHalfOpen)
 	return targetInstances
 }

@@ -19,10 +19,11 @@ package nearbybase
 
 import (
 	"fmt"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 )
 
-//就近路由的配置
+// 就近路由的配置
 type nearbyConfig struct {
 	MatchLevel                      string `yaml:"matchLevel" json:"matchLevel"`
 	MaxMatchLevel                   string `yaml:"maxMatchLevel" json:"maxMatchLevel"`
@@ -31,32 +32,32 @@ type nearbyConfig struct {
 	UnhealthyPercentToDegrade       int    `yaml:"unhealthyPercentToDegrade" json:"unhealthyPercentToDegrade"`
 }
 
-//设置配置级别
+// 设置配置级别
 func (n *nearbyConfig) SetMatchLevel(level string) {
 	n.MatchLevel = level
 }
 
-//返回配置级别
+// 返回配置级别
 func (n *nearbyConfig) GetMatchLevel() string {
 	return n.MatchLevel
 }
 
-//设置配置级别
+// 设置配置级别
 func (n *nearbyConfig) SetLowestMatchLevel(level string) {
 	n.MaxMatchLevel = level
 }
 
-//返回配置级别
+// 返回配置级别
 func (n *nearbyConfig) GetLowestMatchLevel() string {
 	return n.MaxMatchLevel
 }
 
-//设置最大降级匹配级别
+// 设置最大降级匹配级别
 func (n *nearbyConfig) SetMaxMatchLevel(level string) {
 	n.MaxMatchLevel = level
 }
 
-//返回最大降级匹配级别
+// 返回最大降级匹配级别
 func (n *nearbyConfig) GetMaxMatchLevel() string {
 	return n.MaxMatchLevel
 }
@@ -94,7 +95,7 @@ func (n *nearbyConfig) SetUnhealthyPercentToDegrade(u int) {
 	n.UnhealthyPercentToDegrade = u
 }
 
-//设置默认值
+// 设置默认值
 func (n *nearbyConfig) SetDefault() {
 	if "" == n.MatchLevel {
 		n.MatchLevel = config.DefaultMatchLevel
@@ -108,7 +109,7 @@ func (n *nearbyConfig) SetDefault() {
 	}
 }
 
-//就近级别转换
+// 就近级别转换
 var nearbyLevels = map[string]int{
 	"":                 priorityLevelAll,
 	config.RegionLevel: priorityLevelRegion,
@@ -116,7 +117,7 @@ var nearbyLevels = map[string]int{
 	config.CampusLevel: priorityLevelCampus,
 }
 
-//校验
+// 校验
 func (n *nearbyConfig) Verify() error {
 	if config.RegionLevel != n.MatchLevel && config.ZoneLevel != n.MatchLevel && config.CampusLevel != n.MatchLevel {
 		return fmt.Errorf("invalud match level for nearby router: %s, it must be one of %s, %s and %s",

@@ -21,7 +21,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/polarismesh/polaris-go/api"
@@ -32,17 +34,15 @@ var (
 	service   string
 	host      string
 	port      int
-	token     string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "polaris_go_test", "service")
-	flag.StringVar(&host, "host", "127.0.0.1", "host")
+	flag.StringVar(&service, "service", "EchoServerGolang", "service")
 	flag.IntVar(&port, "port", 7879, "port")
-	flag.StringVar(&token, "token", "", "token")
 }
 
+// PolarisProvider .
 type PolarisProvider struct {
 	provider  api.ProviderAPI
 	namespace string
@@ -51,7 +51,14 @@ type PolarisProvider struct {
 	port      int
 }
 
+// Run . execute
 func (svr *PolarisProvider) Run() {
+	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
+	if nil != err {
+		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
+	}
+
+	host = tmpHost
 	svr.registerService()
 	svr.runWebServer()
 }
@@ -59,7 +66,7 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("Hello, I'm Provider"))
+		_, _ = rw.Write([]byte("Hello, I'm EchoServerGolang Provider"))
 	})
 
 	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", svr.port), nil); err != nil {
@@ -74,7 +81,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Namespace = namespace
 	registerRequest.Host = host
 	registerRequest.Port = port
-	registerRequest.ServiceToken = token
+	registerRequest.ServiceToken = "token"
 	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
 	if nil != err {
@@ -94,7 +101,7 @@ func (svr *PolarisProvider) doHeartbeat() {
 		heartbeatRequest.Service = service
 		heartbeatRequest.Host = host
 		heartbeatRequest.Port = port
-		heartbeatRequest.ServiceToken = token
+		heartbeatRequest.ServiceToken = "token"
 		err := svr.provider.Heartbeat(heartbeatRequest)
 		if nil != err {
 			log.Fatalf("fail to heartbeat instance, err is %v", err)
@@ -126,4 +133,17 @@ func main() {
 	}
 
 	svr.Run()
+}
+
+func getLocalHost(serverAddr string) (string, error) {
+	conn, err := net.Dial("tcp", serverAddr)
+	if nil != err {
+		return "", err
+	}
+	localAddr := conn.LocalAddr().String()
+	colonIdx := strings.LastIndex(localAddr, ":")
+	if colonIdx > 0 {
+		return localAddr[:colonIdx], nil
+	}
+	return localAddr, nil
 }

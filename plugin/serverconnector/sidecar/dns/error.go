@@ -22,7 +22,7 @@ type Error struct {
 	err string
 }
 
-//返回 err
+// 返回 err
 func (e *Error) Error() string {
 	if e == nil {
 		return "dns: <nil>"

@@ -18,8 +18,9 @@ package client
 
 import (
 	"errors"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
