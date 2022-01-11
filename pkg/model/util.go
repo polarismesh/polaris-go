@@ -121,7 +121,11 @@ func IsDir(path string) bool {
 
 // IsFile file path is dir
 func IsFile(path string) bool {
-	return !IsDir(path)
+	s, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !s.IsDir()
 }
 
 // 对字符串进行hash操作

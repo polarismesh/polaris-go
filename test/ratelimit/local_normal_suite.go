@@ -119,7 +119,7 @@ func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
 		if allocatedPerSecond < 5 {
 			continue
 		}
-		c.Assert(allocatedPerSecond >= 195 && allocatedPerSecond <= 200, check.Equals, true)
+		c.Assert(allocatedPerSecond >= 195 && allocatedPerSecond <= 205, check.Equals, true)
 	}
 	fmt.Printf("allocatedTotal is %d\n", allocatedTotal)
 	c.Assert(allocatedTotal >= 800 && allocatedTotal <= 1600, check.Equals, true)
@@ -289,6 +289,6 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 		if allocatedPerSecond < 5 {
 			continue
 		}
-		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1000, check.Equals, true)
+		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1005, check.Equals, true)
 	}
 }
