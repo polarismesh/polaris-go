@@ -54,7 +54,7 @@ func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeIn
 	return instances, result.OutputCluster, nil, nil
 }
 
-// 执行路由链
+// processServiceRouters 执行路由链
 func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult

@@ -67,7 +67,7 @@ var Code2Info = map[Code]*wrappers.StringValue{
 	AcquireQuotaError:   {Value: "acquire quota error"},
 }
 
-// 转为http status
+// Code2HTTPStatus 转为http status
 func Code2HTTPStatus(code Code) int {
 	return int(code / 1000)
 }

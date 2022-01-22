@@ -32,7 +32,7 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-// 创建QPS远程限流窗口
+// NewRemoteAwareQpsBucket 创建QPS远程限流窗口
 func NewRemoteAwareQpsBucket(window *RateLimitWindow) *RemoteAwareQpsBucket {
 	raqb := &RemoteAwareQpsBucket{
 		window:         window,
@@ -46,7 +46,7 @@ func NewRemoteAwareQpsBucket(window *RateLimitWindow) *RemoteAwareQpsBucket {
 	return raqb
 }
 
-// 远程配额分配的算法桶
+// RemoteAwareQpsBucket 远程配额分配的算法桶
 type RemoteAwareQpsBucket struct {
 	// 所属的限流窗口
 	window *RateLimitWindow
@@ -60,7 +60,7 @@ type RemoteAwareQpsBucket struct {
 	identifierPool *sync.Pool
 }
 
-// 客户端时间转为服务端时间
+// toServerTimeMilli 客户端时间转为服务端时间
 func (r *RemoteAwareQpsBucket) toServerTimeMilli(timeMilli int64) int64 {
 	timeDiff := atomic.LoadInt64(&r.timeDiff)
 	return timeMilli + timeDiff
@@ -71,7 +71,7 @@ const (
 	tokenPerAlloc = 1
 )
 
-// 从池子里获取标识数组
+// poolGetIdentifier 从池子里获取标识数组
 func (r *RemoteAwareQpsBucket) poolGetIdentifier() []UpdateIdentifier {
 	value := r.identifierPool.Get()
 	if !reflect2.IsNil(value) {
@@ -90,7 +90,7 @@ const (
 	Local
 )
 
-// 执行配额分配操作
+// Allocate 执行配额分配操作
 func (r *RemoteAwareQpsBucket) Allocate() *model.QuotaResponse {
 	if len(r.tokenBuckets) == 0 {
 		return &model.QuotaResponse{
@@ -183,12 +183,12 @@ func (r *RemoteAwareQpsBucket) monitorReportLimit(duration uint32, usedRemoteQuo
 	r.window.Engine().SyncReportStat(model.RateLimitStat, gauge)
 }
 
-// 执行配额回收操作
+// Release 执行配额回收操作
 func (r *RemoteAwareQpsBucket) Release() {
 	// 对于QPS限流，无需进行释放
 }
 
-// 设置通过限流服务端获取的远程QPS
+// SetRemoteQuota 设置通过限流服务端获取的远程QPS
 func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas *RemoteQuotaResult) {
 	clientTime := model.CurrentMillisecond()
 	serverTimeMilli := r.toServerTimeMilli(clientTime)
@@ -241,7 +241,7 @@ func (r *RemoteAwareQpsBucket) GetQuotaUsed(curTimeMilli int64) *UsageInfo {
 	return result
 }
 
-// 更新时间间隔
+// UpdateTimeDiff 更新时间间隔
 func (r *RemoteAwareQpsBucket) UpdateTimeDiff(timeDiff int64) {
 	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
 	if lastTimeDiff != timeDiff {
@@ -256,7 +256,7 @@ func (r *RemoteAwareQpsBucket) GetTokenBuckets() TokenBuckets {
 // 多久没同步，则变成本地
 const remoteExpireMilli = 1000
 
-// 通用信息
+// BucketShareInfo 通用信息
 type BucketShareInfo struct {
 	// 是否单机均摊
 	shareEqual bool
@@ -266,7 +266,7 @@ type BucketShareInfo struct {
 	passOnRemoteFail bool
 }
 
-// 令牌桶是否进行更新的凭证
+// UpdateIdentifier 令牌桶是否进行更新的凭证
 type UpdateIdentifier struct {
 	// 当前周期起始时间，本地限流有效
 	stageStartMilli int64
@@ -276,7 +276,7 @@ type UpdateIdentifier struct {
 	lastRemoteUpdateMilli int64
 }
 
-// 令牌桶
+// TokenBucket 令牌桶
 type TokenBucket struct {
 	UpdateIdentifier
 	windowKey string
@@ -300,7 +300,7 @@ type TokenBucket struct {
 	shareInfo *BucketShareInfo
 }
 
-// 创建令牌桶
+// NewTokenBucket 创建令牌桶
 func NewTokenBucket(
 	windowKey string, validDuration time.Duration, tokenAmount uint32, shareInfo *BucketShareInfo) *TokenBucket {
 	bucket := &TokenBucket{}
@@ -316,7 +316,7 @@ func NewTokenBucket(
 	return bucket
 }
 
-// 获取限流总量
+// GetRuleTotal 获取限流总量
 func (t *TokenBucket) GetRuleTotal() int64 {
 	if !t.shareInfo.shareEqual || t.shareInfo.local {
 		return int64(t.ruleTokenAmount)
@@ -325,7 +325,7 @@ func (t *TokenBucket) GetRuleTotal() int64 {
 	return int64(t.ruleTokenAmount) * int64(instanceCount)
 }
 
-// 归还配额
+// GiveBackToken 归还配额
 func (t *TokenBucket) GiveBackToken(identifier *UpdateIdentifier, token int64, mode TokenBucketMode) {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
@@ -346,14 +346,14 @@ func (t *TokenBucket) GiveBackToken(identifier *UpdateIdentifier, token int64, m
 	}
 }
 
-// 只更新远程客户端数量，不更新配额
+// UpdateRemoteClientCount 只更新远程客户端数量，不更新配额
 func (t *TokenBucket) UpdateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	t.updateRemoteClientCount(remoteQuotas)
 }
 
-// 纯更新客户端数
+// updateRemoteClientCount 纯更新客户端数
 func (t *TokenBucket) updateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	lastRemoteClientUpdateMilli := atomic.LoadInt64(&t.lastRemoteClientUpdateMilli)
 	if lastRemoteClientUpdateMilli < remoteQuotas.ServerTimeMilli {
@@ -373,7 +373,7 @@ func (t *TokenBucket) updateRemoteClientCount(remoteQuotas *RemoteQuotaResult) {
 	}
 }
 
-// 更新远程配额
+// UpdateRemoteToken 更新远程配额
 func (t *TokenBucket) UpdateRemoteToken(remoteQuotas *RemoteQuotaResult, updateClient bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -386,12 +386,12 @@ func (t *TokenBucket) UpdateRemoteToken(remoteQuotas *RemoteQuotaResult, updateC
 	atomic.StoreInt64(&t.lastRemoteUpdateMilli, remoteQuotas.ServerTimeMilli)
 }
 
-// 远程配额过期
+// remoteExpired 远程配额过期
 func (t *TokenBucket) remoteExpired(nowMilli int64) bool {
 	return nowMilli-atomic.LoadInt64(&t.lastRemoteUpdateMilli) > remoteExpireMilli
 }
 
-// 初始化本地配额
+// initLocalStageOnLocalConfig 初始化本地配额
 func (t *TokenBucket) initLocalStageOnLocalConfig(nowMilli int64) {
 	nowStageMilli := t.calculateStageStart(nowMilli)
 	if atomic.LoadInt64(&t.stageStartMilli) == nowStageMilli {
@@ -409,12 +409,12 @@ func (t *TokenBucket) initLocalStageOnLocalConfig(nowMilli int64) {
 	atomic.StoreInt64(&t.stageStartMilli, nowStageMilli)
 }
 
-// 计算起始滑窗
+// calculateStageStart 计算起始滑窗
 func (t *TokenBucket) calculateStageStart(curTimeMs int64) int64 {
 	return curTimeMs - curTimeMs%t.validDurationMilli
 }
 
-// 本地分配
+// tryAllocateLocal 本地分配
 func (t *TokenBucket) tryAllocateLocal(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (int64, TokenBucketMode) {
 	t.initLocalStageOnLocalConfig(nowMilli)
@@ -425,12 +425,12 @@ func (t *TokenBucket) tryAllocateLocal(
 	return atomic.AddInt64(&t.tokenLeft, 0-int64(token)), Local
 }
 
-// 直接分配远程配额
+// directAllocateRemoteToken 直接分配远程配额
 func (t *TokenBucket) directAllocateRemoteToken(token uint32) int64 {
 	return atomic.AddInt64(&t.tokenLeft, 0-int64(token))
 }
 
-// 尝试只读方式分配远程配额
+// allocateRemoteReadOnly 尝试只读方式分配远程配额
 func (t *TokenBucket) allocateRemoteReadOnly(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (bool, int64, TokenBucketMode) {
 	t.mutex.RLock()
@@ -452,7 +452,7 @@ func (t *TokenBucket) allocateRemoteReadOnly(
 	return false, 0, RemoteToLocal
 }
 
-// 以本地退化远程模式来进行分配
+// allocateRemoteToLocal 以本地退化远程模式来进行分配
 func (t *TokenBucket) allocateRemoteToLocal(token uint32, nowMilli int64, identifier *UpdateIdentifier) int64 {
 	// 远程配额过期，配置了直接放通
 	if t.shareInfo.passOnRemoteFail {
@@ -479,7 +479,7 @@ func (t *TokenBucket) allocateRemoteToLocal(token uint32, nowMilli int64, identi
 	return t.createRemoteToLocalTokens(nowMilli, token, identifier, stageStartMilli)
 }
 
-// 创建远程降级的token池
+// createRemoteToLocalTokens 创建远程降级的token池
 func (t *TokenBucket) createRemoteToLocalTokens(
 	nowMilli int64, token uint32, identifier *UpdateIdentifier, stageStartMilli int64) int64 {
 	nowStageMilli := t.calculateStageStart(nowMilli)
@@ -497,7 +497,7 @@ func (t *TokenBucket) createRemoteToLocalTokens(
 	return atomic.AddInt64(&t.remoteToLocalTokenLeft, 0-int64(token))
 }
 
-// 本地分配
+// tryAllocateRemote 本地分配
 func (t *TokenBucket) tryAllocateRemote(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier) (int64, TokenBucketMode) {
 	ok, left, isRemote := t.allocateRemoteReadOnly(token, nowMilli, identifier)
@@ -516,7 +516,7 @@ func (t *TokenBucket) tryAllocateRemote(
 	return t.createRemoteToLocalTokens(nowMilli, token, identifier, stageStartMilli), RemoteToLocal
 }
 
-// 尝试分配配额
+// TryAllocateToken 尝试分配配额
 func (t *TokenBucket) TryAllocateToken(
 	token uint32, nowMilli int64, identifier *UpdateIdentifier, mode TokenBucketMode) (int64, TokenBucketMode) {
 	switch mode {
@@ -534,36 +534,36 @@ func (t *TokenBucket) TryAllocateToken(
 	return t.tryAllocateRemote(token, nowMilli, identifier)
 }
 
-// 记录真实分配配额
+// ConfirmPassed 记录真实分配配额
 func (t *TokenBucket) ConfirmPassed(passed uint32, nowMilli int64) {
 	t.sliceWindow.AddAndGetCurrentPassed(nowMilli, passed)
 }
 
-// 记录限流分配配额
+// ConfirmLimited 记录限流分配配额
 func (t *TokenBucket) ConfirmLimited(limited uint32, nowMilli int64) {
 	t.sliceWindow.AddAndGetCurrentLimited(nowMilli, limited)
 }
 
-// 令牌桶序列
+// TokenBuckets 令牌桶序列
 type TokenBuckets []*TokenBucket
 
-// 数组长度
+// Len 数组长度
 func (tbs TokenBuckets) Len() int {
 	return len(tbs)
 }
 
-// 比较数组成员大小
+// Less 比较数组成员大小
 func (tbs TokenBuckets) Less(i, j int) bool {
 	// 逆序
 	return tbs[i].validDurationMilli > tbs[j].validDurationMilli
 }
 
-// 交换数组成员
+// Swap 交换数组成员
 func (tbs TokenBuckets) Swap(i, j int) {
 	tbs[i], tbs[j] = tbs[j], tbs[i]
 }
 
-// 初始化令牌桶
+// initTokenBuckets 初始化令牌桶
 func initTokenBuckets(rule *namingpb.Rule, windowKey string) TokenBuckets {
 	shareInfo := &BucketShareInfo{}
 	if rule.GetAmountMode() == namingpb.Rule_SHARE_EQUALLY {

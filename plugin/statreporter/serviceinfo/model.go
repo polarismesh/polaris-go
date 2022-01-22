@@ -33,7 +33,7 @@ const (
 	rateLimitStatus = 2
 )
 
-// 一个版本变化节点
+// statusNode 一个版本变化节点
 type statusNode struct {
 	changeSeq  uint32
 	changeTime time.Time
@@ -41,7 +41,7 @@ type statusNode struct {
 	next       *statusNode
 }
 
-// 一个实例或者路由信息的变化列表
+// statusList 一个实例或者路由信息的变化列表
 type statusList struct {
 	head  *statusNode
 	tail  *statusNode
@@ -50,53 +50,53 @@ type statusList struct {
 	lock  uint32
 }
 
-// 一个服务的变化历史
+// statusHistory 一个服务的变化历史
 type statusHistory struct {
 	histories      [3]*statusList
 	rateLimitRules *sync.Map
 	lastUpdateTime atomic.Value
 }
 
-// 一个网格配置的变化历史
+// meshStatusHistory 一个网格配置的变化历史
 type meshStatusHistory struct {
 	history        *statusList
 	meshResources  *sync.Map
 	lastUpdateTime atomic.Value
 }
 
-// 一个网格配置集合的标识
+// meshKey 一个网格配置集合的标识
 type meshKey struct {
 	meshID  string
 	typeUrl string
 }
 
-// 熔断变化节点
+// circuitBreakNode 熔断变化节点
 type circuitBreakNode struct {
 	status monitorpb.StatusChange
 	reason string
 }
 
-// 记录一个服务下面的全死全活记录
+// serviceRecoverAllMap 记录一个服务下面的全死全活记录
 type serviceRecoverAllMap struct {
 	changeList     *statusList
 	clusterRecords *sync.Map
 }
 
-// serviceRecoverAllMap[clusterKey]，一个服务下面某个cluster的全死全活检验
+// clusterRecoverAllCheck serviceRecoverAllMap[clusterKey]，一个服务下面某个cluster的全死全活检验
 type clusterRecoverAllCheck struct {
 	lastCheckTime atomic.Value
 	currentStatus uint32
 	clusterInfo   string
 }
 
-// 一次全死全活变化
+// recoverAllChange 一次全死全活变化
 type recoverAllChange struct {
 	statusChange monitorpb.RecoverAllStatus
 	clusterInfo  string
 	reason       string
 }
 
-// 根据熔断状态变化，创建一个变化节点
+// createCircuitBreakNode 根据熔断状态变化，创建一个变化节点
 func createCircuitBreakNode(pre, current model.CircuitBreakerStatus) (*circuitBreakNode, error) {
 	res := &circuitBreakNode{}
 	res.reason = current.GetCircuitBreaker()
@@ -127,7 +127,7 @@ func createCircuitBreakNode(pre, current model.CircuitBreakerStatus) (*circuitBr
 	return res, nil
 }
 
-// 创建新的状态历史
+// newStatusHistory 创建新的状态历史
 func newStatusHistory(currentTime time.Time) *statusHistory {
 	res := &statusHistory{}
 	res.histories[serviceStatus] = newStatusList()
@@ -138,7 +138,7 @@ func newStatusHistory(currentTime time.Time) *statusHistory {
 	return res
 }
 
-// 创建新的状态列表
+// newStatusList 创建新的状态列表
 func newStatusList() *statusList {
 	res := &statusList{}
 	res.head = &statusNode{}
@@ -146,7 +146,7 @@ func newStatusList() *statusList {
 	return res
 }
 
-// 添加一个版本号状态
+// addStatus 添加一个版本号状态
 func (s *statusList) addStatus(data interface{}, currentTime time.Time) {
 	current_seq := atomic.AddUint32(&s.seq, 1)
 	newNode := &statusNode{
@@ -166,7 +166,7 @@ func (s *statusList) addStatus(data interface{}, currentTime time.Time) {
 	}
 }
 
-// 添加一个删除状态
+// addDeleteStatus 添加一个删除状态
 func (s *statusList) addDeleteStatus(data interface{}, currentTime time.Time) {
 	current_seq := atomic.AddUint32(&s.seq, 1)
 	newNode := &statusNode{
@@ -188,7 +188,7 @@ func (s *statusList) addDeleteStatus(data interface{}, currentTime time.Time) {
 	}
 }
 
-// 返回当前历史状态节点，并且将节点置空
+// getNodes 返回当前历史状态节点，并且将节点置空
 // 返回当前seq，判断是不是信息已经被
 // 返回当前状态列表长度
 func (s *statusList) getNodes() (n *statusNode, currentSeq uint32, currentCount uint32) {

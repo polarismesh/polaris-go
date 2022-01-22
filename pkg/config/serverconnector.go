@@ -57,7 +57,7 @@ func (s *ServerConnectorConfigImpl) GetAddresses() []string {
 	return s.Addresses
 }
 
-// 设置远端cl5 server地址，格式为<host>:<port>
+// SetAddresses 设置远端cl5 server地址，格式为<host>:<port>
 func (s *ServerConnectorConfigImpl) SetAddresses(addresses []string) {
 	s.Addresses = addresses
 }
@@ -68,7 +68,7 @@ func (s *ServerConnectorConfigImpl) GetProtocol() string {
 	return s.Protocol
 }
 
-// 设置与cl5 server对接的协议
+// SetProtocol 设置与cl5 server对接的协议
 func (s *ServerConnectorConfigImpl) SetProtocol(protocol string) {
 	s.Protocol = protocol
 }
@@ -79,7 +79,7 @@ func (s *ServerConnectorConfigImpl) GetConnectTimeout() time.Duration {
 	return *s.ConnectTimeout
 }
 
-// 设置与server的连接超时时间
+// SetConnectTimeout 设置与server的连接超时时间
 func (s *ServerConnectorConfigImpl) SetConnectTimeout(timeout time.Duration) {
 	s.ConnectTimeout = &timeout
 }
@@ -90,7 +90,7 @@ func (s *ServerConnectorConfigImpl) GetMessageTimeout() time.Duration {
 	return *s.MessageTimeout
 }
 
-// 设置远程请求超时时间
+// SetMessageTimeout 设置远程请求超时时间
 func (s *ServerConnectorConfigImpl) SetMessageTimeout(timeout time.Duration) {
 	s.MessageTimeout = &timeout
 }
@@ -101,18 +101,18 @@ func (s *ServerConnectorConfigImpl) GetConnectionIdleTimeout() time.Duration {
 	return *s.ConnectionIdleTimeout
 }
 
-// 设置连接空闲后超时时间
+// SetConnectionIdleTimeout 设置连接空闲后超时时间
 func (s *ServerConnectorConfigImpl) SetConnectionIdleTimeout(timeout time.Duration) {
 	s.ConnectionIdleTimeout = &timeout
 }
 
-// GetClientRequestQueueSize global.serverConnector.requestQueueSize
+// GetRequestQueueSize global.serverConnector.requestQueueSize
 // 新请求的队列BUFFER容量
 func (s *ServerConnectorConfigImpl) GetRequestQueueSize() int32 {
 	return *s.RequestQueueSize
 }
 
-// 设置新请求的队列BUFFER容量
+// SetRequestQueueSize 设置新请求的队列BUFFER容量
 func (s *ServerConnectorConfigImpl) SetRequestQueueSize(queueSize int32) {
 	s.RequestQueueSize = &queueSize
 }
@@ -123,17 +123,17 @@ func (s *ServerConnectorConfigImpl) GetServerSwitchInterval() time.Duration {
 	return *s.ServerSwitchInterval
 }
 
-// server的切换时延
+// SetServerSwitchInterval server的切换时延
 func (s *ServerConnectorConfigImpl) SetServerSwitchInterval(interval time.Duration) {
 	s.ServerSwitchInterval = &interval
 }
 
-// 一次连接失败后，到下一次连接之间的最小间隔时间
+// GetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间
 func (s *ServerConnectorConfigImpl) GetReconnectInterval() time.Duration {
 	return *s.ReconnectInterval
 }
 
-// 一次连接失败后，到下一次连接之间的最小间隔时间
+// SetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间
 func (s *ServerConnectorConfigImpl) SetReconnectInterval(interval time.Duration) {
 	s.ReconnectInterval = &interval
 }
@@ -147,12 +147,12 @@ func (s *ServerConnectorConfigImpl) GetPluginConfig(pluginName string) BaseConfi
 	return cfgValue.(BaseConfig)
 }
 
-// 输出插件具体配置
+// SetPluginConfig 输出插件具体配置
 func (s *ServerConnectorConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeServerConnector, pluginName, value)
 }
 
-// 检验ServerConnector配置
+// Verify 检验ServerConnector配置
 func (s *ServerConnectorConfigImpl) Verify() error {
 	if nil == s {
 		return errors.New("ServerConnectorConfig is nil")
@@ -180,7 +180,7 @@ func (s *ServerConnectorConfigImpl) Verify() error {
 	return errs
 }
 
-// 设置ServerConnector配置的默认值
+// SetDefault 设置ServerConnector配置的默认值
 func (s *ServerConnectorConfigImpl) SetDefault() {
 	if nil == s.ConnectTimeout {
 		s.ConnectTimeout = model.ToDurationPtr(DefaultServerConnectTimeout)
@@ -195,7 +195,7 @@ func (s *ServerConnectorConfigImpl) SetDefault() {
 		s.ServerSwitchInterval = model.ToDurationPtr(DefaultServerSwitchInterval)
 	}
 	if nil == s.RequestQueueSize {
-		s.RequestQueueSize = proto.Int(DefaultRequestQueueSize)
+		s.RequestQueueSize = proto.Int32(int32(DefaultRequestQueueSize))
 	}
 	if nil == s.ReconnectInterval {
 		s.ReconnectInterval = model.ToDurationPtr(DefaultReConnectInterval)
@@ -206,7 +206,7 @@ func (s *ServerConnectorConfigImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeServerConnector)
 }
 
-// 配置初始化
+// Init 配置初始化
 func (s *ServerConnectorConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeServerConnector)

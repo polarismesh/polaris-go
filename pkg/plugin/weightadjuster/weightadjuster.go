@@ -32,7 +32,7 @@ type WeightAdjuster interface {
 	TimingAdjustDynamicWeight(service model.ServiceInstances) ([]*model.InstanceWeight, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeWeightAdjuster, new(WeightAdjuster))
 }

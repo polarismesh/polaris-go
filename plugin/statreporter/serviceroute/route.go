@@ -55,7 +55,7 @@ func (s *Reporter) Name() string {
 	return "serviceRoute"
 }
 
-// 创建一个clientStream的方法
+// createRouteReportStream 创建一个clientStream的方法
 func (s *Reporter) createRouteReportStream(conn monitorpb.GrpcAPIClient) (client basereporter.CloseAbleStream,
 	cancelFunc context.CancelFunc, err error) {
 	var ctx context.Context
@@ -95,7 +95,7 @@ func (s *Reporter) Start() error {
 	return nil
 }
 
-// 定时上报服务的路由记录到monitor
+// uploadRouteRecord 定时上报服务的路由记录到monitor
 func (s *Reporter) uploadRouteRecord() {
 	ticker := time.NewTicker(*s.cfg.ReportInterval)
 	defer ticker.Stop()
@@ -139,7 +139,7 @@ var ruleTypeMap = map[servicerouter.RuleType]monitorpb.RouteRecord_RuleType{
 	servicerouter.DestRule:    monitorpb.RouteRecord_DestRule,
 }
 
-// 根据数据构造记录并发送到monitor
+// constructRecordAndSend 根据数据构造记录并发送到monitor
 func (s *Reporter) constructRecordAndSend(namespace string, service string, data map[ruleKey]map[resultKey]uint32,
 	skipMonitor bool) {
 	if len(data) == 0 {
@@ -249,7 +249,7 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	return nil
 }
 
-// 为服务创建路由调用统计信息的存储数据
+// generateStatData 为服务创建路由调用统计信息的存储数据
 func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 	lv := event.EventObject.(local.ServiceLocalValue)
 	stat := &routeStatData{}

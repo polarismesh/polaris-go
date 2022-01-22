@@ -83,7 +83,7 @@ func (b *StatisticsBucket) GetReportData(periodTime int64) *ReportElements {
 	return data
 }
 
-// create StatisticsBucket
+// NewStatisticsBucket create StatisticsBucket
 func NewStatisticsBucket() *StatisticsBucket {
 	bucket := new(StatisticsBucket)
 	bucket.totalCount = 0
@@ -93,7 +93,7 @@ func NewStatisticsBucket() *StatisticsBucket {
 	return bucket
 }
 
-// 返回记录
+// ReportElements 返回记录
 type ReportElements struct {
 	TotalCount int64
 	LimitCount int64

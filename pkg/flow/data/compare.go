@@ -17,28 +17,30 @@
 
 package data
 
-import "github.com/polarismesh/polaris-go/pkg/model"
+import (
+	"github.com/polarismesh/polaris-go/pkg/model"
+)
 
-// 全相同的比较器
+// AllEqualsComparable 全相同的比较器
 type AllEqualsComparable struct {
 }
 
-// 比较
+// CompareTo 比较
 func (a *AllEqualsComparable) CompareTo(value interface{}) int {
 	return 0
 }
 
-// 最终校验是否可以删除该任务
+// EnsureDeleted 最终校验是否可以删除该任务
 func (a *AllEqualsComparable) EnsureDeleted(value interface{}) bool {
 	return true
 }
 
-// 服务主键比较器
+// ServiceKeyComparable 服务主键比较器
 type ServiceKeyComparable struct {
 	SvcKey model.ServiceKey
 }
 
-// 比较
+// CompareTo 比较
 func (a *ServiceKeyComparable) CompareTo(value interface{}) int {
 	inComparable, ok := value.(*ServiceKeyComparable)
 	if !ok {
@@ -50,7 +52,7 @@ func (a *ServiceKeyComparable) CompareTo(value interface{}) int {
 	return 1
 }
 
-// 最终校验是否可以删除该任务
+// EnsureDeleted 最终校验是否可以删除该任务
 func (a *ServiceKeyComparable) EnsureDeleted(value interface{}) bool {
 	return true
 }

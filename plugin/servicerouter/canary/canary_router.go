@@ -29,8 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-const ()
-
 // CanaryRouterFilter 金丝雀过滤器
 type CanaryRouterFilter struct {
 	*plugin.PluginBase

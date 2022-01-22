@@ -67,7 +67,7 @@ const (
 	APINameAcquire = "v2.RateLimitGRPCV2/Service/Acquire"
 )
 
-// 返回错误码
+// GetErrorCode 返回错误码
 func GetErrorCode(resp *RateLimitResponse) uint32 {
 	if resp.GetCmd() == RateLimitCmd_INIT {
 		return resp.GetRateLimitInitResponse().GetCode()

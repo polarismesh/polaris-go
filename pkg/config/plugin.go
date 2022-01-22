@@ -47,7 +47,7 @@ func RegisterPluginConfigType(typ common.Type, name string, cfg BaseConfig) {
 	cfgTypes[name] = reflect.TypeOf(cfg).Elem()
 }
 
-// 连续错误数熔断配置
+// ErrorCountConfig 连续错误数熔断配置
 type ErrorCountConfig interface {
 	// 连续错误数阈值
 	GetContinuousErrorThreshold() int
@@ -65,7 +65,7 @@ type ErrorCountConfig interface {
 	GetBucketInterval() time.Duration
 }
 
-// 错误率熔断配置
+// ErrorRateConfig 错误率熔断配置
 type ErrorRateConfig interface {
 	// 触发错误率熔断的请求量阈值
 	GetRequestVolumeThreshold() int
@@ -87,10 +87,10 @@ type ErrorRateConfig interface {
 	GetBucketInterval() time.Duration
 }
 
-// 插件配置实现类
+// PluginConfigs 插件配置实现类
 type PluginConfigs map[string]interface{}
 
-// 获取插件配置类型，返回插件名到类型的映射
+// getPluginConfigTypes 获取插件配置类型，返回插件名到类型的映射
 func getPluginConfigTypes(typ common.Type) map[string]reflect.Type {
 	plugs, exists := pluginConfigTypes[typ]
 	if !exists {
@@ -99,7 +99,7 @@ func getPluginConfigTypes(typ common.Type) map[string]reflect.Type {
 	return plugs
 }
 
-// 获取插件配置类型，具体插件类型
+// getPluginConfigType 获取插件配置类型，具体插件类型
 func getPluginConfigType(typ common.Type, name string) (reflect.Type, bool) {
 	plugs, exists := pluginConfigTypes[typ]
 	if !exists {
@@ -111,7 +111,7 @@ func getPluginConfigType(typ common.Type, name string) (reflect.Type, bool) {
 	return nil, false
 }
 
-// 初始化配置对象
+// Init 初始化配置对象
 func (p PluginConfigs) Init(typ common.Type) {
 	cfgTypes := getPluginConfigTypes(typ)
 	for name, cfgType := range cfgTypes {
@@ -120,7 +120,7 @@ func (p PluginConfigs) Init(typ common.Type) {
 	}
 }
 
-// 对于从yaml/json加载的结构，做一个转换
+// convertFromTextValues 对于从yaml/json加载的结构，做一个转换
 func convertFromTextValues(cfgType reflect.Type, cfgValue interface{}) BaseConfig {
 	// 如果在配置文件中没有相关内容，直接创建一个配置对象返回即可
 	if reflect2.IsNil(cfgValue) {
@@ -137,7 +137,7 @@ func convertFromTextValues(cfgType reflect.Type, cfgValue interface{}) BaseConfi
 	return configValue.(BaseConfig)
 }
 
-// 设置默认值
+// SetDefault 设置默认值
 func (p PluginConfigs) SetDefault(typ common.Type) {
 	for plugName := range p {
 		// 如果不是注册进来的配置项，从PluginConfigs里面删除掉
@@ -157,7 +157,7 @@ func (p PluginConfigs) SetDefault(typ common.Type) {
 	}
 }
 
-// 校验插件配置
+// Verify 校验插件配置
 func (p PluginConfigs) Verify() error {
 	for name, cfgValue := range p {
 		cfg, ok := cfgValue.(BaseConfig)

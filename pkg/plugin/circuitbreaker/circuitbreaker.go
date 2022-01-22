@@ -35,7 +35,7 @@ type InstanceCircuitBreaker interface {
 	CircuitBreak(instances []model.Instance) (*Result, error)
 }
 
-// 熔断结算结果
+// Result 熔断结算结果
 type Result struct {
 	Now time.Time
 	// 需要开启熔断器的实例ID

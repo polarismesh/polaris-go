@@ -28,7 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 本地缓存配置
+// LocalCacheConfigImpl 本地缓存配置
 type LocalCacheConfigImpl struct {
 	// consumer.localCache.service.expireTime,
 	// 服务的超时淘汰时间
@@ -66,7 +66,7 @@ func (l *LocalCacheConfigImpl) GetServiceExpireTime() time.Duration {
 	return *l.ServiceExpireTime
 }
 
-// 设置服务超时淘汰时间
+// SetServiceExpireTime 设置服务超时淘汰时间
 func (l *LocalCacheConfigImpl) SetServiceExpireTime(expireTime time.Duration) {
 	l.ServiceExpireTime = &expireTime
 }
@@ -77,48 +77,48 @@ func (l *LocalCacheConfigImpl) GetServiceRefreshInterval() time.Duration {
 	return *l.ServiceRefreshInterval
 }
 
-// 设置服务定时刷新间隔
+// SetServiceRefreshInterval 设置服务定时刷新间隔
 func (l *LocalCacheConfigImpl) SetServiceRefreshInterval(interval time.Duration) {
 	l.ServiceRefreshInterval = &interval
 }
 
-// GetPersistPath consumer.localCache.persist.path
+// GetPersistDir consumer.localCache.persist.path
 // 本地缓存持久化路径
 func (l *LocalCacheConfigImpl) GetPersistDir() string {
 	return l.PersistDir
 }
 
-// 设置本地缓存持久化路径
+// SetPersistDir 设置本地缓存持久化路径
 func (l *LocalCacheConfigImpl) SetPersistDir(dir string) {
 	l.PersistDir = dir
 }
 
-//
+// GetPersistMaxWriteRetry
 func (l *LocalCacheConfigImpl) GetPersistMaxWriteRetry() int {
 	return l.PersistMaxWriteRetry
 }
 
-//
+// SetPersistMaxWriteRetry
 func (l *LocalCacheConfigImpl) SetPersistMaxWriteRetry(maxWriteRetry int) {
 	l.PersistMaxWriteRetry = maxWriteRetry
 }
 
-//
+// GetPersistMaxReadRetry
 func (l *LocalCacheConfigImpl) GetPersistMaxReadRetry() int {
 	return l.PersistMaxReadRetry
 }
 
-//
+// SetPersistMaxReadRetry
 func (l *LocalCacheConfigImpl) SetPersistMaxReadRetry(maxReadRetry int) {
 	l.PersistMaxReadRetry = maxReadRetry
 }
 
-//
+// GetPersistRetryInterval
 func (l *LocalCacheConfigImpl) GetPersistRetryInterval() time.Duration {
 	return *l.PersistRetryInterval
 }
 
-//
+// SetPersistRetryInterval
 func (l *LocalCacheConfigImpl) SetPersistRetryInterval(interval time.Duration) {
 	l.PersistRetryInterval = &interval
 }
@@ -133,12 +133,12 @@ func (l *LocalCacheConfigImpl) SetPersistAvailableInterval(interval time.Duratio
 	l.PersistAvailableInterval = &interval
 }
 
-// 获取是否可以直接使用缓存标签
+// GetStartUseFileCache 获取是否可以直接使用缓存标签
 func (l *LocalCacheConfigImpl) GetStartUseFileCache() bool {
 	return *l.StartUseFileCache
 }
 
-// 设置是否可以直接使用缓存
+// SetStartUseFileCache 设置是否可以直接使用缓存
 func (l *LocalCacheConfigImpl) SetStartUseFileCache(useCacheFile bool) {
 	l.StartUseFileCache = &useCacheFile
 }
@@ -149,7 +149,7 @@ func (l *LocalCacheConfigImpl) GetType() string {
 	return l.Type
 }
 
-// 设置本地缓存类型
+// SetType 设置本地缓存类型
 func (l *LocalCacheConfigImpl) SetType(typ string) {
 	l.Type = typ
 }
@@ -163,12 +163,12 @@ func (l *LocalCacheConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-// 输出插件具体配置
+// SetPluginConfig 输出插件具体配置
 func (l *LocalCacheConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return l.Plugin.SetPluginConfig(common.TypeLocalRegistry, pluginName, value)
 }
 
-// 检验LocalCacheConfig配置
+// Verify 检验LocalCacheConfig配置
 func (l *LocalCacheConfigImpl) Verify() error {
 	if nil == l {
 		return errors.New("LocalCacheConfig is nil")
@@ -185,7 +185,7 @@ func (l *LocalCacheConfigImpl) Verify() error {
 	return errs
 }
 
-// 设置LocalCacheConfig配置的默认值
+// SetDefault 设置LocalCacheConfig配置的默认值
 func (l *LocalCacheConfigImpl) SetDefault() {
 	if nil == l.ServiceExpireTime {
 		l.ServiceExpireTime = model.ToDurationPtr(DefaultServiceExpireTime)
@@ -217,7 +217,7 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 	l.Plugin.SetDefault(common.TypeLocalRegistry)
 }
 
-// localche配置初始化
+// Init localche配置初始化
 func (l *LocalCacheConfigImpl) Init() {
 	l.Plugin = PluginConfigs{}
 	l.Plugin.Init(common.TypeLocalRegistry)

@@ -62,7 +62,7 @@ type ServerAddressList struct {
 	manager *connectionManager
 }
 
-// 获取并进行连接
+// getAndConnectServer 获取并进行连接
 func (s *ServerAddressList) getAndConnectServer(
 	force bool, svc config.ClusterService, timeout time.Duration) *Connection {
 	s.connectMutex.Lock()
@@ -80,7 +80,7 @@ func (s *ServerAddressList) getAndConnectServer(
 	return conn
 }
 
-// 与远程server进行连接
+// getServerAddress 与远程server进行连接
 func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Instance, error) {
 	var targetAddress string
 	var instance model.Instance
@@ -125,7 +125,7 @@ func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Inst
 	return targetAddress, instance, nil
 }
 
-// 获取服务当前连接
+// loadCurrentConnection 获取服务当前连接
 func (s *ServerAddressList) loadCurrentConnection() *Connection {
 	connValue := s.curConn.Load()
 	if reflect2.IsNil(connValue) {
@@ -134,7 +134,7 @@ func (s *ServerAddressList) loadCurrentConnection() *Connection {
 	return connValue.(*Connection)
 }
 
-// 根据地址进行连接
+// connectServer 根据地址进行连接
 func (s *ServerAddressList) connectServer(force bool, addr string, instance model.Instance,
 	service config.ClusterService, timeout time.Duration) (*Connection, error) {
 	var lastConn = s.loadCurrentConnection()
@@ -202,7 +202,7 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 	return conn, nil
 }
 
-// 与远程server进行连接
+// tryGetConnection 与远程server进行连接
 func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []byte) (*Connection, error) {
 	curConnValue := s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
@@ -222,7 +222,7 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 	return s.connectServer(false, address, instance, s.service, timeout)
 }
 
-// 关闭当前连接
+// closeCurrentConnection 关闭当前连接
 func (s *ServerAddressList) closeCurrentConnection(force bool) {
 	conn := s.loadCurrentConnection()
 	if IsAvailableConnection(conn) {
@@ -231,7 +231,7 @@ func (s *ServerAddressList) closeCurrentConnection(force bool) {
 	}
 }
 
-// 连接管理器实现
+// connectionManager 连接管理器实现
 type connectionManager struct {
 	// 客户端信息
 	ClientInfo
@@ -307,12 +307,12 @@ func NewConnectionManager(
 	return manager, nil
 }
 
-// 设置当前协议的连接创建器
+// SetConnCreator 设置当前协议的连接创建器
 func (c *connectionManager) SetConnCreator(creator ConnCreator) {
 	c.creator = creator
 }
 
-// 尝试获取连接
+// tryGetConnection 尝试获取连接
 func (c *connectionManager) tryGetConnection(clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
 	serverList, ok := c.serverServices[clusterType]
 	if !ok {
@@ -328,12 +328,12 @@ func (c *connectionManager) tryGetConnection(clusterType config.ClusterType, has
 	return serverList.tryGetConnection(c.connectTimeout, hashKey)
 }
 
-// 获取并占用连接
+// GetConnection 获取并占用连接
 func (c *connectionManager) GetConnection(opKey string, clusterType config.ClusterType) (*Connection, error) {
 	return c.GetConnectionByHashKey(opKey, clusterType, c.GetHashKey())
 }
 
-// 获取并占用连接
+// GetConnectionByHashKey 获取并占用连接
 func (c *connectionManager) GetConnectionByHashKey(
 	opKey string, clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
 	for {
@@ -368,7 +368,7 @@ func (c *connectionManager) ConnectByAddr(clusterType config.ClusterType, addr s
 	return serverList.ConnectServerByAddrOnly(addr, time.Millisecond*500, serverList.service, instance)
 }
 
-// 上报服务成功
+// ReportSuccess 上报服务成功
 func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout time.Duration) {
 	log.GetBaseLogger().Debugf("service %s: reported success", connID.Service)
 	var err error
@@ -390,7 +390,7 @@ func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout 
 	}
 }
 
-// 上报服务失败
+// ReportFail 上报服务失败
 func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout time.Duration) {
 	log.GetBaseLogger().Warnf("connection %s: reported fail", connID)
 	var err error
@@ -412,7 +412,7 @@ func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout tim
 	}
 }
 
-// 报告连接故障
+// ReportConnectionDown 报告连接故障
 func (c *connectionManager) ReportConnectionDown(connID ConnID) {
 	log.GetBaseLogger().Tracef("connection %s: reported down", connID)
 	var svc = connID.Service
@@ -434,12 +434,12 @@ func (c *connectionManager) ReportConnectionDown(connID ConnID) {
 	}
 }
 
-// 销毁连接管理器
+// Destroy 销毁连接管理器
 func (c *connectionManager) Destroy() {
 	c.cancel()
 }
 
-// 执行切换流程，只有当初次连接成功后才启动
+// doSwitchRoutine 执行切换流程，只有当初次连接成功后才启动
 func (c *connectionManager) doSwitchRoutine() {
 	// 服务端定期切换
 	switchTicker := time.NewTicker(c.switchInterval)
@@ -485,7 +485,7 @@ func (c *connectionManager) doSwitchRoutine() {
 	}
 }
 
-// 更新系统服务
+// UpdateServers 更新系统服务
 func (c *connectionManager) UpdateServers(svcEventKey model.ServiceEventKey) {
 	svc := model.ServiceKey{Namespace: svcEventKey.Namespace, Service: svcEventKey.Service}
 	if c.discoverService == svc {
@@ -497,7 +497,7 @@ func (c *connectionManager) UpdateServers(svcEventKey model.ServiceEventKey) {
 	}
 }
 
-// 是否有效的事件更新
+// isAvailableUpdate 是否有效的事件更新
 func (c *connectionManager) isAvailableUpdate(event model.EventType) bool {
 	c.discoverEventMutex.Lock()
 	defer c.discoverEventMutex.Unlock()
@@ -508,12 +508,12 @@ func (c *connectionManager) isAvailableUpdate(event model.EventType) bool {
 	return true
 }
 
-// 获取当前客户端信息
+// GetClientInfo 获取当前客户端信息
 func (c *connectionManager) GetClientInfo() *ClientInfo {
 	return &c.ClientInfo
 }
 
-// discover是否已经就绪
+// IsReady discover是否已经就绪
 func (c *connectionManager) IsReady() bool {
 	return atomic.LoadUint32(&c.ready) == serviceReadyStatus
 }

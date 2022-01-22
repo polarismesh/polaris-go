@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
-// 创建上报回调
+// NewReportClientCallBack  创建上报回调
 func NewReportClientCallBack(
 	cfg config.Configuration, supplier plugin.Supplier, globalCtx model.ValueContext) (*ReportClientCallBack, error) {
 	var err error
@@ -51,7 +51,7 @@ func NewReportClientCallBack(
 	return callback, nil
 }
 
-// 上报客户端状态任务回调
+// ReportClientCallBack 上报客户端状态任务回调
 type ReportClientCallBack struct {
 	connector     serverconnector.ServerConnector
 	registry      localregistry.InstancesRegistry
@@ -65,7 +65,7 @@ const (
 	clientInfoPersistFile = "client_info.json"
 )
 
-// 从本地缓存加载上报结果信息
+// loadLocalClientReportResult 从本地缓存加载上报结果信息
 func (r *ReportClientCallBack) loadLocalClientReportResult() {
 	resp := &namingpb.Response{}
 	cachedFile := clientInfoPersistFile
@@ -82,7 +82,7 @@ func (r *ReportClientCallBack) loadLocalClientReportResult() {
 	}, nil)
 }
 
-// 客户端上报的请求
+// reportClientRequest 客户端上报的请求
 func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest {
 	apiConfig := r.configuration.GetGlobal().GetAPI()
 	clientHost := apiConfig.GetBindIP()
@@ -99,7 +99,7 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	return reportClientReq
 }
 
-// 执行任务
+// Process 执行任务
 func (r *ReportClientCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < r.interval {
@@ -130,7 +130,7 @@ func (r *ReportClientCallBack) OnTaskEvent(event model.TaskEvent) {
 
 }
 
-// 更新区域属性
+// updateLocation 更新区域属性
 func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr model.SDKError) {
 	if nil != location {
 		// 已获取到客户端的地域信息，更新到全局上下文

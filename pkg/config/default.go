@@ -30,31 +30,31 @@ import (
 
 const (
 	// 默认API调用的超时时间
-	DefaultAPIInvokeTimeout time.Duration = 1 * time.Second
+	DefaultAPIInvokeTimeout = 1 * time.Second
 	// 默认api调用重试次数
 	DefaultAPIMaxRetryTimes int = 1
 	// 默认api调用重试间隔
-	DefaultAPIRetryInterval time.Duration = 1 * time.Second
+	DefaultAPIRetryInterval = 1 * time.Second
 	// 默认首次发现discovery服务重试间隔
-	DefaultDiscoverServiceRetryInterval time.Duration = 5 * time.Second
+	DefaultDiscoverServiceRetryInterval = 5 * time.Second
 	// 默认的服务超时淘汰时间
-	DefaultServiceExpireTime time.Duration = 24 * time.Hour
+	DefaultServiceExpireTime = 24 * time.Hour
 	// 默认的服务刷新间隔
-	DefaultServiceRefreshIntervalDuration time.Duration = 2 * time.Second
+	DefaultServiceRefreshIntervalDuration = 2 * time.Second
 	// 默认SDK往Server连接超时时间间隔
-	DefaultServerConnectTimeout time.Duration = 500 * time.Millisecond
+	DefaultServerConnectTimeout = 500 * time.Millisecond
 	// 默认重连的间隔
-	DefaultReConnectInterval time.Duration = 500 * time.Millisecond
+	DefaultReConnectInterval = 500 * time.Millisecond
 	// 默认消息超时时间
-	DefaultServerMessageTimeout time.Duration = 1500 * time.Millisecond
+	DefaultServerMessageTimeout = 1500 * time.Millisecond
 	// 默认服务端stream闲置超时时间
-	DefaultServerConnectionIdleTimeout time.Duration = 3 * time.Second
+	DefaultServerConnectionIdleTimeout = 3 * time.Second
 	// 默认埋点server连接过期关闭时间
-	DefaultBuiltInServerConnectionCloseTimeout time.Duration = 2 * DefaultServerConnectionIdleTimeout
+	DefaultBuiltInServerConnectionCloseTimeout = 2 * DefaultServerConnectionIdleTimeout
 	// 默认发送队列的buffer大小，支持的最大瞬时并发度，默认1000
 	DefaultRequestQueueSize int = 1000
 	// 默认server的切换时间时间
-	DefaultServerSwitchInterval time.Duration = 10 * time.Minute
+	DefaultServerSwitchInterval = 10 * time.Minute
 	// 默认缓存持久化存储目录
 	DefaultCachePersistDir string = "./polaris/backup"
 	// 持久化缓存写文件的默认重试次数
@@ -66,9 +66,9 @@ const (
 	// 默认持久化文件有效时间
 	DefaultPersistAvailableInterval = 60 * time.Second
 	// 默认熔断节点检查周期
-	DefaultCircuitBreakerCheckPeriod time.Duration = 10 * time.Second
+	DefaultCircuitBreakerCheckPeriod = 10 * time.Second
 	// 最低熔断节点检查周期
-	MinCircuitBreakerCheckPeriod time.Duration = 1 * time.Second
+	MinCircuitBreakerCheckPeriod = 1 * time.Second
 	// 熔断器默认开启与否
 	DefaultCircuitBreakerEnabled bool = true
 	// 服务路由的全死全活默认开启与否
@@ -80,17 +80,17 @@ const (
 	// DefaultHealthCheckConcurrencyAlways 默认持续心跳检测的并发数
 	DefaultHealthCheckConcurrencyAlways int = 10
 	// DefaultHealthCheckInterval 默认健康探测周期
-	DefaultHealthCheckInterval time.Duration = 10 * time.Second
+	DefaultHealthCheckInterval = 10 * time.Second
 	// MinHealthCheckInterval 最低健康探测周期
-	MinHealthCheckInterval time.Duration = 500 * time.Millisecond
+	MinHealthCheckInterval = 500 * time.Millisecond
 	// DefaultHealthCheckTimeout 默认健康探测超时时间
-	DefaultHealthCheckTimeout time.Duration = 100 * time.Millisecond
+	DefaultHealthCheckTimeout = 100 * time.Millisecond
 	// 客户端信息上报周期，默认10分钟
-	DefaultReportClientIntervalDuration time.Duration = 10 * time.Minute
+	DefaultReportClientIntervalDuration = 10 * time.Minute
 	// 最大重定向次数，默认1
 	MaxRedirectTimes = 1
 	// sdk配置上报周期
-	DefaultReportSDKConfigurationInterval time.Duration = 5 * time.Minute
+	DefaultReportSDKConfigurationInterval = 5 * time.Minute
 	// 熔断周期，被熔断后多久变为半开
 	DefaultSleepWindow = 30 * time.Second
 	// 最小熔断周期，1s
@@ -221,10 +221,10 @@ const (
 )
 
 const (
-	DefaultMinServiceExpireTime         time.Duration = 5 * time.Second
-	DefaultMaxServiceExpireCheckTime    time.Duration = 1 * time.Hour
-	DefaultMinTimingInterval            time.Duration = 100 * time.Millisecond
-	DefaultServerServiceRefreshInterval time.Duration = 1 * time.Minute
+	DefaultMinServiceExpireTime      = 5 * time.Second
+	DefaultMaxServiceExpireCheckTime = 1 * time.Hour
+	DefaultMinTimingInterval                       = 100 * time.Millisecond
+	DefaultServerServiceRefreshInterval               = 1 * time.Minute
 )
 
 // 集群类型，用以标识系统服务集群

@@ -23,13 +23,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// proxy of WeightAdjuster
+// Proxy proxy of WeightAdjuster
 type Proxy struct {
 	Subscribe
 	engine model.Engine
 }
 
-// 设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.Subscribe = plug.(Subscribe)
 	p.engine = engine
@@ -40,7 +40,7 @@ func (p *Proxy) WatchService(key model.ServiceKey) (interface{}, error) {
 	return result, err
 }
 
-// 注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeSubScribe, &Proxy{})
 }

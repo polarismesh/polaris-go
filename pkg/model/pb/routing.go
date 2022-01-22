@@ -63,7 +63,7 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 	return nil
 }
 
-// 校验路由规则
+// validateRoute 校验路由规则
 func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Route, ruleCache model.RuleCache) error {
 	if len(routes) == 0 {
 		return nil

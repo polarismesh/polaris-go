@@ -49,12 +49,12 @@ func (g *Adjuster) Destroy() error {
 	return nil
 }
 
-// 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
+// RealTimeAdjustDynamicWeight 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
 func (g *Adjuster) RealTimeAdjustDynamicWeight(model.InstanceGauge) (bool, error) {
 	return false, nil
 }
 
-// 进行动态权重调整，返回调整后的动态权重
+// TimingAdjustDynamicWeight 进行动态权重调整，返回调整后的动态权重
 func (g *Adjuster) TimingAdjustDynamicWeight(service model.ServiceInstances) ([]*model.InstanceWeight, error) {
 	return nil, nil
 }

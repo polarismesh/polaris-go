@@ -29,13 +29,13 @@ type Proxy struct {
 	engine model.Engine
 }
 
-// 设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.WeightAdjuster = plug.(WeightAdjuster)
 	p.engine = engine
 }
 
-// 注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeWeightAdjuster, &Proxy{})
 }

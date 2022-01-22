@@ -92,7 +92,7 @@ type SDKOwner interface {
 	SDKContext() SDKContext
 }
 
-// 判断API是否可用
+// checkAvailable 判断API是否可用
 func checkAvailable(owner SDKOwner) error {
 	if reflect2.IsNil(owner) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "API can not be nil")
@@ -104,9 +104,7 @@ func checkAvailable(owner SDKOwner) error {
 	return nil
 }
 
-/**
- * @brief SDK上下文实现
- */
+// sdkContext SDK上下文实现
 type sdkContext struct {
 	config       config.Configuration
 	plugins      plugin.Manager
@@ -116,9 +114,7 @@ type sdkContext struct {
 	destroyed uint32
 }
 
-/**
- * @brief 销毁SDK上下文
- */
+// Destroy 销毁SDK上下文
 func (s *sdkContext) Destroy() {
 	var err error
 	atomic.StoreUint32(&s.destroyed, 1)
@@ -132,37 +128,27 @@ func (s *sdkContext) Destroy() {
 	}
 }
 
-/**
- * @brief SDK上下文是否已经销毁
- */
+// IsDestroyed SDK上下文是否已经销毁
 func (s *sdkContext) IsDestroyed() bool {
 	return atomic.LoadUint32(&s.destroyed) > 0
 }
 
-/**
- * @brief 获取全局配置信息
- */
+// GetConfig 获取全局配置信息
 func (s *sdkContext) GetConfig() config.Configuration {
 	return s.config
 }
 
-/**
- * @brief 获取插件列表
- */
+// GetPlugins 获取插件列表
 func (s *sdkContext) GetPlugins() plugin.Manager {
 	return s.plugins
 }
 
-/**
- * @brief 获取执行引擎
- */
+// GetEngine 获取执行引擎
 func (s *sdkContext) GetEngine() model.Engine {
 	return s.engine
 }
 
-/**
- * @brief 获取值上下文
- */
+// GetValueContext 获取值上下文
 func (s *sdkContext) GetValueContext() model.ValueContext {
 	return s.valueContext
 }
@@ -188,7 +174,7 @@ func InitContextByStream(buf []byte) (SDKContext, error) {
 	return InitContextByConfig(cfg)
 }
 
-// 检查日志目录是否可写
+// checkLoggersDir 检查日志目录是否可写
 func checkLoggersDir() error {
 	var errs error
 	var err error
@@ -230,7 +216,7 @@ func checkLoggersDir() error {
 	return errs
 }
 
-// 获取进程所处容器名字
+// getPodName 获取进程所处容器名字
 func getPodName() string {
 	var container string
 	envList := config.GetContainerNameEnvList()
@@ -243,7 +229,7 @@ func getPodName() string {
 	return container
 }
 
-// 从环境变量中获取HOSTNAME
+// getHostName 从环境变量中获取HOSTNAME
 func getHostName() string {
 	hostName := os.Getenv("HOSTNAME")
 	return hostName
@@ -333,7 +319,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	return ctx, nil
 }
 
-// 在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作
+// onContextInitialized 在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作
 func onContextInitialized(ctx SDKContext) error {
 	eventHandlers := ctx.GetPlugins().GetEventSubscribers(common.OnContextStarted)
 	event := &common.PluginEvent{

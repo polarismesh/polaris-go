@@ -43,7 +43,7 @@ type RouteGauge struct {
 	Status           RouteStatus
 }
 
-// 清理gauge
+// clear 清理gauge
 func (r *RouteGauge) clear() {
 	r.PluginID = 0
 	r.SrcService.Namespace = ""
@@ -58,7 +58,7 @@ func (r *RouteGauge) clear() {
 // 获取PluginMethodGauge的pool
 var routeStatPool = &sync.Pool{}
 
-// 从pluginStatPool中获取PluginMethodGauge
+// getRouteStatFromPool 从pluginStatPool中获取PluginMethodGauge
 func getRouteStatFromPool() *RouteGauge {
 	value := routeStatPool.Get()
 	if nil == value {
@@ -69,12 +69,12 @@ func getRouteStatFromPool() *RouteGauge {
 	return res
 }
 
-// 从缓存池中获取路由统计信息结构
+// poolPutRouteStat 从缓存池中获取路由统计信息结构
 func poolPutRouteStat(gauge *RouteGauge) {
 	routeStatPool.Put(gauge)
 }
 
-// 上报路由调用信息
+// reportRouteStat 上报路由调用信息
 func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 	svcInstances model.ServiceInstances, res *RouteResult) {
 	gauge := getRouteStatFromPool()

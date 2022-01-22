@@ -215,7 +215,7 @@ func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 	return nil
 }
 
-// 通过metadata来构建缓存
+// buildCacheFromMatcher 通过metadata来构建缓存
 func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache model.RuleCache) error {
 	if len(metadata) == 0 {
 		return nil

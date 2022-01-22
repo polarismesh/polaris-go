@@ -25,31 +25,31 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// proxy of LocalRegistry
+// Proxy proxy of LocalRegistry
 type Proxy struct {
 	LocalRegistry
 	engine model.Engine
 }
 
-// 设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.LocalRegistry = plug.(LocalRegistry)
 	p.engine = engine
 }
 
-// proxy LocalRegistry LoadInstances
+// LoadInstances proxy LocalRegistry LoadInstances
 func (p *Proxy) LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadInstances(svcKey)
 	return result, err
 }
 
-// proxy LocalRegistry UpdateInstances
+// UpdateInstances proxy LocalRegistry UpdateInstances
 func (p *Proxy) UpdateInstances(req *ServiceUpdateRequest) error {
 	err := p.LocalRegistry.UpdateInstances(req)
 	return err
 }
 
-// proxy LocalRegistry PersistMessage
+// PersistMessage proxy LocalRegistry PersistMessage
 func (p *Proxy) PersistMessage(file string, msg proto.Message) error {
 	err := p.LocalRegistry.PersistMessage(file, msg)
 	return err
@@ -67,19 +67,19 @@ func (p *Proxy) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, e
 	return result, err
 }
 
-// 加载网格规则
+// LoadMeshConfig 加载网格规则
 func (p *Proxy) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadMeshConfig(key)
 	return result, err
 }
 
-// proxy LocalRegistry LoadServiceRateLimitRule
+// LoadServiceRateLimitRule proxy LocalRegistry LoadServiceRateLimitRule
 func (p *Proxy) LoadServiceRateLimitRule(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadServiceRateLimitRule(key)
 	return result, err
 }
 
-// 注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeLocalRegistry, &Proxy{})
 }

@@ -96,7 +96,7 @@ var methodMap = map[PluginAPI]string{
 	MethodWatchService:                "WatchService",
 }
 
-// 获取插件api的名字
+// GetPluginAPIName 获取插件api的名字
 func GetPluginAPIName(p PluginAPI) string {
 	return methodMap[p]
 }
@@ -114,7 +114,7 @@ const (
 	PluginApiDelayMax
 )
 
-// 将api的延时范围转化为string
+// String 将api的延时范围转化为string
 func (d PluginAPIDelayRange) String() string {
 	return delayRangeMap[d]
 }
@@ -134,7 +134,7 @@ var delayRangeMap = map[PluginAPIDelayRange]string{
 	PluginApiDelayOver50:  "[50ms,)",
 }
 
-// 将插件接口调用延时转化为PluginAPIDelayRange
+// GetPluginAPIDelayRange 将插件接口调用延时转化为PluginAPIDelayRange
 func GetPluginAPIDelayRange(delay time.Duration) PluginAPIDelayRange {
 	if delay > maxDelayRange {
 		delay = maxDelayRange
@@ -143,7 +143,7 @@ func GetPluginAPIDelayRange(delay time.Duration) PluginAPIDelayRange {
 	return PluginAPIDelayRange(diff)
 }
 
-// 插件接口统计数据
+// PluginMethodGauge 插件接口统计数据
 type PluginMethodGauge struct {
 	model.EmptyInstanceGauge
 	PluginType   common.Type
@@ -157,7 +157,7 @@ type PluginMethodGauge struct {
 // 获取PluginMethodGauge的pool
 var pluginStatPool = &sync.Pool{}
 
-// 从pluginStatPool中获取PluginMethodGauge
+// getPluginStatFromPool 从pluginStatPool中获取PluginMethodGauge
 func getPluginStatFromPool() *PluginMethodGauge {
 	value := pluginStatPool.Get()
 	if nil == value {
@@ -166,7 +166,7 @@ func getPluginStatFromPool() *PluginMethodGauge {
 	return value.(*PluginMethodGauge)
 }
 
-// 将PluginMethodGauge放回pluginStatPool中
+// PoolPutPluginMethodGauge 将PluginMethodGauge放回pluginStatPool中
 func PoolPutPluginMethodGauge(g *PluginMethodGauge) {
 	pluginStatPool.Put(g)
 }

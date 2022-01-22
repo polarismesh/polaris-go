@@ -42,7 +42,7 @@ type InstanceProperties struct {
 	Properties map[string]interface{}
 }
 
-// InstanceProperties: ToString方法
+// String ToString方法
 func (i InstanceProperties) String() string {
 	propBuilder := strings.Builder{}
 	if len(i.Properties) == 0 {
@@ -142,7 +142,7 @@ type RuleRegistry interface {
 	LoadServices(key *model.ServiceKey) (*common.Notifier, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeLocalRegistry, new(LocalRegistry))
 }

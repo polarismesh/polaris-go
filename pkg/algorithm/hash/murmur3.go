@@ -31,7 +31,7 @@ var (
 	murmur3HashPool = &sync.Pool{}
 )
 
-// 通过seed的算法获取hash值
+// murmur3HashWithSeed 通过seed的算法获取hash值
 func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	var pooled = seed == 0
 	var hasher hash.Hash64
@@ -56,7 +56,7 @@ func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	return value, err
 }
 
-// 包初始化函数
+// init 包初始化函数
 func init() {
 	RegisterHashFunc(DefaultHashFuncName, murmur3HashWithSeed)
 }
