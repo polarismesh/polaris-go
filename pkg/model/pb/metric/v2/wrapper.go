@@ -17,9 +17,11 @@
 
 package v2
 
-import "time"
+import (
+	"time"
+)
 
-// 客户端视角的上报请求
+// ClientRateLimitReportRequest 客户端视角的上报请求
 type ClientRateLimitReportRequest struct {
 	Service   string
 	Namespace string
@@ -28,7 +30,7 @@ type ClientRateLimitReportRequest struct {
 	Timestamp int64
 }
 
-// 创建上报请求对象
+// NewClientRateLimitReportRequest 创建上报请求对象
 func NewClientRateLimitReportRequest() *ClientRateLimitReportRequest {
 	return &ClientRateLimitReportRequest{
 		QuotaUsed: make(map[time.Duration]*QuotaSum),

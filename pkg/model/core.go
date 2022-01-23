@@ -21,7 +21,7 @@ import (
 	"fmt"
 )
 
-// 事件类型，用于标识各种不同的事件
+// EventType 事件类型，用于标识各种不同的事件
 type EventType uint32
 
 const (
@@ -41,7 +41,7 @@ const (
 	EventMesh EventType = 0x2006
 )
 
-// 存储于sdk缓存中的对象，包括服务实例和服务路由
+// RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
 type RegistryValue interface {
 	// 获取配置类型
 	GetType() EventType
@@ -51,7 +51,7 @@ type RegistryValue interface {
 	GetRevision() string
 }
 
-// ToString方法
+// String ToString方法
 func (e EventType) String() string {
 	if value, ok := eventTypeToPresent[e]; ok {
 		return value
@@ -80,7 +80,7 @@ var (
 	}
 )
 
-// 通过字符串构造事件类型
+// ToEventType 通过字符串构造事件类型
 func ToEventType(value string) EventType {
 	if eType, ok := presentToEventType[value]; ok {
 		return eType
@@ -88,7 +88,7 @@ func ToEventType(value string) EventType {
 	return EventUnknown
 }
 
-// 服务的唯一标识KEY
+// ServiceKey 服务的唯一标识KEY
 type ServiceKey struct {
 	// 命名空间
 	Namespace string
@@ -96,7 +96,7 @@ type ServiceKey struct {
 	Service string
 }
 
-// ToString方法
+// String ToString方法
 func (s ServiceKey) String() string {
 	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\"}", s.Namespace, s.Service)
 }
@@ -108,12 +108,12 @@ type MeshKey struct {
 	TypeUrl  string
 }
 
-// ToString方法
+// String ToString方法
 func (s MeshKey) String() string {
 	return fmt.Sprintf("{business: \"%s\", typeurl: \"%s\"}", s.Business, s.TypeUrl)
 }
 
-// 服务加规则的唯一标识KEY
+// ServiceEventKey 服务加规则的唯一标识KEY
 type ServiceEventKey struct {
 	// 服务标识
 	ServiceKey
@@ -123,19 +123,19 @@ type ServiceEventKey struct {
 	Type EventType
 }
 
-// ToString方法
+// String ToString方法
 func (s ServiceEventKey) String() string {
 	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v}", s.Namespace, s.Service, s.Type)
 }
 
-// 服务实例的唯一标识
+// InstanceKey 服务实例的唯一标识
 type InstanceKey struct {
 	ServiceKey
 	Host string
 	Port int
 }
 
-// ToString方法
+// String ToString方法
 func (i InstanceKey) String() string {
 	return fmt.Sprintf("{service: %s, host: %s, port: %v}", i.ServiceKey, i.Host, i.Port)
 }

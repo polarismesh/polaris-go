@@ -105,12 +105,12 @@ const (
 	ErrCodeDiskError = BaseSDKInternalErrCode + 1
 )
 
-// 是否可重试的错误码
+// Retryable 是否可重试的错误码
 func (e ErrCode) Retryable() bool {
 	return e == ErrCodeNetworkError || e == ErrCodeServerException
 }
 
-// SDK错误的总封装类型
+// SDKError SDK错误的总封装类型
 type SDKError interface {
 	// 获取错误码
 	ErrorCode() ErrCode
@@ -122,7 +122,7 @@ type SDKError interface {
 	ServerInfo() string
 }
 
-// SDK错误类型实现
+// sdkError SDK错误类型实现
 type sdkError struct {
 	errCode    ErrCode
 	errDetail  string
@@ -131,12 +131,12 @@ type sdkError struct {
 	serverInfo string
 }
 
-// 获取错误码
+// ErrorCode 获取错误码
 func (s *sdkError) ErrorCode() ErrCode {
 	return s.errCode
 }
 
-// 获取错误信息
+// Error 获取错误信息
 func (s *sdkError) Error() string {
 	errCodeStr := ErrCodeToString(s.ErrorCode())
 	if nil != s.cause {
@@ -146,17 +146,17 @@ func (s *sdkError) Error() string {
 	return fmt.Sprintf("Polaris-%v(%s): %s", s.ErrorCode(), errCodeStr, s.errDetail)
 }
 
-// 服务端返回码
+// ServerCode 服务端返回码
 func (s *sdkError) ServerCode() uint32 {
 	return s.serverCode
 }
 
-// 服务端返回信息
+// ServerInfo 服务端返回信息
 func (s *sdkError) ServerInfo() string {
 	return s.serverInfo
 }
 
-// 输出字符串信息
+// String 输出字符串信息
 func (s sdkError) String() string {
 	return s.Error()
 }
@@ -179,17 +179,17 @@ const (
 	ServerExceptionRetCode = 500
 )
 
-// 判断是否成功的错误码
+// IsSuccessResultCode 判断是否成功的错误码
 func IsSuccessResultCode(retCode uint32) bool {
 	return retCode/RetCodeDivFactor == SuccessRetCode
 }
 
-// 判断是否为内部server错误
+// IsServerException 判断是否为内部server错误
 func IsServerException(retCode uint32) bool {
 	return retCode/RetCodeDivFactor == ServerExceptionRetCode
 }
 
-// 构造服务端相关错误
+// NewServerSDKError 构造服务端相关错误
 func NewServerSDKError(serverCode uint32, serverInfo string, cause error, msg string, args ...interface{}) SDKError {
 	return &sdkError{
 		errCode:    serverCodeToErrCode(serverCode),
@@ -200,7 +200,7 @@ func NewServerSDKError(serverCode uint32, serverInfo string, cause error, msg st
 	}
 }
 
-// 通过服务端的错误码转换成SDK错误码
+// serverCodeToErrCode 通过服务端的错误码转换成SDK错误码
 func serverCodeToErrCode(retCode uint32) ErrCode {
 	errCode := ErrCodeServerUserError
 	if IsServerException(retCode) {
@@ -243,12 +243,12 @@ var errCodeArray = []ErrCode{ErrCodeSuccess, ErrCodeUnknown, ErrCodeAPIInvalidAr
 	ErrCodeLocationMismatch, ErrCodeDstMetaMismatch, ErrCodeMeshConfigNotFound, ErrCodeConsumerInitCalleeError,
 }
 
-// 根据错误码索引返回错误码
+// ErrCodeFromIndex 根据错误码索引返回错误码
 func ErrCodeFromIndex(i int) ErrCode {
 	return errCodeArray[i]
 }
 
-// 将错误码转换为字符串
+// ErrCodeToString 将错误码转换为字符串
 func ErrCodeToString(ec ErrCode) string {
 	res, ok := errCodeString[ec]
 	if !ok {
@@ -257,7 +257,7 @@ func ErrCodeToString(ec ErrCode) string {
 	return res
 }
 
-// 错误码类型
+// ErrCodeType 错误码类型
 type ErrCodeType int
 
 const (
@@ -294,7 +294,7 @@ var errCodeTypeMap = map[ErrCode]ErrCodeType{
 	ErrCodeConsumerInitCalleeError: UserError,
 }
 
-// 获取错误码类型
+// GetErrCodeType 获取错误码类型
 func GetErrCodeType(e ErrCode) ErrCodeType {
 	t, ok := errCodeTypeMap[e]
 	if ok {

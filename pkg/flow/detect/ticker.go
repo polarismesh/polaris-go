@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 )
 
-// 创建健康检查的回调
+// NewHealthCheckCallBack 创建健康检查的回调
 func NewHealthCheckCallBack(cfg config.Configuration, supplier plugin.Supplier) (*HealthCheckCallBack, error) {
 	var err error
 	callback := &HealthCheckCallBack{
@@ -49,7 +49,7 @@ func NewHealthCheckCallBack(cfg config.Configuration, supplier plugin.Supplier) 
 	return callback, nil
 }
 
-// 健康探测回调任务
+// HealthCheckCallBack 健康探测回调任务
 type HealthCheckCallBack struct {
 	// 探活器
 	healthCheckers []healthcheck.HealthChecker
@@ -71,7 +71,7 @@ type HealthCheckCallBack struct {
 
 const channelBuffer = 100
 
-// 执行任务
+// Process 执行任务
 func (c *HealthCheckCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	svc := taskKey.(model.ServiceKey)

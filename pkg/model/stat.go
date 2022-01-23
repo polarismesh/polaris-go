@@ -49,7 +49,7 @@ type InstanceGauge interface {
 	Validate() error
 }
 
-// 统计类型
+// MetricType 统计类型
 type MetricType int
 
 const (
@@ -66,71 +66,71 @@ const (
 
 var metricTypes = HashSet{}
 
-// 检测是不是合法的统计类型
+// ValidMetircType 检测是不是合法的统计类型
 func ValidMetircType(t MetricType) bool {
 	return metricTypes.Contains(t)
 }
 
-// instangeGauge的空实现
+// EmptyInstanceGauge instangeGauge的空实现
 type EmptyInstanceGauge struct {
 }
 
-// namesapce
+// GetNamespace
 func (e EmptyInstanceGauge) GetNamespace() string {
 	return ""
 }
 
-// service
+// GetService
 func (e EmptyInstanceGauge) GetService() string {
 	return ""
 }
 
-// host
+// GetHost
 func (e EmptyInstanceGauge) GetHost() string {
 	return ""
 }
 
-// port
+// GetPort
 func (e EmptyInstanceGauge) GetPort() int {
 	return -1
 }
 
-// retstatus
+// GetRetStatus
 func (e EmptyInstanceGauge) GetRetStatus() RetStatus {
 	return RetFail
 }
 
-// CircuitBreakerStatus
+// GetCircuitBreakerStatus
 func (e EmptyInstanceGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return nil
 }
 
-// retcode
+// GetRetCodeValue retcode
 func (e EmptyInstanceGauge) GetRetCodeValue() int32 {
 	return 0
 }
 
-// delay
+// GetDelay delay
 func (e EmptyInstanceGauge) GetDelay() *time.Duration {
 	return nil
 }
 
-// api
+// GetAPI api
 func (e EmptyInstanceGauge) GetAPI() ApiOperation {
 	return ApiOperationMax
 }
 
-// 校验
+// Validate 校验
 func (e EmptyInstanceGauge) Validate() error {
 	return nil
 }
 
-// 获取被调节点
+// GetCalledInstance 获取被调节点
 func (e EmptyInstanceGauge) GetCalledInstance() Instance {
 	return nil
 }
 
-// 调用时延
+// GetDelayRange 调用时延
 func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 	return ApiDelayMax
 }
@@ -138,7 +138,7 @@ func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 // 命名类型，标识具体的API类型
 type ApiOperation int
 
-// ToString方法
+// String ToString方法
 func (a ApiOperation) String() string {
 	return apiOperationPresents[a]
 }
@@ -179,7 +179,7 @@ var (
 	}
 )
 
-// API延时范围
+// ApiDelayRange API延时范围
 type ApiDelayRange int
 
 // API延时范围常量
@@ -202,7 +202,7 @@ var (
 	}
 )
 
-// ToString方法
+// String ToString方法
 func (a ApiDelayRange) String() string {
 	return apiDelayPresents[a]
 }
@@ -212,7 +212,7 @@ const (
 	maxTimeRange = 200 * time.Millisecond
 )
 
-// 获取api时延范围
+// GetApiDelayRange 获取api时延范围
 func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	if delay > maxTimeRange {
 		delay = maxTimeRange
@@ -221,7 +221,7 @@ func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	return ApiDelayRange(diff)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	metricTypes.Add(SDKAPIStat)
 	metricTypes.Add(ServiceStat)

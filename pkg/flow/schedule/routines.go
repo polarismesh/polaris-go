@@ -30,7 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 任务调度协程接口
+// TaskRoutine 任务调度协程接口
 type TaskRoutine interface {
 	// 进行任务调度
 	Schedule() (chan<- *model.PriorityTask, model.TaskValues)
@@ -38,7 +38,7 @@ type TaskRoutine interface {
 	Destroy()
 }
 
-// 创建任务调度协程
+// NewTaskRoutine 创建任务调度协程
 func NewTaskRoutine(periodicTask *model.PeriodicTask) TaskRoutine {
 	return &taskRoutine{
 		periodicTask:        periodicTask,
@@ -47,7 +47,7 @@ func NewTaskRoutine(periodicTask *model.PeriodicTask) TaskRoutine {
 		mutex:               &sync.Mutex{}}
 }
 
-// 任务调度协程
+// taskRoutine 任务调度协程
 type taskRoutine struct {
 	periodicTask *model.PeriodicTask
 	ctx          context.Context
@@ -61,7 +61,7 @@ type taskRoutine struct {
 	mutex               *sync.Mutex
 }
 
-// 进行任务调度
+// Schedule 进行任务调度
 func (t *taskRoutine) Schedule() (chan<- *model.PriorityTask, model.TaskValues) {
 	if t.periodicTask.TakePriority {
 		t.priorityChan = make(chan *model.PriorityTask, prioritySize)
@@ -70,7 +70,7 @@ func (t *taskRoutine) Schedule() (chan<- *model.PriorityTask, model.TaskValues) 
 	return t.priorityChan, t
 }
 
-// 获取默认的调度时长
+// GetDefaultInterval 获取默认的调度时长
 func GetDefaultInterval(interval time.Duration) time.Duration {
 	if interval < clock.TimeStep() {
 		return clock.TimeStep()
@@ -78,7 +78,7 @@ func GetDefaultInterval(interval time.Duration) time.Duration {
 	return interval
 }
 
-// 结束任务调度
+// Destroy 结束任务调度
 func (t *taskRoutine) Destroy() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -87,13 +87,13 @@ func (t *taskRoutine) Destroy() {
 	t.stop()
 }
 
-// 任务包裹
+// TaskItem 任务包裹
 type TaskItem struct {
 	value           model.TaskValue
 	lastProcessTime time.Time
 }
 
-// 启动协程
+// start 启动协程
 func (t *taskRoutine) start() {
 	if t.destroyed || t.started {
 		return
@@ -110,7 +110,7 @@ func (t *taskRoutine) start() {
 	}
 }
 
-// 结束协程
+// stop 结束协程
 func (t *taskRoutine) stop() {
 	if !t.started {
 		return
@@ -123,7 +123,7 @@ func (t *taskRoutine) stop() {
 // 优先级队列长度，暂定100
 const prioritySize = 100
 
-// 处理带优先级的任务
+// runTakePriority 处理带优先级的任务
 func (t *taskRoutine) runTakePriority() {
 	ticker := time.NewTicker(t.periodicTask.Period)
 	defer ticker.Stop()
@@ -143,7 +143,7 @@ func (t *taskRoutine) runTakePriority() {
 	}
 }
 
-// 处理定时任务
+// processPeriodicTask 处理定时任务
 func (t *taskRoutine) processPeriodicTask(key interface{}, item *TaskItem) {
 	result := t.periodicTask.CallBack.Process(key, item.value, item.lastProcessTime)
 	switch result {
@@ -156,7 +156,7 @@ func (t *taskRoutine) processPeriodicTask(key interface{}, item *TaskItem) {
 	}
 }
 
-// 遍历并处理定时任务信息
+// iteratePeriodTaskItems 遍历并处理定时任务信息
 func (t *taskRoutine) iteratePeriodTaskItems(takePriority bool) {
 	immutableMap := t.immutableTaskValues.Load().(map[interface{}]*TaskItem)
 	if len(immutableMap) == 0 {
@@ -170,7 +170,7 @@ func (t *taskRoutine) iteratePeriodTaskItems(takePriority bool) {
 	}
 }
 
-// 处理定时任务
+// runPeriod 处理定时任务
 func (t *taskRoutine) runPeriod() {
 	ticker := time.NewTicker(t.periodicTask.Period)
 	defer ticker.Stop()
@@ -186,14 +186,14 @@ func (t *taskRoutine) runPeriod() {
 	}
 }
 
-// 获取状态，仅供测试使用
+// Started 获取状态，仅供测试使用
 func (t *taskRoutine) Started() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.started
 }
 
-// 增加数据
+// AddValue 增加数据
 // 对于非立即启动的任务，首次增加value时，协程才开始启动
 func (t *taskRoutine) AddValue(key interface{}, value model.TaskValue) {
 	t.mutex.Lock()
@@ -220,7 +220,7 @@ func (t *taskRoutine) AddValue(key interface{}, value model.TaskValue) {
 	}
 }
 
-// 重建只读map
+// rebuildImmutableValues 重建只读map
 func (t *taskRoutine) rebuildImmutableValues() {
 	immutableMap := make(map[interface{}]*TaskItem, len(t.mutableTaskValues))
 	for k, v := range t.mutableTaskValues {
@@ -229,7 +229,7 @@ func (t *taskRoutine) rebuildImmutableValues() {
 	t.immutableTaskValues.Store(immutableMap)
 }
 
-// 删除数据
+// DeleteValue 删除数据
 // 当缓存数据列表为空时，对于非长稳运行的任务，则会结束协程
 func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 	t.mutex.Lock()
@@ -251,7 +251,7 @@ func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 	}
 }
 
-// 通过值来启动任务
+// StartTask 通过值来启动任务
 func StartTask(taskName string, taskValues model.TaskValues, values map[interface{}]model.TaskValue) {
 	for k, v := range values {
 		taskValues.AddValue(k, v)

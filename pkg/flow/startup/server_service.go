@@ -29,7 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 )
 
-// 创建系统服务拉取回调
+// NewServerServiceCallBack 创建系统服务拉取回调
 func NewServerServiceCallBack(
 	cfg config.Configuration, supplier plugin.Supplier, engine model.Engine) (*ServerServiceCallBack, error) {
 	var err error
@@ -43,7 +43,7 @@ func NewServerServiceCallBack(
 	return callback, nil
 }
 
-// 初始化系统服务的回调函数
+// ServerServiceCallBack 初始化系统服务的回调函数
 type ServerServiceCallBack struct {
 	engine    model.Engine
 	connector serverconnector.ServerConnector
@@ -51,7 +51,7 @@ type ServerServiceCallBack struct {
 	interval  time.Duration
 }
 
-// 执行系统服务初始化任务
+// Process 执行系统服务初始化任务
 func (s *ServerServiceCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < s.interval {

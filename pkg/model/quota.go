@@ -26,7 +26,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-// 配额获取的请求
+// QuotaRequestImpl 配额获取的请求
 type QuotaRequestImpl struct {
 	// 必选，命名空间
 	namespace string
@@ -43,67 +43,67 @@ type QuotaRequestImpl struct {
 	RetryCount *int
 }
 
-// 获取服务名
+// GetService 获取服务名
 func (q *QuotaRequestImpl) GetService() string {
 	return q.service
 }
 
-//
+// SetService 设置服务名称
 func (q *QuotaRequestImpl) SetService(svc string) {
 	q.service = svc
 }
 
-// 获取命名空间
+// GetNamespace 获取命名空间
 func (q *QuotaRequestImpl) GetNamespace() string {
 	return q.namespace
 }
 
-//
+// SetNamespace 设置命名空间
 func (q *QuotaRequestImpl) SetNamespace(namespace string) {
 	q.namespace = namespace
 }
 
-// 获取命名空间
+// GetCluster 获取集群
 func (q *QuotaRequestImpl) GetCluster() string {
 	return q.cluster
 }
 
-//
+// SetCluster 设置集群
 func (q *QuotaRequestImpl) SetCluster(cluster string) {
 	q.cluster = cluster
 }
 
-//
+// SetLabels 设置业务标签
 func (q *QuotaRequestImpl) SetLabels(labels map[string]string) {
 	q.labels = labels
 }
 
-//
+// GetLabels 获取业务标签
 func (q *QuotaRequestImpl) GetLabels() map[string]string {
 	return q.labels
 }
 
-//
+// SetTimeout 设置单次查询超时时间
 func (q *QuotaRequestImpl) SetTimeout(timeout time.Duration) {
 	q.Timeout = &timeout
 }
 
-//
+// SetRetryCount 设置重试次数
 func (q *QuotaRequestImpl) SetRetryCount(retryCount int) {
 	q.RetryCount = &retryCount
 }
 
-// 获取超时值指针
+// GetTimeoutPtr 获取超时值指针
 func (q *QuotaRequestImpl) GetTimeoutPtr() *time.Duration {
 	return q.Timeout
 }
 
-// 获取重试次数指针
+// GetRetryCountPtr 获取重试次数指针
 func (q *QuotaRequestImpl) GetRetryCountPtr() *int {
 	return q.RetryCount
 }
 
-// 校验
+// Validate 校验
 func (q *QuotaRequestImpl) Validate() error {
 	if nil == q {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "QuotaRequestImpl can not be nil")
@@ -118,7 +118,7 @@ func (q *QuotaRequestImpl) Validate() error {
 	return errs
 }
 
-// 应答码
+// QuotaResultCode 应答码
 type QuotaResultCode int
 
 const (
@@ -126,7 +126,7 @@ const (
 	QuotaResultLimited QuotaResultCode = -1
 )
 
-// 配额查询应答
+// QuotaResponse 配额查询应答
 type QuotaResponse struct {
 	// 配额分配的返回码
 	Code QuotaResultCode
@@ -134,7 +134,7 @@ type QuotaResponse struct {
 	Info string
 }
 
-// 配额分配器，执行配额分配及回收
+// QuotaAllocator 配额分配器，执行配额分配及回收
 type QuotaAllocator interface {
 	// 执行配额分配操作
 	Allocate() *QuotaResponse
@@ -142,8 +142,7 @@ type QuotaAllocator interface {
 	Release()
 }
 
-// 创建分配future
-// 可以直接传入
+// NewQuotaFuture 创建分配future 可以直接传入
 func NewQuotaFuture(resp *QuotaResponse, deadline time.Time, allocator QuotaAllocator) *QuotaFutureImpl {
 	future := &QuotaFutureImpl{}
 	future.allocator = allocator
@@ -163,7 +162,7 @@ func NewQuotaFuture(resp *QuotaResponse, deadline time.Time, allocator QuotaAllo
 	return future
 }
 
-// 异步获取配额的future
+// QuotaFutureImpl 异步获取配额的future
 type QuotaFutureImpl struct {
 	mutex       sync.Mutex
 	resp        *QuotaResponse
@@ -173,12 +172,12 @@ type QuotaFutureImpl struct {
 	cancel      context.CancelFunc
 }
 
-// 分配是否结束
+// Done 分配是否结束
 func (q *QuotaFutureImpl) Done() <-chan struct{} {
 	return q.deadlineCtx.Done()
 }
 
-// 获取分配结果
+// Get 获取分配结果
 func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	if nil == q {
 		return nil
@@ -199,7 +198,7 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	return q.resp
 }
 
-// 释放资源，仅用于并发数限流的场景
+// Release 释放资源，仅用于并发数限流的场景
 func (q *QuotaFutureImpl) Release() {
 	if q.released {
 		return

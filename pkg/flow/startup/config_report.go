@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 创建配置上报回调
+// NewConfigReportCallBack 创建配置上报回调
 func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext) *ConfigReportCallBack {
 	return &ConfigReportCallBack{
 		engine:    engine,
@@ -34,14 +34,14 @@ func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext) 
 	}
 }
 
-// 自身配置上报任务回调
+// ConfigReportCallBack 自身配置上报任务回调
 type ConfigReportCallBack struct {
 	engine    model.Engine
 	globalCtx model.ValueContext
 	interval  time.Duration
 }
 
-// 执行任务
+// Process 执行任务
 func (c *ConfigReportCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < c.interval {

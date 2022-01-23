@@ -29,7 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// 过滤器参数集合
+// cacheFilters 过滤器参数集合
 type cacheFilters struct {
 	// 命名空间
 	namespace string
@@ -43,7 +43,7 @@ type cacheFilters struct {
 	destInstancesFilter *localregistry.InstancesFilter
 }
 
-// 转换为上下文查询标识
+// toContextKey 转换为上下文查询标识
 func (c *cacheFilters) toContextKey() (dstInstKey *ContextKey, srcRouterKey *ContextKey, dstRouterKey *ContextKey) {
 	if nil != c.destInstancesFilter {
 		dstInstKey = &ContextKey{
@@ -69,7 +69,7 @@ func (c *cacheFilters) toContextKey() (dstInstKey *ContextKey, srcRouterKey *Con
 	return dstInstKey, srcRouterKey, dstRouterKey
 }
 
-// 实例请求转换为获取缓存的请求
+// instancesRequestToCacheFilters 实例请求转换为获取缓存的请求
 func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesRequest,
 	redirectedService *model.ServiceInfo) *cacheFilters {
 	filters := &cacheFilters{
@@ -107,7 +107,7 @@ func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesReque
 	return filters
 }
 
-// 构建重定向服务filter
+// buildRedirectedFilter 构建重定向服务filter
 func buildRedirectedFilter(filters *cacheFilters, redirectedService model.ServiceMetadata) {
 	filters.service = redirectedService.GetService()
 	filters.namespace = redirectedService.GetNamespace()
@@ -117,7 +117,7 @@ func buildRedirectedFilter(filters *cacheFilters, redirectedService model.Servic
 	filters.destRouteFilter.Service = redirectedService.GetService()
 }
 
-// 同步加载缓存资源，包括实例以及规则
+// getAndLoadCacheValues 同步加载缓存资源，包括实例以及规则
 func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	request model.CacheValueQuery, load bool) (*CombineNotifyContext, model.SDKError) {
 	var notifiers []*SingleNotifyContext
@@ -246,7 +246,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	return NewCombineNotifyContext(dstService, notifiers), nil
 }
 
-// 尝试加载服务信息，来源包括缓存文件加载的信息
+// tryGetServiceValuesFromCache 尝试加载服务信息，来源包括缓存文件加载的信息
 // 返回值为是否成功加载了所需信息和这个过程中可能发生的错误
 func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request model.CacheValueQuery) (bool, error) {
 	failNum := 0
@@ -380,7 +380,7 @@ func (e *Engine) afterLazyGetInstances(
 	return cls, redirected, nil
 }
 
-// 把多个SDK error合成一个error
+// combineSDKErrors 把多个SDK error合成一个error
 func combineSDKErrors(sdkErrs map[ContextKey]model.SDKError) error {
 	var errs error
 	for key, sdkErr := range sdkErrs {

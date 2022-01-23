@@ -17,7 +17,9 @@
 
 package rand
 
-import "github.com/polarismesh/polaris-go/pkg/algorithm/search"
+import (
+	"github.com/polarismesh/polaris-go/pkg/algorithm/search"
+)
 
 // WeightedSlice 带权重的数组
 type WeightedSlice interface {

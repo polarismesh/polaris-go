@@ -21,7 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 负载均衡配置
+// LoadBalancerConfigImpl 负载均衡配置
 type LoadBalancerConfigImpl struct {
 	// 负载均衡类型
 	Type string `yaml:"type" json:"type"`
@@ -29,12 +29,12 @@ type LoadBalancerConfigImpl struct {
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-// 负载均衡类型
+// GetType 负载均衡类型
 func (l *LoadBalancerConfigImpl) GetType() string {
 	return l.Type
 }
 
-// 设置负载均衡类型
+// SetType 设置负载均衡类型
 func (l *LoadBalancerConfigImpl) SetType(typ string) {
 	l.Type = typ
 }
@@ -48,17 +48,17 @@ func (l *LoadBalancerConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-// 输出插件具体配置
+// SetPluginConfig 输出插件具体配置
 func (l *LoadBalancerConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return l.Plugin.SetPluginConfig(common.TypeLoadBalancer, pluginName, value)
 }
 
-// 检验LocalCacheConfig配置
+// Verify 检验LocalCacheConfig配置
 func (l *LoadBalancerConfigImpl) Verify() error {
 	return l.Plugin.Verify()
 }
 
-// 设置LocalCacheConfig配置的默认值
+// SetDefault 设置LocalCacheConfig配置的默认值
 func (l *LoadBalancerConfigImpl) SetDefault() {
 	if len(l.Type) == 0 {
 		l.Type = DefaultLoadBalancerWR
@@ -66,7 +66,7 @@ func (l *LoadBalancerConfigImpl) SetDefault() {
 	l.Plugin.SetDefault(common.TypeLoadBalancer)
 }
 
-// 负载均衡配置初始化
+// Init 负载均衡配置初始化
 func (l *LoadBalancerConfigImpl) Init() {
 	l.Plugin = PluginConfigs{}
 	l.Plugin.Init(common.TypeLoadBalancer)

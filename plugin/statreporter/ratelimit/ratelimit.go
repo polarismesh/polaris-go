@@ -45,7 +45,7 @@ const (
 	trafficShapingListName = "trafficShapingAlgorithm"
 )
 
-// 限流日志上报插件
+// Reporter 限流日志上报插件
 type Reporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -68,17 +68,17 @@ type noRuleRequests struct {
 	deleted  uint32
 }
 
-// 插件类型
+// Type 插件类型
 func (s *Reporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-// 插件名称
+// Name 插件名称
 func (s *Reporter) Name() string {
 	return "rateLimitRecord"
 }
 
-// enable
+// IsEnable
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -92,7 +92,7 @@ func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	return false
 }
 
-// destroy 解决匿名组合中该函数二义性问题
+// Destroy 解决匿名组合中该函数二义性问题
 func (s *Reporter) Destroy() error {
 	err := s.PluginBase.Destroy()
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Reporter) Destroy() error {
 	return nil
 }
 
-// 初始化插件
+// Init 初始化插件
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.connectionManager = ctx.ConnManager
@@ -136,7 +136,7 @@ func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// 上报限流发生事件
+// ReportStat 上报限流发生事件
 func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	if t != model.RateLimitStat {
 		return nil

@@ -51,7 +51,7 @@ type DetectResultImp struct {
 	DetectInstance model.Instance // 探测的实例
 }
 
-// GetDetectType 探测类型，与探测插件名相同
+// IsSuccess 探测类型，与探测插件名相同
 func (r *DetectResultImp) IsSuccess() bool {
 	return r.Success
 }
@@ -66,7 +66,7 @@ func (r *DetectResultImp) GetDetectInstance() model.Instance {
 	return r.DetectInstance
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeHealthCheck, new(HealthChecker))
 }

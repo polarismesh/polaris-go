@@ -100,7 +100,7 @@ const (
 	OnRateLimitWindowDeleted PluginEventType = 0x8009
 )
 
-// 插件事件
+// PluginEvent 插件事件
 type PluginEvent struct {
 	// 事件类型
 	EventType PluginEventType
@@ -108,7 +108,7 @@ type PluginEvent struct {
 	EventObject interface{}
 }
 
-// 服务变更对象，对于OnServiceAdded，OnServiceUpdated，OnServiceDeleted的事件，会传递该对象
+// ServiceEventObject 服务变更对象，对于OnServiceAdded，OnServiceUpdated，OnServiceDeleted的事件，会传递该对象
 type ServiceEventObject struct {
 	// 事件对象信息
 	SvcEventKey model.ServiceEventKey
@@ -120,13 +120,13 @@ type ServiceEventObject struct {
 	DiffInfo interface{}
 }
 
-// 版本号变化
+// RevisionChange 版本号变化
 type RevisionChange struct {
 	OldRevision string
 	NewRevision string
 }
 
-// 限流规则的变化信息
+// RateLimitDiffInfo 限流规则的变化信息
 type RateLimitDiffInfo struct {
 	// 哪些规则的版本变化了，key为ruleID，value为RevisionChange
 	UpdatedRules map[string]*RevisionChange
@@ -134,7 +134,7 @@ type RateLimitDiffInfo struct {
 	DeletedRules map[string]string
 }
 
-// 网格规则的变化信息
+// MeshResourceDiffInfo 网格规则的变化信息
 type MeshResourceDiffInfo struct {
 	// 网格ID
 	MeshID string
@@ -146,31 +146,31 @@ type MeshResourceDiffInfo struct {
 	DeletedResources map[string]string
 }
 
-// 触发插件事件的回调
+// PluginEventHandler 触发插件事件的回调
 type PluginEventHandler struct {
 	Callback func(event *PluginEvent) error
 }
 
-// 控制插件启动销毁的运行上下文
+// RunContext 控制插件启动销毁的运行上下文
 type RunContext struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-// 创建插件运行上下文
+// NewRunContext 创建插件运行上下文
 func NewRunContext() *RunContext {
 	ctx := &RunContext{}
 	ctx.ctx, ctx.cancel = context.WithCancel(context.Background())
 	return ctx
 }
 
-// 销毁运行上下文
+// Destroy 销毁运行上下文
 func (c *RunContext) Destroy() error {
 	c.cancel()
 	return nil
 }
 
-// 判断是否已经销毁
+// IsDestroyed 判断是否已经销毁
 func (c *RunContext) IsDestroyed() bool {
 	select {
 	case <-c.ctx.Done():
@@ -180,7 +180,7 @@ func (c *RunContext) IsDestroyed() bool {
 	}
 }
 
-// 获取控制channel
+// Done 获取控制channel
 func (c *RunContext) Done() <-chan struct{} {
 	return c.ctx.Done()
 }
@@ -192,14 +192,14 @@ type Notifier struct {
 	cancel   context.CancelFunc
 }
 
-// 创建通知器
+// NewNotifier 创建通知器
 func NewNotifier() *Notifier {
 	notifier := &Notifier{}
 	notifier.ctx, notifier.cancel = context.WithCancel(context.Background())
 	return notifier
 }
 
-// 获取回调错误
+// GetError 获取回调错误
 func (n *Notifier) GetError() model.SDKError {
 	sdkErrValue := n.sdkError.Load()
 	if reflect2.IsNil(sdkErrValue) {
@@ -208,12 +208,12 @@ func (n *Notifier) GetError() model.SDKError {
 	return sdkErrValue.(model.SDKError)
 }
 
-// 获取回调上下文
+// GetContext 获取回调上下文
 func (n *Notifier) GetContext() context.Context {
 	return n.ctx
 }
 
-// 执行回调通知
+// Notify 执行回调通知
 func (n *Notifier) Notify(sdkErr model.SDKError) {
 	if nil != sdkErr {
 		n.sdkError.Store(sdkErr)

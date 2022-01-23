@@ -39,9 +39,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
 )
 
-/**
- * @brief 编排调度引擎，API相关逻辑在这里执行
- */
+// Engine 编排调度引擎，API相关逻辑在这里执行
 type Engine struct {
 	// 服务端连接器
 	connector serverconnector.ServerConnector
@@ -150,7 +148,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	return nil
 }
 
-// 加载服务路由链插件
+// LoadFlowRouteChain 加载服务路由链插件
 func (e *Engine) LoadFlowRouteChain() error {
 	var err error
 	e.routerChain, err = data.GetServiceRouterChain(e.configuration, e.plugins)
@@ -170,17 +168,17 @@ func (e *Engine) LoadFlowRouteChain() error {
 	return nil
 }
 
-// 获取流程辅助类
+// FlowQuotaAssistant 获取流程辅助类
 func (e *Engine) FlowQuotaAssistant() *quota.FlowQuotaAssistant {
 	return e.flowQuotaAssistant
 }
 
-// 获取插件工厂
+// PluginSupplier 获取插件工厂
 func (e *Engine) PluginSupplier() plugin.Supplier {
 	return e.plugins
 }
 
-// watch service
+// WatchService watch service
 func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServiceResponse, error) {
 	if e.subscribe != nil {
 		allInsReq := &model.GetAllInstancesRequest{}
@@ -221,7 +219,7 @@ func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
 }
 
-// serviceUpdate消息订阅回调
+// ServiceEventCallback serviceUpdate消息订阅回调
 func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {
 		err := e.subscribe.DoSubScribe(event)
@@ -233,7 +231,7 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	return nil
 }
 
-// 启动引擎
+// Start 启动引擎
 func (e *Engine) Start() error {
 	// 添加客户端定期上报任务
 	clientReportTaskValues, err := e.addClientReportTask()
@@ -263,7 +261,7 @@ func (e *Engine) Start() error {
 	return nil
 }
 
-// 根据服务获取路由链
+// getRouterChain 根据服务获取路由链
 func (e *Engine) getRouterChain(svcInstances model.ServiceInstances) *servicerouter.RouterChain {
 	svcInstancesProto := svcInstances.(*pb.ServiceInstancesInProto)
 	routerChain := svcInstancesProto.GetServiceRouterChain()
@@ -273,7 +271,7 @@ func (e *Engine) getRouterChain(svcInstances model.ServiceInstances) *servicerou
 	return routerChain
 }
 
-// 根据服务获取负载均衡器
+// getLoadBalancer 根据服务获取负载均衡器
 // 优先使用被调配置的负载均衡算法，其次选择用户选择的算法
 func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgorithm string) (
 	loadbalancer.LoadBalancer, error) {
@@ -302,7 +300,7 @@ func (e *Engine) Destroy() error {
 	return nil
 }
 
-// 上报统计数据到统计插件中
+// SyncReportStat 上报统计数据到统计插件中
 func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) error {
 	if !model.ValidMetircType(typ) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid report metric type")
@@ -318,12 +316,12 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 	return nil
 }
 
-// 上报api数据
+// reportAPIStat 上报api数据
 func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 	return e.SyncReportStat(model.SDKAPIStat, result)
 }
 
-// 上报服务数据
+// reportSvcStat 上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
 }

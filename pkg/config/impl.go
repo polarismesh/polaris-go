@@ -45,12 +45,12 @@ func (c *ConfigurationImpl) GetConsumer() ConsumerConfig {
 	return c.Consumer
 }
 
-// GetConsumer consumer前缀开头的所有配置项
+// GetProvider consumer前缀开头的所有配置项
 func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 	return c.Provider
 }
 
-// 全局配置
+// GlobalConfigImpl 全局配置
 type GlobalConfigImpl struct {
 	System          *SystemConfigImpl          `yaml:"system" json:"system"`
 	API             *APIConfigImpl             `yaml:"api" json:"api"`
@@ -58,7 +58,7 @@ type GlobalConfigImpl struct {
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
 }
 
-// 获取系统配置
+// GetSystem 获取系统配置
 func (g *GlobalConfigImpl) GetSystem() SystemConfig {
 	return g.System
 }
@@ -73,12 +73,12 @@ func (g *GlobalConfigImpl) GetServerConnector() ServerConnectorConfig {
 	return g.ServerConnector
 }
 
-// cl5.global.statReporter前缀开头的所有配置项
+// GetStatReporter cl5.global.statReporter前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 	return g.StatReporter
 }
 
-// 消费者配置
+// ConsumerConfigImpl 消费者配置
 type ConsumerConfigImpl struct {
 	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache" json:"localCache"`
 	ServiceRouter    *ServiceRouterConfigImpl  `yaml:"serviceRouter" json:"serviceRouter"`
@@ -104,22 +104,22 @@ func (c *ConsumerConfigImpl) GetLoadbalancer() LoadbalancerConfig {
 	return c.Loadbalancer
 }
 
-// GetLoadbalancer consumer.circuitbreaker前缀开头的所有配置
+// GetCircuitBreaker consumer.circuitbreaker前缀开头的所有配置
 func (c *ConsumerConfigImpl) GetCircuitBreaker() CircuitBreakerConfig {
 	return c.CircuitBreaker
 }
 
-// GetHealthCheckConfig get health check config
+// GetHealthCheck get health check config
 func (c *ConsumerConfigImpl) GetHealthCheck() HealthCheckConfig {
 	return c.HealthCheck
 }
 
-// 订阅配置
+// GetSubScribe 订阅配置
 func (c *ConsumerConfigImpl) GetSubScribe() SubscribeConfig {
 	return c.Subscribe
 }
 
-// 服务独立配置
+// GetServiceSpecific 服务独立配置
 func (c *ConsumerConfigImpl) GetServiceSpecific(namespace string, service string) ServiceSpecificConfig {
 	for _, v := range c.ServicesSpecific {
 		if v.Namespace == namespace && v.Service == service {
@@ -129,7 +129,7 @@ func (c *ConsumerConfigImpl) GetServiceSpecific(namespace string, service string
 	return nil
 }
 
-// 系统配置
+// SystemConfigImpl 系统配置
 type SystemConfigImpl struct {
 	// SDK运行模式
 	Mode model.RunMode `yaml:"mode" json:"mode"`
@@ -143,32 +143,32 @@ type SystemConfigImpl struct {
 	Variables map[string]string `yaml:"variables" json:"variables"`
 }
 
-// SDK运行模式，agent还是noagent
+// GetMode SDK运行模式，agent还是noagent
 func (s *SystemConfigImpl) GetMode() model.RunMode {
 	return s.Mode
 }
 
-// 设置SDK运行模式
+// SetMode 设置SDK运行模式
 func (s *SystemConfigImpl) SetMode(mode model.RunMode) {
 	s.Mode = mode
 }
 
-// 服务发现集群
+// GetDiscoverCluster 服务发现集群
 func (s *SystemConfigImpl) GetDiscoverCluster() ServerClusterConfig {
 	return s.DiscoverCluster
 }
 
-// 健康检查集群
+// GetHealthCheckCluster 健康检查集群
 func (s *SystemConfigImpl) GetHealthCheckCluster() ServerClusterConfig {
 	return s.HealthCheckCluster
 }
 
-// 监控上报集群
+// GetMonitorCluster 监控上报集群
 func (s *SystemConfigImpl) GetMonitorCluster() ServerClusterConfig {
 	return s.MonitorCluster
 }
 
-// 获取一个路由variable
+// GetVariable 获取一个路由variable
 func (s *SystemConfigImpl) GetVariable(key string) (string, bool) {
 	if s.Variables == nil {
 		return "", false
@@ -177,7 +177,7 @@ func (s *SystemConfigImpl) GetVariable(key string) (string, bool) {
 	return value, ok
 }
 
-// 设置一个路由variable
+// SetVariable 设置一个路由variable
 func (s *SystemConfigImpl) SetVariable(key, value string) {
 	if s.Variables == nil {
 		s.Variables = make(map[string]string)
@@ -185,46 +185,46 @@ func (s *SystemConfigImpl) SetVariable(key, value string) {
 	s.Variables[key] = value
 }
 
-// 取消一个路由variable
+// UnsetVariable 取消一个路由variable
 func (s *SystemConfigImpl) UnsetVariable(key string) {
 	if s.Variables != nil {
 		delete(s.Variables, key)
 	}
 }
 
-// 单个服务集群配置
+// ServerClusterConfigImpl 单个服务集群配置
 type ServerClusterConfigImpl struct {
 	Namespace       string         `yaml:"namespace" json:"namespace"`
 	Service         string         `yaml:"service" json:"service"`
 	RefreshInterval *time.Duration `yaml:"refreshInterval" json:"refreshInterval"`
 }
 
-// 获取命名空间
+// GetNamespace 获取命名空间
 func (s *ServerClusterConfigImpl) GetNamespace() string {
 	return s.Namespace
 }
 
-// 设置命名空间
+// SetNamespace 设置命名空间
 func (s *ServerClusterConfigImpl) SetNamespace(namespace string) {
 	s.Namespace = namespace
 }
 
-// 获取服务名
+// GetService 获取服务名
 func (s *ServerClusterConfigImpl) GetService() string {
 	return s.Service
 }
 
-// 设置服务名
+// SetService 设置服务名
 func (s *ServerClusterConfigImpl) SetService(service string) {
 	s.Service = service
 }
 
-// 获取系统服务刷新间隔
+// GetRefreshInterval 获取系统服务刷新间隔
 func (s *ServerClusterConfigImpl) GetRefreshInterval() time.Duration {
 	return *s.RefreshInterval
 }
 
-// 获取系统服务刷新间隔
+// SetRefreshInterval 获取系统服务刷新间隔
 func (s *ServerClusterConfigImpl) SetRefreshInterval(interval time.Duration) {
 	s.RefreshInterval = &interval
 }
@@ -281,7 +281,7 @@ func (a *APIConfigImpl) GetBindIP() string {
 	return a.BindIPValue
 }
 
-// 设置默认客户端绑定的网卡地址
+// SetBindIP 设置默认客户端绑定的网卡地址
 func (a *APIConfigImpl) SetBindIP(bindIPValue string) {
 	a.BindIPValue = bindIPValue
 }

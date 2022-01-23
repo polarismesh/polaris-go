@@ -131,13 +131,13 @@ func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 
 // SetDefault 设置默认参数
 func (r *RateLimitConfigImpl) SetDefault() {
-	if nil == r.Enable {
+	if r.Enable == nil {
 		r.Enable = &DefaultRateLimitEnable
 	}
-	if 0 == r.MaxWindowSize {
+	if r.MaxWindowSize == 0 {
 		r.MaxWindowSize = MaxRateLimitWindowSize
 	}
-	if 0 == r.PurgeInterval {
+	if r.PurgeInterval == 0 {
 		r.PurgeInterval = DefaultRateLimitPurgeInterval
 	}
 	r.Plugin.SetDefault(common.TypeRateLimiter)

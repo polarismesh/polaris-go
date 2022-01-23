@@ -37,7 +37,7 @@ type Subscribe interface {
 	WatchService(key model.ServiceKey) (interface{}, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeSubScribe, new(Subscribe))
 }

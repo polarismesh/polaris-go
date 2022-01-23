@@ -31,7 +31,7 @@ type Clock interface {
 	Now() time.Time
 }
 
-// 时钟的实现
+// clockImpl 时钟的实现
 type clockImpl struct {
 	currentTime atomic.Value
 }
@@ -47,7 +47,7 @@ func TimeStep() time.Duration {
 	return 10 * time.Millisecond
 }
 
-// 定期更新时间
+// updateTime 定期更新时间
 func (c *clockImpl) updateTime() {
 	ticker := time.NewTicker(TimeStep())
 	defer ticker.Stop()
@@ -58,7 +58,6 @@ func (c *clockImpl) updateTime() {
 			c.currentTime.Store(&now)
 		}
 	}
-
 }
 
 // GetClock 获取全局时钟
@@ -66,7 +65,7 @@ func GetClock() Clock {
 	return globalClock
 }
 
-// 初始化全局时钟
+// init 初始化全局时钟
 func init() {
 	globalClock = &clockImpl{}
 	now := time.Now()

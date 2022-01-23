@@ -17,9 +17,11 @@
 
 package model
 
-import "time"
+import (
+	"time"
+)
 
-// 任务值类型
+// TaskValue 任务值类型
 type TaskValue interface {
 	// 比较两个元素
 	CompareTo(interface{}) int
@@ -27,7 +29,7 @@ type TaskValue interface {
 	EnsureDeleted(value interface{}) bool
 }
 
-// 定时任务处理的数据
+// TaskValues 定时任务处理的数据
 type TaskValues interface {
 	// 获取启动状态
 	Started() bool
@@ -60,7 +62,7 @@ const (
 	EventStop
 )
 
-// 回调接口
+// PeriodicCallBack 回调接口
 type PeriodicCallBack interface {
 	// 任务回调函数
 	// 参数说明：
@@ -74,7 +76,7 @@ type PeriodicCallBack interface {
 	OnTaskEvent(event TaskEvent)
 }
 
-// 周期执行的任务信息（含高优先级任务)
+// PeriodicTask 周期执行的任务信息（含高优先级任务)
 type PeriodicTask struct {
 	// 任务标识
 	Name string
@@ -90,13 +92,13 @@ type PeriodicTask struct {
 	DelayStart bool
 }
 
-// 调度高优先级任务
+// PriorityCallBack 调度高优先级任务
 type PriorityCallBack interface {
 	// 处理任务内容
 	Process()
 }
 
-// 任务结构
+// PriorityTask 任务结构
 type PriorityTask struct {
 	// 任务标识
 	Name string

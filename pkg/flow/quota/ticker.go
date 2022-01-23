@@ -29,7 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 )
 
-// 远程配额查询任务
+// RemoteQuotaCallBack 远程配额查询任务
 type RemoteQuotaCallBack struct {
 	registry             localregistry.InstancesRegistry
 	asyncRLimitConnector AsyncRateLimitConnector
@@ -37,7 +37,7 @@ type RemoteQuotaCallBack struct {
 	scalableRand         *rand.ScalableRand
 }
 
-// 创建查询任务
+// NewRemoteQuotaCallback 创建查询任务
 func NewRemoteQuotaCallback(cfg config.Configuration, supplier plugin.Supplier,
 	engine model.Engine, connector AsyncRateLimitConnector) (*RemoteQuotaCallBack, error) {
 	registry, err := data.GetRegistry(cfg, supplier)
@@ -56,7 +56,7 @@ const (
 	intervalRangeMilli = 20
 )
 
-// 处理远程配额查询任务
+// Process 处理远程配额查询任务
 func (r *RemoteQuotaCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	rateLimitWindow := taskValue.(*RateLimitWindow)

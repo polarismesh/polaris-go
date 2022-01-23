@@ -38,7 +38,7 @@ const (
 	RecoverAll   uint32 = 1
 )
 
-// 在一个cluster的全死全活状态发生改变时触发
+// onRecoverAllChanged 在一个cluster的全死全活状态发生改变时触发
 func (s *Reporter) onRecoverAllChanged(event *common.PluginEvent) error {
 	cluster := event.EventObject.(*model.Cluster)
 	svcLocalValue := cluster.GetClusters().GetServiceInstances().(*pb.ServiceInstancesInProto).GetServiceLocalValue()
@@ -70,7 +70,7 @@ func (s *Reporter) onRecoverAllChanged(event *common.PluginEvent) error {
 	return nil
 }
 
-// 打印全死全活cluster的信息
+// printRecoverAllCluster 打印全死全活cluster的信息
 func printRecoverAllCluster(cluster *model.Cluster, recoverAllStart bool) {
 	allInstances := cluster.GetClusterValue().GetAllInstanceSet()
 	selectableInstances := cluster.GetClusterValue().GetInstancesSet(true, false)
@@ -89,7 +89,7 @@ func printRecoverAllCluster(cluster *model.Cluster, recoverAllStart bool) {
 	}
 }
 
-// 清空过期的clusterkey
+// cleanExpiredClusterRecoverAllRecord 清空过期的clusterkey
 func (s *Reporter) cleanExpiredClusterRecoverAllRecord() {
 	now := s.globalCtx.Now()
 	registry := s.registry
@@ -121,7 +121,7 @@ func (s *Reporter) cleanExpiredClusterRecoverAllRecord() {
 	}
 }
 
-// 获取或创建某个cluster的全死全活记录
+// getClusterRecoverAllRecord 获取或创建某个cluster的全死全活记录
 func (s *Reporter) getClusterRecoverAllRecord(svc *sync.Map, key model.ClusterKey,
 	createWhenEmpty bool) *clusterRecoverAllCheck {
 	res, ok := svc.Load(key)
@@ -138,7 +138,7 @@ func (s *Reporter) getClusterRecoverAllRecord(svc *sync.Map, key model.ClusterKe
 	return res.(*clusterRecoverAllCheck)
 }
 
-// 发送熔断和全死全活记录
+// sendCircuitBreakHistory 发送熔断和全死全活记录
 func (s *Reporter) sendCircuitBreakHistory() {
 	registry := s.registry
 	if nil == registry {
@@ -219,7 +219,7 @@ func (s *Reporter) sendCircuitBreakHistory() {
 	}
 }
 
-// 获取当前周期该服务的所有全死全活变化
+// getAllRecoverRecords 获取当前周期该服务的所有全死全活变化
 func (s *Reporter) getAllRecoverRecords(svcInst *pb.ServiceInstancesInProto) []*monitorpb.RecoverAllChange {
 	var res []*monitorpb.RecoverAllChange
 	svcLocalValue := svcInst.GetServiceLocalValue()

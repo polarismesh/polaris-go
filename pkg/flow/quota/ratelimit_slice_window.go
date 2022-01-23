@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 )
 
-// 创建滑窗
+// NewSlidingWindow 创建滑窗
 func NewSlidingWindow(slideCount int, intervalMs int) *SlidingWindow {
 	slidingWindow := &SlidingWindow{}
 	slidingWindow.intervalMs = intervalMs
@@ -36,23 +36,23 @@ func NewSlidingWindow(slideCount int, intervalMs int) *SlidingWindow {
 	return slidingWindow
 }
 
-// 计算起始滑窗
+// calculateWindowStart 计算起始滑窗
 func (s *SlidingWindow) calculateWindowStart(curTimeMs int64) int64 {
 	return CalculateStartTimeMilli(curTimeMs, int64(s.windowLengthMs))
 }
 
-// 计算起始滑窗
+// CalculateStartTimeMilli 计算起始滑窗
 func CalculateStartTimeMilli(curTimeMs int64, interval int64) int64 {
 	return curTimeMs - curTimeMs%interval
 }
 
-// 计算时间下标
+// calculateTimeIdx 计算时间下标
 func (s *SlidingWindow) calculateTimeIdx(curTimeMs int64) int {
 	timeId := curTimeMs / int64(s.windowLengthMs)
 	return int(timeId % int64(s.slideCount))
 }
 
-// 当前窗口
+// currentWindow 当前窗口
 func (s *SlidingWindow) currentWindow(curTimeMs int64, reset bool) (*Window, *Window) {
 	idx := s.calculateTimeIdx(curTimeMs)
 	windowStart := s.calculateWindowStart(curTimeMs)
@@ -70,19 +70,19 @@ func (s *SlidingWindow) currentWindow(curTimeMs int64, reset bool) (*Window, *Wi
 	}
 }
 
-// 原子增加，并返回当前bucket
+// AddAndGetCurrentPassed 原子增加，并返回当前bucket
 func (s *SlidingWindow) AddAndGetCurrentPassed(curTimeMs int64, value uint32) (uint32, *Window) {
 	window, expiredWindow := s.currentWindow(curTimeMs, true)
 	return window.addAndGetPassed(value), expiredWindow
 }
 
-// 原子增加，并返回当前bucket
+// AddAndGetCurrentLimited 原子增加，并返回当前bucket
 func (s *SlidingWindow) AddAndGetCurrentLimited(curTimeMs int64, value uint32) (uint32, *Window) {
 	window, expiredWindow := s.currentWindow(curTimeMs, true)
 	return window.addAndGetLimited(value), expiredWindow
 }
 
-// 获取上报数据
+// AcquireCurrentValues 获取上报数据
 func (s *SlidingWindow) AcquireCurrentValues(curTimeMs int64) (uint32, uint32, *Window) {
 	window, expiredWindow := s.currentWindow(curTimeMs, true)
 	passed := window.swapPassed()
@@ -90,14 +90,14 @@ func (s *SlidingWindow) AcquireCurrentValues(curTimeMs int64) (uint32, uint32, *
 	return passed, limited, expiredWindow
 }
 
-// 获取上报数据
+// TouchCurrentPassed 获取上报数据
 func (s *SlidingWindow) TouchCurrentPassed(curTimeMs int64) (uint32, *Window) {
 	window, expiredWindow := s.currentWindow(curTimeMs, true)
 	passed := window.addAndGetPassed(0)
 	return passed, expiredWindow
 }
 
-// 滑窗通用实现
+// SlidingWindow 滑窗通用实现
 type SlidingWindow struct {
 	// 单个窗口长度
 	windowLengthMs int
@@ -111,7 +111,7 @@ type SlidingWindow struct {
 	slideCount int
 }
 
-// 重置窗口,返回过期的窗口
+// reset 重置窗口,返回过期的窗口
 func (w *Window) reset(oldWindowStart int64, windowStart int64) *Window {
 	if atomic.CompareAndSwapInt64(&w.WindowStart, oldWindowStart, windowStart) {
 		passedValue := atomic.SwapUint32(&w.PassedValue, 0)
@@ -125,7 +125,7 @@ func (w *Window) reset(oldWindowStart int64, windowStart int64) *Window {
 	return nil
 }
 
-// 单个窗口
+// Window 单个窗口
 type Window struct {
 	// 起始时间
 	WindowStart int64
@@ -135,22 +135,22 @@ type Window struct {
 	LimitedValue uint32
 }
 
-// 原子增加通过数
+// addAndGetPassed 原子增加通过数
 func (w *Window) addAndGetPassed(value uint32) uint32 {
 	return atomic.AddUint32(&w.PassedValue, value)
 }
 
-// 原子增加被限流数
+// addAndGetLimited 原子增加被限流数
 func (w *Window) addAndGetLimited(value uint32) uint32 {
 	return atomic.AddUint32(&w.LimitedValue, value)
 }
 
-// 原子增加通过数
+// swapPassed 原子增加通过数
 func (w *Window) swapPassed() uint32 {
 	return atomic.SwapUint32(&w.PassedValue, 0)
 }
 
-// 原子增加被限流数
+// swapLimited 原子增加被限流数
 func (w *Window) swapLimited() uint32 {
 	return atomic.SwapUint32(&w.LimitedValue, 0)
 }

@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	dnsTimeout time.Duration = 2 * time.Second
-	UDPSize    uint16        = 65535
+	dnsTimeout        = 2 * time.Second
+	UDPSize    uint16 = 65535
 
 	protocolSidecar = "sidecar"
 )

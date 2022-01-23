@@ -72,7 +72,7 @@ func IsAvailableConnection(conn *Connection) bool {
 	return atomic.LoadUint32(&conn.lazyDestroy) == 0
 }
 
-// 尝试占据连接，ref+1, 占据成功返回true，否则返回false
+// acquire 尝试占据连接，ref+1, 占据成功返回true，否则返回false
 func (c *Connection) acquire(opKey string) bool {
 	if atomic.LoadUint32(&c.lazyDestroy) == 1 {
 		return false
@@ -87,7 +87,7 @@ func (c *Connection) acquire(opKey string) bool {
 	return true
 }
 
-// 关闭连接
+// closeConnection 关闭连接
 func (c *Connection) closeConnection(force bool) bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -104,7 +104,7 @@ func (c *Connection) ForceClose() bool {
 	return c.closeConnection(true)
 }
 
-// 懒回收
+// lazyClose 懒回收
 func (c *Connection) lazyClose(force bool) {
 	atomic.StoreUint32(&c.lazyDestroy, 1)
 	curRef := atomic.LoadInt32(&c.ref)
@@ -116,7 +116,7 @@ func (c *Connection) lazyClose(force bool) {
 	}
 }
 
-// 释放连接
+// Release 释放连接
 func (c *Connection) Release(opKey string) {
 	nextValue := atomic.AddInt32(&c.ref, -1)
 	log.GetNetworkLogger().Tracef(
@@ -136,7 +136,7 @@ func (c *Connection) Release(opKey string) {
 	}
 }
 
-// 转换成GRPC连接
+// ToGRPCConn 转换成GRPC连接
 func ToGRPCConn(conn ClosableConn) *grpc.ClientConn {
 	return conn.(*grpc.ClientConn)
 }

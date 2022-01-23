@@ -138,7 +138,7 @@ func (s *SubscribeLocalChannel) WatchService(key model.ServiceKey) (interface{},
 	return value, nil
 }
 
-// 注册插件和配置
+// init 注册插件和配置
 func init() {
 	plugin.RegisterConfigurablePlugin(&SubscribeLocalChannel{}, &Config{})
 }

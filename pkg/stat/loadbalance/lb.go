@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 负载均衡统计数据
+// LoadBalanceGauge 负载均衡统计数据
 type LoadBalanceGauge struct {
 	model.EmptyInstanceGauge
 	Inst model.Instance
@@ -32,7 +32,7 @@ type LoadBalanceGauge struct {
 // LoadBalanceGauge池子
 var loadBalanceStatPool = &sync.Pool{}
 
-// 从池子中获取一个LoadBalanceGauge
+// GetLoadBalanceStatFromPool 从池子中获取一个LoadBalanceGauge
 func GetLoadBalanceStatFromPool() *LoadBalanceGauge {
 	value := loadBalanceStatPool.Get()
 	if nil == value {
@@ -41,12 +41,12 @@ func GetLoadBalanceStatFromPool() *LoadBalanceGauge {
 	return value.(*LoadBalanceGauge)
 }
 
-// 将LoadBalanceGauge放回pool
+// PoolPutLoadBalanceStat 将LoadBalanceGauge放回pool
 func PoolPutLoadBalanceStat(gauge *LoadBalanceGauge) {
 	loadBalanceStatPool.Put(gauge)
 }
 
-// 获取被选中的实例
+// GetCalledInstance 获取被选中的实例
 func (l *LoadBalanceGauge) GetCalledInstance() model.Instance {
 	return l.Inst
 }

@@ -35,7 +35,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
-// 限流分配窗口的缓存
+// RateLimitWindowSet 限流分配窗口的缓存
 type RateLimitWindowSet struct {
 	// 更新锁
 	updateMutex sync.RWMutex
@@ -47,7 +47,7 @@ type RateLimitWindowSet struct {
 	lastPurgeTimeMilli int64
 }
 
-// 构造函数
+// NewRateLimitWindowSet 构造函数
 func NewRateLimitWindowSet(assistant *FlowQuotaAssistant) *RateLimitWindowSet {
 	return &RateLimitWindowSet{
 		windowByRule:       make(map[string]*WindowContainer),
@@ -56,7 +56,7 @@ func NewRateLimitWindowSet(assistant *FlowQuotaAssistant) *RateLimitWindowSet {
 	}
 }
 
-// 拷贝一份只读数据
+// GetRateLimitWindows 拷贝一份只读数据
 func (rs *RateLimitWindowSet) GetRateLimitWindows() []*RateLimitWindow {
 	rs.updateMutex.RLock()
 	defer rs.updateMutex.RUnlock()
@@ -67,7 +67,7 @@ func (rs *RateLimitWindowSet) GetRateLimitWindows() []*RateLimitWindow {
 	return result
 }
 
-// 获取限流窗口
+// GetRateLimitWindow 获取限流窗口
 func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *namingpb.Rule, flatLabels string) *RateLimitWindow {
 	// 访问前进行一次窗口淘汰检查
 	rs.PurgeWindows(model.CurrentMillisecond())
@@ -83,7 +83,7 @@ func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *namingpb.Rule, flatLabels
 	return container.WindowByLabel[flatLabels]
 }
 
-// 执行窗口淘汰
+// PurgeWindows 执行窗口淘汰
 func (rs *RateLimitWindowSet) PurgeWindows(nowMilli int64) {
 	lastPurgeTimeMilli := atomic.LoadInt64(&rs.lastPurgeTimeMilli)
 	if nowMilli-lastPurgeTimeMilli < rs.flowAssistant.purgeIntervalMilli {
@@ -103,7 +103,7 @@ func (rs *RateLimitWindowSet) PurgeWindows(nowMilli int64) {
 	}
 }
 
-// 规则是否还有正则表达式匹配逻辑
+// HasRegex 规则是否还有正则表达式匹配逻辑
 func HasRegex(rule *namingpb.Rule) bool {
 	labels := rule.GetLabels()
 	if len(labels) == 0 {
@@ -117,7 +117,7 @@ func HasRegex(rule *namingpb.Rule) bool {
 	return false
 }
 
-// 添加限流窗口
+// AddRateLimitWindow 添加限流窗口
 func (rs *RateLimitWindowSet) AddRateLimitWindow(
 	commonRequest *data.CommonRateLimitRequest, rule *namingpb.Rule, flatLabels string) (*RateLimitWindow, error) {
 	// 判断是否正则扩散
@@ -152,7 +152,7 @@ func (rs *RateLimitWindowSet) AddRateLimitWindow(
 	return window, nil
 }
 
-// 窗口过期
+// OnWindowExpired 窗口过期
 func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitWindow) bool {
 	rs.updateMutex.Lock()
 	defer rs.updateMutex.Unlock()
@@ -174,7 +174,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	return true
 }
 
-// 服务更新回调
+// OnServiceUpdated 服务更新回调
 func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEventObject) {
 	var updatedRules *common.RateLimitDiffInfo
 	if svcEventObject.SvcEventKey.Type == model.EventRateLimiting {
@@ -198,7 +198,7 @@ func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEve
 	}
 }
 
-// 删除容器对象
+// deleteContainer 删除容器对象
 func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	container := rs.windowByRule[revision]
 	delete(rs.windowByRule, revision)
@@ -221,7 +221,7 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	}
 }
 
-// 从RateLimitWindowSet中删除一个RateLimitWindow
+// deleteWindow 从RateLimitWindowSet中删除一个RateLimitWindow
 func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	window.SetStatus(Deleted)
 	rs.flowAssistant.DelWindowCount()
@@ -233,7 +233,7 @@ func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	})
 }
 
-// 窗口容器
+// WindowContainer 窗口容器
 type WindowContainer struct {
 	// 主窗口，非正则表达式的适用
 	MainWindow *RateLimitWindow
@@ -241,7 +241,7 @@ type WindowContainer struct {
 	WindowByLabel map[string]*RateLimitWindow
 }
 
-// 获取限流滑窗
+// GetRateLimitWindows 获取限流滑窗
 func (w *WindowContainer) GetRateLimitWindows() []*RateLimitWindow {
 	windows := make([]*RateLimitWindow, 0, len(w.WindowByLabel))
 	if nil != w.MainWindow {
@@ -254,7 +254,7 @@ func (w *WindowContainer) GetRateLimitWindows() []*RateLimitWindow {
 	return windows
 }
 
-// 创建窗口容器
+// NewWindowContainer 创建窗口容器
 func NewWindowContainer() *WindowContainer {
 	return &WindowContainer{
 		WindowByLabel: make(map[string]*RateLimitWindow),
@@ -272,13 +272,13 @@ const (
 	Deleted
 )
 
-// 远程同步相关参数
+// RemoteSyncParam 远程同步相关参数
 type RemoteSyncParam struct {
 	// 连接相关参数
 	model.ControlParam
 }
 
-// 配额使用信息
+// UsageInfo 配额使用信息
 type UsageInfo struct {
 	// 配额使用时间
 	CurTimeMilli int64
@@ -288,7 +288,7 @@ type UsageInfo struct {
 	Limited map[int64]uint32
 }
 
-// 远程下发配额
+// RemoteQuotaResult 远程下发配额
 type RemoteQuotaResult struct {
 	Left            int64
 	ClientCount     uint32
@@ -296,7 +296,7 @@ type RemoteQuotaResult struct {
 	DurationMill    int64
 }
 
-// 远程配额分配的令牌桶
+// RemoteAwareBucket 远程配额分配的令牌桶
 type RemoteAwareBucket interface {
 	// 父接口，执行用户配额分配操作
 	model.QuotaAllocator
@@ -310,7 +310,7 @@ type RemoteAwareBucket interface {
 	UpdateTimeDiff(timeDiff int64)
 }
 
-// 限流窗口
+// RateLimitWindow 限流窗口
 type RateLimitWindow struct {
 	// 配额窗口集合
 	WindowSet *RateLimitWindowSet
@@ -361,12 +361,12 @@ var (
 	DefaultStatisticReportPeriod = 1 * time.Second
 )
 
-// 计算淘汰周期
+// getExpireDuration 计算淘汰周期
 func getExpireDuration(rule *namingpb.Rule) time.Duration {
 	return getMaxDuration(rule) + ExpireFactor
 }
 
-// 获取最大的限流周期
+// getMaxDuration 获取最大的限流周期
 func getMaxDuration(rule *namingpb.Rule) time.Duration {
 	var maxDuration time.Duration
 	for _, amount := range rule.GetAmounts() {
@@ -379,7 +379,7 @@ func getMaxDuration(rule *namingpb.Rule) time.Duration {
 	return maxDuration
 }
 
-// 创建限流窗口
+// NewRateLimitWindow 创建限流窗口
 func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	commonRequest *data.CommonRateLimitRequest, labels string) (*RateLimitWindow, error) {
 	window := &RateLimitWindow{}
@@ -423,7 +423,7 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	return window, nil
 }
 
-// 构建限流模式及集群
+// buildRemoteConfigMode 构建限流模式及集群
 func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *namingpb.Rule) {
 	// 解析限流集群配置
 	if rule.GetType() == namingpb.Rule_LOCAL {
@@ -439,7 +439,7 @@ func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, r
 	}
 }
 
-// 构建限流窗口的索引值
+// buildQuotaHashValue 构建限流窗口的索引值
 func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 	// <服务名>#<命名空间>#<labels if exists>
 	builder := &strings.Builder{}
@@ -455,14 +455,14 @@ func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 	return uniqueKey, value
 }
 
-// 根据限流行为名获取限流算法插件
+// createBehavior 根据限流行为名获取限流算法插件
 func createBehavior(supplier plugin.Supplier, behaviorName string) ratelimiter.ServiceRateLimiter {
 	// 因为构造缓存时候已经校验过，所以这里可以直接忽略错误
 	plug, _ := supplier.GetPlugin(common.TypeRateLimiter, behaviorName)
 	return plug.(ratelimiter.ServiceRateLimiter)
 }
 
-// 校验输入的元数据是否符合规则
+// matchLabels 校验输入的元数据是否符合规则
 func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	labels map[string]string, ruleCache model.RuleCache) bool {
 	if len(labels) == 0 {
@@ -487,20 +487,20 @@ func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	}
 }
 
-// 上下文的键类型
+// contextKey 上下文的键类型
 type contextKey struct {
 	name string
 }
 
-// ToString方法
+// String ToString方法
 func (k *contextKey) String() string { return "rateLimit context value " + k.name }
 
-// 错误容器，用于传递上下文错误信息
+// errContainer 错误容器，用于传递上下文错误信息
 type errContainer struct {
 	err atomic.Value
 }
 
-// 初始化限流窗口
+// Init 初始化限流窗口
 func (r *RateLimitWindow) Init() {
 	if !r.CasStatus(Created, Initializing) {
 		// 确保初始化一次
@@ -524,17 +524,17 @@ func (r *RateLimitWindow) buildInitTargetStr() string {
 	return target.String()
 }
 
-// 获取SDK引擎
+// Engine 获取SDK引擎
 func (r *RateLimitWindow) Engine() model.Engine {
 	return r.WindowSet.flowAssistant.engine
 }
 
-// 获取异步连接器
+// AsyncRateLimitConnector 获取异步连接器
 func (r *RateLimitWindow) AsyncRateLimitConnector() AsyncRateLimitConnector {
 	return r.WindowSet.flowAssistant.asyncRateLimitConnector
 }
 
-// 转换成限流PB初始化消息
+// InitializeRequest 转换成限流PB初始化消息
 func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
 	clientId := r.Engine().GetContext().GetClientId()
 	initReq := &rlimitV2.RateLimitInitRequest{}
@@ -557,23 +557,23 @@ func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
 	return initReq
 }
 
-// 远程访问的错误信息
+// RemoteErrorContainer 远程访问的错误信息
 type RemoteErrorContainer struct {
 	sdkErr atomic.Value
 }
 
-// 比较两个窗口是否相同
+// CompareTo 比较两个窗口是否相同
 func (r *RateLimitWindow) CompareTo(another interface{}) int {
 	return strings.Compare(r.uniqueKey, another.(*RateLimitWindow).uniqueKey)
 }
 
-// 删除前进行检查，返回true才删除，该检查是同步操作
+// EnsureDeleted 删除前进行检查，返回true才删除，该检查是同步操作
 func (r *RateLimitWindow) EnsureDeleted(value interface{}) bool {
 	// 只有过期才删除
 	return r.GetStatus() == Deleted
 }
 
-// 转换成限流PB上报消息
+// acquireRequest 转换成限流PB上报消息
 func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportRequest {
 	reportReq := &rlimitV2.ClientRateLimitReportRequest{
 		Service:   r.SvcKey.Service,
@@ -593,22 +593,22 @@ func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportReques
 	return reportReq
 }
 
-// 原子获取状态
+// GetStatus 原子获取状态
 func (r *RateLimitWindow) GetStatus() int64 {
 	return atomic.LoadInt64(&r.status)
 }
 
-// 设置状态
+// SetStatus 设置状态
 func (r *RateLimitWindow) SetStatus(status int64) {
 	atomic.StoreInt64(&r.status, status)
 }
 
-// CAS设置状态
+// CasStatus CAS设置状态
 func (r *RateLimitWindow) CasStatus(oldStatus int64, status int64) bool {
 	return atomic.CompareAndSwapInt64(&r.status, oldStatus, status)
 }
 
-// 分配配额
+// AllocateQuota 分配配额
 func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 	nowMilli := model.CurrentMillisecond()
 	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
@@ -648,12 +648,12 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 	return model.NewQuotaFuture(nil, deadline, r.allocatingBucket), nil
 }
 
-// 获取最近访问时间
+// GetLastAccessTimeMilli 获取最近访问时间
 func (r *RateLimitWindow) GetLastAccessTimeMilli() int64 {
 	return atomic.LoadInt64(&r.lastAccessTimeMilli)
 }
 
-// 是否已经过期
+// Expired 是否已经过期
 func (r *RateLimitWindow) Expired(nowMilli int64) bool {
 	return nowMilli-r.GetLastAccessTimeMilli() > model.ToMilliSeconds(r.expireDuration)
 }

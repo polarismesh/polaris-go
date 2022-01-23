@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// 通知开关，标识本次需要获取哪些资源
+// NotifyTrigger 通知开关，标识本次需要获取哪些资源
 type NotifyTrigger struct {
 	EnableDstInstances bool
 	EnableDstRoute     bool
@@ -32,7 +32,7 @@ type NotifyTrigger struct {
 	EnableMesh         bool
 }
 
-// 清理缓存信息
+// Clear 清理缓存信息
 func (n *NotifyTrigger) Clear() {
 	n.EnableDstInstances = false
 	n.EnableDstRoute = false
@@ -43,14 +43,14 @@ func (n *NotifyTrigger) Clear() {
 	n.EnableMesh = false
 }
 
-// 单次查询的控制参数
+// ControlParam 单次查询的控制参数
 type ControlParam struct {
 	Timeout       time.Duration
 	MaxRetry      int
 	RetryInterval time.Duration
 }
 
-// 缓存查询请求对象
+// CacheValueQuery 缓存查询请求对象
 type CacheValueQuery interface {
 	// 获取目标服务
 	GetDstService() *ServiceKey
@@ -74,102 +74,47 @@ type CacheValueQuery interface {
 	SetMeshConfig(mc MeshConfig)
 }
 
-/**
- * @brief 编排调度引擎，API相关逻辑在这里执行
- */
+// Engine 编排调度引擎，API相关逻辑在这里执行
 type Engine interface {
-	/**
-	 * @brief 销毁流程引擎
-	 */
+	// 销毁流程引擎
 	Destroy() error
-
-	/**
-	 * 同步加载资源，可通过配置参数指定一次同时加载多个资源
-	 */
+	// 同步加载资源，可通过配置参数指定一次同时加载多个资源
 	SyncGetResources(req CacheValueQuery) error
-
-	/**
-	 * @brief 同步获取负载均衡后的服务实例
-	 */
+	// 同步获取负载均衡后的服务实例
 	SyncGetOneInstance(req *GetOneInstanceRequest) (*OneInstanceResponse, error)
-
-	/**
-	 * @brief 同步获取批量服务实例
-	 */
+	// 同步获取批量服务实例
 	SyncGetInstances(req *GetInstancesRequest) (*InstancesResponse, error)
-
-	/**
-	 * @brief 同步获取全量服务实例
-	 */
+	// 同步获取全量服务实例
 	SyncGetAllInstances(req *GetAllInstancesRequest) (*InstancesResponse, error)
-
-	/**
-	 * @brief 同步进行服务注册
-	 */
+	// 同步进行服务注册
 	SyncRegister(instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
-
-	/**
-	 * @brief 同步进行服务反注册
-	 */
+	// 同步进行服务反注册
 	SyncDeregister(instance *InstanceDeRegisterRequest) error
-
-	/**
-	 * @brief 同步进行心跳上报
-	 */
+	// 同步进行心跳上报
 	SyncHeartbeat(instance *InstanceHeartbeatRequest) error
-
-	/**
-	 * @brief 上报调用结果信息
-	 */
+	// 上报调用结果信息
 	SyncUpdateServiceCallResult(result *ServiceCallResult) error
-
-	/**
-	 * @brief 上报实例统计信息
-	 */
+	// 上报实例统计信息
 	SyncReportStat(typ MetricType, stat InstanceGauge) error
-
-	/**
-	 * @brief 同步获取服务规则
-	 */
+	// 同步获取服务规则
 	SyncGetServiceRule(
 		eventType EventType, req *GetServiceRuleRequest) (*ServiceRuleResponse, error)
-
-	/**
-	 * @brief 同步获取网格规则
-	 */
+	// 同步获取网格规则
 	SyncGetMeshConfig(
 		eventType EventType, req *GetMeshConfigRequest) (*MeshConfigResponse, error)
-
-	/**
-	 * @brief 同步获取网格
-	 */
+	// 同步获取网格
 	SyncGetMesh(
 		eventType EventType, req *GetMeshRequest) (*MeshResponse, error)
-
-	/**
-	 * @brief 同步获取批量服务
-	 */
+	// 同步获取批量服务
 	SyncGetServices(
 		eventType EventType, req *GetServicesRequest) (*ServicesResponse, error)
-
-	/**
-	 * @brief 同步获取配额信息
-	 */
+	// 同步获取配额信息
 	AsyncGetQuota(request *QuotaRequestImpl) (*QuotaFutureImpl, error)
-
-	/**
-	 * @brief 启动定时任务
-	 */
+	// 启动定时任务
 	ScheduleTask(task *PeriodicTask) (chan<- *PriorityTask, TaskValues)
-
-	/**
-	 * @brief 监听服务的change
-	 */
+	// 监听服务的change
 	WatchService(request *WatchServiceRequest) (*WatchServiceResponse, error)
-
 	GetContext() ValueContext
-	/**
-	 * @brief 所需的被调初始化
-	 */
+	// 所需的被调初始化
 	InitCalleeService(req *InitCalleeServiceRequest) error
 }

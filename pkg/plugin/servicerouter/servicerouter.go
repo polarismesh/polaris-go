@@ -27,7 +27,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 路由信息
+// RouteInfo 路由信息
 type RouteInfo struct {
 	// 源服务信息
 	SourceService model.ServiceMetadata
@@ -59,18 +59,18 @@ type RouteInfo struct {
 	MatchRuleType RuleType
 }
 
-// 初始化map
+// Init 初始化map
 func (r *RouteInfo) Init(supplier plugin.Supplier) {
 	registeredRouters := plugin.GetPluginCount(common.TypeServiceRouter)
 	r.chainEnables = make(map[int32]bool, registeredRouters)
 }
 
-// 设置是否需要执行全死全活插件兜底
+// SetIgnoreFilterOnlyOnEndChain 设置是否需要执行全死全活插件兜底
 func (r *RouteInfo) SetIgnoreFilterOnlyOnEndChain(run bool) {
 	r.ignoreFilterOnlyOnEndChain = run
 }
 
-// 清理值
+// ClearValue 清理值
 func (r *RouteInfo) ClearValue() {
 	r.DestService = nil
 	r.SourceService = nil
@@ -84,7 +84,7 @@ func (r *RouteInfo) ClearValue() {
 	}
 }
 
-// 校验入参
+// Validate 校验入参
 func (r *RouteInfo) Validate() error {
 	var errs error
 	if nil == r.DestService {
@@ -96,7 +96,7 @@ func (r *RouteInfo) Validate() error {
 	return errs
 }
 
-// 路由插件是否启用
+// IsRouterEnable 路由插件是否启用
 func (r *RouteInfo) IsRouterEnable(routerId int32) bool {
 	var enable, ok bool
 	if enable, ok = r.chainEnables[routerId]; !ok {
@@ -105,7 +105,7 @@ func (r *RouteInfo) IsRouterEnable(routerId int32) bool {
 	return enable
 }
 
-// 设置是否启用路由插件
+// SetRouterEnable 设置是否启用路由插件
 func (r *RouteInfo) SetRouterEnable(routerId int32, enable bool) {
 	r.chainEnables[routerId] = enable
 }
@@ -118,7 +118,7 @@ const (
 	SrcRule     RuleType = 2
 )
 
-// 路由结束状态
+// RouteStatus 路由结束状态
 type RouteStatus int
 
 const (
@@ -164,7 +164,7 @@ func (rs RouteStatus) String() string {
 	return routeStatusMap[rs]
 }
 
-// 路由结果信息
+// RouteResult 路由结果信息
 type RouteResult struct {
 	// 根据路由规则重定向的目标服务，无需重定向则返回空
 	RedirectDestService *model.ServiceInfo
@@ -174,7 +174,7 @@ type RouteResult struct {
 	Status RouteStatus
 }
 
-// 服务路由链结构
+// RouterChain 服务路由链结构
 type RouterChain struct {
 	// 服务路由链
 	Chain []ServiceRouter
@@ -193,7 +193,7 @@ type ServiceRouter interface {
 		routeInfo *RouteInfo, serviceClusters model.ServiceClusters, withinCluster *model.Cluster) (*RouteResult, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeServiceRouter, new(ServiceRouter))
 }

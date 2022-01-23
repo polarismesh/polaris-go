@@ -25,7 +25,7 @@ type SearchableSlice interface {
 	Count() int
 }
 
-// 通过循环方式进行二分查找
+// selectLoop 通过循环方式进行二分查找
 func selectLoop(weightedIndexes SearchableSlice, selector uint64) int {
 	var count = weightedIndexes.Count()
 	var lowp = 0
