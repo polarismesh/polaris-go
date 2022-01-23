@@ -321,7 +321,7 @@ func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 	return e.SyncReportStat(model.SDKAPIStat, result)
 }
 
-// reportSvcStat上报服务数据
+// reportSvcStat 上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
 }
