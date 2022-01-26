@@ -29,7 +29,7 @@ import (
 // HealthChecker 【扩展点接口】主动健康探测策略
 type HealthChecker interface {
 	plugin.Plugin
-	// 对单个实例进行探测，返回探测结果
+	// DetectInstance 对单个实例进行探测，返回探测结果
 	// DetectInstance 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
 	DetectInstance(model.Instance) (DetectResult, error)
 }

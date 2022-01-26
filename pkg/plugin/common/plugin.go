@@ -31,7 +31,7 @@ import (
 type Type uint32
 
 const (
-	// TypePluginBase
+	// TypePluginBase .
 	TypePluginBase Type = 0x1000
 	// TypeServerConnector 注册中心连接器扩展点
 	TypeServerConnector Type = 0x1001
@@ -53,7 +53,7 @@ const (
 	TypeAlarmReporter Type = 0x1009
 	// TypeRateLimiter 限流扩展点
 	TypeRateLimiter Type = 0x1010
-
+	// TypeSubScribe .
 	TypeSubScribe Type = 0x1011
 )
 
@@ -77,26 +77,27 @@ func (t Type) String() string {
 	return typeToPresent[t]
 }
 
+// PluginEventType .
 type PluginEventType int
 
 const (
-	// 本地缓存实例创建后触发的时机
+	// OnInstanceLocalValueCreated 本地缓存实例创建后触发的时机
 	OnInstanceLocalValueCreated PluginEventType = 0x8001
-	// 在所有插件创建完毕后触发的事件
+	// OnContextStarted 在所有插件创建完毕后触发的事件
 	OnContextStarted PluginEventType = 0x8002
-	// sdk内存中添加了一个服务（实例或路由）触发的事件
+	// OnServiceAdded sdk内存中添加了一个服务（实例或路由）触发的事件
 	OnServiceAdded PluginEventType = 0x8003
-	// sdk内存中更新了一个服务（实例或路由）触发的事件
+	// OnServiceUpdated sdk内存中更新了一个服务（实例或路由）触发的事件
 	OnServiceUpdated PluginEventType = 0x8004
-	// sdk内存中删除了一个服务（实例或路由）触发的事件
+	// OnServiceDeleted sdk内存中删除了一个服务（实例或路由）触发的事件
 	OnServiceDeleted PluginEventType = 0x8005
-	// 一个经过路由的cluster返回给用户
+	// OnRoutedClusterReturned 一个经过路由的cluster返回给用户
 	OnRoutedClusterReturned PluginEventType = 0x8006
-	// 一个服务的localvalue创建触发的事件
+	// OnServiceLocalValueCreated 一个服务的localvalue创建触发的事件
 	OnServiceLocalValueCreated PluginEventType = 0x8007
-	// 一个限流规则的限流窗口创建时触发的事件
+	// OnRateLimitWindowCreated 一个限流规则的限流窗口创建时触发的事件
 	OnRateLimitWindowCreated PluginEventType = 0x8008
-	// 一个限流规则的限流窗口被删除时触发的事件
+	// OnRateLimitWindowDeleted 一个限流规则的限流窗口被删除时触发的事件
 	OnRateLimitWindowDeleted PluginEventType = 0x8009
 )
 
@@ -221,7 +222,7 @@ func (n *Notifier) Notify(sdkErr model.SDKError) {
 	n.cancel()
 }
 
-// 要加载的插件类型
+// LoadedPluginTypes 要加载的插件类型
 var LoadedPluginTypes = []Type{
 	TypeServerConnector,
 	TypeServiceRouter,
