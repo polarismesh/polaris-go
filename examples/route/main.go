@@ -58,8 +58,8 @@ func main() {
 	getInstancesRequest.Namespace = namespace
 	getInstancesRequest.Service = service
 	getInstancesRequest.SourceService = &model.ServiceInfo{
-		Service:   selfNamespace,
-		Namespace: selfService,
+		Service:   selfService,
+		Namespace: selfNamespace,
 		Metadata: map[string]string{
 			"env": "dev",
 		},
