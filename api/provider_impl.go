@@ -76,7 +76,7 @@ func (c *providerAPI) Destroy() {
 	}
 }
 
-// 通过以默认域名为埋点server的默认配置创建ProviderAPI
+// newProviderAPI 通过以默认域名为埋点server的默认配置创建ProviderAPI
 func newProviderAPI() (ProviderAPI, error) {
 	return newProviderAPIByConfig(config.NewDefaultConfigurationWithDomain())
 }
@@ -104,7 +104,7 @@ func newProviderAPIByContext(context SDKContext) ProviderAPI {
 	return &providerAPI{context}
 }
 
-// 通过系统默认配置文件创建ProviderAPI
+// newProviderAPIByDefaultConfigFile 通过系统默认配置文件创建ProviderAPI
 func newProviderAPIByDefaultConfigFile() (ProviderAPI, error) {
 	path := model.ReplaceHomeVar(config.DefaultConfigFile)
 	return newProviderAPIByFile(path)

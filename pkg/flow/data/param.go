@@ -26,7 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 控制参数提供者
+// ControlParamProvider 控制参数提供者
 type ControlParamProvider interface {
 	// 获取超时值指针
 	GetTimeoutPtr() *time.Duration
@@ -38,7 +38,7 @@ type ControlParamProvider interface {
 	SetRetryCount(int)
 }
 
-// 为服务注册的请求设置默认值
+// BuildControlParam 为服务注册的请求设置默认值
 func BuildControlParam(
 	provider ControlParamProvider, cfg config.Configuration, param *model.ControlParam) {
 	if reflect2.IsNil(provider) || nil == provider.GetTimeoutPtr() {
@@ -56,5 +56,4 @@ func BuildControlParam(
 		provider.SetTimeout(param.Timeout)
 		provider.SetRetryCount(param.MaxRetry)
 	}
-
 }

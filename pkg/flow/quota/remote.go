@@ -38,7 +38,7 @@ import (
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
 
-// 应答回调函数
+// ResponseCallBack 应答回调函数
 type ResponseCallBack interface {
 	// 应答回调函数
 	OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, curTimeMilli int64)
@@ -46,7 +46,7 @@ type ResponseCallBack interface {
 	OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64)
 }
 
-// 限流消息同步器
+// RateLimitMsgSender 限流消息同步器
 type RateLimitMsgSender interface {
 	// 是否已经初始化
 	HasInitialized(svcKey model.ServiceKey, labels string) bool
@@ -58,7 +58,7 @@ type RateLimitMsgSender interface {
 	AdjustTime() int64
 }
 
-// 异步限流连接器
+// AsyncRateLimitConnector 异步限流连接器
 type AsyncRateLimitConnector interface {
 	// 初始化限流控制信息
 	GetMessageSender(svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error)
@@ -71,14 +71,14 @@ type AsyncRateLimitConnector interface {
 // 头信息带给server真实的IP地址
 const headerKeyClientIP = "client-ip"
 
-// 基于时间段的回调结构
+// DurationBaseCallBack 基于时间段的回调结构
 type DurationBaseCallBack struct {
 	record   *InitializeRecord
 	callBack ResponseCallBack
 	duration time.Duration
 }
 
-// 初始化记录
+// InitializeRecord 初始化记录
 type InitializeRecord struct {
 	identifier        *CounterIdentifier
 	counterSet        *StreamCounterSet
@@ -88,7 +88,7 @@ type InitializeRecord struct {
 	lastRecvTimeMilli int64
 }
 
-// 记录超时
+// Expired 记录超时
 func (ir *InitializeRecord) Expired(nowMilli int64) bool {
 	lastRecvMilli := atomic.LoadInt64(&ir.lastRecvTimeMilli)
 	lastInitMilli := atomic.LoadInt64(&ir.initSendTimeMilli)
@@ -102,7 +102,7 @@ const (
 	syncTimeInterval = 30 * time.Second
 )
 
-// 同一个节点的counter集合，用于回调
+// StreamCounterSet 同一个节点的counter集合，用于回调
 type StreamCounterSet struct {
 	// 锁，保证下面2个map同步
 	mutex *sync.RWMutex
@@ -134,7 +134,7 @@ type StreamCounterSet struct {
 	timeDiff int64
 }
 
-// 新建流管理器
+// NewStreamCounterSet 新建流管理器
 func NewStreamCounterSet(asyncConnector *asyncRateLimitConnector, identifier *HostIdentifier) *StreamCounterSet {
 	streamCounterSet := &StreamCounterSet{
 		mutex:           &sync.RWMutex{},
@@ -145,7 +145,7 @@ func NewStreamCounterSet(asyncConnector *asyncRateLimitConnector, identifier *Ho
 	return streamCounterSet
 }
 
-// 比较两个元素
+// CompareTo 比较两个元素
 func (s *StreamCounterSet) CompareTo(value interface{}) int {
 	record := value.(*StreamCounterSet)
 	if *s.HostIdentifier == *record.HostIdentifier {
@@ -154,14 +154,14 @@ func (s *StreamCounterSet) CompareTo(value interface{}) int {
 	return 1
 }
 
-// 删除前进行检查，返回true才删除，该检查是同步操作
+// EnsureDeleted 删除前进行检查，返回true才删除，该检查是同步操作
 func (s *StreamCounterSet) EnsureDeleted(value interface{}) bool {
 	counterSet := value.(*StreamCounterSet)
 	result := atomic.LoadInt32(&counterSet.expired) > 0
 	return result
 }
 
-// 是否已经初始化
+// HasInitialized 是否已经初始化
 func (s *StreamCounterSet) HasInitialized(svcKey model.ServiceKey, labels string) bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -174,7 +174,7 @@ func (s *StreamCounterSet) HasInitialized(svcKey model.ServiceKey, labels string
 	return ok && len(record.counterKeys) > 0
 }
 
-// 创建连接
+// createConnection 创建连接
 func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
@@ -189,7 +189,7 @@ func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-// 初始化操作的前置检查
+// preInitCheck 初始化操作的前置检查
 func (s *StreamCounterSet) preInitCheck(
 	counterIdentifier CounterIdentifier, callback ResponseCallBack) rlimitV2.RateLimitGRPCV2_ServiceClient {
 	s.mutex.Lock()
@@ -247,7 +247,7 @@ func createHeaderContext(headers map[string]string) context.Context {
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
-// 发送初始化请求
+// SendInitRequest 发送初始化请求
 func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitRequest, callback ResponseCallBack) {
 	counterIdentifier := CounterIdentifier{
 		service:   initReq.GetTarget().GetService(),
@@ -273,7 +273,7 @@ func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitReques
 	}
 }
 
-// 检查并创建客户端
+// checkAndCreateClient 检查并创建客户端
 func (s *StreamCounterSet) checkAndCreateClient() (rlimitV2.RateLimitGRPCV2Client, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -302,7 +302,7 @@ func (s *StreamCounterSet) checkAndCreateClient() (rlimitV2.RateLimitGRPCV2Clien
 	return s.client, nil
 }
 
-// 检查是否已经超时
+// Expired 检查是否已经超时
 func (s *StreamCounterSet) Expired(nowMilli int64, clearRecords bool) bool {
 	if clearRecords {
 		s.eliminateExpiredRecords(nowMilli)
@@ -322,7 +322,7 @@ func (s *StreamCounterSet) Expired(nowMilli int64, clearRecords bool) bool {
 	return false
 }
 
-// 清理超时的记录
+// eliminateExpiredRecords 清理超时的记录
 func (s *StreamCounterSet) eliminateExpiredRecords(nowMilli int64) {
 	s.mutex.RLock()
 	records := make(map[CounterIdentifier]*InitializeRecord, len(s.initialingWindows))
@@ -343,7 +343,7 @@ func (s *StreamCounterSet) eliminateExpiredRecords(nowMilli int64) {
 	}
 }
 
-// 同步时间
+// AdjustTime 同步时间
 func (s *StreamCounterSet) AdjustTime() int64 {
 	client, err := s.checkAndCreateClient()
 	if nil != err {
@@ -374,7 +374,7 @@ func (s *StreamCounterSet) AdjustTime() int64 {
 	return timeDiff
 }
 
-// 关闭连接
+// closeConnection 关闭连接
 func (s *StreamCounterSet) closeConnection() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -384,13 +384,13 @@ func (s *StreamCounterSet) closeConnection() {
 	}
 }
 
-// 清理stream
+// cleanup 清理stream
 func (s *StreamCounterSet) cleanup(serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
 	s.asyncConnector.dropStreamCounterSet(s, serviceStream)
 	s.closeConnection()
 }
 
-// 转为http status
+// code2CommonCode 转为http status
 func code2CommonCode(code uint32) int {
 	value := int(code / 1000)
 	if value < 100 {
@@ -400,12 +400,12 @@ func code2CommonCode(code uint32) int {
 
 }
 
-// 是否成功错误码
+// IsSuccess 是否成功错误码
 func IsSuccess(code uint32) bool {
 	return code2CommonCode(code) == 200
 }
 
-// 通过初始化应答来更新
+// updateByInitResp 通过初始化应答来更新
 func (s *StreamCounterSet) updateByInitResp(identifier CounterIdentifier, initResp *rlimitV2.RateLimitInitResponse) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -426,7 +426,7 @@ func (s *StreamCounterSet) updateByInitResp(identifier CounterIdentifier, initRe
 	}
 }
 
-// 处理初始化应答
+// processInitResponse 处理初始化应答
 func (s *StreamCounterSet) processInitResponse(initResp *rlimitV2.RateLimitInitResponse) bool {
 	target := initResp.GetTarget()
 	identifier := CounterIdentifier{
@@ -453,7 +453,7 @@ func (s *StreamCounterSet) processInitResponse(initResp *rlimitV2.RateLimitInitR
 	return false
 }
 
-// 处理上报的应答
+// processReportResponse 处理上报的应答
 func (s *StreamCounterSet) processReportResponse(reportRsp *rlimitV2.RateLimitReportResponse) bool {
 	if IsSuccess(reportRsp.GetCode()) {
 		s.mutex.RLock()
@@ -473,7 +473,7 @@ func (s *StreamCounterSet) processReportResponse(reportRsp *rlimitV2.RateLimitRe
 	return false
 }
 
-// 处理应答消息
+// processResponse 处理应答消息
 func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
 	defer s.cleanup(serviceStream)
 	for {
@@ -508,7 +508,7 @@ func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV
 	}
 }
 
-// 发送上报请求
+// SendReportRequest 发送上报请求
 func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRateLimitReportRequest) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -555,7 +555,7 @@ func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRat
 	return nil
 }
 
-// 节点标识
+// HostIdentifier 节点标识
 type HostIdentifier struct {
 	host string
 	port uint32
@@ -566,19 +566,19 @@ func (h HostIdentifier) String() string {
 	return fmt.Sprintf("{host: %s, port: %d}", h.host, h.port)
 }
 
-// 计数器标识
+// CounterIdentifier 计数器标识
 type CounterIdentifier struct {
 	service   string
 	namespace string
 	labels    string
 }
 
-// ToString输出
+// String ToString输出
 func (c CounterIdentifier) String() string {
 	return fmt.Sprintf("{service: %s, namespace: %s, labels: %s}", c.service, c.namespace, c.labels)
 }
 
-// 目前只实现了 RateLimit-Acquire的异步 和 metric-report的异步
+// asyncRateLimitConnector 目前只实现了 RateLimit-Acquire的异步 和 metric-report的异步
 type asyncRateLimitConnector struct {
 	// 读写锁，守护streams列表
 	mutex *sync.RWMutex
@@ -633,7 +633,7 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 	}
 }
 
-// 淘汰流管理器
+// dropStreamCounterSet 淘汰流管理器
 func (a *asyncRateLimitConnector) dropStreamCounterSet(
 	streamCounterSet *StreamCounterSet, serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
 	a.mutex.Lock()
@@ -645,7 +645,7 @@ func (a *asyncRateLimitConnector) dropStreamCounterSet(
 	delete(a.streams, *streamCounterSet.HostIdentifier)
 }
 
-// 获取流计数器
+// getStreamCounterSet 获取流计数器
 func (a *asyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentifier) (*StreamCounterSet, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -655,7 +655,7 @@ func (a *asyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentif
 	return a.streams[hostIdentifier], nil
 }
 
-// 定时处理过期任务
+// Process 定时处理过期任务
 func (a *asyncRateLimitConnector) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	counterSet := taskValue.(*StreamCounterSet)
@@ -685,14 +685,14 @@ func (a *asyncRateLimitConnector) OnTaskEvent(event model.TaskEvent) {
 
 }
 
-// 获取stream的数量，用于测试
+// StreamCount 获取stream的数量，用于测试
 func (a *asyncRateLimitConnector) StreamCount() int {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 	return len(a.streams)
 }
 
-// 创建流上下文
+// GetMessageSender 创建流上下文
 func (a *asyncRateLimitConnector) GetMessageSender(
 	svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error) {
 	req := &model.GetOneInstanceRequest{}
@@ -755,7 +755,7 @@ func (a *asyncRateLimitConnector) getIPString(remoteHost string, remotePort uint
 	return a.clientHost
 }
 
-// 清理
+// Destroy 清理
 func (a *asyncRateLimitConnector) Destroy() {
 	a.mutex.Lock()
 	a.destroyed = true

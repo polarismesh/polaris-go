@@ -1,5 +1,5 @@
 /**
- * Tencent is pleased to support the open source community by making polaris-go available.
+ * Tencent is pleased to support the open source community by making Polaris available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
  *
@@ -15,25 +15,15 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package localchannel
+package model
 
-const (
-	DefaultChannelBufferSize = 30
-)
+import "testing"
 
-// Config 上报缓存信息插件的配置
-type Config struct {
-	ChannelBufferSize uint32 `yaml:"channelBufferSize" json:"channelBufferSize"`
-}
-
-// Verify 校验配置
-func (c *Config) Verify() error {
-	return nil
-}
-
-// SetDefault 设置默认配置值
-func (c *Config) SetDefault() {
-	if c.ChannelBufferSize == 0 {
-		c.ChannelBufferSize = DefaultChannelBufferSize
+// TestIsFile 测试文件是否存在
+func TestIsFile(t *testing.T) {
+	fileName := "./notExist.txt"
+	result := IsFile(fileName)
+	if result {
+		t.Fatalf("file %s exists check, expect false, actual true", fileName)
 	}
 }

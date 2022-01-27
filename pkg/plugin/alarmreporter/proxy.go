@@ -35,7 +35,7 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.engine = engine
 }
 
-// 注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeAlarmReporter, &Proxy{})
 }

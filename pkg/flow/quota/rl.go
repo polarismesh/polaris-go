@@ -21,7 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 限流的类型
+// RateLimitType 限流的类型
 type RateLimitType int
 
 const (

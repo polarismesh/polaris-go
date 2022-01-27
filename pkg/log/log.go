@@ -124,9 +124,7 @@ const (
 	MaxLogger
 )
 
-/**
- * @brief 日志容器接口
- */
+// container 日志容器接口
 type container struct {
 	loggers []*atomic.Value
 }
@@ -361,7 +359,7 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 	}
 }
 
-// 配置日志插件
+// configLogger 配置日志插件
 func configLogger(pluginName string, loggerName string, options *Options, defaultLevel int) (logger Logger, err error) {
 	if err = options.Verify(); nil != err {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,

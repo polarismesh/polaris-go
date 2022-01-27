@@ -144,7 +144,7 @@ func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.
 
 const minAmountDuration = 1 * time.Second
 
-// 校验配额总量
+// validateAmount 校验配额总量
 func validateAmount(amounts []*namingpb.Amount) error {
 	if len(amounts) == 0 {
 		return nil

@@ -33,7 +33,7 @@ type StatReporter interface {
 	ReportStat(model.MetricType, model.InstanceGauge) error
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeStatReporter, new(StatReporter))
 }

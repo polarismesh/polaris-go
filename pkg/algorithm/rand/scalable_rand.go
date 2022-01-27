@@ -43,7 +43,7 @@ func NewScalableRand() *ScalableRand {
 	return scalableRand
 }
 
-// 循环并获取唯一的随机数种子
+// getRandSeed 循环并获取唯一的随机数种子
 func (s *ScalableRand) getRandSeed() int64 {
 	var seed int64
 	for {
@@ -56,7 +56,7 @@ func (s *ScalableRand) getRandSeed() int64 {
 	return seed
 }
 
-// 获取并比较种子数
+// getAndSetInitSeed 获取并比较种子数
 func (s *ScalableRand) getAndSetInitSeed(seed int64) bool {
 	initSeed := atomic.LoadInt64(&s.initSeed)
 	if initSeed == seed {
@@ -87,7 +87,7 @@ func Intn(n int) int {
 	return globalRand.Intn(n)
 }
 
-// 初始化全局随机种子
+// init 初始化全局随机种子
 func init() {
 	globalRand = NewScalableRand()
 }

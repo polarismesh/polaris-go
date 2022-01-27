@@ -42,7 +42,7 @@ var (
 	pluginTypes = make(map[common.Type]map[string]pluginType)
 )
 
-// 插件类型封装
+// pluginType 插件类型封装
 type pluginType struct {
 	// 插件ID
 	pluginId int32
@@ -50,7 +50,7 @@ type pluginType struct {
 	reflectType reflect.Type
 }
 
-// 检查插件是否已经注册
+// IsPluginRegistered 检查插件是否已经注册
 func IsPluginRegistered(typ common.Type, name string) bool {
 	var ok bool
 	var plugins map[string]pluginType
@@ -63,9 +63,7 @@ func IsPluginRegistered(typ common.Type, name string) bool {
 	return true
 }
 
-/**
- * @brief 插件提供者
- */
+// Supplier 插件提供者
 type Supplier interface {
 	// GetPlugin 获取插件实例
 	GetPlugin(typ common.Type, name string) (Plugin, error)
@@ -79,9 +77,7 @@ type Supplier interface {
 	RegisterEventSubscriber(event common.PluginEventType, handler common.PluginEventHandler)
 }
 
-/**
- * @brief 插件管理器统一接口
- */
+// Manager 插件管理器统一接口
 type Manager interface {
 	Supplier
 	// InitPlugins 初始化插件列表
@@ -92,7 +88,7 @@ type Manager interface {
 	StartPlugins() error
 }
 
-// 插件实例包装类
+// pluginWrapper 插件实例包装类
 type pluginWrapper struct {
 	// 插件唯一标识，与具体插件类型对应
 	id int32
@@ -118,12 +114,12 @@ type manager struct {
 	initialized uint32
 }
 
-// 判断是否实现了对应的接口
+// instanceOf 判断是否实现了对应的接口
 func instanceOf(value interface{}, interfaceType reflect.Type) bool {
 	return reflect.PtrTo(reflect.TypeOf(value).Elem()).Implements(interfaceType)
 }
 
-// 检查插件是否实现了对应的插件接口
+// checkInterfaceType 检查插件是否实现了对应的插件接口
 func checkInterfaceType(plugin Plugin) error {
 	intfType := pluginInterfaceTypes[plugin.Type()]
 	if !instanceOf(plugin, intfType) {
@@ -133,7 +129,7 @@ func checkInterfaceType(plugin Plugin) error {
 	return nil
 }
 
-// 注册插件接口类型
+// RegisterPluginInterface 注册插件接口类型
 func RegisterPluginInterface(typ common.Type, plugin interface{}) {
 	if _, ok := pluginInterfaceTypes[typ]; ok {
 		// 开发态错误，直接panic以便快速发现问题
@@ -142,7 +138,7 @@ func RegisterPluginInterface(typ common.Type, plugin interface{}) {
 	pluginInterfaceTypes[typ] = reflect.TypeOf(plugin).Elem()
 }
 
-// 注册插件proxy类型
+// RegisterPluginProxy 注册插件proxy类型
 func RegisterPluginProxy(typ common.Type, proxy PluginProxy) {
 	if _, ok := pluginProxyTypes[typ]; ok {
 		panic(fmt.Sprintf("duplicate register for plugin proxy type %s", typ))
@@ -155,7 +151,7 @@ func RegisterPlugin(plugin Plugin) {
 	RegisterConfigurablePlugin(plugin, nil)
 }
 
-// RegisterPlugin 注册插件到全局配置对象，并注册插件配置类型
+// RegisterConfigurablePlugin 注册插件到全局配置对象，并注册插件配置类型
 func RegisterConfigurablePlugin(plugin Plugin, cfg config.BaseConfig) {
 	if err := checkInterfaceType(plugin); nil != err {
 		// 插件注册失败则直接panic，让用户直接感知
@@ -182,7 +178,7 @@ func createPlugin(typ reflect.Type) Plugin {
 	return value.(Plugin)
 }
 
-// 创建插件proxy
+// createPluginProxy 创建插件proxy
 func createPluginProxy(typ common.Type) PluginProxy {
 	t := pluginProxyTypes[typ]
 	value := reflect.New(t).Interface()
@@ -246,7 +242,7 @@ func (m *manager) InitPlugins(
 	return nil
 }
 
-// 启动所有插件
+// StartPlugins 启动所有插件
 func (m *manager) StartPlugins() error {
 	if atomic.LoadUint32(&m.initialized) == 0 {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil, "manager has not been initialized")
@@ -269,7 +265,7 @@ func (m *manager) StartPlugins() error {
 	return err
 }
 
-// 清理插件初始化结果，并返回输入错误
+// cleanupWhenError 清理插件初始化结果，并返回输入错误
 func (m *manager) cleanupWhenError(sdkErr model.SDKError) error {
 	if nil == sdkErr {
 		return nil
@@ -323,7 +319,7 @@ func (m *manager) GetPlugin(typ common.Type, name string) (Plugin, error) {
 	return plug.instance, nil
 }
 
-// 获取一个类型的加载的插件名字
+// GetPluginsByType 获取一个类型的加载的插件名字
 func (m *manager) GetPluginsByType(typ common.Type) []string {
 	var res []string
 	plugins, exists := m.plugins[typ]
@@ -336,7 +332,7 @@ func (m *manager) GetPluginsByType(typ common.Type) []string {
 	return res
 }
 
-// 通过id获取插件
+// GetPluginById 通过id获取插件
 func (m *manager) GetPluginById(id int32) (Plugin, error) {
 	plugin, exists := m.idToPlugins[id]
 	if !exists {
@@ -345,7 +341,7 @@ func (m *manager) GetPluginById(id int32) (Plugin, error) {
 	return plugin, nil
 }
 
-// GetPlugin 获取插件
+// GetPluginId 获取插件
 func GetPluginId(typ common.Type, name string) (int32, error) {
 	plugs, exists := pluginTypes[typ]
 	if !exists {
@@ -360,13 +356,13 @@ func GetPluginId(typ common.Type, name string) (int32, error) {
 	return plug.pluginId, nil
 }
 
-// 获取某个类型下注册的插件数量
+// GetPluginCount 获取某个类型下注册的插件数量
 func GetPluginCount(typ common.Type) int {
 	plugs := pluginTypes[typ]
 	return len(plugs)
 }
 
-// 注册事件回调函数
+// RegisterEventSubscriber 注册事件回调函数
 func (m *manager) RegisterEventSubscriber(event common.PluginEventType, handler common.PluginEventHandler) {
 	if atomic.LoadUint32(&m.initialized) > 0 {
 		panic("manager has initialized")
@@ -381,7 +377,7 @@ func (m *manager) RegisterEventSubscriber(event common.PluginEventType, handler 
 	m.eventSubscriber[event] = handlers
 }
 
-// 注册事件回调函数
+// GetEventSubscribers 注册事件回调函数
 func (m *manager) GetEventSubscribers(event common.PluginEventType) []common.PluginEventHandler {
 	if atomic.LoadUint32(&m.initialized) == 0 {
 		panic("manager has not initialized")
@@ -389,7 +385,7 @@ func (m *manager) GetEventSubscribers(event common.PluginEventType) []common.Plu
 	return m.eventSubscriber[event]
 }
 
-// 用于插件初始化的上下文对象
+// InitContext 用于插件初始化的上下文对象
 type InitContext struct {
 	Config       config.Configuration
 	Plugins      Supplier
@@ -426,64 +422,64 @@ type Plugin interface {
 	IsEnable(cfg config.Configuration) bool
 }
 
-// Plugin Base
+// PluginBase Plugin Base
 type PluginBase struct {
 	pluginIndex int32
 	sdkID       string
 }
 
-// type
+// Type
 func (b *PluginBase) Type() common.Type {
 	return common.TypePluginBase
 }
 
-// name
+// Name
 func (b *PluginBase) Name() string {
 	return common.TypePluginBase.String()
 }
 
-// init
+// Init init
 func (b *PluginBase) Init(ctx *InitContext) error {
 	b.pluginIndex = ctx.PluginIndex
 	b.sdkID = ctx.SDKContextID
 	return nil
 }
 
-// 插件id
+// ID 插件id
 func (b *PluginBase) ID() int32 {
 	return b.pluginIndex
 }
 
-// 获取所属sdkContext的uuid
+// GetSDKContextID 获取所属sdkContext的uuid
 func (b *PluginBase) GetSDKContextID() string {
 	return b.sdkID
 }
 
-// destroy
+// Destroy destroy
 func (b *PluginBase) Destroy() error {
 	return nil
 }
 
-// 启动插件
+// Start 启动插件
 func (b *PluginBase) Start() error {
 	// do nothing
 	return nil
 }
 
-// 创建pluginbase
+// NewPluginBase 创建pluginbase
 func NewPluginBase(ctx *InitContext) *PluginBase {
 	res := &PluginBase{}
 	res.Init(ctx)
 	return res
 }
 
-// Plugin的代理
+// PluginProxy Plugin的代理
 type PluginProxy interface {
 	Plugin
 	SetRealPlugin(plugin Plugin, engine model.Engine)
 }
 
-// is enable
+// IsEnable is enable
 func (b *PluginBase) IsEnable(cfg config.Configuration) bool {
 	return true
 }

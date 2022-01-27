@@ -22,7 +22,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 限流API对象
+// limitAPI 限流API对象
 type limitAPI struct {
 	context SDKContext
 }
@@ -51,7 +51,7 @@ func (c *limitAPI) Destroy() {
 	}
 }
 
-// 通过以默认域名为埋点server的默认配置创建LimitAPI
+// newLimitAPI 通过以默认域名为埋点server的默认配置创建LimitAPI
 func newLimitAPI() (LimitAPI, error) {
 	return newLimitAPIByConfig(config.NewDefaultConfigurationWithDomain())
 }

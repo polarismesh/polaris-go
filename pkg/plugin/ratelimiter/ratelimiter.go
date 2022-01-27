@@ -26,18 +26,18 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 配额查询相关的信息
+// InitCriteria 配额查询相关的信息
 type InitCriteria struct {
 	DstRule *namingpb.Rule
 }
 
-// 单个配额
+// AmountDuration 单个配额
 type AmountDuration struct {
 	AmountUsed    uint32
 	ValidDuration time.Duration
 }
 
-// 配额池
+// QuotaBucket 配额池
 type QuotaBucket interface {
 	// 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
 	GetQuota() (*QuotaResult, error)
@@ -45,7 +45,7 @@ type QuotaBucket interface {
 	Release()
 }
 
-// 配额分配的结果
+// QuotaResult 配额分配的结果
 type QuotaResult struct {
 	// 分配的结果码
 	Code model.QuotaResultCode
@@ -55,7 +55,7 @@ type QuotaResult struct {
 	QueueTime time.Duration
 }
 
-// 服务限流处理插件接口
+// ServiceRateLimiter 服务限流处理插件接口
 type ServiceRateLimiter interface {
 	plugin.Plugin
 	// 初始化并创建令牌桶/漏桶
@@ -63,7 +63,7 @@ type ServiceRateLimiter interface {
 	InitQuota(criteria *InitCriteria) (QuotaBucket, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeRateLimiter, new(ServiceRateLimiter))
 }

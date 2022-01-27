@@ -31,21 +31,21 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// 结果上报及归还请求实例请求对象
+// syncInstancesReportAndFinalize 结果上报及归还请求实例请求对象
 func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstancesRequest) {
 	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonInstancesRequest(commonRequest)
 }
 
-// 结果上报及归还限流请求对象
+// syncRateLimitReportAndFinalize 结果上报及归还限流请求对象
 func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest) {
 	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
 
-// 结果上报及归还请求实例规则对象
+// syncRuleReportAndFinalize 结果上报及归还请求实例规则对象
 func (e *Engine) syncRuleReportAndFinalize(commonRequest *data.CommonRuleRequest) {
 	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
@@ -89,7 +89,7 @@ func (e *Engine) SyncGetOneInstance(req *model.GetOneInstanceRequest) (*model.On
 	return resp, err
 }
 
-// 操作主要业务逻辑
+// doSyncGetOneInstance 操作主要业务逻辑
 func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
@@ -123,7 +123,7 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 	return &model.OneInstanceResponse{InstancesResponse: *instancesResp}, nil
 }
 
-// 同步加载资源
+// SyncGetResources 同步加载资源
 func (e *Engine) SyncGetResources(req model.CacheValueQuery) error {
 	var err error
 	var retryTimes = -1
@@ -191,7 +191,7 @@ outLoop:
 	return model.NewSDKError(model.ErrCodeAPITimeoutError, err, errMsg)
 }
 
-// 上报在获取实例信息时可能发生的多个错误
+// reportCombinedErrs 上报在获取实例信息时可能发生的多个错误
 func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime time.Duration,
 	errs map[ContextKey]model.SDKError) {
 	origDelay := *apiRes.GetDelay()
@@ -216,7 +216,7 @@ func (e *Engine) getServiceRoutedInstances(
 		req.DstInstances.GetServiceClusters())
 }
 
-// 同步获取封装的服务实例应答
+// syncGetWrapInstances 同步获取封装的服务实例应答
 func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 	var redirectedTimes = 0
 	var cluster *model.Cluster
@@ -249,7 +249,7 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 		config.MaxRedirectTimes, req.DstService.Service, req.DstService.Namespace)
 }
 
-// 缓存对账，确保cluster的根与当前查询出来的服务实例一致
+// verifyCluster 缓存对账，确保cluster的根与当前查询出来的服务实例一致
 func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster) *model.Cluster {
 	clsServices := cluster.GetClusters().GetServiceInstances()
 	if clsServices.GetRevision() == svcInstances.GetRevision() {
@@ -322,9 +322,7 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 		targetCls, instances, totalWeight, commonRequest.Revision, commonRequest.DstInstances.GetMetadata()), nil
 }
 
-/**
- * @brief 同步进行服务注册
- */
+// SyncRegister 同步进行服务注册
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
@@ -352,9 +350,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 	return resp.(*model.InstanceRegisterResponse), nil
 }
 
-/**
- * @brief 同步进行服务反注册
- */
+// SyncDeregister 同步进行服务反注册
 func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error {
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
@@ -382,9 +378,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 	return err
 }
 
-/**
- * @brief 同步进行心跳上报
- */
+// SyncHeartbeat 同步进行心跳上报
 func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
@@ -412,9 +406,7 @@ func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 	return err
 }
 
-/**
- * @brief 同步上报调用结果信息
- */
+// SyncUpdateServiceCallResult 同步上报调用结果信息
 func (e *Engine) SyncUpdateServiceCallResult(result *model.ServiceCallResult) error {
 	commonRequest := data.PoolGetCommonServiceCallResultRequest(e.plugins)
 	commonRequest.InitByServiceCallResult(result, e.configuration)
@@ -430,9 +422,7 @@ func (e *Engine) SyncUpdateServiceCallResult(result *model.ServiceCallResult) er
 	return err
 }
 
-/**
- * @brief 同步上报调用结果信息 实际处理函数
- */
+// realSyncUpdateServiceCallResult 同步上报调用结果信息 实际处理函数
 func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult) error {
 	// 当前处理熔断和服务调用统计上报
 	if err := e.reportSvcStat(result); nil != err {
@@ -511,7 +501,7 @@ func (e *Engine) doSyncGetMeshConfig(commonRequest *data.MeshConfigRequest) (
 	return commonRequest.BuildMeshConfigResponse(commonRequest.GetMeshConfig()), nil
 }
 
-// 同步获取网格
+// SyncGetMesh 同步获取网格
 func (e *Engine) SyncGetMesh(eventType model.EventType,
 	req *model.GetMeshRequest) (*model.MeshResponse, error) {
 	// 方法开始时间
@@ -531,7 +521,7 @@ func (e *Engine) doSyncGetMesh(commonRequest *data.MeshRequest) (
 	return commonRequest.BuildMeshResponse(commonRequest.GetMesh()), nil
 }
 
-// 同步获取服务规则
+// SyncGetServiceRule 同步获取服务规则
 func (e *Engine) SyncGetServiceRule(
 	eventType model.EventType, req *model.GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
 	commonRequest := data.PoolGetCommonRuleRequest()
@@ -541,7 +531,7 @@ func (e *Engine) SyncGetServiceRule(
 	return resp, err
 }
 
-// 同步获取服务规则
+// doSyncGetServiceRule 同步获取服务规则
 func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*model.ServiceRuleResponse, error) {
 	maxRetryTimes := commonRequest.ControlParam.MaxRetry
 	// 构建规则过滤器
@@ -604,7 +594,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 		maxRetryTimes, commonRequest.DstService.Service, commonRequest.DstService.Namespace)
 }
 
-// 初始化服务运行中需要的被调服务
+// InitCalleeService 初始化服务运行中需要的被调服务
 func (e *Engine) InitCalleeService(req *model.InitCalleeServiceRequest) error {
 	commonRequest := &data.ConsumerInitCallServiceResultRequest{}
 	commonRequest.InitByServiceCallResult(req, e.configuration)
@@ -613,7 +603,7 @@ func (e *Engine) InitCalleeService(req *model.InitCalleeServiceRequest) error {
 	return err
 }
 
-// 初始化服务运行中需要的被调服务
+// realInitCalleeService 初始化服务运行中需要的被调服务
 func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 	reportReq *data.ConsumerInitCallServiceResultRequest) error {
 	getAllReq := model.GetAllInstancesRequest{

@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 负载均衡的过滤值成员
+// Criteria 负载均衡的过滤值成员
 type Criteria struct {
 	// 用户传入用于计算hash的二进制流
 	HashKey []byte
@@ -37,7 +37,7 @@ type Criteria struct {
 	ReplicateInfo ReplicateInfo
 }
 
-// 备份节点信息
+// ReplicateInfo 备份节点信息
 type ReplicateInfo struct {
 	Count int
 	Nodes []model.Instance
@@ -50,7 +50,7 @@ type LoadBalancer interface {
 	ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error)
 }
 
-// 初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeLoadBalancer, new(LoadBalancer))
 }

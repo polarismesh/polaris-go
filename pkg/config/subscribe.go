@@ -40,17 +40,17 @@ func (s *SubscribeImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeSubScribe)
 }
 
-// verify
+// Verify
 func (s *SubscribeImpl) Verify() error {
 	return nil
 }
 
-// 设置插件
+// SetType 设置插件
 func (s *SubscribeImpl) SetType(typeStr string) {
 	s.Type = typeStr
 }
 
-// 获取插件
+// GetType 获取插件
 func (s *SubscribeImpl) GetType() string {
 	return s.Type
 }

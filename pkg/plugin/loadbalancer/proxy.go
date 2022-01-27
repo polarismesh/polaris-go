@@ -29,7 +29,7 @@ type Proxy struct {
 	engine model.Engine
 }
 
-// 设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.LoadBalancer = plug.(LoadBalancer)
 	p.engine = engine
@@ -40,7 +40,7 @@ type SelectStatus struct {
 	IncludeHalfOpen     bool
 }
 
-// proxy LoadBalancer ChooseInstance
+// ChooseInstance proxy LoadBalancer ChooseInstance
 func (p *Proxy) ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error) {
 	// 第一次进行负载均衡，包括半开实例
 	criteria.Cluster.IncludeHalfOpen = true
@@ -68,7 +68,7 @@ func (p *Proxy) ChooseInstance(criteria *Criteria, instances model.ServiceInstan
 	return firstResult, nil
 }
 
-// 注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeLoadBalancer, &Proxy{})
 }

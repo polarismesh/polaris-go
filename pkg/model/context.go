@@ -51,7 +51,7 @@ type SDKToken struct {
 	HostName string
 }
 
-// 地域信息
+// LocationInfo 地域信息
 type LocationInfo interface {
 	// 获取地域明细
 	GetLocation() *Location
@@ -65,7 +65,7 @@ type LocationInfo interface {
 	IsLocationReady() bool
 }
 
-// 用于主流程传递kv数据的上下文对象，线程安全
+// ValueContext 用于主流程传递kv数据的上下文对象，线程安全
 type ValueContext interface {
 	// 设置kv值
 	SetValue(key string, value interface{})
@@ -88,7 +88,7 @@ type ValueContext interface {
 	Since(time.Time) time.Duration
 }
 
-// 创建kv上下文对象
+// NewValueContext 创建kv上下文对象
 func NewValueContext() ValueContext {
 	ctx := &valueContext{
 		coreMap: &sync.Map{},
@@ -113,7 +113,7 @@ const (
 	LocationEmpty
 )
 
-// 地域信息包装类型，含控制及状态信息
+// locationInfo 地域信息包装类型，含控制及状态信息
 type locationInfo struct {
 	// 地域详情
 	location *Location
@@ -123,46 +123,46 @@ type locationInfo struct {
 	locationStatus uint32
 }
 
-// 获取地域明细
+// GetLocation 获取地域明细
 func (l *locationInfo) GetLocation() *Location {
 	return l.location
 }
 
-// 在地域信息获取过程中的错误信息
+// GetLastError 在地域信息获取过程中的错误信息
 func (l *locationInfo) GetLastError() SDKError {
 	return l.lastErr
 }
 
-// 获取地域信息状态
+// GetStatus 获取地域信息状态
 func (l *locationInfo) GetStatus() uint32 {
 	return l.locationStatus
 }
 
-// 查看地域信息是否已经初始化过
+// IsLocationInitialized 查看地域信息是否已经初始化过
 func (l *locationInfo) IsLocationInitialized() bool {
 	return l.GetStatus() > LocationInit
 }
 
-// 查看地域信息是否ready状态
+// IsLocationReady 查看地域信息是否ready状态
 func (l *locationInfo) IsLocationReady() bool {
 	return l.GetStatus() == LocationReady
 }
 
-// 通过context.Done通知一个事件的发生
+// contextNotifier 通过context.Done通知一个事件的发生
 type contextNotifier struct {
 	context.Context
 	cancel     context.CancelFunc
 	onceNotify sync.Once
 }
 
-// 通知事件发生
+// Notify 通知事件发生
 func (c *contextNotifier) Notify() {
 	c.onceNotify.Do(func() {
 		c.cancel()
 	})
 }
 
-// ValueContext的实现类
+// valueContext ValueContext的实现类
 type valueContext struct {
 	// 当前地域信息
 	currentLocation atomic.Value
@@ -178,7 +178,7 @@ type valueContext struct {
 	coreMap *sync.Map
 }
 
-// 等待地域信息状态
+// WaitLocationInfo 等待地域信息状态
 func (v *valueContext) WaitLocationInfo(ctx context.Context, locationStatus uint32) bool {
 	switch locationStatus {
 	case LocationInit:
@@ -200,23 +200,23 @@ func (v *valueContext) WaitLocationInfo(ctx context.Context, locationStatus uint
 	return false
 }
 
-// 设置kv值
+// SetValue 设置kv值
 func (v *valueContext) SetValue(key string, value interface{}) {
 	v.coreMap.Store(key, value)
 }
 
-// 获取kv值
+// GetValue 获取kv值
 func (v *valueContext) GetValue(key string) (interface{}, bool) {
 	return v.coreMap.Load(key)
 }
 
-// 获取当前节点地域信息
+// GetCurrentLocation 获取当前节点地域信息
 func (v *valueContext) GetCurrentLocation() LocationInfo {
 	value := v.currentLocation.Load()
 	return value.(LocationInfo)
 }
 
-// 设置当前节点地域信息
+// SetCurrentLocation 设置当前节点地域信息
 func (v *valueContext) SetCurrentLocation(location *Location, lastErr SDKError) bool {
 	locInfo := &locationInfo{
 		location: location,
@@ -250,22 +250,22 @@ func (v *valueContext) SetCurrentLocation(location *Location, lastErr SDKError) 
 	return becomeReady
 }
 
-// 获取当前时间戳
+// Now 获取当前时间戳
 func (v *valueContext) Now() time.Time {
 	return v.clock.Now()
 }
 
-// 计算时间间隔
+// Since 计算时间间隔
 func (v *valueContext) Since(startTime time.Time) time.Duration {
 	return v.Now().Sub(startTime)
 }
 
-// 查看地域信息是否ready状态
+// IsLocationReady 查看地域信息是否ready状态
 func (v *valueContext) IsLocationReady() bool {
 	return v.GetCurrentLocation().IsLocationReady()
 }
 
-// 获取客户端ID
+// GetClientId 获取客户端ID
 func (v *valueContext) GetClientId() string {
 	tokenValue, ok := v.GetValue(ContextKeyToken)
 	if !ok {
@@ -275,7 +275,7 @@ func (v *valueContext) GetClientId() string {
 	return sdkToken.UID
 }
 
-// 获取客户端ID
+// GetEngine 获取客户端ID
 func (v *valueContext) GetEngine() Engine {
 	value, ok := v.GetValue(ContextKeyEngine)
 	if !ok {

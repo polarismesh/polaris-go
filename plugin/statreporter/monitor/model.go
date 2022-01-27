@@ -32,12 +32,12 @@ type dimensionRecord struct {
 	lastReadTime   int64
 }
 
-// 检查是否更新过
+// IsMetricUpdate 检查是否更新过
 func (d *dimensionRecord) IsMetricUpdate() bool {
 	return atomic.LoadInt64(&d.lastUpdateTime) > atomic.LoadInt64(&d.lastReadTime)
 }
 
-// 设置更新时间
+// SetLastReadTime 设置更新时间
 func (d *dimensionRecord) SetLastReadTime() {
 	atomic.StoreInt64(&d.lastUpdateTime, clock.GetClock().Now().UnixNano())
 }
@@ -90,7 +90,7 @@ func (d *dimensionRecord) add64Dimensions(idx int, value int64) {
 	atomic.StoreInt64(&d.lastUpdateTime, clock.GetClock().Now().UnixNano())
 }
 
-// 往某些维度添加值
+// AddValue 往某些维度添加值
 func (d *dimensionRecord) AddValue(gauge model.InstanceGauge, addFunc addDimensionFunc) {
 	addFunc(gauge, d)
 }
