@@ -34,12 +34,14 @@ var (
 	service   string
 	host      string
 	port      int
+	token	  string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "EchoServerGolang", "service")
 	flag.IntVar(&port, "port", 7879, "port")
+	flag.StringVar(&token, "token", "", "token")
 }
 
 // PolarisProvider .
@@ -81,7 +83,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Namespace = namespace
 	registerRequest.Host = host
 	registerRequest.Port = port
-	registerRequest.ServiceToken = "token"
+	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
 	if nil != err {
@@ -101,7 +103,7 @@ func (svr *PolarisProvider) doHeartbeat() {
 		heartbeatRequest.Service = service
 		heartbeatRequest.Host = host
 		heartbeatRequest.Port = port
-		heartbeatRequest.ServiceToken = "token"
+		heartbeatRequest.ServiceToken = token
 		err := svr.provider.Heartbeat(heartbeatRequest)
 		if nil != err {
 			log.Fatalf("fail to heartbeat instance, err is %v", err)

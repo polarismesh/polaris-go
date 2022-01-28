@@ -8,16 +8,34 @@
 
 ## 如何构建
 
+> provider
+
 直接依赖go mod进行构建
 
 - linux/mac构建命令
 ```
-go build -o route
+cd ./provider
+go build -o provider
 ```
 - windows构建命令
 ```
-go build -o route.exe
+cd ./consumer
+go build -o provider.exe
 ```
+
+> consumer
+
+- linux/mac构建命令
+```
+cd ./consumer
+go build -o consumer
+```
+- windows构建命令
+```
+cd ./consumer
+go build -o consumer.exe
+```
+
 
 ## 如何使用
 
@@ -45,28 +63,39 @@ global:
     addresses:
     - 127.0.0.1:8091
 ```
-
 ### 执行程序
 
 直接执行生成的可执行程序
 
+> provider
+
 - linux/mac运行命令
 ```
-./route --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
+./provider --port={} --metadata={}
 ```
 
 - windows运行命令
 ```
-./route.exe --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
+./provider.exe --port={} --metadata={}
 ```
 
-### 期望结果
+> consumer
 
-运行后，最终会打印具有标签`env=test`的服务实例
+
+- linux/mac运行命令
+```
+./consumer
+```
+
+- windows运行命令
+```
+./consumer.exe
+```
+
+### 验证
 
 ```
-➜  route git:(feat_demo) ✗ ./route --service="polaris_go_provider"
-2021/12/12 16:58:34 start to invoke GetInstancesRequest operation
-2021/12/12 16:58:34 instance GetInstances 0 is 127.0.0.5:8080 metadata=>map[string]string{"env":"test", "protocol":"", "version":""}
-2021/12/12 16:58:34 instance GetInstances 1 is 127.0.0.4:8080 metadata=>map[string]string{"env":"test", "protocol":"", "version":""}
+curl -H http://127.0.0.1:18080/echo
+
+Hello, I'm EchoServerGolang Provider
 ```
