@@ -34,13 +34,14 @@ var (
 	service   string
 	host      string
 	port      int
-	token	  string
+	token     string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "EchoServerGolang", "service")
 	flag.IntVar(&port, "port", 7879, "port")
+	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 }
 
