@@ -126,7 +126,7 @@ func (svr *PolarisProvider) doHeartbeat() {
 		heartbeatRequest.ServiceToken = token
 		err := svr.provider.Heartbeat(heartbeatRequest)
 		if nil != err {
-			log.Fatalf("fail to heartbeat instance, err is %v", err)
+			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
 		}
 		time.Sleep(2 * time.Second)
 	}

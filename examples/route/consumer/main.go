@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -60,8 +61,8 @@ func (svr *PolarisConsumer) runWebServer() {
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		getOneRequest.SourceService = &model.ServiceInfo{
-			Service:   selfNamespace,
-			Namespace: selfService,
+			Service:   selfService,
+			Namespace: selfNamespace,
 			Metadata:  convertHeaders(r.Header),
 		}
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
@@ -119,7 +120,9 @@ func main() {
 func convertHeaders(header map[string][]string) map[string]string {
 	meta := make(map[string]string)
 	for k, v := range header {
-		meta[k] = v[0]
+		if strings.ToLower(k) == "env" {
+			meta[strings.ToLower(k)] = v[0]
+		}
 	}
 
 	return meta

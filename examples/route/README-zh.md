@@ -49,10 +49,6 @@ go build -o consumer.exe
 
 ![create_service_rule](./image/create_service_rule.png)
 
-### 创建服务实例
-
-![create_service_instances](./image/create_service_instances.png)
-
 ### 修改配置
 
 指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
@@ -65,18 +61,24 @@ global:
 ```
 ### 执行程序
 
-直接执行生成的可执行程序
+直接执行生成的可执行程序, 对于provider进程
 
 > provider
 
 - linux/mac运行命令
 ```
-./provider --port={} --metadata={}
+./provider --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
+./provider --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
 - windows运行命令
 ```
-./provider.exe --port={} --metadata={}
+./provider.exe --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider.exe --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
+./provider.exe --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider.exe --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
 > consumer
@@ -84,18 +86,20 @@ global:
 
 - linux/mac运行命令
 ```
-./consumer
+./consumer --selfNamespace={selfName} --selfService=EchoConsumer
 ```
 
 - windows运行命令
 ```
-./consumer.exe
+./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
 ```
 
 ### 验证
 
-```
-curl -H http://127.0.0.1:18080/echo
+通过设置请求头参数***env***的值，实现路由到不同的服务实例
 
-Hello, I'm EchoServerGolang Provider
+```
+curl -H 'env: pre' http://127.0.0.1:18080/echo
+
+Hello, I'm EchoServerGolang Provider env=pre
 ```
