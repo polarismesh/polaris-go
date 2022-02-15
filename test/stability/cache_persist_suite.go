@@ -118,7 +118,7 @@ func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
 	for i := 0; i < 5; i++ {
 		if util.DirExist(util.BackupDir) {
 			err := os.RemoveAll(util.BackupDir)
-			if nil == err {
+			if err == nil {
 				break
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -262,7 +262,7 @@ func tryOpenFile(backupFile string) (*os.File, error) {
 	var err error
 	for i := 0; i < 5; i++ {
 		backupJson, err = os.OpenFile(backupFile, os.O_RDONLY, 0644)
-		if nil == err {
+		if err == nil {
 			return backupJson, err
 		}
 		time.Sleep(500 * time.Millisecond)

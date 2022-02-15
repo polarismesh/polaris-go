@@ -238,7 +238,7 @@ func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error 
 		return model.NewSDKError(model.ErrCodeDiskError, err, "fail to open file %s to write", tempFileName)
 	}
 	n, err := tmpFile.Write(msg)
-	if nil == err && n < len(msg) {
+	if err == nil && n < len(msg) {
 		return model.NewSDKError(model.ErrCodeDiskError, nil, "unable to write all bytes to file %s", tempFileName)
 	}
 	if err = cph.closeTmpFile(tmpFile, cacheFile); err != nil {

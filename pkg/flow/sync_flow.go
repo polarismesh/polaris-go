@@ -175,7 +175,7 @@ outLoop:
 	}
 	// 超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
 	var success bool
-	if nil == err {
+	if err == nil {
 		success, err = tryGetServiceValuesFromCache(e.registry, req)
 		if success {
 			log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",

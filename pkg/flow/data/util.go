@@ -170,7 +170,7 @@ func RetrySyncCall(name string, svcKey *model.ServiceKey,
 		startTime := clock.GetClock().Now()
 		resp, err = call(request)
 		consumeTime := clock.GetClock().Now().Sub(startTime)
-		if nil == err {
+		if err == nil {
 			return resp, nil
 		}
 		sdkErr, ok := err.(model.SDKError)
