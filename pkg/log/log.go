@@ -353,7 +353,7 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default network logger %s", name)))
 		}
-		if err != nils {
+		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
 	}

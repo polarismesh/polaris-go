@@ -22,14 +22,13 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/network"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-
 	"github.com/hashicorp/go-multierror"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/network"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
 var (
@@ -298,7 +297,7 @@ func (m *manager) DestroyPlugins() (errs error) {
 			}
 		}
 	}
-	if err != nils {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodePluginError, errs, "DestroyPlugins: plugins destroy errors")
 	}
 	return nil
