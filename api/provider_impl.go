@@ -21,7 +21,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 
-	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 

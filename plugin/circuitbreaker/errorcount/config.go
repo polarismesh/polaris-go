@@ -39,7 +39,7 @@ const (
 	DefaultErrCountMetricBucketCount = 10
 )
 
-// 连续错误熔断的配置对象
+// Config 连续错误熔断的配置对象
 type Config struct {
 	// 连续错误数阈值
 	ContinuousErrorThreshold int `yaml:"continuousErrorThreshold" json:"continuousErrorThreshold"`
@@ -49,7 +49,7 @@ type Config struct {
 	MetricNumBuckets int `yaml:"metricNumBuckets" json:"metricNumBuckets"`
 }
 
-// 检验连续错误熔断配置
+// Verify 检验连续错误熔断配置
 func (r *Config) Verify() error {
 	var errs error
 	if r.ContinuousErrorThreshold <= 0 {
@@ -62,7 +62,7 @@ func (r *Config) Verify() error {
 	return errs
 }
 
-// 设置连续错误熔断配置默认值
+// SetDefault 设置连续错误熔断配置默认值
 func (r *Config) SetDefault() {
 	if r.ContinuousErrorThreshold == 0 {
 		r.ContinuousErrorThreshold = DefaultContinuousErrorThreshold
@@ -75,38 +75,38 @@ func (r *Config) SetDefault() {
 	}
 }
 
-// 获取滑桶时间间隔
+// GetBucketInterval 获取滑桶时间间隔
 func (r *Config) GetBucketInterval() time.Duration {
 	bucketSize := math.Ceil(float64(*r.MetricStatTimeWindow) / float64(r.MetricNumBuckets))
 	return time.Duration(bucketSize)
 }
 
-// 连续错误数阈值
+// GetContinuousErrorThreshold 连续错误数阈值
 func (r *Config) GetContinuousErrorThreshold() int {
 	return r.ContinuousErrorThreshold
 }
 
-// 设置连续错误数阈值
+// SetContinuousErrorThreshold 设置连续错误数阈值
 func (r *Config) SetContinuousErrorThreshold(value int) {
 	r.ContinuousErrorThreshold = value
 }
 
-// 连续错误数统计时间窗口
+// GetMetricStatTimeWindow 连续错误数统计时间窗口
 func (r *Config) GetMetricStatTimeWindow() time.Duration {
 	return *r.MetricStatTimeWindow
 }
 
-// 设置连续错误数统计时间窗口
+// SetMetricStatTimeWindow 设置连续错误数统计时间窗口
 func (r *Config) SetMetricStatTimeWindow(value time.Duration) {
 	r.MetricStatTimeWindow = &value
 }
 
-// 连续错误数统计滑桶数量
+// GetMetricNumBuckets连续错误数统计滑桶数量
 func (r *Config) GetMetricNumBuckets() int {
 	return r.MetricNumBuckets
 }
 
-// 设置连续错误数统计滑桶数量
+// SetMetricNumBuckets 设置连续错误数统计滑桶数量
 func (r *Config) SetMetricNumBuckets(value int) {
 	r.MetricNumBuckets = value
 }

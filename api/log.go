@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
-	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 

@@ -1,5 +1,9 @@
 # polaris-go
 
+English | [简体中文](./README-zh.md) 
+
+---
+
 Polaris is an operation centre that supports multiple programming languages, with high compatibility to different
 application framework. Polaris-go is golang SDK for Polaris.
 

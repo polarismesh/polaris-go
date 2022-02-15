@@ -221,10 +221,10 @@ const (
 )
 
 const (
-	DefaultMinServiceExpireTime      = 5 * time.Second
-	DefaultMaxServiceExpireCheckTime = 1 * time.Hour
-	DefaultMinTimingInterval                       = 100 * time.Millisecond
-	DefaultServerServiceRefreshInterval               = 1 * time.Minute
+	DefaultMinServiceExpireTime         = 5 * time.Second
+	DefaultMaxServiceExpireCheckTime    = 1 * time.Hour
+	DefaultMinTimingInterval            = 100 * time.Millisecond
+	DefaultServerServiceRefreshInterval = 1 * time.Minute
 )
 
 // 集群类型，用以标识系统服务集群
