@@ -1209,7 +1209,7 @@ func (g *InstanceRegisterRequest) Validate() error {
 	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err != nil {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceRegisterRequest: ")
 	}
 	return nil

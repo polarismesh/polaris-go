@@ -297,7 +297,7 @@ func (m *manager) DestroyPlugins() (errs error) {
 			}
 		}
 	}
-	if err != nil {
+	if errs != nil {
 		return model.NewSDKError(model.ErrCodePluginError, errs, "DestroyPlugins: plugins destroy errors")
 	}
 	return nil
