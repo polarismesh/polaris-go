@@ -32,10 +32,10 @@ type providerAPI struct {
 // Register 同步注册服务，服务注册成功后会填充instance中的InstanceId字段
 // 用户可保持该instance对象用于反注册和心跳上报
 func (c *providerAPI) Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := instance.Validate(); nil != err {
+	if err := instance.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncRegister(&instance.InstanceRegisterRequest)
@@ -43,10 +43,10 @@ func (c *providerAPI) Register(instance *InstanceRegisterRequest) (*model.Instan
 
 // Deregister 同步反注册服务
 func (c *providerAPI) Deregister(instance *InstanceDeRegisterRequest) error {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return err
 	}
-	if err := instance.Validate(); nil != err {
+	if err := instance.Validate(); err != nil {
 		return err
 	}
 	return c.context.GetEngine().SyncDeregister(&instance.InstanceDeRegisterRequest)
@@ -54,10 +54,10 @@ func (c *providerAPI) Deregister(instance *InstanceDeRegisterRequest) error {
 
 // Heartbeat 心跳上报
 func (c *providerAPI) Heartbeat(instance *InstanceHeartbeatRequest) error {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return err
 	}
-	if err := instance.Validate(); nil != err {
+	if err := instance.Validate(); err != nil {
 		return err
 	}
 	return c.context.GetEngine().SyncHeartbeat(&instance.InstanceHeartbeatRequest)
@@ -83,7 +83,7 @@ func newProviderAPI() (ProviderAPI, error) {
 // NewProviderAPIByFile 通过配置文件创建SDK ProviderAPI对象
 func newProviderAPIByFile(path string) (ProviderAPI, error) {
 	context, err := InitContextByFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &providerAPI{context}, nil
@@ -92,7 +92,7 @@ func newProviderAPIByFile(path string) (ProviderAPI, error) {
 // NewProviderAPIByConfig 通过配置对象创建SDK ProviderAPI对象
 func newProviderAPIByConfig(cfg config.Configuration) (ProviderAPI, error) {
 	context, err := InitContextByConfig(cfg)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &providerAPI{context}, nil

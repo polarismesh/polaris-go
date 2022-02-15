@@ -30,7 +30,7 @@ func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFut
 	startTime := clock.GetClock().Now()
 	future, err := e.flowQuotaAssistant.GetQuota(commonRequest)
 	consumeTime := clock.GetClock().Now().Sub(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		(&commonRequest.CallResult).SetDelay(consumeTime)

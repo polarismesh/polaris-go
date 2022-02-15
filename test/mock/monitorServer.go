@@ -157,7 +157,7 @@ func (m *monitorServer) CollectServerStatistics(monitorpb.GrpcAPI_CollectServerS
 func (m *monitorServer) CollectSDKAPIStatistics(server monitorpb.GrpcAPI_CollectSDKAPIStatisticsServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -181,7 +181,7 @@ func (m *monitorServer) CollectSDKAPIStatistics(server monitorpb.GrpcAPI_Collect
 func (m *monitorServer) CollectServiceStatistics(server monitorpb.GrpcAPI_CollectServiceStatisticsServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -221,7 +221,7 @@ func (m *monitorServer) CollectSDKConfiguration(ctx context.Context,
 func (m *monitorServer) CollectSDKCache(server monitorpb.GrpcAPI_CollectSDKCacheServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -246,7 +246,7 @@ func (m *monitorServer) CollectSDKCache(server monitorpb.GrpcAPI_CollectSDKCache
 func (m *monitorServer) CollectCircuitBreak(server monitorpb.GrpcAPI_CollectCircuitBreakServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -271,7 +271,7 @@ func (m *monitorServer) CollectCircuitBreak(server monitorpb.GrpcAPI_CollectCirc
 func (m *monitorServer) CollectPluginStatistics(server monitorpb.GrpcAPI_CollectPluginStatisticsServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -353,7 +353,7 @@ func (m *monitorServer) SetCircuitBreakCache(data []*monitorpb.ServiceCircuitbre
 func (m *monitorServer) CollectLoadBalanceInfo(server monitorpb.GrpcAPI_CollectLoadBalanceInfoServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -395,7 +395,7 @@ func (m *monitorServer) SetLbStat(data []*monitorpb.ServiceLoadBalanceInfo) {
 func (m *monitorServer) CollectRateLimitRecord(server monitorpb.GrpcAPI_CollectRateLimitRecordServer) error {
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -437,7 +437,7 @@ func (m *monitorServer) SetRateLimitRecords(data []*monitorpb.RateLimitRecord) {
 func (m *monitorServer) CollectRouteRecord(svr monitorpb.GrpcAPI_CollectRouteRecordServer) error {
 	for {
 		req, err := svr.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil
@@ -497,7 +497,7 @@ func (m *monitorServer) SetMeshConfigRecords(data []*monitorpb.MeshResourceInfo)
 func (m *monitorServer) CollectMeshResource(svr monitorpb.GrpcAPI_CollectMeshResourceServer) error {
 	for {
 		req, err := svr.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Monitor: server receive eof\n")
 				return nil

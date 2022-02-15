@@ -41,7 +41,7 @@ type RemoteQuotaCallBack struct {
 func NewRemoteQuotaCallback(cfg config.Configuration, supplier plugin.Supplier,
 	engine model.Engine, connector AsyncRateLimitConnector) (*RemoteQuotaCallBack, error) {
 	registry, err := data.GetRegistry(cfg, supplier)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &RemoteQuotaCallBack{
@@ -82,7 +82,7 @@ func (r *RemoteQuotaCallBack) Process(
 	case Initializing:
 		rateLimitWindow.DoAsyncRemoteInit()
 	default:
-		if err := rateLimitWindow.DoAsyncRemoteAcquire(); nil != err {
+		if err := rateLimitWindow.DoAsyncRemoteAcquire(); err != nil {
 			rateLimitWindow.SetStatus(Initializing)
 		}
 	}

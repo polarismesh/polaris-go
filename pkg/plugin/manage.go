@@ -153,7 +153,7 @@ func RegisterPlugin(plugin Plugin) {
 
 // RegisterConfigurablePlugin 注册插件到全局配置对象，并注册插件配置类型
 func RegisterConfigurablePlugin(plugin Plugin, cfg config.BaseConfig) {
-	if err := checkInterfaceType(plugin); nil != err {
+	if err := checkInterfaceType(plugin); err != nil {
 		// 插件注册失败则直接panic，让用户直接感知
 		panic(err)
 	}
@@ -225,7 +225,7 @@ func (m *manager) InitPlugins(
 	for _, plug := range pluginSlice {
 		ctx.PluginIndex = plug.id
 		err = plug.instance.Init(&ctx)
-		if nil != err {
+		if err != nil {
 			return m.cleanupWhenError(model.NewSDKError(model.ErrCodePluginError, err,
 				"InitPlugins: fail to init plugin name %v:%s", plug.instance.Type(), plug.instance.Name()))
 		}
@@ -234,7 +234,7 @@ func (m *manager) InitPlugins(
 			"Initialized plugin type %v, name %s, id %d",
 			plug.instance.Type(), plug.instance.Name(), ctx.PluginIndex)
 	}
-	if err = delegateInit(); nil != err {
+	if err = delegateInit(); err != nil {
 		return m.cleanupWhenError(model.NewSDKError(model.ErrCodePluginError, err,
 			"InitPlugins: fail to init delegate"))
 	}
@@ -251,12 +251,12 @@ func (m *manager) StartPlugins() error {
 	startedPlugins := model.HashSet{}
 	for id, plug := range m.idToPlugins {
 		startedPlugins.Add(id)
-		if err = plug.Start(); nil != err {
+		if err = plug.Start(); err != nil {
 			log.GetBaseLogger().Errorf("fail to start plugin %s, err is %v", plug.Name(), err)
 			break
 		}
 	}
-	if nil != err && len(startedPlugins) > 0 {
+	if err != nil && len(startedPlugins) > 0 {
 		// 回滚所有插件
 		for idValue := range startedPlugins {
 			m.idToPlugins[idValue.(int32)].Destroy()
@@ -278,7 +278,7 @@ func (m *manager) cleanupWhenError(sdkErr model.SDKError) error {
 			continue
 		}
 		for name, plugInst := range plugInstances {
-			if err := plugInst.instance.Destroy(); nil != err {
+			if err := plugInst.instance.Destroy(); err != nil {
 				log.GetBaseLogger().Errorf("fail to destroy plugin %v:%s, err %v", typ, name, err)
 			}
 		}
@@ -292,13 +292,13 @@ func (m *manager) DestroyPlugins() (errs error) {
 	for typ, plugs := range m.plugins {
 		for name, plug := range plugs {
 			err = plug.instance.Destroy()
-			if nil != err {
+			if err != nil {
 				errs = multierror.Append(errs, multierror.Prefix(err,
 					fmt.Sprintf("DestroyPlugins: plugin %v:%s error, ", typ, name)))
 			}
 		}
 	}
-	if nil != errs {
+	if err != nils {
 		return model.NewSDKError(model.ErrCodePluginError, errs, "DestroyPlugins: plugins destroy errors")
 	}
 	return nil

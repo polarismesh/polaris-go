@@ -132,7 +132,7 @@ func IsFile(path string) bool {
 func HashStr(key string) (uint64, error) {
 	a := fnv.New64()
 	_, err := a.Write([]byte(key))
-	if nil != err {
+	if err != nil {
 		return 0, err
 	}
 	return a.Sum64(), nil
@@ -210,7 +210,7 @@ func ReplaceHomeVar(path string) string {
 		return path
 	}
 	homeDir, err := homedir.Dir()
-	if nil != err {
+	if err != nil {
 		return strings.Replace(path, HomeVar, ".", 1)
 	}
 	return strings.Replace(path, HomeVar, homeDir, 1)
@@ -232,7 +232,7 @@ func PathExist(path string) bool {
 func EnsureAndVerifyDir(dir string) error {
 	if !PathExist(dir) {
 		err := os.MkdirAll(dir, 0744)
-		if nil != err {
+		if err != nil {
 			return NewSDKError(ErrCodeDiskError, err, "unable to create dir %s", dir)
 		}
 		return nil

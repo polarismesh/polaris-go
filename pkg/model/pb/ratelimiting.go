@@ -112,18 +112,18 @@ func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.
 		return nil
 	}
 	for _, rule := range rateLimiting.GetRules() {
-		if err := buildCacheFromMatcher(rule.GetLabels(), ruleCache); nil != err {
+		if err := buildCacheFromMatcher(rule.GetLabels(), ruleCache); err != nil {
 			routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(rule)
 			return fmt.Errorf("fail to validate rate limit rule, error is %v, rule text is\n%s",
 				err, routeTxt)
 		}
-		if err := validateAmount(rule.GetAmounts()); nil != err {
+		if err := validateAmount(rule.GetAmounts()); err != nil {
 			routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(rule)
 			return fmt.Errorf("fail to validate rate limit rule, error is %v, rule text is\n%s",
 				err, routeTxt)
 		}
 		maxDuration, err := GetMaxValidDuration(rule)
-		if nil != err {
+		if err != nil {
 			return fmt.Errorf("fail to parse validDuration in rate limit rule, error is %v", err)
 		}
 		amountPresent := rule.GetReport().GetAmountPercent().GetValue()
@@ -151,7 +151,7 @@ func validateAmount(amounts []*namingpb.Amount) error {
 	}
 	for _, amount := range amounts {
 		validDuration, err := ConvertDuration(amount.GetValidDuration())
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		if validDuration < minAmountDuration {
@@ -170,7 +170,7 @@ func GetMaxValidDuration(rule *namingpb.Rule) (time.Duration, error) {
 	}
 	for _, amount := range amounts {
 		validDura, err := ConvertDuration(amount.GetValidDuration())
-		if nil != err {
+		if err != nil {
 			return validDura, err
 		}
 		if validDura == 0 {

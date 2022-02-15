@@ -64,7 +64,7 @@ func NewCachePersistHandler(persistDir string, maxWriteRetry int,
 	handler.maxReadRetry = maxReadRetry
 	handler.maxWriteRetry = maxWriteRetry
 	handler.retryInterval = retryInterval
-	if err := handler.init(); nil != err {
+	if err := handler.init(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to init cachePersistHandler")
 	}
 	return handler, nil
@@ -75,7 +75,7 @@ func (cph *CachePersistHandler) init() error {
 	if nil == cph.marshaler {
 		cph.marshaler = &jsonpb.Marshaler{}
 	}
-	if err := model.EnsureAndVerifyDir(cph.persistDir); nil != err {
+	if err := model.EnsureAndVerifyDir(cph.persistDir); err != nil {
 		return err
 	}
 	return nil
@@ -91,7 +91,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 	for _, cacheFile := range cacheFiles {
 		msg := &namingpb.DiscoverResponse{}
 		svcValueKey, fileInfo, err := cph.loadCacheFromFile(cacheFile, msg)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to load cache from file %s, error is %v", cacheFile, err)
 			continue
 		}
@@ -110,7 +110,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 func (cph *CachePersistHandler) loadCacheFromFile(
 	cacheFile string, message proto.Message) (*model.ServiceEventKey, os.FileInfo, error) {
 	svcValueKey, err := cph.fileNameToServiceEventKey(cacheFile)
-	if nil != err {
+	if err != nil {
 		return nil, nil, multierror.Prefix(err, fmt.Sprintf("Fail to decode the cache file name %s: ", cacheFile))
 	}
 	fileInfo, err := os.Stat(cacheFile)
@@ -118,10 +118,10 @@ func (cph *CachePersistHandler) loadCacheFromFile(
 		return svcValueKey, nil, multierror.Prefix(err, fmt.Sprintf("Fail to Stat the cache file name %s: ",
 			cacheFile))
 	}
-	if err = cph.loadMessageFromAbsoluteFile(cacheFile, message, 0); nil != err {
+	if err = cph.loadMessageFromAbsoluteFile(cacheFile, message, 0); err != nil {
 		return svcValueKey, nil, err
 	}
-	if err = pb.ValidateMessage(svcValueKey, message); nil != err {
+	if err = pb.ValidateMessage(svcValueKey, message); err != nil {
 		return svcValueKey, nil, multierror.Prefix(err, "Fail to validate file cache: ")
 	}
 	return svcValueKey, fileInfo, nil
@@ -141,14 +141,14 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 	var retryTimes int
 	for retryTimes = 0; retryTimes <= maxRetry; retryTimes++ {
 		cacheJson, err := os.OpenFile(cacheFile, os.O_RDONLY, 0600)
-		if nil != err {
+		if err != nil {
 			lastErr = model.NewSDKError(model.ErrCodeDiskError, err, "fail to read file cache")
 			// 文件打开失败的话，重试没有意义，直接失败
 			break
 		}
 		err = jsonpb.Unmarshal(cacheJson, message)
 		cacheJson.Close()
-		if nil != err {
+		if err != nil {
 			lastErr = multierror.Prefix(err, "Fail to unmarshal file cache: ")
 			time.Sleep(cph.retryInterval)
 			// 解码失败可能是读到了部分数据，所以这里可以重试
@@ -165,11 +165,11 @@ func (cph *CachePersistHandler) fileNameToServiceEventKey(fileName string) (*mod
 	svcKeyFile := fileName[0 : len(fileName)-len(CacheSuffix)]
 	pieces := strings.Split(svcKeyFile, "#")
 	namespace, err := url.QueryUnescape(pieces[1])
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	svc, err := url.QueryUnescape(pieces[2])
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	eventType := model.ToEventType(pieces[3])
@@ -189,7 +189,7 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	log.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
 	for retryTimes := 0; retryTimes <= cph.maxWriteRetry; retryTimes++ {
 		err := os.Remove(fileToDelete)
-		if nil != err {
+		if err != nil {
 			if !os.IsNotExist(err) {
 				log.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
 					" because %s, next retrytimes %d", fileToDelete, err.Error(), retryTimes)
@@ -211,13 +211,13 @@ func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto
 	fileToAdd := filepath.Join(cph.persistDir, fileName)
 	log.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
 	msg, err := cph.marshaler.MarshalToString(svcResp)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Warnf("Fail to marshal the service response for %s", fileToAdd)
 		return
 	}
 	for retryTimes := 0; retryTimes <= cph.maxWriteRetry; retryTimes++ {
 		err = cph.doWriteFile(fileToAdd, []byte(msg))
-		if nil != err {
+		if err != nil {
 			if retryTimes > 0 {
 				log.GetBaseLogger().Warnf("Fail to write cache file %s, error: %s,"+
 					" retry times: %v", fileToAdd, err.Error(), retryTimes)
@@ -234,14 +234,14 @@ func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto
 func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error {
 	tempFileName := cacheFile + ".tmp"
 	tmpFile, err := os.OpenFile(tempFileName, os.O_WRONLY|os.O_CREATE, 0600)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeDiskError, err, "fail to open file %s to write", tempFileName)
 	}
 	n, err := tmpFile.Write(msg)
 	if nil == err && n < len(msg) {
 		return model.NewSDKError(model.ErrCodeDiskError, nil, "unable to write all bytes to file %s", tempFileName)
 	}
-	if err = cph.closeTmpFile(tmpFile, cacheFile); nil != err {
+	if err = cph.closeTmpFile(tmpFile, cacheFile); err != nil {
 		os.Remove(tempFileName)
 		return err
 	}

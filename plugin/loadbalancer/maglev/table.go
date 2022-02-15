@@ -69,11 +69,11 @@ func (t *TableSelector) buildTableEntries(
 		}
 		idBuf := []byte(realInstance.GetId())
 		seed0HashValue, err := hashFunc(idBuf, 0)
-		if nil != err {
+		if err != nil {
 			return 0, nil, fmt.Errorf("fail to get seed0 hash value for %s", realInstance.GetId())
 		}
 		seed1HashValue, err := hashFunc(idBuf, 1)
-		if nil != err {
+		if err != nil {
 			return 0, nil, fmt.Errorf("fail to get seed1 hash value for %s", realInstance.GetId())
 		}
 		entry.node = instanceIdx
@@ -97,7 +97,7 @@ func NewTable(
 	}
 	selector.nodes = make([]*model.WeightedIndex, tableSize)
 	maxNormalizedWeight, entries, err := selector.buildTableEntries(instanceSet, hashFunc)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	var tableIndex uint64
@@ -149,7 +149,7 @@ func (t *TableSelector) Select(value interface{}) (int, *model.ReplicateNodes, e
 	}
 	criteria := value.(*loadbalancer.Criteria)
 	hashValue, err := common.CalcHashValue(criteria, t.hashFunc)
-	if nil != err {
+	if err != nil {
 		return -1, nil, err
 	}
 	nodeIndex := int(hashValue % t.tableSize)

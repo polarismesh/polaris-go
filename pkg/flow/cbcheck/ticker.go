@@ -35,10 +35,10 @@ import (
 func NewCircuitBreakCallBack(cfg config.Configuration, supplier plugin.Supplier) (*CircuitBreakCallBack, error) {
 	var err error
 	callBack := &CircuitBreakCallBack{}
-	if callBack.registry, err = data.GetRegistry(cfg, supplier); nil != err {
+	if callBack.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callBack.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, supplier); nil != err {
+	if callBack.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callBack.interval = cfg.GetConsumer().GetCircuitBreaker().GetCheckPeriod()
@@ -75,7 +75,7 @@ func (c *CircuitBreakCallBack) Process(
 	if nil != request {
 		resultStr = request.String()
 	}
-	if nil != err {
+	if err != nil {
 		log.GetDetectLogger().Errorf(
 			"fail to do timing circuitBreak check for %s, result is %s, error: %v", svc, resultStr, err)
 		return model.CONTINUE
@@ -111,7 +111,7 @@ func (c *CircuitBreakCallBack) doCircuitBreakForService(svc model.ServiceKey, sv
 				continue
 			}
 			result, err := circuitBreaker.CircuitBreak([]model.Instance{instance})
-			if nil != err {
+			if err != nil {
 				log.GetBaseLogger().Errorf("fail to do timingCircuitBreak %s for %v, instance %s:%d, error: %v",
 					circuitBreaker.Name(), svc, instance.GetHost(), instance.GetPort(), err)
 				continue

@@ -119,11 +119,11 @@ func (s *sdkContext) Destroy() {
 	var err error
 	atomic.StoreUint32(&s.destroyed, 1)
 	err = s.engine.Destroy()
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
 	}
 	err = s.plugins.DestroyPlugins()
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
 	}
 }
@@ -159,7 +159,7 @@ func InitContextByFile(path string) (SDKContext, error) {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid context file %s", path)
 	}
 	buff, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to read context file %s", path)
 	}
 	return InitContextByStream(buff)
@@ -168,7 +168,7 @@ func InitContextByFile(path string) (SDKContext, error) {
 // InitContextByStream 通过YAML流新建服务消费者配置
 func InitContextByStream(buf []byte) (SDKContext, error) {
 	cfg, err := config.LoadConfiguration(buf)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return InitContextByConfig(cfg)
@@ -180,35 +180,35 @@ func checkLoggersDir() error {
 	var err error
 	if l, ok := log.GetBaseLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
-		if nil != err {
+		if err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create base logger dir: %s", l.GetLogDir())))
 		}
 	}
 	if l, ok := log.GetDetectLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
-		if nil != err {
+		if err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create detect logger dir: %s", l.GetLogDir())))
 		}
 	}
 	if l, ok := log.GetStatLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
-		if nil != err {
+		if err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create stat logger dir: %s", l.GetLogDir())))
 		}
 	}
 	if l, ok := log.GetStatReportLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
-		if nil != err {
+		if err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create statReport logger dir: %s", l.GetLogDir())))
 		}
 	}
 	if l, ok := log.GetNetworkLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
-		if nil != err {
+		if err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create network logger dir: %s", l.GetLogDir())))
 		}
@@ -246,14 +246,14 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	}
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		text, err := yaml.Marshal(cfg)
-		if nil != err {
+		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to marshal input config")
 		}
 		log.GetBaseLogger().Debugf("Input config:\n%s", string(text))
 	}
 
 	cfg.SetDefault()
-	if err := cfg.Verify(); nil != err {
+	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
 	token := model.SDKToken{
@@ -272,7 +272,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	plugManager := plugin.NewPluginManager()
 	globalCtx.SetValue(model.ContextKeyPlugins, plugManager)
 	connManager, err := network.NewConnectionManager(cfg, globalCtx)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create connectionManager")
 	}
 	initCtx := plugin.InitContext{Config: cfg, Plugins: plugManager, ValueCtx: globalCtx, ConnManager: connManager,
@@ -304,12 +304,12 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		return nil, err
 	}
 	err = engine.Start()
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
 	ctx := &sdkContext{config: cfg, plugins: plugManager, engine: engine, valueContext: globalCtx}
-	if err = onContextInitialized(ctx); nil != err {
+	if err = onContextInitialized(ctx); err != nil {
 		ctx.Destroy()
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func onContextInitialized(ctx SDKContext) error {
 		EventType: common.OnContextStarted, EventObject: ctx}
 	for _, handler := range eventHandlers {
 		err := handler.Callback(event)
-		if nil != err {
+		if err != nil {
 			return model.NewSDKError(model.ErrCodePluginError, err,
 				"InitContextByConfig: fail to handle OnContextStarted event")
 		}

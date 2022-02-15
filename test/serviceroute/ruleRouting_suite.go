@@ -99,11 +99,11 @@ type RuleRoutingTestingSuite struct {
 // 注册路由规则
 func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service, path string) error {
 	buf, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	route := &namingpb.Routing{}
-	if err = jsonpb.UnmarshalString(string(buf), route); nil != err {
+	if err = jsonpb.UnmarshalString(string(buf), route); err != nil {
 		return err
 	}
 	return mockServer.RegisterRouteRule(svc, route)
@@ -127,7 +127,7 @@ func registerServiceAndRules(mockServer mock.NamingServer, svcName string,
 		return service
 	}
 	err := registerRouteRuleByFile(mockServer, service, path)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to register routeRule for %s, error is %v", path, err)
 	}
 	return service
@@ -373,7 +373,7 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	t.setupAdvanceServer(t.mockServer)
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ruleServerIPAddr, ruleServerPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ruleServerIPAddr, ruleServerPort)

@@ -55,7 +55,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
-		if nil != err {
+		if err != nil {
 			log.Fatalf("fail to getOneInstance, err is %v", err)
 		}
 		instance := oneInstResp.GetInstance()
@@ -91,7 +91,7 @@ func main() {
 		return
 	}
 	consumer, err := api.NewConsumerAPI()
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
 	defer consumer.Destroy()

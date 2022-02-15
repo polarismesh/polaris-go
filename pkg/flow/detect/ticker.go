@@ -39,10 +39,10 @@ func NewHealthCheckCallBack(cfg config.Configuration, supplier plugin.Supplier) 
 	callback := &HealthCheckCallBack{
 		mutex: &sync.Mutex{},
 	}
-	if callback.healthCheckers, err = data.GetHealthCheckers(cfg, supplier); nil != err {
+	if callback.healthCheckers, err = data.GetHealthCheckers(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callback.registry, err = data.GetRegistry(cfg, supplier); nil != err {
+	if callback.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.healthCheckConfig = cfg.GetConsumer().GetHealthCheck()
@@ -80,7 +80,7 @@ func (c *HealthCheckCallBack) Process(
 		return model.CONTINUE
 	}
 	err := c.doHealthCheckService(svcInstances)
-	if nil != err {
+	if err != nil {
 		log.GetDetectLogger().Errorf("fail to update instances for %v, error: %v", svc, err)
 		return model.CONTINUE
 	}
@@ -119,7 +119,7 @@ func (c *HealthCheckCallBack) healthCheckLoop(taskChannel chan model.Instance, t
 				Namespace: instance.GetNamespace(),
 				Service:   instance.GetService(),
 			}, instance)
-			if nil != err {
+			if err != nil {
 				log.GetDetectLogger().Infof("[HealthCheck] fail to do health check, err is %v", err)
 			}
 		}

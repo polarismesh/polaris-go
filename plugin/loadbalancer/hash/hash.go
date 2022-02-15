@@ -51,7 +51,7 @@ func (g *LoadBalancer) Init(ctx *plugin.InitContext) error {
 	var err error
 	g.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(g.Name()).(*Config)
 	g.hashFunc, err = hash.GetHashFunc(g.cfg.HashFunction)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to init hashFunc")
 	}
 	return nil
@@ -78,7 +78,7 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
 	}
 	hashValue, err := lbcommon.CalcHashValue(criteria, g.hashFunc)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to cal hash value")
 	}
 	targetValue := hashValue % uint64(targetInstances.TotalWeight())

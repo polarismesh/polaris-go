@@ -51,7 +51,7 @@ func (m *MaglevLoadBalancer) Init(ctx *plugin.InitContext) error {
 	m.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(m.Name()).(*Config)
 	var err error
 	m.hashFunc, err = hash.GetHashFunc(m.cfg.HashFunction)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to init hashFunc")
 	}
 	return nil
@@ -91,11 +91,11 @@ func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
 	}
 	selector, err := m.getOrBuildHashRing(targetInstances)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to build maglev table")
 	}
 	index, replicateNodes, err := selector.Select(criteria)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to select from maglev table")
 	}
 	if nil != replicateNodes {

@@ -56,7 +56,7 @@ func (rt *NetworkFailTestingSuite) SetUpSuite(c *check.C) {
 	var err error
 	rt.mockGRPCListener, err = net.Listen(
 		"tcp", fmt.Sprintf("%s:%d", mockRateLimitHost, mockRateLimitPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening mock rateLimitServer: %v", err))
 	}
 	go func() {

@@ -194,13 +194,13 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 func (m *MockRateLimitServer) Service(stream rlimitV2.RateLimitGRPCV2_ServiceServer) error {
 	for {
 		request, err := stream.Recv()
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		resp := m.processRequest(request)
 		if nil != resp {
 			err = stream.Send(resp)
-			if nil != err {
+			if err != nil {
 				return err
 			}
 		}

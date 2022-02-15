@@ -204,12 +204,12 @@ func (s *Reporter) sendCircuitBreakHistory() {
 			return
 		}
 		err := s.circuitBreakClient.Send(msg)
-		if nil != err {
+		if err != nil {
 			log.GetStatReportLogger().Errorf("fail to report circuitbreak status, id: %s, err %s，"+
 				" monitor server is %s", msg.Id, err.Error(), s.connection.ConnID)
 		}
 		resp, err := s.circuitBreakClient.Recv()
-		if nil != err || resp.Id.GetValue() != msg.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+		if err != nil || resp.Id.GetValue() != msg.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 			log.GetStatReportLogger().Errorf("fail to report circuitbreak status, resp is %v, err is %v,"+
 				" monitor server is %s", resp, err, s.connection.ConnID)
 		} else {

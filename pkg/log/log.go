@@ -314,7 +314,7 @@ func (o Options) Verify() error {
 	if o.RotationMaxSize == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("RotationMaxSize is required"))
 	}
-	if err := VerifyLogLevel(o.LogLevel); nil != err {
+	if err := VerifyLogLevel(o.LogLevel); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
@@ -333,27 +333,27 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 		// 初始化默认基础日志
 		var errs error
 		var err error
-		if err = ConfigDefaultBaseLogger(name); nil != err {
+		if err = ConfigDefaultBaseLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default base logger %s", name)))
 		}
-		if err = ConfigDefaultStatLogger(name); nil != err {
+		if err = ConfigDefaultStatLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default stat logger %s", name)))
 		}
-		if err = ConfigDefaultDetectLogger(name); nil != err {
+		if err = ConfigDefaultDetectLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default detect logger %s", name)))
 		}
-		if err = ConfigDefaultStatReportLogger(name); nil != err {
+		if err = ConfigDefaultStatReportLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default statReport logger %s", name)))
 		}
-		if err = ConfigDefaultNetworkLogger(name); nil != err {
+		if err = ConfigDefaultNetworkLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default network logger %s", name)))
 		}
-		if nil != errs {
+		if err != nils {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
 	}
@@ -361,7 +361,7 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 
 // configLogger 配置日志插件
 func configLogger(pluginName string, loggerName string, options *Options, defaultLevel int) (logger Logger, err error) {
-	if err = options.Verify(); nil != err {
+	if err = options.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"configLogger: fail to verify options %+v", *options)
 	}
@@ -370,7 +370,7 @@ func configLogger(pluginName string, loggerName string, options *Options, defaul
 		return nil, model.NewSDKError(model.ErrCodePluginError, nil,
 			"configLogger: plugin name %s not registered", pluginName)
 	}
-	if logger, err = creator(loggerName, options, defaultLevel); nil != err {
+	if logger, err = creator(loggerName, options, defaultLevel); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"configLogger: fail to create logger for plugin %s, options %+v", pluginName, *options)
 	}
@@ -380,7 +380,7 @@ func configLogger(pluginName string, loggerName string, options *Options, defaul
 // ConfigBaseLogger 配置基础日志器
 func ConfigBaseLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, baseLoggerName, options, DefaultBaseLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetBaseLogger(logger)
@@ -390,7 +390,7 @@ func ConfigBaseLogger(pluginName string, options *Options) error {
 // ConfigStatLogger 配置统计日志器
 func ConfigStatLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, statLoggerName, options, DefaultStatLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetStatLogger(logger)
@@ -400,7 +400,7 @@ func ConfigStatLogger(pluginName string, options *Options) error {
 // ConfigStatReportLogger 配置统计上报日志器
 func ConfigStatReportLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, statReportLoggerName, options, DefaultStatReportLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetStatReportLogger(logger)
@@ -410,7 +410,7 @@ func ConfigStatReportLogger(pluginName string, options *Options) error {
 // ConfigDetectLogger 配置探测日志器
 func ConfigDetectLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, detectLoggerName, options, DefaultDetectLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetDetectLogger(logger)
@@ -420,7 +420,7 @@ func ConfigDetectLogger(pluginName string, options *Options) error {
 // ConfigNetworkLogger 配置网络交互日志器
 func ConfigNetworkLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, networkLoggerName, options, DefaultNetworkLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetNetworkLogger(logger)

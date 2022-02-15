@@ -98,7 +98,7 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cacheIP, cachePort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", cacheIP, cachePort)
@@ -279,7 +279,7 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 		return false
 	}
 	backupJson, err := tryOpenFile(backupFile)
-	if nil != err {
+	if err != nil {
 		log.Printf("Fail to checkPersist because %s can not be open for %v, startTime: %v\n",
 			backupFile, err, startTime)
 		backupJson.Close()

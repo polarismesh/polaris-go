@@ -243,7 +243,7 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 	// if !enableNearby {
 	//	result, err := filteronly.GetFilteredInstances(
 	//		g.valueCtx, rInfo, clusters, g.percentOfMinInstances, withinCluster, g.recoverAll)
-	//	if nil != err {
+	//	if err != nil {
 	//		return nil, err
 	//	}
 	//	if len(withinCluster.ComposeMetaValue) == 0 {

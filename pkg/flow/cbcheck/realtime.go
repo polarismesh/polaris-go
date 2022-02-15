@@ -70,7 +70,7 @@ func (c *CircuitBreakRealTimeCallBack) Process() {
 	if nil != request {
 		resultStr = request.String()
 	}
-	if nil != err {
+	if err != nil {
 		log.GetDetectLogger().Errorf("fail to do realtime circuitBreak check for %s, result is %s, error: %v",
 			c.task.SvcKey, resultStr, err)
 		return

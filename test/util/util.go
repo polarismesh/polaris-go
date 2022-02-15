@@ -75,7 +75,7 @@ func DirExist(path string) bool {
 func DeleteDir(path string) error {
 	if DirExist(path) {
 		err := os.RemoveAll(path)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("remove %s err %s\n", path, err)
 		}
 		return err
@@ -214,7 +214,7 @@ func SetupMockDiscover(host string, port int) (*grpc.Server, net.Listener, mock.
 	mockServer := mock.NewNamingServer()
 	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening discoverServer: %v", err))
 	}
 	token := mockServer.RegisterServerService(config.ServerDiscoverService)

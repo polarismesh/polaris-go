@@ -183,7 +183,7 @@ func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 	defer cancel()
 	conn, err := grpc.DialContext(
 		ctx, fmt.Sprintf("%s:%d", s.HostIdentifier.host, s.HostIdentifier.port), opts...)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return conn, nil
@@ -196,7 +196,7 @@ func (s *StreamCounterSet) preInitCheck(
 	defer s.mutex.Unlock()
 	if nil == s.conn {
 		conn, err := s.createConnection()
-		if nil != err {
+		if err != nil {
 			log.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s:%d, err is %v",
 				s.HostIdentifier.host, s.HostIdentifier.port, err)
 			return nil
@@ -210,7 +210,7 @@ func (s *StreamCounterSet) preInitCheck(
 		selfHost := s.asyncConnector.getIPString(s.HostIdentifier.host, s.HostIdentifier.port)
 		ctx := createHeaderContext(map[string]string{headerKeyClientIP: selfHost})
 		serviceStream, err := s.client.Service(ctx)
-		if nil != err {
+		if err != nil {
 			log.GetNetworkLogger().Errorf("[RateLimit]fail to create serviceStream to %s:%d, err is %v",
 				s.HostIdentifier.host, s.HostIdentifier.port, err)
 			s.conn.Close()
@@ -267,7 +267,7 @@ func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitReques
 		initReqStr, _ := (&jsonpb.Marshaler{}).MarshalToString(initReq)
 		log.GetNetworkLogger().Debugf("[RateLimit]Send init request: %s\n", initReqStr)
 	}
-	if err := serviceStream.Send(request); nil != err {
+	if err := serviceStream.Send(request); err != nil {
 		log.GetNetworkLogger().Errorf("[RateLimit]fail to send init message to %s:%d, key is %s, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, counterIdentifier, err)
 	}
@@ -288,7 +288,7 @@ func (s *StreamCounterSet) checkAndCreateClient() (rlimitV2.RateLimitGRPCV2Clien
 		log.GetNetworkLogger().Infof("[RateLimit]createConnection to %s", *s.HostIdentifier)
 		s.lastConnectFailTimeMilli = curTimeMilli
 		conn, err := s.createConnection()
-		if nil != err {
+		if err != nil {
 			log.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s, err is %v",
 				*s.HostIdentifier, err)
 			return nil, err
@@ -346,7 +346,7 @@ func (s *StreamCounterSet) eliminateExpiredRecords(nowMilli int64) {
 // AdjustTime 同步时间
 func (s *StreamCounterSet) AdjustTime() int64 {
 	client, err := s.checkAndCreateClient()
-	if nil != err {
+	if err != nil {
 		return atomic.LoadInt64(&s.timeDiff)
 	}
 	lastSyncTimeMilli := atomic.LoadInt64(&s.lastSyncTimeMilli)
@@ -358,7 +358,7 @@ func (s *StreamCounterSet) AdjustTime() int64 {
 	defer cancel()
 	timeResp, err := client.TimeAdjust(ctx, &rlimitV2.TimeAdjustRequest{})
 	atomic.StoreInt64(&s.lastSyncTimeMilli, model.CurrentMillisecond())
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("[RateLimit]fail to send timeAdjust message to %s:%d, key is %s, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, err)
 		return atomic.LoadInt64(&s.timeDiff)
@@ -478,7 +478,7 @@ func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV
 	defer s.cleanup(serviceStream)
 	for {
 		resp, err := serviceStream.Recv()
-		if nil != err {
+		if err != nil {
 			if err != io.EOF {
 				log.GetNetworkLogger().Errorf("[RateLimit]fail to receive message from %s:%d, err is %v",
 					s.HostIdentifier.host, s.HostIdentifier.port, err)
@@ -548,7 +548,7 @@ func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRat
 		reportReqStr, _ := (&jsonpb.Marshaler{}).MarshalToString(reportReq)
 		log.GetNetworkLogger().Debugf("[RateLimit]Send report request: %s\n", reportReqStr)
 	}
-	if err := s.serviceStream.Send(request); nil != err {
+	if err := s.serviceStream.Send(request); err != nil {
 		log.GetNetworkLogger().Errorf("[RateLimit]fail to send request message to %s:%d, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, err)
 	}
@@ -712,7 +712,7 @@ func (a *asyncRateLimitConnector) GetMessageSender(
 		a.taskValues = taskValues
 	})
 	instanceResp, err := engine.SyncGetOneInstance(req)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	var hostIdentifier = &HostIdentifier{}
@@ -720,7 +720,7 @@ func (a *asyncRateLimitConnector) GetMessageSender(
 	hostIdentifier.port = instanceResp.GetInstances()[0].GetPort()
 	var counterSet *StreamCounterSet
 	counterSet, err = a.getStreamCounterSet(*hostIdentifier)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if nil != counterSet {
@@ -746,7 +746,7 @@ func (a *asyncRateLimitConnector) getIPString(remoteHost string, remotePort uint
 	}
 	addr := fmt.Sprintf("%s:%d", remoteHost, remotePort)
 	conn, err := net.Dial("tcp", addr)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("fail to dial %s to get local host, err is %v", err)
 		return ""
 	}

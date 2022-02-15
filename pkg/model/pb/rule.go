@@ -207,7 +207,7 @@ func (s *ServiceRuleInProto) IsCacheLoaded() bool {
 // ValidateAndBuildCache 校验路由规则，以及构建正则表达式缓存
 func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 	s.assistant.SetDefault(s.ruleValue)
-	if err := s.assistant.Validate(s.ruleValue, s.ruleCache); nil != err {
+	if err := s.assistant.Validate(s.ruleValue, s.ruleCache); err != nil {
 		// 缓存规则解释失败异常
 		s.validateError = err
 		return err
@@ -234,7 +234,7 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 			continue
 		}
 		regexValue, err := regexp.Compile(valueRawStr)
-		if nil != err {
+		if err != nil {
 			return fmt.Errorf("invalid regex expression %s, error is %v", valueRawStr, err)
 		}
 		ruleCache.PutRegexMatcher(valueRawStr, regexValue)

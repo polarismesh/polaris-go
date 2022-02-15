@@ -45,7 +45,7 @@ func (e *Engine) ScheduleTask(task *model.PeriodicTask) (chan<- *model.PriorityT
 // addPeriodicCircuitBreakTask 添加定时熔断任务
 func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbcheck.CircuitBreakCallBack, error) {
 	callback, err := cbcheck.NewCircuitBreakCallBack(e.configuration, e.plugins)
-	if nil != err {
+	if err != nil {
 		return nil, nil, err
 	}
 	rtChan, taskValues := e.ScheduleTask(&model.PeriodicTask{
@@ -67,7 +67,7 @@ func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbc
 // addClientReportTask 添加客户端定期上报任务
 func (e *Engine) addClientReportTask() (model.TaskValues, error) {
 	callback, err := startup.NewReportClientCallBack(e.configuration, e.plugins, e.globalCtx)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
@@ -98,7 +98,7 @@ const keyDiscoverService = "discoverService"
 // addLoadServerServiceTask 添加获取系统服务信息任务（包括路由和实例）
 func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 	callback, err := startup.NewServerServiceCallBack(e.configuration, e.plugins, e)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
@@ -114,7 +114,7 @@ func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 // addHealthCheckTask 添加客户端主动健康检查任务
 func (e *Engine) addHealthCheckTask() error {
 	callback, err := detect.NewHealthCheckCallBack(e.configuration, e.plugins)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
