@@ -173,7 +173,7 @@ func (c *CircuitBreakerConfigImpl) Verify() error {
 			fmt.Errorf(
 				"consumer.circuitbreaker.recoverNumBuckets must be greater than %d", MinRecoverNumBuckets))
 	}
-	if err := c.Plugin.Verify(); nil != err {
+	if err := c.Plugin.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs

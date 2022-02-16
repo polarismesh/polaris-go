@@ -104,7 +104,7 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
 	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
+	if err != nil {
 		log2.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
 	log2.Printf("moniator server listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)

@@ -98,7 +98,7 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cacheIP, cachePort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", cacheIP, cachePort)
@@ -118,7 +118,7 @@ func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
 	for i := 0; i < 5; i++ {
 		if util.DirExist(util.BackupDir) {
 			err := os.RemoveAll(util.BackupDir)
-			if nil == err {
+			if err == nil {
 				break
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -262,7 +262,7 @@ func tryOpenFile(backupFile string) (*os.File, error) {
 	var err error
 	for i := 0; i < 5; i++ {
 		backupJson, err = os.OpenFile(backupFile, os.O_RDONLY, 0644)
-		if nil == err {
+		if err == nil {
 			return backupJson, err
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -279,7 +279,7 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 		return false
 	}
 	backupJson, err := tryOpenFile(backupFile)
-	if nil != err {
+	if err != nil {
 		log.Printf("Fail to checkPersist because %s can not be open for %v, startTime: %v\n",
 			backupFile, err, startTime)
 		backupJson.Close()

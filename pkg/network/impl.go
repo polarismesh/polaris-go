@@ -68,12 +68,12 @@ func (s *ServerAddressList) getAndConnectServer(
 	s.connectMutex.Lock()
 	defer s.connectMutex.Unlock()
 	address, instance, err := s.getServerAddress(s.manager.GetHashKey())
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("fail get server address from service %s, error %v", svc, err)
 		return nil
 	}
 	conn, err := s.connectServer(force, address, instance, svc, timeout)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("fail get connect %s from service %s, error %v", address, svc, err)
 		return nil
 	}
@@ -116,7 +116,7 @@ func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Inst
 		req.SetRetryCount(0)
 		req.SetTimeout(getAddressTimeout)
 		resp, err := engine.SyncGetOneInstance(req)
-		if nil != err {
+		if err != nil {
 			return "", nil, err
 		}
 		instance = resp.Instances[0]
@@ -152,7 +152,7 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 		instance: instance,
 	}
 	connectDuration := time.Now().Sub(connectTime)
-	if nil != err {
+	if err != nil {
 		if !reflect2.IsNil(instance) {
 			s.manager.ReportFail(connID, int32(model.ErrCodeConnectError), connectDuration)
 		}
@@ -184,7 +184,7 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 	connectTime := time.Now()
 	tcpConn, err := s.manager.creator.CreateConnection(addr, timeout, &s.manager.ClientInfo)
 	connectDuration := time.Now().Sub(connectTime)
-	if nil != err {
+	if err != nil {
 		return nil, fmt.Errorf("fail to connect to %s, timeout is %v, service is %s, because %s",
 			addr, connectDuration, s.service, err.Error())
 	}
@@ -216,7 +216,7 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 		return curConnValue, nil
 	}
 	address, instance, err := s.getServerAddress(hashKey)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return s.connectServer(false, address, instance, s.service, timeout)
@@ -338,7 +338,7 @@ func (c *connectionManager) GetConnectionByHashKey(
 	opKey string, clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
 	for {
 		conn, err := c.tryGetConnection(clusterType, hashKey)
-		if nil != err {
+		if err != nil {
 			log.GetNetworkLogger().Errorf(
 				"fail to get connection, opKey is %s, cluster %v, error is %s", opKey, clusterType, err)
 			return nil, err
@@ -384,7 +384,7 @@ func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout 
 			err = engine.SyncUpdateServiceCallResult(result)
 		}
 	}
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"error to update success call result for connection %s, %s", connID.String(), err)
 	}
@@ -406,7 +406,7 @@ func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout tim
 			err = engine.SyncUpdateServiceCallResult(result)
 		}
 	}
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"error to update fail call result for connection %s, %s", connID.String(), err)
 	}

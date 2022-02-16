@@ -85,18 +85,18 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	flowEngine.plugins = plugins
 	// 加载服务端连接器
 	flowEngine.connector, err = data.GetServerConnector(cfg, plugins)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	flowEngine.serverServices = config.GetServerServices(cfg)
 	// 加载本地缓存插件
 	flowEngine.registry, err = data.GetRegistry(cfg, plugins)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	if cfg.GetGlobal().GetStatReporter().IsEnable() {
 		flowEngine.reporterChain, err = data.GetStatReporterChain(cfg, plugins)
-		if nil != err {
+		if err != nil {
 			return err
 		}
 	}
@@ -107,7 +107,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 	// 初始化限流缓存
 	flowEngine.flowQuotaAssistant = &quota.FlowQuotaAssistant{}
-	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); nil != err {
+	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); err != nil {
 		return err
 	}
 	// 加载全局上下文
@@ -116,7 +116,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
 	disableHealthCheck := when == config.HealthCheckNever
 	if !disableHealthCheck {
-		if err = flowEngine.addHealthCheckTask(); nil != err {
+		if err = flowEngine.addHealthCheckTask(); err != nil {
 			return err
 		}
 	}
@@ -124,11 +124,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable()
 	if enable {
 		flowEngine.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, plugins)
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		flowEngine.rtCircuitBreakChan, flowEngine.circuitBreakTask, err = flowEngine.addPeriodicCircuitBreakTask()
-		if nil != err {
+		if err != nil {
 			return err
 		}
 	}
@@ -152,17 +152,17 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 func (e *Engine) LoadFlowRouteChain() error {
 	var err error
 	e.routerChain, err = data.GetServiceRouterChain(e.configuration, e.plugins)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	filterOnlyRouterPlugin, err := e.plugins.GetPlugin(common.TypeServiceRouter, config.DefaultServiceRouterFilterOnly)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	e.filterOnlyRouter = filterOnlyRouterPlugin.(servicerouter.ServiceRouter)
 	// 加载负载均衡插件
 	e.loadbalancer, err = data.GetLoadBalancer(e.configuration, e.plugins)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	return nil
@@ -235,12 +235,12 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 func (e *Engine) Start() error {
 	// 添加客户端定期上报任务
 	clientReportTaskValues, err := e.addClientReportTask()
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	// 添加获取系统服务的任务
 	serverServiceTaskValues, err := e.addLoadServerServiceTask()
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	// 添加上报sdk配置任务
@@ -308,7 +308,7 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 	if len(e.reporterChain) > 0 {
 		for _, reporter := range e.reporterChain {
 			err := reporter.ReportStat(typ, stat)
-			if nil != err {
+			if err != nil {
 				return err
 			}
 		}

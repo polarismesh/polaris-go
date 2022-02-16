@@ -148,7 +148,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 		t.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
 	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", lbMonitorIP, lbMonitorPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
 	log.Printf("moniator server listening on %s:%d\n", lbMonitorIP, lbMonitorPort)
@@ -179,7 +179,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)

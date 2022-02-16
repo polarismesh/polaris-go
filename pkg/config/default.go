@@ -221,10 +221,10 @@ const (
 )
 
 const (
-	DefaultMinServiceExpireTime      = 5 * time.Second
-	DefaultMaxServiceExpireCheckTime = 1 * time.Hour
-	DefaultMinTimingInterval                       = 100 * time.Millisecond
-	DefaultServerServiceRefreshInterval               = 1 * time.Minute
+	DefaultMinServiceExpireTime         = 5 * time.Second
+	DefaultMaxServiceExpireCheckTime    = 1 * time.Hour
+	DefaultMinTimingInterval            = 100 * time.Millisecond
+	DefaultServerServiceRefreshInterval = 1 * time.Minute
 )
 
 // 集群类型，用以标识系统服务集群
@@ -344,7 +344,7 @@ func (a *APIConfigImpl) Verify() error {
 		} else {
 			var err error
 			a.BindIPValue, err = model.GetIP(a.BindIntf)
-			if nil != err {
+			if err != nil {
 				return fmt.Errorf(
 					"can not get ip from provided bind interface %s, err is %s", a.BindIntf, err.Error())
 			}
@@ -382,16 +382,16 @@ func (g *GlobalConfigImpl) Verify() error {
 	}
 	var errs error
 	var err error
-	if err = g.ServerConnector.Verify(); nil != err {
+	if err = g.ServerConnector.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = g.API.Verify(); nil != err {
+	if err = g.API.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = g.System.Verify(); nil != err {
+	if err = g.System.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = g.StatReporter.Verify(); nil != err {
+	if err = g.StatReporter.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
@@ -439,19 +439,19 @@ func (c *ConsumerConfigImpl) Verify() error {
 	}
 	var errs error
 	var err error
-	if err = c.LocalCache.Verify(); nil != err {
+	if err = c.LocalCache.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.ServiceRouter.Verify(); nil != err {
+	if err = c.ServiceRouter.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.Loadbalancer.Verify(); nil != err {
+	if err = c.Loadbalancer.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.CircuitBreaker.Verify(); nil != err {
+	if err = c.CircuitBreaker.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.HealthCheck.Verify(); nil != err {
+	if err = c.HealthCheck.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
@@ -484,13 +484,13 @@ func (c *ConfigurationImpl) Verify() error {
 	}
 	var errs error
 	var err error
-	if err = c.Global.Verify(); nil != err {
+	if err = c.Global.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.Consumer.Verify(); nil != err {
+	if err = c.Consumer.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if err = c.Provider.Verify(); nil != err {
+	if err = c.Provider.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
@@ -532,15 +532,15 @@ func (s *SystemConfigImpl) Verify() error {
 				s.Mode, model.ModeNoAgent, model.ModeWithAgent))
 	}
 	var err error
-	if err = s.DiscoverCluster.Verify(); nil != err {
+	if err = s.DiscoverCluster.Verify(); err != nil {
 		errs = multierror.Append(errs,
 			fmt.Errorf("fail to verify serverClusters.discoverCluster, error is %v", err))
 	}
-	if err = s.HealthCheckCluster.Verify(); nil != err {
+	if err = s.HealthCheckCluster.Verify(); err != nil {
 		errs = multierror.Append(errs,
 			fmt.Errorf("fail to verify serverClusters.healthCheckCluster, error is %v", err))
 	}
-	if err = s.MonitorCluster.Verify(); nil != err {
+	if err = s.MonitorCluster.Verify(); err != nil {
 		errs = multierror.Append(errs,
 			fmt.Errorf("fail to verify serverClusters.monitorCluster, error is %v", err))
 	}

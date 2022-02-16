@@ -116,14 +116,14 @@ func NewContinuum(
 			hashKeyBuilder.WriteString(strconv.Itoa(i))
 			hashKey := hashKeyBuilder.String()
 			var hashValue uint64
-			if hashValue, err = hashFunc([]byte(hashKey), 0); nil != err {
+			if hashValue, err = hashFunc([]byte(hashKey), 0); err != nil {
 				return nil, err
 			}
 			if addr, ok := hashValues[hashValue]; ok {
 				// hash冲突
 				log.GetBaseLogger().Debugf("hash conflict between %s and %s", addr, hashKey)
 				hashValue, hashKey, err = continuum.doRehash(hashValue, hashValues, 1)
-				if nil != err {
+				if err != nil {
 					log.GetBaseLogger().Errorf("fail to generate hash at %s:%d(id=%s, limit=%d), error %v",
 						realInstance.GetHost(), realInstance.GetPort(), realInstance.GetId(), i, err)
 					continue
@@ -180,10 +180,10 @@ func (c *ContinuumSelector) doRehash(
 	var err error
 	var hashValue uint64
 	buf := bytes.NewBuffer(make([]byte, 0, 8))
-	if err = binary.Write(buf, binary.LittleEndian, lastHash); nil != err {
+	if err = binary.Write(buf, binary.LittleEndian, lastHash); err != nil {
 		return 0, "", err
 	}
-	if hashValue, err = c.hashFunc(buf.Bytes(), 0); nil != err {
+	if hashValue, err = c.hashFunc(buf.Bytes(), 0); err != nil {
 		return 0, "", err
 	}
 	if key, ok := hashValues[hashValue]; ok {
@@ -206,7 +206,7 @@ func (c *ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNode
 	default:
 		criteria := value.(*loadbalancer.Criteria)
 		hashValue, err := common.CalcHashValue(criteria, c.hashFunc)
-		if nil != err {
+		if err != nil {
 			return -1, nil, err
 		}
 		targetIndex, nodes := c.selectByHashValue(hashValue, criteria.ReplicateInfo.Count)

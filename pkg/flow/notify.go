@@ -111,7 +111,7 @@ func (c *CombineNotifyContext) Errs() map[ContextKey]model.SDKError {
 	var errs = make(map[ContextKey]model.SDKError, len(c.notifiers))
 	for _, notifier := range c.notifiers {
 		err := notifier.Err()
-		if nil != err {
+		if err != nil {
 			errs[*notifier.name] = err
 		}
 	}

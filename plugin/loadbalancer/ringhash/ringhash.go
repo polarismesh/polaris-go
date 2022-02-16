@@ -50,7 +50,7 @@ func (k *KetamaLoadBalancer) Init(ctx *plugin.InitContext) error {
 	k.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(k.Name()).(*Config)
 	var err error
 	k.hashFunc, err = hash.GetHashFunc(k.cfg.HashFunction)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to init hashFunc")
 	}
 	return nil
@@ -90,11 +90,11 @@ func (k *KetamaLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
 	}
 	selector, err := k.getOrBuildHashRing(targetInstances)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to build ring, err is %v", err)
 	}
 	index, nodes, err := selector.Select(criteria)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to select from ring")
 	}
 	if nil != nodes {

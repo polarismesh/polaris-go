@@ -50,7 +50,7 @@ func (c *ConfigReportCallBack) Process(
 	err := c.engine.SyncReportStat(model.SDKCfgStat, nil)
 	t, _ := c.globalCtx.GetValue(model.ContextKeyToken)
 	token := t.(model.SDKToken)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("report sdk config info, IP: %s, PID: %d, UID: %s, error:%s",
 			token.IP, token.PID, token.UID, err)
 		// 发生错误则进行重试，直到上报成功为止

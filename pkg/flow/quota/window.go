@@ -140,7 +140,7 @@ func (rs *RateLimitWindowSet) AddRateLimitWindow(
 	}
 	var err error
 	window, err = NewRateLimitWindow(rs, rule, commonRequest, flatLabels)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if hasRegex {
@@ -398,7 +398,7 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	var err error
 	criteria := &commonRequest.Criteria
 	window.trafficShapingBucket, err = window.rateLimiter.InitQuota(criteria)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	window.allocatingBucket = NewRemoteAwareQpsBucket(window)
@@ -613,7 +613,7 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 	nowMilli := model.CurrentMillisecond()
 	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
 	shapingResult, err := r.trafficShapingBucket.GetQuota()
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	deadline := time.Unix(0, nowMilli*1e6)

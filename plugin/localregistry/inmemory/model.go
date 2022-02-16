@@ -253,7 +253,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 	// 更新标记为，表示该对象已经经过远程更新
 	atomic.StoreUint32(&s.hasRemoteUpdated, 1)
 	var svcDeleted bool
-	if nil != err {
+	if err != nil {
 		// 收取消息有出错
 		instancesValue := s.LoadValue(false)
 		// 没有服务信息直接删除

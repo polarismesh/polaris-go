@@ -32,7 +32,7 @@ func (r *RateLimitWindow) DoAsyncRemoteInit() error {
 		return nil
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("fail to call RateLimitService.GetMessageSender, service %s, error is %s",
 			r.remoteCluster, err)
 		return err
@@ -51,7 +51,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 		return nil
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to call RateLimitService.GetMessageSender, service %s, error is %s",
 			r.remoteCluster, err)
@@ -67,7 +67,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 
 	request := r.acquireRequest()
 	err = sender.SendReportRequest(request)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to call RateLimitService.Acquire, service %s, labels %s, error is %s",
 			r.SvcKey, r.Labels, err)

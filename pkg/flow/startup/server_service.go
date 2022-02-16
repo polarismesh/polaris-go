@@ -34,7 +34,7 @@ func NewServerServiceCallBack(
 	cfg config.Configuration, supplier plugin.Supplier, engine model.Engine) (*ServerServiceCallBack, error) {
 	var err error
 	var callback = &ServerServiceCallBack{}
-	if callback.connector, err = data.GetServerConnector(cfg, supplier); nil != err {
+	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.engine = engine
@@ -65,7 +65,7 @@ func (s *ServerServiceCallBack) Process(
 	commonRequest := &data.CommonInstancesRequest{}
 	commonRequest.InitByGetMultiRequest(request, s.cfg)
 	err := s.engine.SyncGetResources(commonRequest)
-	if nil != err {
+	if err != nil {
 		sdkErr := err.(model.SDKError)
 		// 只有超时的情况下，继续尝试加载discover服务
 		if sdkErr.ErrorCode() == model.ErrCodeAPITimeoutError {
@@ -81,14 +81,14 @@ func (s *ServerServiceCallBack) Process(
 	if err = s.connector.UpdateServers(&model.ServiceEventKey{
 		ServiceKey: discoverService,
 		Type:       model.EventInstances,
-	}); nil != err {
+	}); err != nil {
 		log.GetBaseLogger().Errorf("fail to update server service %s instances, err is %s",
 			discoverService, err)
 	}
 	if err = s.connector.UpdateServers(&model.ServiceEventKey{
 		ServiceKey: discoverService,
 		Type:       model.EventRouting,
-	}); nil != err {
+	}); err != nil {
 		log.GetBaseLogger().Errorf("fail to update server service %s routing, err is %s",
 			discoverService, err)
 	}

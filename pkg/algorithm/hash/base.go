@@ -35,7 +35,7 @@ func WriteBuffer(writer io.Writer, buf []byte) error {
 	total := len(buf)
 	for total > 0 {
 		length, err := writer.Write(buf)
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		total -= length

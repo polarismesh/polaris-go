@@ -40,7 +40,7 @@ func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeIn
 		return serviceInstances.GetInstances(), nil, nil, nil
 	}
 	result, err := GetFilterCluster(ctx, routers, routeInfo, serviceInstances.GetServiceClusters())
-	if nil != err {
+	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer GetRouteResultPool().Put(result)
@@ -72,7 +72,7 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if nil != err {
+		if err != nil {
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
@@ -91,7 +91,7 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if nil != err {
+		if err != nil {
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
@@ -102,7 +102,7 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 // GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
 func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
-	if err := routeInfo.Validate(); nil != err {
+	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
 	}
 	var result *RouteResult
@@ -116,7 +116,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 			routeInfo.Init(plugins)
 		}
 		result, err = processServiceRouters(ctx, routers, routeInfo, svcClusters, cluster)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 		if nil != result && nil != result.RedirectDestService {

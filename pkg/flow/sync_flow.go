@@ -94,7 +94,7 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 	}
 	inst, err := loadbalancer.ChooseInstance(e.globalCtx, balancer, &commonRequest.Criteria, commonRequest.DstInstances)
 	consumeTime = e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
@@ -136,7 +136,7 @@ outLoop:
 		startTime := e.globalCtx.Now()
 		// 尝试获取本地缓存的值
 		combineContext, err = getAndLoadCacheValues(e.registry, req, retryTimes < param.MaxRetry)
-		if nil != err {
+		if err != nil {
 			break outLoop
 		}
 		// 本地缓存已经加载完成，退出
@@ -175,7 +175,7 @@ outLoop:
 	}
 	// 超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
 	var success bool
-	if nil == err {
+	if err == nil {
 		success, err = tryGetServiceValuesFromCache(e.registry, req)
 		if success {
 			log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
@@ -223,7 +223,7 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 	var redirectedService *model.ServiceInfo
 	for redirectedTimes <= config.MaxRedirectTimes {
 		err := e.SyncGetResources(req)
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		if req.FetchAll {
@@ -232,7 +232,7 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 		} else {
 			// 走就近路由
 			cluster, redirectedService, err = e.afterLazyGetInstances(req)
-			if nil != err {
+			if err != nil {
 				return err
 			}
 			if nil != redirectedService {
@@ -288,7 +288,7 @@ func (e *Engine) doSyncGetAllInstances(commonRequest *data.CommonInstancesReques
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 	startTime := e.globalCtx.Now()
 	err := e.syncGetWrapInstances(commonRequest)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 		return e.connector.RegisterInstance(request.(*model.InstanceRegisterRequest))
 	}, param)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 		return nil, e.connector.DeregisterInstance(request.(*model.InstanceDeRegisterRequest))
 	}, param)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		apiCallResult.SetSuccess(consumeTime)
@@ -398,7 +398,7 @@ func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 		return nil, e.connector.Heartbeat(request.(*model.InstanceHeartbeatRequest))
 	}, param)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		apiCallResult.SetSuccess(consumeTime)
@@ -413,7 +413,7 @@ func (e *Engine) SyncUpdateServiceCallResult(result *model.ServiceCallResult) er
 	startTime := e.globalCtx.Now()
 	err := e.realSyncUpdateServiceCallResult(result)
 	consumeTime := e.globalCtx.Since(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		(&commonRequest.CallResult).SetSuccess(consumeTime)
@@ -425,7 +425,7 @@ func (e *Engine) SyncUpdateServiceCallResult(result *model.ServiceCallResult) er
 // realSyncUpdateServiceCallResult 同步上报调用结果信息 实际处理函数
 func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult) error {
 	// 当前处理熔断和服务调用统计上报
-	if err := e.reportSvcStat(result); nil != err {
+	if err := e.reportSvcStat(result); err != nil {
 		return err
 	}
 	if nil == e.rtCircuitBreakChan || len(e.circuitBreakerChain) == 0 {
@@ -435,7 +435,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	for _, cbreaker := range e.circuitBreakerChain {
 		cbName := cbreaker.Name()
 		rtLimit, err := cbreaker.Stat(result)
-		if nil != err {
+		if err != nil {
 			return model.NewSDKError(model.ErrCodeCircuitBreakerError, err,
 				"fail to do real time circuitBreak in %s", cbName)
 		}
@@ -475,7 +475,7 @@ func (e *Engine) SyncGetServices(eventType model.EventType,
 func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.ServicesResponse, error) {
 	log.GetBaseLogger().Debugf("doSyncGetServices----->")
 	err := e.SyncGetResources(commonRequest)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return commonRequest.BuildServicesResponse(commonRequest.GetServices()), nil
@@ -495,7 +495,7 @@ func (e *Engine) SyncGetMeshConfig(eventType model.EventType,
 func (e *Engine) doSyncGetMeshConfig(commonRequest *data.MeshConfigRequest) (
 	*model.MeshConfigResponse, error) {
 	err := e.SyncGetResources(commonRequest)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return commonRequest.BuildMeshConfigResponse(commonRequest.GetMeshConfig()), nil
@@ -515,7 +515,7 @@ func (e *Engine) SyncGetMesh(eventType model.EventType,
 func (e *Engine) doSyncGetMesh(commonRequest *data.MeshRequest) (
 	*model.MeshResponse, error) {
 	err := e.SyncGetResources(commonRequest)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return commonRequest.BuildMeshResponse(commonRequest.GetMesh()), nil
@@ -549,7 +549,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 			return commonRequest.BuildServiceRuleResponse(svcRule), nil
 		}
 		var notifier *common.Notifier
-		if notifier, err = e.registry.LoadServiceRouteRule(&commonRequest.DstService.ServiceKey); nil != err {
+		if notifier, err = e.registry.LoadServiceRouteRule(&commonRequest.DstService.ServiceKey); err != nil {
 			(&commonRequest.CallResult).SetFail(
 				model.GetErrorCodeFromError(err), e.globalCtx.Since(apiStartTime))
 			return nil, err

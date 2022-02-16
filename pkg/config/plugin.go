@@ -165,7 +165,7 @@ func (p PluginConfigs) Verify() error {
 			continue
 		}
 		// 检验插件配置
-		if err := cfg.Verify(); nil != err {
+		if err := cfg.Verify(); err != nil {
 			return fmt.Errorf("fail to verify plugin %s config, err is %v", name, err)
 		}
 	}

@@ -42,7 +42,7 @@ func GetServerConnector(
 	// 加载服务端连接器
 	protocol := cfg.GetGlobal().GetServerConnector().GetProtocol()
 	targetPlugin, err := supplier.GetPlugin(common.TypeServerConnector, protocol)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return targetPlugin.(serverconnector.ServerConnector), nil
@@ -52,7 +52,7 @@ func GetServerConnector(
 func GetRegistry(cfg config.Configuration, supplier plugin.Supplier) (localregistry.LocalRegistry, error) {
 	localCacheType := cfg.GetConsumer().GetLocalCache().GetType()
 	targetPlugin, err := supplier.GetPlugin(common.TypeLocalRegistry, localCacheType)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return targetPlugin.(localregistry.LocalRegistry), nil
@@ -71,7 +71,7 @@ func GetCircuitBreakers(
 				hasHealthCheckBreaker = true
 			}
 			targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, cbName)
-			if nil != err {
+			if err != nil {
 				return nil, err
 			}
 			cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
@@ -79,7 +79,7 @@ func GetCircuitBreakers(
 	}
 	if when == config.HealthCheckAlways && !hasHealthCheckBreaker {
 		targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, config.DefaultCircuitBreakerErrCheck)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 		cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
@@ -94,7 +94,7 @@ func GetHealthCheckers(cfg config.Configuration, supplier plugin.Supplier) ([]he
 	if len(names) > 0 {
 		for _, name := range names {
 			targetPlugin, err := supplier.GetPlugin(common.TypeHealthCheck, name)
-			if nil != err {
+			if err != nil {
 				return nil, err
 			}
 			healthCheckers = append(healthCheckers, targetPlugin.(healthcheck.HealthChecker))
@@ -112,7 +112,7 @@ func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (
 	if len(filterChain) > 0 {
 		for _, filter := range filterChain {
 			targetPlugin, err := supplier.GetPlugin(common.TypeServiceRouter, filter)
-			if nil != err {
+			if err != nil {
 				return nil, err
 			}
 			filters.Chain = append(filters.Chain, targetPlugin.(servicerouter.ServiceRouter))
@@ -128,7 +128,7 @@ func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([
 	if len(reporterNames) > 0 {
 		for _, reporter := range reporterNames {
 			targetPlugin, err := supplier.GetPlugin(common.TypeStatReporter, reporter)
-			if nil != err {
+			if err != nil {
 				return nil, err
 			}
 			reporterChain = append(reporterChain, targetPlugin.(statreporter.StatReporter))
@@ -141,7 +141,7 @@ func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([
 func GetLoadBalancer(cfg config.Configuration, supplier plugin.Supplier) (loadbalancer.LoadBalancer, error) {
 	lbType := cfg.GetConsumer().GetLoadbalancer().GetType()
 	targetPlugin, err := supplier.GetPlugin(common.TypeLoadBalancer, lbType)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return targetPlugin.(loadbalancer.LoadBalancer), nil
@@ -150,7 +150,7 @@ func GetLoadBalancer(cfg config.Configuration, supplier plugin.Supplier) (loadba
 // GetLoadBalancerByLbType 获取负载均衡插件
 func GetLoadBalancerByLbType(lbType string, supplier plugin.Supplier) (loadbalancer.LoadBalancer, error) {
 	targetPlugin, err := supplier.GetPlugin(common.TypeLoadBalancer, lbType)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return targetPlugin.(loadbalancer.LoadBalancer), nil
@@ -170,7 +170,7 @@ func RetrySyncCall(name string, svcKey *model.ServiceKey,
 		startTime := clock.GetClock().Now()
 		resp, err = call(request)
 		consumeTime := clock.GetClock().Now().Sub(startTime)
-		if nil == err {
+		if err == nil {
 			return resp, nil
 		}
 		sdkErr, ok := err.(model.SDKError)

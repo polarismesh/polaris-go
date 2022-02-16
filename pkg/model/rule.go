@@ -276,7 +276,7 @@ func (g *GetServiceRuleRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetServiceRuleRequest can not be nil")
 	}
-	if err := validateServiceMetadata("GetServiceRuleRequest", g); nil != err {
+	if err := validateServiceMetadata("GetServiceRuleRequest", g); err != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, err, "fail to validate GetServiceRuleRequest")
 	}
 	return nil

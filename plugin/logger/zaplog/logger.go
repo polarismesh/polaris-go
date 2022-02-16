@@ -190,7 +190,7 @@ func (z *zapLogger) IsLevelEnabled(l int) bool {
 
 // 动态设置日志级别
 func (z *zapLogger) SetLogLevel(l int) error {
-	if err := plog.VerifyLogLevel(l); nil != err {
+	if err := plog.VerifyLogLevel(l); err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify log level")
 	}
 	atomic.StoreInt32(&z.outputLevel, int32(l))
