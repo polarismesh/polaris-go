@@ -39,7 +39,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/version"
 
-	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
