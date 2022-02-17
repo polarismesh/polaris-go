@@ -106,7 +106,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 		}, instances)
 		namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
 		grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", mockListenHost, port))
-		if nil != err {
+		if err != nil {
 			log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 		}
 		log.Printf("appserver listening on %s:%d\n", mockListenHost, port)
@@ -124,7 +124,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	builtinGrpcServer := grpc.NewServer(grpcOptions...)
 	t.grpcServers = append(t.grpcServers, builtinGrpcServer)
 	builtinListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", mockListenHost, builtinPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening built appserver %v", err))
 	}
 	namingpb.RegisterPolarisGRPCServer(builtinGrpcServer, t.builtinServer)

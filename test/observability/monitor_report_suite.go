@@ -193,7 +193,7 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(m.grpcServer, m.mockServer)
 	m.discoverLisenter, err = net.Listen("tcp", fmt.Sprintf("%s:%d", discoverIp, discoverPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", discoverIp, discoverPort)
@@ -201,7 +201,7 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 
 	monitorpb.RegisterGrpcAPIServer(m.grpcMonitor, m.monitorServer)
 	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
@@ -1108,18 +1108,18 @@ func (m *MonitorReportSuite) checkStringArrayEqual(arr1 []string, arr2 []string,
 // 从文件中读取rateLimit的定义
 func readRateLimitRuleFromFile(path string, singleRule bool) (proto.Message, error) {
 	buf, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if singleRule {
 		rule := &namingpb.Rule{}
-		if err = jsonpb.UnmarshalString(string(buf), rule); nil != err {
+		if err = jsonpb.UnmarshalString(string(buf), rule); err != nil {
 			return nil, err
 		}
 		return rule, err
 	}
 	rateLimit := &namingpb.RateLimit{}
-	if err = jsonpb.UnmarshalString(string(buf), rateLimit); nil != err {
+	if err = jsonpb.UnmarshalString(string(buf), rateLimit); err != nil {
 		return nil, err
 	}
 	return rateLimit, err

@@ -83,11 +83,11 @@ func (l *L5CSTLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
 	}
 	selector, err := l.getOrBuildHashRing(targetInstances)
-	if nil != err {
+	if err != nil {
 		return nil, fmt.Errorf("fail to build ring, err is %v", err)
 	}
 	index, nodes, err := selector.Select(criteria)
-	if nil != err {
+	if err != nil {
 		return nil, fmt.Errorf("fail to select from ring, err is %v", err)
 	}
 	if nil != nodes {

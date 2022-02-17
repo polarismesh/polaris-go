@@ -315,7 +315,7 @@ func (g *GetOneInstanceRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetOneInstanceRequest can not be nil")
 	}
-	if err := validateServiceMetadata("GetOneInstanceRequest", g); nil != err {
+	if err := validateServiceMetadata("GetOneInstanceRequest", g); err != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, err,
 			"fail to validate GetInstancesRequest")
 	}
@@ -384,7 +384,7 @@ func (g *GetAllInstancesRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetAllInstancesRequest can not be nil")
 	}
-	if err := validateServiceMetadata("GetAllInstancesRequest", g); nil != err {
+	if err := validateServiceMetadata("GetAllInstancesRequest", g); err != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, err,
 			"fail to validate GetAllInstancesRequest")
 	}
@@ -475,7 +475,7 @@ func (g *GetInstancesRequest) Validate() error {
 	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "GetInstancesRequest can not be nil")
 	}
-	if err := validateServiceMetadata("GetInstancesRequest", g); nil != err {
+	if err := validateServiceMetadata("GetInstancesRequest", g); err != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, err,
 			"fail to validate GetInstancesRequest")
 	}
@@ -775,7 +775,7 @@ func (s *ServiceCallResult) Validate() error {
 	if nil == s.GetDelay() {
 		errs = multierror.Append(errs, fmt.Errorf("ServiceCallResult: delay should not be empty"))
 	}
-	if nil != errs {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate ServiceCallResult: ")
 	}
 	return nil
@@ -990,7 +990,7 @@ func (i *InstanceHeartbeatRequest) Validate() error {
 	if i.Port <= 0 || i.Port >= 65536 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: port should be in range (0, 65536)"))
 	}
-	if nil != errs {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceHeartbeatRequest: ")
 	}
 	return nil
@@ -1067,7 +1067,7 @@ func (i *InstanceDeRegisterRequest) Validate() error {
 	if i.Port <= 0 || i.Port >= 65536 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: port should be in range (0, 65536)"))
 	}
-	if nil != errs {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceDeRegisterRequest: ")
 	}
 	return nil
@@ -1206,10 +1206,10 @@ func (g *InstanceRegisterRequest) Validate() error {
 			fmt.Errorf("InstanceRegisterRequest: priority should be in range [%d, %d]", MinPriority, MaxPriority))
 	}
 	var err error
-	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); nil != err {
+	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if nil != errs {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceRegisterRequest: ")
 	}
 	return nil
@@ -1245,7 +1245,7 @@ func (r *ReportClientRequest) Validate() error {
 	if len(r.Version) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("ReportClientRequest: version should not be empty"))
 	}
-	if nil != errs {
+	if errs != nil {
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate ReportClientRequest: ")
 	}
 	return nil

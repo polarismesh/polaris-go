@@ -27,7 +27,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
 
-	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
@@ -38,10 +37,10 @@ type consumerAPI struct {
 
 // GetOneInstance sync get one instance after load balance
 func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInstanceResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetOneInstance(&req.GetOneInstanceRequest)
@@ -49,10 +48,10 @@ func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInst
 
 // GetInstances sync get one instances after route
 func (c *consumerAPI) GetInstances(req *GetInstancesRequest) (*model.InstancesResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetInstances(&req.GetInstancesRequest)
@@ -60,10 +59,10 @@ func (c *consumerAPI) GetInstances(req *GetInstancesRequest) (*model.InstancesRe
 
 // GetAllInstances 获取完整的服务列表
 func (c *consumerAPI) GetAllInstances(req *GetAllInstancesRequest) (*model.InstancesResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetAllInstances(&req.GetAllInstancesRequest)
@@ -71,10 +70,10 @@ func (c *consumerAPI) GetAllInstances(req *GetAllInstancesRequest) (*model.Insta
 
 // UpdateServiceCallResult update the service call error code and delay
 func (c *consumerAPI) UpdateServiceCallResult(req *ServiceCallResult) error {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return err
 	}
 	return c.context.GetEngine().SyncUpdateServiceCallResult(&req.ServiceCallResult)
@@ -82,10 +81,10 @@ func (c *consumerAPI) UpdateServiceCallResult(req *ServiceCallResult) error {
 
 // GetRouteRule 同步获取服务路由规则
 func (c *consumerAPI) GetRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetServiceRule(model.EventRouting, &req.GetServiceRuleRequest)
@@ -93,7 +92,7 @@ func (c *consumerAPI) GetRouteRule(req *GetServiceRuleRequest) (*model.ServiceRu
 
 // GetMeshConfig 同步获取mesh配置
 func (c *consumerAPI) GetMeshConfig(req *GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetMeshConfig(model.EventMeshConfig, &req.GetMeshConfigRequest)
@@ -101,7 +100,7 @@ func (c *consumerAPI) GetMeshConfig(req *GetMeshConfigRequest) (*model.MeshConfi
 
 // GetMesh 同步获取网格
 func (c *consumerAPI) GetMesh(req *GetMeshRequest) (*model.MeshResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetMesh(model.EventMesh, &req.GetMeshRequest)
@@ -109,10 +108,10 @@ func (c *consumerAPI) GetMesh(req *GetMeshRequest) (*model.MeshResponse, error) 
 
 // GetServicesByBusiness 同步获取批量服务
 func (c *consumerAPI) GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetServices(model.EventServices, &req.GetServicesRequest)
@@ -120,10 +119,10 @@ func (c *consumerAPI) GetServicesByBusiness(req *GetServicesRequest) (*model.Ser
 
 // InitCalleeService 初始化服务运行中需要的被调服务
 func (c *consumerAPI) InitCalleeService(req *InitCalleeServiceRequest) error {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return err
 	}
-	if err := req.Validate(); nil != err {
+	if err := req.Validate(); err != nil {
 		return err
 	}
 	return c.context.GetEngine().InitCalleeService(&req.InitCalleeServiceRequest)
@@ -160,7 +159,7 @@ func newConsumerAPI() (ConsumerAPI, error) {
 // NewConsumerAPIByFile 通过配置文件创建SDK ConsumerAPI对象
 func newConsumerAPIByFile(path string) (ConsumerAPI, error) {
 	context, err := InitContextByFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &consumerAPI{context}, nil
@@ -169,7 +168,7 @@ func newConsumerAPIByFile(path string) (ConsumerAPI, error) {
 // NewConsumerAPIByFile 通过配置对象创建SDK ConsumerAPI对象
 func newConsumerAPIByConfig(cfg config.Configuration) (ConsumerAPI, error) {
 	context, err := InitContextByConfig(cfg)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &consumerAPI{context}, nil

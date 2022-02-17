@@ -109,7 +109,7 @@ func (h *Histogram) Print(w io.Writer) {
 // common printf
 func printf(w io.Writer, format string, a ...interface{}) {
 	_, err := fmt.Fprintf(w, format, a...)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to print %s, error is %v", format, err)
 	}
 }

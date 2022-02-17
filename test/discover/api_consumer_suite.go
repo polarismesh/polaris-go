@@ -107,7 +107,7 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -188,7 +188,7 @@ func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
 		endTime := time.Now()
 		consumeTime := endTime.Sub(startTime)
 		fmt.Printf("time consume is %v\n", consumeTime)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("err recv is %v\n", err)
 		}
 		c.Assert(err, check.IsNil)

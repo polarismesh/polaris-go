@@ -32,7 +32,7 @@ func ChooseInstance(ctx model.ValueContext, loadbalancer LoadBalancer,
 			"cluster is nil for loadBalance for %s", svcKey)
 	}
 	instance, err := loadbalancer.ChooseInstance(criteria, cluster.GetClusters().GetServiceInstances())
-	if nil != err {
+	if err != nil {
 		sdkErr = err.(model.SDKError)
 	}
 	if nil != criteria.Cluster {

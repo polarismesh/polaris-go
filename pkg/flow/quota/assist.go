@@ -116,7 +116,7 @@ func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration,
 		return nil
 	}
 	callback, err := NewRemoteQuotaCallback(cfg, supplier, engine, f.asyncRateLimitConnector)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	period := config.MinRateLimitReportInterval
@@ -140,7 +140,7 @@ func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration,
 	f.svcToWindowSet = &sync.Map{}
 	localRules := cfg.GetProvider().GetRateLimit().GetRules()
 	if len(localRules) > 0 {
-		if f.localRules, err = rateLimitRuleConversion(localRules); nil != err {
+		if f.localRules, err = rateLimitRuleConversion(localRules); err != nil {
 			return err
 		}
 	}
@@ -199,7 +199,7 @@ func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey
 			},
 		}
 		svcRule := pb.NewServiceRuleInProto(respInProto)
-		if err := svcRule.ValidateAndBuildCache(); nil != err {
+		if err := svcRule.ValidateAndBuildCache(); err != nil {
 			return nil, errors.New(fmt.Sprintf("fail to validate config local rule, err is %v", err))
 		}
 		values[svcKey] = svcRule
@@ -305,7 +305,7 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		return model.NewQuotaFuture(resp, clock.GetClock().Now(), nil), nil
 	}
 	window, err := f.lookupRateLimitWindow(commonRequest)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if nil == window {
@@ -333,7 +333,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	commonRequest *data.CommonRateLimitRequest) (*RateLimitWindow, error) {
 	var err error
 	// 1. 并发获取被调服务信息和限流配置，服务不存在，返回错误
-	if err = f.engine.SyncGetResources(commonRequest); nil != err {
+	if err = f.engine.SyncGetResources(commonRequest); err != nil {
 		sdkErr, ok := err.(model.SDKError)
 		if !ok {
 			return nil, err
@@ -348,14 +348,14 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	var rule *namingpb.Rule
 	var hasContent bool
 	hasContent, rule, err = lookupRule(svcRule, commonRequest.Labels)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if !hasContent {
 		// 远程规则没有内容，则匹配本地规则
 		svcRule = f.localRules[commonRequest.DstService]
 		_, rule, err = lookupRule(svcRule, commonRequest.Labels)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 	}

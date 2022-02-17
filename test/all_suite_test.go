@@ -46,7 +46,7 @@ func Test(t *testing.T) {
 // 初始化测试套
 func init() {
 	logDir := "testdata/test_log"
-	if err := api.ConfigLoggers(logDir, api.DebugLog); nil != err {
+	if err := api.ConfigLoggers(logDir, api.DebugLog); err != nil {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
 	// sdkcontext 销毁测试

@@ -47,7 +47,7 @@ func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	}
 	var value uint64
 	var err error
-	if err = WriteBuffer(hasher, buf); nil == err {
+	if err = WriteBuffer(hasher, buf); err == nil {
 		value = hasher.Sum64()
 	}
 	if pooled {

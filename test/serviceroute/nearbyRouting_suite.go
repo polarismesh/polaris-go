@@ -89,7 +89,7 @@ func (t *NearbyTestingSuite) setupServer(ipAddr string, port int) (*grpc.Server,
 
 	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, port))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, port)

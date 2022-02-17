@@ -536,7 +536,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 	//
 	for {
 		req, err := server.Recv()
-		if nil != err {
+		if err != nil {
 			if io.EOF == err {
 				log.GetBaseLogger().Debugf("Discover: server receive eof\n")
 				return nil
@@ -583,7 +583,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 				Type:    namingTypeReqToResp[req.Type],
 				Service: req.Service,
 			})
-			if nil != err {
+			if err != nil {
 				return err
 			}
 		}
@@ -612,7 +612,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 				Code:    &wrappers.UInt32Value{Value: namingpb.NotFoundResource},
 				Type:    namingTypeReqToResp[req.Type],
 				Info:    &wrappers.StringValue{Value: fmt.Sprintf("service not found for service %s", *key)},
-			}); nil != err {
+			}); err != nil {
 				log.GetBaseLogger().Debugf("Discover: server send error %v\n", err)
 				return err
 			}
@@ -744,7 +744,7 @@ func (n *namingServer) Discover(server namingpb.PolarisGRPC_DiscoverServer) erro
 		if n.printReturn {
 			log2.Printf("send resp, type %v, %v", req.Type, req.Service)
 		}
-		if err = server.Send(resp); nil != err {
+		if err = server.Send(resp); err != nil {
 			log2.Printf("send resp err: %v", err)
 			return err
 		}

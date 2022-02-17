@@ -93,7 +93,7 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", mockServerHost)
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s\n", mockServerHost)

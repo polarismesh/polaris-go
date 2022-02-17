@@ -34,7 +34,7 @@ func CalcHashValueWithSeed(
 	var err error
 	if len(criteria.HashKey) > 0 {
 		hashValue, err = hashFunc(criteria.HashKey, seed)
-		if nil != err {
+		if err != nil {
 			return 0, err
 		}
 	} else {

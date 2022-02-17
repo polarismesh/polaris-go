@@ -26,10 +26,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/model/local"
-
 	"github.com/polarismesh/polaris-go/pkg/metric"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/local"
 )
 
 // 半开调用结果统计维度
@@ -42,7 +41,7 @@ const (
 	MaxHalfOpenDimension
 )
 
-// 是否强制隔离，当节点状态为不健康或者隔离时，则不会转换熔断半开状态
+// forceIsolate 是否强制隔离，当节点状态为不健康或者隔离时，则不会转换熔断半开状态
 func forceIsolate(instance model.Instance) bool {
 	return !instance.IsHealthy() || instance.IsIsolated()
 }
@@ -55,7 +54,7 @@ type HalfOpenConversionHandler struct {
 	enableHealthCheck bool
 }
 
-// 创建半开熔断器
+// NewHalfOpenConversionHandler 创建半开熔断器
 func NewHalfOpenConversionHandler(cfg config.Configuration) *HalfOpenConversionHandler {
 	handler := &HalfOpenConversionHandler{
 		cbCfg:             cfg.GetConsumer().GetCircuitBreaker(),
@@ -64,13 +63,13 @@ func NewHalfOpenConversionHandler(cfg config.Configuration) *HalfOpenConversionH
 	return handler
 }
 
-// 获取恢复滑桶间隔
+// GetRecoverBucketInterval 获取恢复滑桶间隔
 func (h *HalfOpenConversionHandler) GetRecoverBucketInterval() time.Duration {
 	bucketSize := math.Ceil(float64(h.cbCfg.GetRecoverWindow()) / float64(h.cbCfg.GetRecoverNumBuckets()))
 	return time.Duration(bucketSize)
 }
 
-// 创建半开的统计窗口
+// CreateHalfOpenMetricWindow 创建半开的统计窗口
 func (h *HalfOpenConversionHandler) CreateHalfOpenMetricWindow(name string) *metric.SliceWindow {
 	return metric.NewSliceWindow(name, h.cbCfg.GetRecoverNumBuckets(),
 		h.GetRecoverBucketInterval(), MaxHalfOpenDimension, clock.GetClock().Now().UnixNano())
@@ -118,19 +117,16 @@ func (h *HalfOpenConversionHandler) OpenToHalfOpen(instance model.Instance, now 
 	return halfOpenByTimeout(now, startTime, h.cbCfg.GetSleepWindow())
 }
 
-// 打开了探测，通过探测结果来判断半开
+// halfOpenByTimeout 打开了探测，通过探测结果来判断半开
 func halfOpenByTimeout(now time.Time, startTime time.Time, sleepWindow time.Duration) bool {
-	if now.Sub(startTime) >= sleepWindow {
-		// 时间窗已经过去, 则恢复半开
-		return true
-	}
-	return false
+	// 时间窗已经过去, 则恢复半开
+	return now.Sub(startTime) >= sleepWindow
 }
 
 // 半开状态日志打印间隔
 const halfOpenLogInterval = 30 * time.Second
 
-// 统计半开后的请求分配次数
+// GetRequestCountAfterHalfOpen 统计半开后的请求分配次数
 func GetRequestCountAfterHalfOpen(halfOpenWindow *metric.SliceWindow, timeRange *metric.TimeRange) int64 {
 	return halfOpenWindow.CalcMetrics(KeyHalfOpenRequestCount, timeRange)
 }
@@ -141,7 +137,7 @@ const (
 	NoChange
 )
 
-// 半开状态转换判断逻辑
+// halfOpenConversion 半开状态转换判断逻辑
 func (h *HalfOpenConversionHandler) halfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil == cbStatus || cbStatus.GetCircuitBreaker() != cbName ||
@@ -191,17 +187,17 @@ func (h *HalfOpenConversionHandler) halfOpenConversion(now time.Time, instance m
 	return ToClose
 }
 
-// 熔断器的半开状态转换
+// HalfOpenConversion 熔断器的半开状态转换
 func (h *HalfOpenConversionHandler) HalfOpenConversion(now time.Time, instance model.Instance, cbName string) int {
 	return h.halfOpenConversion(now, instance, cbName)
 }
 
-// 获取半开后分配的请求数
+// GetRequestCountAfterHalfOpen 获取半开后分配的请求数
 func (h *HalfOpenConversionHandler) GetRequestCountAfterHalfOpen() int {
 	return h.cbCfg.GetRequestCountAfterHalfOpen()
 }
 
-// 统计半开状态的调用量以及成功失败数
+// StatHalfOpenCalls 统计半开状态的调用量以及成功失败数
 // 当达到半开次数阈值时，返回true，代表立刻进行状态判断
 func (h *HalfOpenConversionHandler) StatHalfOpenCalls(cbStatus model.CircuitBreakerStatus, gauge model.InstanceGauge) bool {
 	reqCountAfterHalfOpen := cbStatus.AddRequestCountAfterHalfOpen(1, gauge.GetRetStatus() == model.RetSuccess)

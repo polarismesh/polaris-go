@@ -112,7 +112,7 @@ func (r *RateLimitConfigImpl) Verify() error {
 	}
 	if len(r.Rules) > 0 {
 		for _, rule := range r.Rules {
-			if err := rule.Verify(); nil != err {
+			if err := rule.Verify(); err != nil {
 				return err
 			}
 		}

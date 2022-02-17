@@ -208,7 +208,7 @@ func (s *Reporter) uploadRateLimitRecord() {
 			timeStart := time.Now()
 			deadline := timeStart.Add(*s.config.ReportInterval)
 			err := s.connectToMonitor(deadline)
-			if nil != err {
+			if err != nil {
 				log.GetStatReportLogger().Errorf("fail to connect to monitor to report ratelimit Record, error %v", err)
 				s.uploadToMonitor = false
 			}
@@ -224,7 +224,7 @@ func (s *Reporter) uploadRateLimitRecord() {
 func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var err error
 	s.connection, err = s.connectionManager.GetConnection("ReportRateLimit", sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return err
 	}
@@ -232,7 +232,7 @@ func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var clientCtx context.Context
 	clientCtx, s.clientCancel = context.WithDeadline(context.Background(), deadline)
 	s.rateLimitClient, err = client.CollectRateLimitRecord(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report ratelimit record, err: %s", err.Error())
 		s.closeConnection()
 		return err
@@ -398,12 +398,12 @@ func (s *Reporter) sendRateLimitRecord(record *monitorpb.RateLimitRecord) {
 
 	// 上传到monitor
 	err := s.rateLimitClient.Send(record)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to report ratelimit record, id: %s, err %s, monitor server is %s",
 			record.Id, err.Error(), s.connection.ConnID)
 	}
 	resp, err := s.rateLimitClient.Recv()
-	if nil != err || resp.Id.GetValue() != record.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+	if err != nil || resp.Id.GetValue() != record.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 		log.GetStatReportLogger().Errorf("fail to report ratelimit record, resp is %v, err is %v, monitor server is %s",
 			resp, err, s.connection.ConnID)
 	} else {
