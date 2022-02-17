@@ -28,11 +28,11 @@ import (
 
 // InstanceLocalValue 本地实例数据，包括熔断，动态权重等信息
 type InstanceLocalValue interface {
-	// 获取统计滑窗
+	// GetSliceWindows 获取统计滑窗
 	GetSliceWindows(int32) []*metric.SliceWindow
-	// 实例的熔断状态
+	// GetCircuitBreakerStatus 实例的熔断状态
 	GetCircuitBreakerStatus() model.CircuitBreakerStatus
-	// 实例的健康检查状态
+	// GetActiveDetectStatus 实例的健康检查状态
 	GetActiveDetectStatus() model.ActiveDetectStatus
 	GetExtendedData(pluginIndex int32) interface{}
 	SetExtendedData(pluginIndex int32, data interface{})

@@ -28,9 +28,9 @@ import (
 // InstanceCircuitBreaker 【扩展点接口】节点熔断
 type InstanceCircuitBreaker interface {
 	plugin.Plugin
-	// 进行调用统计，返回当前实例是否需要进行立即熔断
+	// Stat 进行调用统计，返回当前实例是否需要进行立即熔断
 	Stat(model.InstanceGauge) (bool, error)
-	// 进行熔断计算，返回需要进行状态转换的实例ID
+	// CircuitBreak 进行熔断计算，返回需要进行状态转换的实例ID
 	// 入参包括全量服务实例，以及当前周期的健康探测结果
 	CircuitBreak(instances []model.Instance) (*Result, error)
 }
