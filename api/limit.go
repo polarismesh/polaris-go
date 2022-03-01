@@ -79,4 +79,6 @@ var (
 	NewLimitAPIByContext = newLimitAPIByContext
 	// NewLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
 	NewLimitAPIByFile = newLimitAPIByFile
+	// NewLimitAPIByAddress 通过address创建LimitAPI
+	NewLimitAPIByAddress = newLimitAPIByAddress
 )

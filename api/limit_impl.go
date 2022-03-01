@@ -78,3 +78,8 @@ func newLimitAPIByFile(path string) (LimitAPI, error) {
 	}
 	return &limitAPI{context: context}, nil
 }
+
+func newLimitAPIByAddress(address ...string) (LimitAPI, error) {
+	conf := config.NewDefaultConfiguration(address)
+	return newLimitAPIByConfig(conf)
+}

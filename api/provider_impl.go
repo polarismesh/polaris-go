@@ -108,3 +108,9 @@ func newProviderAPIByDefaultConfigFile() (ProviderAPI, error) {
 	path := model.ReplaceHomeVar(config.DefaultConfigFile)
 	return newProviderAPIByFile(path)
 }
+
+// newProviderAPIByAddress 通过address创建ProviderAPI
+func newProviderAPIByAddress(address ...string) (ProviderAPI, error) {
+	conf := config.NewDefaultConfiguration(address)
+	return newProviderAPIByConfig(conf)
+}

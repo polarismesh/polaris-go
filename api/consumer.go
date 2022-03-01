@@ -132,4 +132,6 @@ var (
 	NewConsumerAPIByDefaultConfigFile = newConsumerAPIByDefaultConfigFile
 	// NewServiceCallResult 创建上报对象
 	NewServiceCallResult = newServiceCallResult
+	// NewConsumerAPIByAddress 通过address创建ConsumerAPI对象
+	NewConsumerAPIByAddress = newConsumerAPIByAddress
 )
