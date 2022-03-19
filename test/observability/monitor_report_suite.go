@@ -47,49 +47,49 @@ import (
 
 // consumerAPI各种方法的调用次数
 var (
-	// 同步获取一个实例的成功失败数
+	// GetOneInstanceSuccessNum 同步获取一个实例的成功失败数
 	GetOneInstanceSuccessNum = 0
 	GetOneInstanceFailNum    = 0
 
-	// 同步获取实例的成功失败数
+	// GetInstancesSuccessNum 同步获取实例的成功失败数
 	GetInstancesSuccessNum = 0
 	GetInstancesFailNum    = 0
 
-	// 同步获取路由规则
+	// GetRouteRuleSuccessNum 同步获取路由规则
 	GetRouteRuleSuccessNum = 0
 	GetRouteRuleFailNum    = 0
 
-	// 上报服务调用的次数
+	// ServiceCallSuccessNum 上报服务调用的次数
 	ServiceCallSuccessNum = 0
 	ServiceCallFailNum    = 0
 
-	// 获取网格调用次数
+	// GetMeshSuccessNum 获取网格调用次数
 	GetMeshSuccessNum = 0
 	GetMeshFailNum    = 0
 )
 
 // providerAPI各种方法调用次数
 var (
-	// 注册实例的成功失败数
+	// RegisterSuccessNum 注册实例的成功失败数
 	RegisterSuccessNum = 0
 	RegisterFailNum    = 0
 
-	// 反注册实例的成功失败数
+	// DeregisterSuccessNum 反注册实例的成功失败数
 	DeregisterSuccessNum = 0
 	DeregisterFailNum    = 0
 
-	// 心跳的成功失败数
+	// HeartbeatSuccessNum 心跳的成功失败数
 	HeartbeatSuccessNum = 0
 	HeartbeatFailNum    = 0
 
-	// 限流的成功失败数
+	// GetQuotaSuccessNum 限流的成功失败数
 	GetQuotaSuccessNum = 0
 	GetQuotaFailNum    = 0
 )
 
 const (
 	// polaris-server的IP端口
-	discoverIp   = "127.0.0.1"
+	discoverIP   = "127.0.0.1"
 	discoverPort = 8180
 
 	// 上报的服务调用
@@ -110,7 +110,7 @@ const (
 	rateLimitRule2Id = "rule2"
 )
 
-// 上报插件测试套件
+// MonitorReportSuite 上报插件测试套件
 type MonitorReportSuite struct {
 	mockServer    mock.NamingServer
 	monitorServer mock.MonitorServer
@@ -123,7 +123,7 @@ type MonitorReportSuite struct {
 	discoverToken         string
 	monitorToken          string
 	serviceToken          string
-	instanceId            string
+	instanceID            string
 	instPort              uint32
 	instHost              string
 	changeSvcToken        string
@@ -134,7 +134,7 @@ type MonitorReportSuite struct {
 	recoverAllService *namingpb.Service
 }
 
-// 初始化套件
+// SetUpSuite 初始化套件
 func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.initStatNum()
 
@@ -150,11 +150,11 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.monitorServer = mock.NewMonitorServer()
 
 	m.mockServer = mock.NewNamingServer()
-	m.mockServer.RegisterServerServices(discoverIp, discoverPort)
+	m.mockServer.RegisterServerServices(discoverIP, discoverPort)
 
 	m.monitorToken = m.mockServer.RegisterServerService(config.ServerMonitorService)
 	m.mockServer.RegisterServerInstance(
-		mock.MonitorIp, mock.MonitorPort, config.ServerMonitorService, m.monitorToken, true)
+		mock.MonitorIP, mock.MonitorPort, config.ServerMonitorService, m.monitorToken, true)
 	m.mockServer.RegisterRouteRule(util.BuildNamingService(config.ServerNamespace, config.ServerMonitorService, ""),
 		m.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 
@@ -174,7 +174,7 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	// 获取一个被调服务实例的信息，用于后面调用providerApi
 	svcKey := &model.ServiceKey{Namespace: testService.GetNamespace().GetValue(),
 		Service: testService.GetName().GetValue()}
-	m.instanceId = m.mockServer.GetServiceInstances(svcKey)[0].GetId().GetValue()
+	m.instanceID = m.mockServer.GetServiceInstances(svcKey)[0].GetId().GetValue()
 	m.instHost = m.mockServer.GetServiceInstances(svcKey)[0].GetHost().GetValue()
 	m.instPort = m.mockServer.GetServiceInstances(svcKey)[0].GetPort().GetValue()
 
@@ -192,19 +192,19 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.mockServer.GenInstancesWithStatus(m.recoverAllService, 2, mock.UnhealthyStatus, 2048)
 
 	namingpb.RegisterPolarisGRPCServer(m.grpcServer, m.mockServer)
-	m.discoverLisenter, err = net.Listen("tcp", fmt.Sprintf("%s:%d", discoverIp, discoverPort))
+	m.discoverLisenter, err = net.Listen("tcp", fmt.Sprintf("%s:%d", discoverIP, discoverPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
-	log.Printf("appserver listening on %s:%d\n", discoverIp, discoverPort)
+	log.Printf("appserver listening on %s:%d\n", discoverIP, discoverPort)
 	util.StartGrpcServer(m.grpcServer, m.discoverLisenter)
 
 	monitorpb.RegisterGrpcAPIServer(m.grpcMonitor, m.monitorServer)
-	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
+	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIP, mock.MonitorPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
-	log.Printf("appserver listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
+	log.Printf("appserver listening on %s:%d\n", mock.MonitorIP, mock.MonitorPort)
 	util.StartGrpcServer(m.grpcMonitor, m.monitorListener)
 }
 
@@ -256,7 +256,7 @@ func (m MonitorReportSuite) setupChangeSvc() {
 
 }
 
-// 关闭测试套件
+// TearDownSuite 关闭测试套件
 func (m *MonitorReportSuite) TearDownSuite(c *check.C) {
 	m.grpcMonitor.Stop()
 	m.grpcServer.Stop()
@@ -294,7 +294,7 @@ func (m *MonitorReportSuite) initStatNum() {
 
 }
 
-// 测试consumerAPI方法的上报
+// TestMonitorReportConsumer 测试consumerAPI方法的上报
 func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	m.monitorServer.SetSvcStat(nil)
@@ -534,7 +534,7 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	for _, s := range sdkStat {
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiGetInstances.String():
 			// 因为获取系统服务时也会使用同步api，
@@ -627,7 +627,7 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	c.Assert(hasCalledSvcStat, check.Equals, true)
 }
 
-// 测试providerapi方法上报统计情况
+// TestMonitorReportProvider 测试providerapi方法上报统计情况
 func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	log.Printf("Start TestMonitorReportProvider")
@@ -644,7 +644,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	registerReq.Namespace = calledNs
 	registerReq.Service = calledSvc
 	registerReq.ServiceToken = m.serviceToken + "err"
-	registerReq.Host = discoverIp
+	registerReq.Host = discoverIP
 	registerReq.Port = 78
 
 	for i := 0; i < RegisterFailNum; i++ {
@@ -662,7 +662,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	deregReq.Namespace = calledNs
 	deregReq.Service = calledSvc
 	deregReq.ServiceToken = m.serviceToken + "err"
-	deregReq.Host = discoverIp
+	deregReq.Host = discoverIP
 	deregReq.Port = 56
 
 	for i := 0; i < DeregisterFailNum; i++ {
@@ -682,7 +682,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	heartBeatReq.Port = int(m.instPort)
 	heartBeatReq.Host = m.instHost
 	heartBeatReq.ServiceToken = m.serviceToken + "err"
-	heartBeatReq.InstanceID = m.instanceId
+	heartBeatReq.InstanceID = m.instanceID
 
 	for i := 0; i < HeartbeatFailNum; i++ {
 		err := provider.Heartbeat(heartBeatReq)
@@ -706,7 +706,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	m.monitorServer.SetPluginStat(nil)
 }
 
-// 测试limitAPI方法上报统计情况
+// TestMonitorReportLimitAPI 测试limitAPI方法上报统计情况
 func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	log.Printf("Start TestMonitorReportLimitAPI")
@@ -754,7 +754,7 @@ func (m *MonitorReportSuite) checkLimitAPIStat(sdkStat []*monitorpb.SDKAPIStatis
 	for _, s := range sdkStat {
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiGetQuota.String():
 			if s.GetKey().GetSuccess().GetValue() {
@@ -784,7 +784,7 @@ func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatis
 		// 统计信息的版本、类型、host要对的上
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiRegister.String():
 			if s.GetKey().GetSuccess().GetValue() {
@@ -851,7 +851,7 @@ var instChanges = [][]changeStatus{
 	},
 }
 
-// 测试上报缓存信息的statReporter
+// TestReportCacheInfo 测试上报缓存信息的statReporter
 func (m *MonitorReportSuite) TestReportCacheInfo(c *check.C) {
 	log.Printf("Start TestReportCacheInfo, changeSvcToken: %s", m.changeSvcToken)
 	defer util.DeleteDir(util.BackupDir)
@@ -1004,7 +1004,7 @@ func (m *MonitorReportSuite) setRevisionOfInstance(loopCount int, c *check.C) {
 	}
 }
 
-// 测试限流规则的版本号上报
+// TestRateLimitRuleRevisionReport 测试限流规则的版本号上报
 func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 	log.Printf("Start TestRateLimitRuleRevisionReport")
 	defer util.DeleteDir(util.BackupDir)
@@ -1154,7 +1154,7 @@ func (m *MonitorReportSuite) setRateLimitRuleRevisions(rule *namingpb.RateLimit,
 	}
 }
 
-// 测试全死全活上报
+// TestRecoverAllReport 测试全死全活上报
 func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 	log.Printf("TestRecoverAllReport")
 	defer util.DeleteDir(util.BackupDir)
@@ -1211,7 +1211,7 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 //	}
 // }
 
-// 检查是否有 UpdateServiceCallReport 的monitor上报
+// TestUpdateServiceCallReport 检查是否有 UpdateServiceCallReport 的monitor上报
 func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	m.monitorServer.SetSvcStat(nil)
@@ -1260,7 +1260,7 @@ func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	c.Assert(len(sdkStat) >= 2, check.Equals, true)
 }
 
-// 检测当前添加的错误码不会返回ErrCodeUnknown
+// TestErrorCodeUnknown 检测当前添加的错误码不会返回ErrCodeUnknown
 func (m *MonitorReportSuite) TestErrorCodeUnknown(c *check.C) {
 	log.Printf("Start TestErrorCodeUnknown")
 	code := model.ErrCodeUnknown + 1
@@ -1276,7 +1276,7 @@ func (m *MonitorReportSuite) TestErrorCodeUnknown(c *check.C) {
 	}
 }
 
-// 检测当connectionManager不ready的时候，是否会跳过第一次reportConfig
+// TestConfigNotReady 检测当connectionManager不ready的时候，是否会跳过第一次reportConfig
 // 现在通过检测日志可以看出是不是跳过了第一次reportConfig，还无法进行自动判断
 func (m *MonitorReportSuite) TestConfigNotReady(c *check.C) {
 	log.Printf("Start TestConfigNotReady")

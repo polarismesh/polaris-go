@@ -50,7 +50,7 @@ const (
 	instanceTotal = 5
 )
 
-// HealthCheckTestingSuite 消费者API测试套
+// HealthCheckAlwaysTestingSuite 消费者API测试套
 type HealthCheckAlwaysTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -118,7 +118,7 @@ const (
 	healthPort1030 = 1027
 )
 
-// TestTCPDetection 测试持久化探测
+// TestHttpDetectAlways 测试持久化探测
 func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	healthPorts := []int{healthPort1025, healthPort1030}
 	for _, port := range healthPorts {
