@@ -95,6 +95,7 @@ func (svr *PolarisProvider) registerService() {
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
 	ticker := time.NewTicker(time.Duration(10 * time.Second))
+	defer ticker.Stop()
 	for range ticker.C {
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
 		heartbeatRequest.Namespace = namespace
