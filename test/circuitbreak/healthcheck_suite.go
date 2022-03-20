@@ -122,7 +122,7 @@ func (t *HealthCheckTestingSuite) TestTCPDetection(c *check.C) {
 	Logic(c, startTCPServer, nil, 0, true)
 }
 
-// TestTCPDetection 测试TCP探测失败
+// TestFailTCPDetection 测试TCP探测失败
 func (t *HealthCheckTestingSuite) TestFailTCPDetection(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("start to TestTCPDetectionFail")
@@ -136,7 +136,7 @@ func (t *HealthCheckTestingSuite) TestHTTPDetection(c *check.C) {
 	Logic(c, nil, startHTTPServer, 3, true)
 }
 
-// HTTPDetection 测试UDP探测失败
+// TestFailHTTPDetection 测试UDP探测失败
 func (t *HealthCheckTestingSuite) TestFailHTTPDetection(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("start to TestFailHTTPDetection")

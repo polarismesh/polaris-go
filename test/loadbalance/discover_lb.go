@@ -37,7 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
-// LBTestingSuite 消费者API测试套
+// InnerServiceLBTestingSuite 消费者API测试套
 type InnerServiceLBTestingSuite struct {
 	grpcServer        *grpc.Server
 	grpcListener      net.Listener
@@ -48,7 +48,7 @@ type InnerServiceLBTestingSuite struct {
 	monitorToken string
 }
 
-// 设置模拟桩服务器
+// SetUpSuite 设置模拟桩服务器
 func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -78,7 +78,7 @@ func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite SetUpSuite 结束测试套程序
 func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -86,6 +86,7 @@ func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
 	}
 }
 
+// TestConnManger 测试连接管理器
 func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
 	service := &namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
