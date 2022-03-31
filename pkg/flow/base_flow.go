@@ -136,7 +136,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstInstKey := &ContextKey{ServiceKey: dstService, Operation: keyDstInstances}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstInstKey)
 			notifier, err := registry.LoadInstances(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstInstKey, notifier))
@@ -152,7 +152,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			srcRouterKey := &ContextKey{ServiceKey: srcService, Operation: keySourceRoute}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", srcRouterKey)
 			notifier, err := registry.LoadServiceRouteRule(srcService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(srcRouterKey, notifier))
@@ -168,7 +168,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRoute}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
 			notifier, err := registry.LoadServiceRouteRule(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
@@ -183,7 +183,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstRateLimitKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRateLimit}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRateLimitKey)
 			notifier, err := registry.LoadServiceRateLimitRule(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstRateLimitKey, notifier))
@@ -199,7 +199,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstMeshConfigKey := &ContextKey{ServiceKey: dstService, Operation: keyDstMeshConfig}
 			log.GetBaseLogger().Debugf("Mesh value not initialized, scheduled context %s", dstMeshConfigKey)
 			notifier, err := registry.LoadMeshConfig(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshConfigKey, notifier))
@@ -215,7 +215,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstMeshKey := &ContextKey{ServiceKey: dstService, Operation: keyDstMesh}
 			log.GetBaseLogger().Debugf("Mesh value not initialized, scheduled context %s", dstMeshKey)
 			notifier, err := registry.LoadMesh(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshKey, notifier))
@@ -232,7 +232,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			dstMeshConfigKey := &ContextKey{ServiceKey: dstService, Operation: keyDstServices}
 			log.GetBaseLogger().Debugf("services value not initialized, scheduled context %s", dstMeshConfigKey)
 			notifier, err := registry.LoadServices(dstService)
-			if nil != err {
+			if err != nil {
 				return nil, err.(model.SDKError)
 			}
 			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshConfigKey, notifier))
@@ -255,7 +255,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	srcService := request.GetSrcService()
 	if trigger.EnableDstInstances {
 		_, err := registry.LoadInstances(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		instances := registry.GetInstances(dstService, true, false)
@@ -268,7 +268,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	}
 	if trigger.EnableSrcRoute {
 		_, err := registry.LoadServiceRouteRule(srcService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		routeRule := registry.GetServiceRouteRule(srcService, true)
@@ -281,7 +281,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	}
 	if trigger.EnableDstRoute {
 		_, err := registry.LoadServiceRouteRule(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		routeRule := registry.GetServiceRouteRule(dstService, true)
@@ -294,7 +294,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	}
 	if trigger.EnableDstRateLimit {
 		_, err := registry.LoadServiceRateLimitRule(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		routeRule := registry.GetServiceRateLimitRule(dstService, true)
@@ -308,7 +308,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	if trigger.EnableMeshConfig {
 		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache meshconfig")
 		_, err := registry.LoadMeshConfig(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		mc := registry.GetMeshConfig(dstService, true)
@@ -323,7 +323,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	if trigger.EnableServices {
 		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache services")
 		_, err := registry.LoadServices(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		// 复用网格接口
@@ -338,7 +338,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	if trigger.EnableMesh {
 		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache mesh, %v", dstService)
 		_, err := registry.LoadMesh(dstService)
-		if nil != err {
+		if err != nil {
 			return false, err.(model.SDKError)
 		}
 		mc := registry.GetMesh(dstService, true)
@@ -364,13 +364,13 @@ func (e *Engine) afterLazyGetInstances(
 	// 服务路由
 	if !req.SkipRouteFilter {
 		result, err = e.getServiceRoutedInstances(req)
-		if nil != err {
+		if err != nil {
 			return nil, nil, err
 		}
 	} else {
 		result, err = servicerouter.GetFilterCluster(e.globalCtx, nil, &req.RouteInfo,
 			req.DstInstances.GetServiceClusters())
-		if nil != err {
+		if err != nil {
 			return nil, nil, err
 		}
 	}

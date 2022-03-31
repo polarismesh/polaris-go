@@ -97,7 +97,7 @@ func (t *HealthCheckTestingSuite) SetUpSuite(c *check.C) {
 	mockServer.GenTestInstancesWithHostPort(testService, 100, "127.0.0.1", 1024)
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -122,7 +122,7 @@ func (t *HealthCheckTestingSuite) TestTCPDetection(c *check.C) {
 	Logic(c, startTCPServer, nil, 0, true)
 }
 
-// TestTCPDetection 测试TCP探测失败
+// TestFailTCPDetection 测试TCP探测失败
 func (t *HealthCheckTestingSuite) TestFailTCPDetection(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("start to TestTCPDetectionFail")
@@ -136,7 +136,7 @@ func (t *HealthCheckTestingSuite) TestHTTPDetection(c *check.C) {
 	Logic(c, nil, startHTTPServer, 3, true)
 }
 
-// HTTPDetection 测试UDP探测失败
+// TestFailHTTPDetection 测试UDP探测失败
 func (t *HealthCheckTestingSuite) TestFailHTTPDetection(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("start to TestFailHTTPDetection")
@@ -254,7 +254,7 @@ func startTCPServer(address string, sTime int, retByte []byte) error {
 			}(conn)
 			return nil
 		}
-		if err := task(); nil != err {
+		if err := task(); err != nil {
 			return err
 		}
 	}
@@ -270,7 +270,7 @@ func startHTTPServer(address string, sTime int, statusCode int) error {
 	})
 	log.Printf("httpserver ready, addr %s", address)
 	err := http.ListenAndServe(address, mux)
-	if nil != err {
+	if err != nil {
 		log.Printf("httpserver err %v", err)
 	}
 	return err

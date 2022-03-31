@@ -352,7 +352,7 @@ func makeFuncSync(bf stats.Features) (rpcCallFunc, rpcCleanupFunc) {
 		}
 		req := ctx.data[0].(*api.GetOneInstanceRequest)
 		instanceRsp, err := tc.GetOneInstance(req)
-		if nil != err {
+		if err != nil {
 			log.Fatalf("fail to invoke %d call for service %s, err is %v", index, req.Service, err)
 		}
 		instance := instanceRsp.Instances[0]
@@ -371,7 +371,7 @@ func makeFuncSync(bf stats.Features) (rpcCallFunc, rpcCleanupFunc) {
 func makeClient() (api.ConsumerAPI, func()) {
 	var err error
 	var consumerAPI api.ConsumerAPI
-	if consumerAPI, err = api.NewConsumerAPI(); nil != err {
+	if consumerAPI, err = api.NewConsumerAPI(); err != nil {
 		log.Fatalf("fail to init consumer api, error is %v", err)
 	}
 	return consumerAPI, func() {

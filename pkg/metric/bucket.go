@@ -43,6 +43,7 @@ func (r *ResMetricArray) GetMetric(dimension int) int64 {
 	return atomic.LoadInt64(&r.metrics[dimension])
 }
 
+// SwapMetric .交换统计
 func (r *ResMetricArray) SwapMetric(dimension int, newValue int64) int64 {
 	return atomic.SwapInt64(&r.metrics[dimension], newValue)
 }
@@ -57,12 +58,15 @@ func (r *ResMetricArray) SetMetric(dimension int, value int64) {
 	atomic.StoreInt64(&r.metrics[dimension], value)
 }
 
-// timeRange的类型
+// IntervalType timeRange的类型
 type IntervalType int
 
 const (
+	// IncludeStart .
 	IncludeStart IntervalType = iota
+	// IncludeEnd .
 	IncludeEnd
+	// IncludeBoth .
 	IncludeBoth
 )
 
@@ -81,17 +85,20 @@ func (i IntervalType) String() string {
 
 // TimeRange 时间段
 type TimeRange struct {
-	// 起始时间
+	// Start 起始时间
 	Start time.Time
-	// 结束时间
+	// End 结束时间
 	End time.Time
-	// 时间段类型
+	// Type 时间段类型
 	Type IntervalType
 }
 
 const (
+	// Before .
 	Before int = iota
+	// Inside .
 	Inside
+	// After .
 	After
 )
 

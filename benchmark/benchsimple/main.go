@@ -132,7 +132,7 @@ func validate() error {
 func makeClient() (api.ConsumerAPI, func()) {
 	var err error
 	var consumerAPI api.ConsumerAPI
-	if consumerAPI, err = api.NewConsumerAPI(); nil != err {
+	if consumerAPI, err = api.NewConsumerAPI(); err != nil {
 		log.Fatalf("fail to init consumer api, error is %v", err)
 	}
 	return consumerAPI, func() {
@@ -287,13 +287,13 @@ type benchOpts struct {
 // 运行获取单个服务实例并上报
 func doSyncGetOneInstanceUpload(fe *feature) {
 	instance, err := fe.consumerClient.GetOneInstance(fe.getOneRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetOneInstance for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 	fe.result.RetStatus = model.RetSuccess
 	fe.result.CalledInstance = instance.Instances[0]
 	err = fe.consumerClient.UpdateServiceCallResult(fe.result)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke UpdateServiceCallResult for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
@@ -301,7 +301,7 @@ func doSyncGetOneInstanceUpload(fe *feature) {
 // 运行获取多个服务实例
 func doSyncGetOneInstance(fe *feature) {
 	_, err := fe.consumerClient.GetOneInstance(fe.getOneRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetOneInstance for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
@@ -309,7 +309,7 @@ func doSyncGetOneInstance(fe *feature) {
 // 运行获取单个服务实例
 func doSyncGetMultiInstances(fe *feature) {
 	_, err := fe.consumerClient.GetInstances(fe.getMultiRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetInstances for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
@@ -397,7 +397,7 @@ func main() {
 		log.Fatal("Error: unparsed arguments: ", flag.Args())
 	}
 	var err error
-	if err = validate(); nil != err {
+	if err = validate(); err != nil {
 		log.Fatalf("fail to validate parameters, error is %v", err)
 	}
 	ops := &benchOpts{

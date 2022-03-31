@@ -192,7 +192,7 @@ func (s *Reporter) constructRecordAndSend(namespace string, service string, data
 				totalRecord.GetId(), err)
 			return
 		}
-		if nil != err || resp.Id.GetValue() != totalRecord.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+		if err != nil || resp.Id.GetValue() != totalRecord.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 			log.GetStatReportLogger().Errorf("fail to report route record, resp is %v, err is %v, monitor server is %s",
 				resp, err, s.GetClientStreamServer(0))
 		} else {

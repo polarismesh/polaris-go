@@ -107,7 +107,7 @@ var (
 	lbHealthyInstances []*namingpb.Instance
 )
 
-// 设置模拟桩服务器
+// SetUpSuite 设置模拟桩服务器
 func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -148,7 +148,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 		t.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
 	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", lbMonitorIP, lbMonitorPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
 	log.Printf("moniator server listening on %s:%d\n", lbMonitorIP, lbMonitorPort)
@@ -179,7 +179,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -188,7 +188,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite 清理模拟桩服务器 SetUpSuite 结束测试套程序
 func (t *LBTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
@@ -287,79 +287,79 @@ func (t *LBTestingSuite) testLoadBalance(c *check.C, service string, lbType stri
 //	c.Assert(len(uploadNum), check.Equals, 0)
 // }
 
-// 负载均衡测试WeightRandom
+// TestAllHealthyLoadBalanceWR 负载均衡测试WeightRandom
 func (t *LBTestingSuite) TestAllHealthyLoadBalanceWR(c *check.C) {
 	log.Printf("Start TestAllHealthyLoadBalanceWeightRandom")
 	t.testLoadBalance(c, lbService, config.DefaultLoadBalancerWR)
 }
 
-// 负载均衡测试RingHash
+// TestAllHealthyLoadBalanceRing 负载均衡测试RingHash
 func (t *LBTestingSuite) TestAllHealthyLoadBalanceRing(c *check.C) {
 	log.Printf("Start TestAllHealthyLoadBalanceHashRing")
 	t.testLoadBalance(c, lbService, config.DefaultLoadBalancerRingHash)
 }
 
-// 负载均衡测试Maglev
+// TestAllHealthyLoadBalanceMaglev 负载均衡测试Maglev
 func (t *LBTestingSuite) TestAllHealthyLoadBalanceMaglev(c *check.C) {
 	log.Printf("Start TestAllHealthyLoadBalanceMaglev")
 	t.testLoadBalance(c, lbService, config.DefaultLoadBalancerMaglev)
 }
 
-// 负载均衡测试l5 ringHash
+// TestAllHealthyLoadBalanceL5RingHash 负载均衡测试l5 ringHash
 func (t *LBTestingSuite) TestAllHealthyLoadBalanceL5RingHash(c *check.C) {
 	log.Printf("Start TestAllHealthyLoadBalanceMaglev")
 	t.testLoadBalance(c, lbService, config.DefaultLoadBalancerL5CST)
 }
 
-// 部分健康负载均衡测试WeightRandom
+// TestPartialLoadBalanceWR 部分健康负载均衡测试WeightRandom
 func (t *LBTestingSuite) TestPartialLoadBalanceWR(c *check.C) {
 	log.Printf("Start TestPartialLoadBalanceWeightRandom")
 	t.testLoadBalance(c, lbPartialService, config.DefaultLoadBalancerWR)
 }
 
-// 部分健康负载均衡测试RingHash
+// TestPartialLoadBalanceRing 部分健康负载均衡测试RingHash
 func (t *LBTestingSuite) TestPartialLoadBalanceRing(c *check.C) {
 	log.Printf("Start TestPartialLoadBalanceHashRing")
 	t.testLoadBalance(c, lbPartialService, config.DefaultLoadBalancerRingHash)
 }
 
-// 部分健康负载均衡测试Maglev
+// TestPartialLoadBalanceMaglev 部分健康负载均衡测试Maglev
 func (t *LBTestingSuite) TestPartialLoadBalanceMaglev(c *check.C) {
 	log.Printf("Start TestPartialLoadBalanceHashRing")
 	t.testLoadBalance(c, lbPartialService, config.DefaultLoadBalancerMaglev)
 }
 
-// 部分健康负载均衡测试l5
-func (t *LBTestingSuite) TestPartialLoadBalancel5RingHash(c *check.C) {
+// TestPartialLoadBalancerL5RingHash 部分健康负载均衡测试l5
+func (t *LBTestingSuite) TestPartialLoadBalancerL5RingHash(c *check.C) {
 	log.Printf("Start TestPartialLoadBalanceHashRing")
 	t.testLoadBalance(c, lbPartialService, config.DefaultLoadBalancerL5CST)
 }
 
-// 负载均衡测试
+// TestAllFailLoadBalanceWR 负载均衡测试
 func (t *LBTestingSuite) TestAllFailLoadBalanceWR(c *check.C) {
 	log.Printf("Start TestAllFailLoadBalanceWeightRandom")
 	t.testLoadBalance(c, lbAllFailService, config.DefaultLoadBalancerWR)
 }
 
-// 负载均衡测试
+// TestAllFailLoadBalanceRing 负载均衡测试
 func (t *LBTestingSuite) TestAllFailLoadBalanceRing(c *check.C) {
 	log.Printf("Start TestAllFailLoadBalanceHashRing")
 	t.testLoadBalance(c, lbAllFailService, config.DefaultLoadBalancerRingHash)
 }
 
-// 负载均衡测试
+// TestAllFailLoadBalanceMaglev 负载均衡测试
 func (t *LBTestingSuite) TestAllFailLoadBalanceMaglev(c *check.C) {
 	log.Printf("Start TestAllFailLoadBalanceHashRing")
 	t.testLoadBalance(c, lbAllFailService, config.DefaultLoadBalancerMaglev)
 }
 
-// 负载均衡测试
+// TestAllFailLoadBalanceL5RingHash 负载均衡测试
 func (t *LBTestingSuite) TestAllFailLoadBalanceL5RingHash(c *check.C) {
 	log.Printf("Start TestAllFailLoadBalanceHashRing")
 	t.testLoadBalance(c, lbAllFailService, config.DefaultLoadBalancerL5CST)
 }
 
-// 测试直接通过负载均衡插件来挑选实例
+// TestDirectLoadBalance 测试直接通过负载均衡插件来挑选实例
 func (t *LBTestingSuite) TestDirectLoadBalance(c *check.C) {
 	log.Printf("Start TestDirectLoadBalance")
 	defer util.DeleteDir(util.BackupDir)
@@ -414,28 +414,28 @@ func (t *LBTestingSuite) TestDirectLoadBalance(c *check.C) {
 	c.Assert(totalDiff < 0.025, check.Equals, true)
 }
 
-// 测试RingHash负载均衡是否可以每次都返回相同节点
+// TestForeverNodeRingHash 测试RingHash负载均衡是否可以每次都返回相同节点
 func (t *LBTestingSuite) TestForeverNodeRingHash(c *check.C) {
 	log.Printf("Start TestForeverNodeRingHash")
 	t.testForeverNodeForHash(c, lbService, config.DefaultLoadBalancerRingHash)
 	t.testForeverNodeForHashSameContext(c, lbService, config.DefaultLoadBalancerRingHash)
 }
 
-// 测试RingHash负载均衡是否可以每次都返回相同节点
+// TestForeverNodeMaglev 测试RingHash负载均衡是否可以每次都返回相同节点
 func (t *LBTestingSuite) TestForeverNodeMaglev(c *check.C) {
 	log.Printf("Start TestForeverNodeMaglev")
 	t.testForeverNodeForHash(c, lbService, config.DefaultLoadBalancerMaglev)
 	t.testForeverNodeForHashSameContext(c, lbService, config.DefaultLoadBalancerMaglev)
 }
 
-// 测试Hash负载均衡是否可以每次都返回相同节点
+// TestForeverNodeHash 测试Hash负载均衡是否可以每次都返回相同节点
 func (t *LBTestingSuite) TestForeverNodeHash(c *check.C) {
 	log.Printf("Start TestForeverNodeHash")
 	t.testForeverNodeForHash(c, lbService, config.DefaultLoadBalancerHash)
 	t.testForeverNodeForHashSameContext(c, lbService, config.DefaultLoadBalancerHash)
 }
 
-// 测试l5ringHash负载均衡是否可以每次都返回相同节点
+// TestForeverNodeL5RingHash 测试l5ringHash负载均衡是否可以每次都返回相同节点
 func (t *LBTestingSuite) TestForeverNodeL5RingHash(c *check.C) {
 	log.Printf("Start TestForeverNodeMaglev")
 	t.testForeverNodeForHash(c, lbService, config.DefaultLoadBalancerL5CST)
@@ -541,7 +541,7 @@ func (t *LBTestingSuite) testForeverNodeForHashOne(
 	return addrGot[0]
 }
 
-// 套件名字
+// GetName 套件名字
 func (t *LBTestingSuite) GetName() string {
 	return "LoadBalance"
 }
@@ -562,7 +562,7 @@ func (t *LBTestingSuite) genInstanceWeights(response model.ServiceInstances) {
 	fmt.Printf("instances count is %d, totalWeight is %d\n", instanceCount, totalWeight)
 }
 
-// 测试获取备份节点
+// TestReplicateNodeRingHash 测试获取备份节点
 func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
 	log.Printf("Start TestReplicateNodeRingHash")
 	for i := 0; i < 1; i++ {
@@ -613,7 +613,7 @@ func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
 	}
 }
 
-// 测试用户选择负载均衡算法
+// TestUserChooseLBAlgorithm 测试用户选择负载均衡算法
 func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	log.Printf("Start TestUserChooseLBAlgorithm")
 	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")

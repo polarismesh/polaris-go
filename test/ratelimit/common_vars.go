@@ -161,11 +161,11 @@ func loadRateLimitRules() (map[string]*namingpb.RateLimit, error) {
 	outputs := make(map[string]*namingpb.RateLimit, 0)
 	for svcName, rulePath := range rulePaths {
 		buf, err := ioutil.ReadFile(rulePath)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 		rateLimit := &namingpb.RateLimit{}
-		if err = jsonpb.UnmarshalString(string(buf), rateLimit); nil != err {
+		if err = jsonpb.UnmarshalString(string(buf), rateLimit); err != nil {
 			return nil, err
 		}
 		outputs[svcName] = rateLimit

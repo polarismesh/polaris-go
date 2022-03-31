@@ -83,7 +83,7 @@ func main() {
 	quotaReq.SetNamespace(namespace)
 	quotaReq.SetService(service)
 	limitAPI, err = api.NewLimitAPI()
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to create limitAPI, err: %v", err)
 	}
 	scalableRand := rand.NewScalableRand()
@@ -139,7 +139,7 @@ func getQuota(wg *sync.WaitGroup, stop <-chan struct{}, id int) {
 			return
 		default:
 			result, err := limitAPI.GetQuota(quotaReq)
-			if nil != err {
+			if err != nil {
 				log.Fatalf("fail to get quota, err: %v", err)
 			}
 			atomic.AddInt64(&allReq, 1)

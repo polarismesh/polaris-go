@@ -174,7 +174,7 @@ func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) (
 			return res, nil
 		}
 		duration, err := pb.ConvertDuration(a.ValidDuration)
-		if nil != err {
+		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err,
 				"invalid rateLimit rule duration %v", a.ValidDuration)
 		}

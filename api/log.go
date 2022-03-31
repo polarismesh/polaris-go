@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
-	// 加载插件注册函数
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
@@ -105,19 +104,19 @@ func GetStatReportLogger() Logger {
 // ConfigLoggers 全局配置日志对象
 func ConfigLoggers(logDir string, logLevel int) error {
 	var err error
-	if err = ConfigBaseLogger(logDir, logLevel); nil != err {
+	if err = ConfigBaseLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigBaseLogger: %v", err)
 	}
-	if err = ConfigStatLogger(logDir, logLevel); nil != err {
+	if err = ConfigStatLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigStatLogger: %v", err)
 	}
-	if err = ConfigDetectLogger(logDir, logLevel); nil != err {
+	if err = ConfigDetectLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigDetectLogger: %v", err)
 	}
-	if err = ConfigStatReportLogger(logDir, logLevel); nil != err {
+	if err = ConfigStatReportLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigStatReportLogger: %v", err)
 	}
-	if err = ConfigNetworkLogger(logDir, logLevel); nil != err {
+	if err = ConfigNetworkLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigNetworkLogger: %v", err)
 	}
 	return nil
@@ -185,30 +184,30 @@ func SetLoggersDir(logDir string) error {
 	var errs error
 	var err error
 	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultBaseLogRotationPath), DefaultBaseLogLevel)
-	if err = log.ConfigBaseLogger(log.DefaultLogger, option); nil != err {
+	if err = log.ConfigBaseLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default base logger with logDir: %s", logDir)))
 	}
 	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultStatLogRotationPath), DefaultStatLogLevel)
-	if err = log.ConfigStatLogger(log.DefaultLogger, option); nil != err {
+	if err = log.ConfigStatLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default stat logger with logDir %s", logDir)))
 	}
 	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultDetectLogRotationPath),
 		DefaultDetectLogLevel)
-	if err = log.ConfigDetectLogger(log.DefaultLogger, option); nil != err {
+	if err = log.ConfigDetectLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default detect logger with logDir %s", logDir)))
 	}
 	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultStatReportLogRotationPath),
 		DefaultStatReportLogLevel)
-	if err = log.ConfigStatReportLogger(log.DefaultLogger, option); nil != err {
+	if err = log.ConfigStatReportLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default statReport logger with logDir %s", logDir)))
 	}
 	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultNetworkLogRotationPath),
 		DefaultNetworkLogLevel)
-	if err = log.ConfigNetworkLogger(log.DefaultLogger, option); nil != err {
+	if err = log.ConfigNetworkLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default network logger with logDir %s", logDir)))
 	}

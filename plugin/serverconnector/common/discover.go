@@ -402,7 +402,7 @@ func (s *StreamingClient) CloseStream(closeSend bool) bool {
 			log.GetNetworkLogger().Debugf(
 				"%s, connection %s(%s) reqID %s start to closeSend",
 				s.connector.ServiceConnector.GetSDKContextID(), s.connection.ConnID, s.reqID, s.connection.Address)
-			if err := s.discoverClient.CloseSend(); nil != err {
+			if err := s.discoverClient.CloseSend(); err != nil {
 				// 这里一般不会出现错误，只是为了处理告警
 				log.GetNetworkLogger().Warnf("%s, fail to doCloseSend, error is %v",
 					s.connector.ServiceConnector.GetSDKContextID(), err)
@@ -621,7 +621,7 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 	}
 	streamingClient.connection, err = g.connManager.GetConnection(OpKeyDiscover, task.targetCluster)
 	taskType := atomic.LoadUint32(&task.longRun)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get connection of %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), task.targetCluster, err)
 		goto finally
@@ -629,7 +629,7 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 	streamingClient.reqID = NextDiscoverReqID()
 	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(streamingClient.reqID,
 		streamingClient.connection, 0)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get streaming client from %s, reqID %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), streamingClient.connection, streamingClient.reqID, err)
 		goto finally
@@ -646,7 +646,7 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 	// 启动streamingClient的接收协程
 	go streamingClient.receiveAndNotify()
 finally:
-	if nil != err {
+	if err != nil {
 		if nil != streamingClient.connection {
 			g.connManager.ReportConnectionDown(streamingClient.connection.ConnID)
 			streamingClient.connection.Release(OpKeyDiscover)
@@ -773,7 +773,7 @@ func (g *DiscoverConnector) asyncUpdateTask(
 	if nil == streamingClient {
 		// 构造新的streamingClient
 		streamingClient, err = g.newStream(task)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to create stream for service %v, error is %+v", task.ServiceEventKey, err)
 			return nil
 		}
@@ -788,7 +788,7 @@ func (g *DiscoverConnector) asyncUpdateTask(
 	}
 	atomic.AddUint64(&task.totalRequests, 1)
 	err = streamingClient.discoverClient.Send(request)
-	if nil != err {
+	if err != nil {
 		// 由receive协程来处理该错误的连接
 		log.GetNetworkLogger().Errorf("%s, asyncUpdateTask: fail to send request for service %s from "+
 			"streamingClient %s, error is %+v", g.ServiceConnector.GetSDKContextID(), task, streamingClient.reqID, err)
@@ -806,7 +806,7 @@ func (g *DiscoverConnector) processUpdateTask(
 	log.GetBaseLogger().Debugf("start to process task %s", task.ServiceEventKey)
 	if task.targetCluster == config.BuiltinCluster {
 		svcDeleted, err := g.syncUpdateTask(task)
-		if nil != err {
+		if err != nil {
 			g.retryUpdateTask(task, err, true)
 			return streamingClient
 		}
@@ -995,7 +995,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	var curTime = time.Now()
 	// 获取服务发现server连接
 	connection, err := g.connManager.GetConnection(OpKeyDiscover, task.targetCluster)
-	if nil != err {
+	if err != nil {
 		return false, err
 	}
 	defer connection.Release(OpKeyDiscover)
@@ -1004,7 +1004,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	if cancel != nil {
 		defer cancel()
 	}
-	if nil != err {
+	if err != nil {
 		return false, err
 	}
 	log.GetBaseLogger().Debugf("sync stream %s created, connection %s, timeout %v",
@@ -1013,20 +1013,20 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	task.msgSendTime.Store(curTime)
 	atomic.AddUint64(&task.totalRequests, 1)
 	err = discoverClient.Send(request)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to send request for service %v, error is %+v", task.ServiceEventKey, err)
 		return false, err
 	}
 	resp, err := discoverClient.Recv()
 	var sdkErr model.SDKError
-	if nil != err {
+	if err != nil {
 		sdkErr = model.NewSDKError(model.ErrCodeNetworkError, err,
 			"error while receiving from %s(%s), reqID %s",
 			connection.ConnID, connection.Address, reqID)
 	} else {
 		err = pb.ValidateMessage(nil, resp)
-		if nil != err {
+		if err != nil {
 			sdkErr = model.NewSDKError(model.ErrCodeInvalidResponse, err,
 				"invalid response from %s(%s), reqID %s",
 				connection.ConnID, connection.Address, reqID)

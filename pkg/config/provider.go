@@ -46,7 +46,7 @@ func (p *ProviderConfigImpl) Verify() error {
 	}
 	var errs error
 	var err error
-	if err = p.RateLimit.Verify(); nil != err {
+	if err = p.RateLimit.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs

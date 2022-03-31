@@ -44,7 +44,7 @@ const (
 	providerInstancePort = 8848
 )
 
-// Provider测试套件
+// ProviderTestingSuite Provider测试套件
 type ProviderTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -53,12 +53,12 @@ type ProviderTestingSuite struct {
 	provider     api.ProviderAPI
 }
 
-// 套件名字
+// GetName 套件名字
 func (t *ProviderTestingSuite) GetName() string {
 	return "Provider"
 }
 
-// 初始化测试套件
+// SetUpSuite 初始化测试套件
 func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	fmt.Printf("ProviderTestingSuite Start\n")
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -93,7 +93,7 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	// 进行端口监听
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -107,14 +107,14 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	time.Sleep(2 * time.Second)
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite SetUpSuite 结束测试套程序
 func (t *ProviderTestingSuite) TearDownSuite(c *check.C) {
 	t.provider.Destroy()
 	t.grpcServer.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-// 测试以无文件默认配置初始化providerAPI
+// TestInitProviderAPIByDefault 测试以无文件默认配置初始化providerAPI
 func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 	log.Printf("Start TestInitProviderAPIByDefault")
 	defer util.DeleteDir(util.BackupDir)
@@ -127,14 +127,14 @@ func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 	providerAPI.Destroy()
 }
 
-// 测试ProviderAPI的三个功能，register，heartbeat，deregister
+// TestProviderNormal 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderNormal(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderNormal")
 	t.testProvider(c, false)
 }
 
-// 测试ProviderAPI的三个功能，register，heartbeat，deregister
+// TestProviderTimeout 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderTimeout(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderTimeout")

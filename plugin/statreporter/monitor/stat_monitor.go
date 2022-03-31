@@ -162,7 +162,7 @@ func (s *Stat2MonitorReporter) Init(ctx *plugin.InitContext) error {
 		iterateAndSendFunc: iterateSvcStat,
 	}
 	// s.cfg.localCacheName = ctx.Config.GetConsumer().GetLocalCache().GetType()
-	if err := s.getLocalRegistryAndConfigInfo(ctx); nil != err {
+	if err := s.getLocalRegistryAndConfigInfo(ctx); err != nil {
 		return err
 	}
 
@@ -364,12 +364,12 @@ func (s *Stat2MonitorReporter) sendSdkStatReq(sdkKey *model.APICallKey, metric u
 	log.GetStatLogger().Infof("%s", sdkStatToString(req))
 	if nil != s.sdkClient {
 		err := s.sdkClient.Send(req)
-		if nil != err {
+		if err != nil {
 			log.GetStatReportLogger().Errorf("fail to send sdk stat data32, err: %s, monitor server is %s",
 				err.Error(), s.conn.ConnID)
 		} else {
 			resp, err := s.sdkClient.Recv()
-			if nil != err || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
+			if err != nil || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 				log.GetStatReportLogger().Errorf("fail to receive resp for id %v, resp is %v,"+
 					" monitor server is %s", id, resp, s.conn.ConnID)
 			} else {
@@ -429,12 +429,12 @@ func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, res
 			log.GetStatLogger().Infof("uid: %s | %s", s.sdkToken.UID, svcStatToString(req))
 			if nil != s.svcClient {
 				err := s.svcClient.Send(req)
-				if nil != err {
+				if err != nil {
 					log.GetStatReportLogger().Errorf("fail to send sdk service data32, err: %s, monitor server is %s",
 						err.Error(), s.conn.ConnID)
 				} else {
 					resp, err := s.svcClient.Recv()
-					if nil != err || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
+					if err != nil || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 						log.GetStatReportLogger().Errorf("fail to reveice resp for id %v, resp is %v,"+
 							" monitor server is %s", id, resp, s.conn.ConnID)
 					} else {
@@ -454,7 +454,7 @@ func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, res
 func (s *Stat2MonitorReporter) connectMonitor(monitorDeadline time.Time) {
 	var err error
 	s.conn, err = s.connectionManager.GetConnection(opReportStat, sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return
 	}
@@ -462,11 +462,11 @@ func (s *Stat2MonitorReporter) connectMonitor(monitorDeadline time.Time) {
 	ctx, c := context.WithDeadline(context.Background(), monitorDeadline)
 	s.cancelFunc = c
 	s.sdkClient, err = client.CollectSDKAPIStatistics(ctx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report sdk stat, err: %s", err.Error())
 	}
 	s.svcClient, err = client.CollectServiceStatistics(ctx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report service stat, err: %s", err.Error())
 	}
 }
@@ -514,7 +514,7 @@ func (s *Stat2MonitorReporter) getLocalRegistryAndConfigInfo(ctx *plugin.InitCon
 	s.registry, _ = data.GetRegistry(ctx.Config, ctx.Plugins)
 	yamlByte, _ := yaml.Marshal(ctx.Config)
 	cfgByte, err := gyaml.YAMLToJSON(yamlByte)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to convert yaml-format Config to json")
 	}
 	s.globalCfgStr.Store(string(cfgByte))
@@ -555,7 +555,7 @@ func (s *Stat2MonitorReporter) reportSDKConfig() error {
 		}
 	}
 	conn, err := s.connectionManager.GetConnection(opReportStat, sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to connect to polaris.monitor")
 	}
@@ -586,7 +586,7 @@ func (s *Stat2MonitorReporter) reportSDKConfig() error {
 	ctx, cancel := context.WithDeadline(context.Background(), s.globalCtx.Now().Add(*s.cfg.MetricsReportWindow))
 	defer cancel()
 	resp, err := reportClient.CollectSDKConfiguration(ctx, req)
-	if nil != err || resp.GetId().GetValue() != req.Token.Uid ||
+	if err != nil || resp.GetId().GetValue() != req.Token.Uid ||
 		resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 		err = model.NewSDKError(model.ErrCodeInvalidResponse, err, "invalid resp from monitor")
 		log.GetStatReportLogger().Errorf("fail to reveice resp for Config of  %v, resp is %v, monitor server is %s",

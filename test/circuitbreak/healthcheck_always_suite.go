@@ -50,7 +50,7 @@ const (
 	instanceTotal = 5
 )
 
-// HealthCheckTestingSuite 消费者API测试套
+// HealthCheckAlwaysTestingSuite 消费者API测试套
 type HealthCheckAlwaysTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -94,7 +94,7 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	mockServer.GenTestInstancesWithHostPort(testService, instanceTotal, "127.0.0.1", 1024)
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -118,7 +118,7 @@ const (
 	healthPort1030 = 1027
 )
 
-// TestTCPDetection 测试持久化探测
+// TestHttpDetectAlways 测试持久化探测
 func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	healthPorts := []int{healthPort1025, healthPort1030}
 	for _, port := range healthPorts {

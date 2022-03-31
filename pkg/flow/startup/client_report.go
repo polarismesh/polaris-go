@@ -38,10 +38,10 @@ func NewReportClientCallBack(
 	cfg config.Configuration, supplier plugin.Supplier, globalCtx model.ValueContext) (*ReportClientCallBack, error) {
 	var err error
 	var callback = &ReportClientCallBack{}
-	if callback.connector, err = data.GetServerConnector(cfg, supplier); nil != err {
+	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callback.registry, err = data.GetRegistry(cfg, supplier); nil != err {
+	if callback.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.configuration = cfg
@@ -70,7 +70,7 @@ func (r *ReportClientCallBack) loadLocalClientReportResult() {
 	resp := &namingpb.Response{}
 	cachedFile := clientInfoPersistFile
 	err := r.registry.LoadPersistedMessage(cachedFile, resp)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
 		return
 	}
@@ -106,12 +106,12 @@ func (r *ReportClientCallBack) Process(
 		return model.SKIP
 	}
 	reportClientReq := r.reportClientRequest()
-	if err := reportClientReq.Validate(); nil != err {
+	if err := reportClientReq.Validate(); err != nil {
 		log.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
 		return model.TERMINATE
 	}
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		r.updateLocation(nil, err.(model.SDKError))
 		// 发生错误也要重试，直到获取到地域信息为止

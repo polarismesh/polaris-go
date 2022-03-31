@@ -54,10 +54,10 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 	}
 	routingValue := message.(*namingpb.Routing)
 	var err error
-	if err = r.validateRoute("inbound", routingValue.Inbounds, ruleCache); nil != err {
+	if err = r.validateRoute("inbound", routingValue.Inbounds, ruleCache); err != nil {
 		return err
 	}
-	if err = r.validateRoute("outbound", routingValue.Outbounds, ruleCache); nil != err {
+	if err = r.validateRoute("outbound", routingValue.Outbounds, ruleCache); err != nil {
 		return err
 	}
 	return nil
@@ -72,7 +72,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 		sources := route.GetSources()
 		if len(sources) > 0 {
 			for _, source := range sources {
-				if err := buildCacheFromMatcher(source.GetMetadata(), ruleCache); nil != err {
+				if err := buildCacheFromMatcher(source.GetMetadata(), ruleCache); err != nil {
 					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(source)
 					return fmt.Errorf("fail to validate %s source route, error is %v, route text is\n%s",
 						direction, err, routeTxt)
@@ -82,7 +82,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 		destinations := route.GetDestinations()
 		if len(destinations) > 0 {
 			for _, destination := range destinations {
-				if err := buildCacheFromMatcher(destination.GetMetadata(), ruleCache); nil != err {
+				if err := buildCacheFromMatcher(destination.GetMetadata(), ruleCache); err != nil {
 					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(destination)
 					return fmt.Errorf("fail to validate %s destination route, error is %v, route text is\n%s",
 						direction, err, routeTxt)

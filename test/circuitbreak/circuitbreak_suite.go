@@ -82,7 +82,7 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 
 	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
 	t.mockServer.RegisterServerInstance(
-		mock.MonitorIp, mock.MonitorPort, config.ServerMonitorService, t.monitorToken, true)
+		mock.MonitorIP, mock.MonitorPort, config.ServerMonitorService, t.monitorToken, true)
 	t.mockServer.RegisterRouteRule(&namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
@@ -103,11 +103,11 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
-	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
+	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIP, mock.MonitorPort))
+	if err != nil {
 		log2.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
-	log2.Printf("moniator server listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
+	log2.Printf("moniator server listening on %s:%d\n", mock.MonitorIP, mock.MonitorPort)
 	go func() {
 		t.grpcMonitor.Serve(t.monitorListener)
 	}()
@@ -248,6 +248,7 @@ func (t *CircuitBreakSuite) testErrRateByInstance(
 	t.monitorServer.SetCircuitBreakCache(nil)
 }
 
+// CheckInstanceAvailable 检查实例是否可用
 func CheckInstanceAvailable(c *check.C, consumerAPI api.ConsumerAPI, targetIns model.Instance,
 	available bool, namespace string, service string) {
 	request := &api.GetOneInstanceRequest{}
@@ -475,22 +476,22 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 	fmt.Printf("TestCircuitBreakByDefault(skipRouter is %v) terminated\n", skipRouter)
 }
 
-// 通过默认配置来进行熔断测试
+// TestCircuitBreakByDefault 通过默认配置来进行熔断测试
 func (t *CircuitBreakSuite) TestCircuitBreakByDefault(c *check.C) {
 	t.testCircuitBreakByDefault(false, c)
 }
 
-// 测试通过获取多个实例接口分配的实例也可以进行连续错误数熔断半开状态转换
+// TestErrCountByGetInstances 测试通过获取多个实例接口分配的实例也可以进行连续错误数熔断半开状态转换
 func (t *CircuitBreakSuite) TestErrCountByGetInstances(c *check.C) {
 	t.testCircuitBreakByInstance(c, "errorCount", false)
 }
 
-// 测试通过获取多个实例接口分配的实例也可以进行错误率熔断半开状态转换
+// TestErrRateByGetInstances 测试通过获取多个实例接口分配的实例也可以进行错误率熔断半开状态转换
 func (t *CircuitBreakSuite) TestErrRateByGetInstances(c *check.C) {
 	t.testCircuitBreakByInstance(c, "errorRate", false)
 }
 
-// 连续错误熔断的阈值 测试
+// TestErrCountTriggerOpenThreshold 连续错误熔断的阈值 测试
 func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	fmt.Println("--TestErrCountTriggerOpenNum")
 	defer util.DeleteDir(util.BackupDir)
@@ -560,7 +561,7 @@ func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	CheckInstanceAvailable(c, consumerAPI, targetIns, false, cbNS, cbSVC)
 }
 
-// 触发错误率熔断的阈值 测试
+// TestErrRateTriggerOpenThreshold 触发错误率熔断的阈值 测试
 func (t *CircuitBreakSuite) TestErrRateTriggerOpenThreshold(c *check.C) {
 	fmt.Println("--TestErrRateTriggerOpenThreshold")
 	defer util.DeleteDir(util.BackupDir)
@@ -629,6 +630,7 @@ func (t *CircuitBreakSuite) TestErrRateTriggerOpenThreshold(c *check.C) {
 	CheckInstanceAvailable(c, consumerAPI, targetIns, false, cbNS, cbSVC)
 }
 
+// TestSleepWindow 设置熔断器的睡眠窗口 测试
 // 熔断sleepWindow测试, 不启用探测
 // 测试半开后最大可以获取实例的次数
 // 熔断器半开后恢复所需成功探测数测试
@@ -749,6 +751,7 @@ func (t *CircuitBreakSuite) addInstance(srService string, srNamespace string, sr
 	t.mockServer.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
 }
 
+// TestAllCircuitBreaker 测试所有熔断器
 // 全部熔断后测试
 // 全部熔断后优先获取熔断实例
 // 全部不健康,可以触发全死全活
@@ -828,7 +831,7 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	}
 }
 
-// 半开后低频率请求测试
+// TestHalfOpenSlow 半开后低频率请求测试
 func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 	fmt.Println("--TestHalfOpenSlow")
 	defer util.DeleteDir(util.BackupDir)
@@ -914,6 +917,7 @@ const (
 	setWeightZero = 3
 )
 
+// WhenOpenToHalfOpenChangToUnavailable 当熔断开后，熔断状态变为半开后，熔断状态变为不可用
 func (t *CircuitBreakSuite) WhenOpenToHalfOpenChangToUnavailable(c *check.C, flag int) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
@@ -984,16 +988,19 @@ func (t *CircuitBreakSuite) WhenOpenToHalfOpenChangToUnavailable(c *check.C, fla
 	time.Sleep(time.Second * 2)
 }
 
+// TestWhenOpenToHalfOpenChangToUnhealthy 当熔断开后，熔断状态变为半开后，熔断状态变为不可用
 func (t *CircuitBreakSuite) TestWhenOpenToHalfOpenChangToUnhealthy(c *check.C) {
 	fmt.Println("---TestWhenOpenToHalfOpenChangToUnhealthy")
 	t.WhenOpenToHalfOpenChangToUnavailable(c, setUnhealthy)
 }
 
+// TestWhenOpenToHalfOpenChangToIsolate 当熔断开后，熔断状态变为半开后，熔断状态变为不可用
 func (t *CircuitBreakSuite) TestWhenOpenToHalfOpenChangToIsolate(c *check.C) {
 	fmt.Println("---TestWhenOpenToHalfOpenChangToIsolate")
 	t.WhenOpenToHalfOpenChangToUnavailable(c, setIsolate)
 }
 
+// TestWhenOpenToHalfOpenChangToWeightZero 	当熔断开后，熔断状态变为半开后，熔断权重为0
 func (t *CircuitBreakSuite) TestWhenOpenToHalfOpenChangToWeightZero(c *check.C) {
 	fmt.Println("---TestWhenOpenToHalfOpenChangToWeightZero")
 	t.WhenOpenToHalfOpenChangToUnavailable(c, setWeightZero)
@@ -1075,6 +1082,7 @@ func (t *CircuitBreakSuite) reportErrorWhenHalfOpen(c *check.C, consumer api.Con
 	wg.Done()
 }
 
+// TestHalfOpenMustChangeErrorCount 断开熔断变更错误
 func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorCount(c *check.C) {
 	fmt.Println("--TestHalfOpenMustChangeErrorCount")
 	defer util.DeleteDir(util.BackupDir)
@@ -1102,6 +1110,7 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorCount(c *check.C) {
 	t.testHalfOpenMustChange(c, consumerAPI, "errorCount", 0, 15)
 }
 
+// TestHalfOpenMustChangeErrorRate 断开熔断变更错误率
 func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
 	fmt.Println("--TestHalfOpenMustChangeErrorRate")
 	defer util.DeleteDir(util.BackupDir)
@@ -1128,6 +1137,7 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
 	t.testHalfOpenMustChange(c, consumerAPI, "errorRate", 2, 9)
 }
 
+// TestAllHalfOpenReturn 断开熔断变更错误率
 func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
 	fmt.Println("--TestAllHalfOpenReturn")
 	defer util.DeleteDir(util.BackupDir)

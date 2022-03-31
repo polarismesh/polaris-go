@@ -45,7 +45,7 @@ func (g *Connector) CreateConnection(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, opts...)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return conn, nil

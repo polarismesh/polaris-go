@@ -150,7 +150,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	protocol := ctx.Config.GetGlobal().GetServerConnector().GetProtocol()
 	connectorPlugin, err := ctx.Plugins.GetPlugin(common.TypeServerConnector, protocol)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	g.globalConfig = ctx.Config
@@ -179,7 +179,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 		ctx.Config.GetConsumer().GetLocalCache().GetPersistMaxReadRetry(),
 		ctx.Config.GetConsumer().GetLocalCache().GetPersistRetryInterval())
 	g.cacheFromPersistAvailableInterval = ctx.Config.GetConsumer().GetLocalCache().GetPersistAvailableInterval()
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	g.plugins = ctx.Plugins
@@ -412,7 +412,7 @@ func (g *LocalCache) toNamespacePluginValues() *pb.SvcPluginValues {
 	values := &pb.SvcPluginValues{}
 	for _, router := range config.DefaultPolarisServicesRouterChain {
 		routePlugin, err := g.plugins.GetPlugin(common.TypeServiceRouter, router)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to lookup plugin %s, error %v", router, err)
 			continue
 		}
@@ -429,7 +429,7 @@ func (g *LocalCache) toPluginValues(clsType config.ClusterType) *pb.SvcPluginVal
 	values := &pb.SvcPluginValues{}
 	for _, router := range config.DefaultServerServiceRouterChain {
 		routePlugin, err := g.plugins.GetPlugin(common.TypeServiceRouter, router)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to lookup plugin %s, error %v", router, err)
 			continue
 		}
@@ -440,7 +440,7 @@ func (g *LocalCache) toPluginValues(clsType config.ClusterType) *pb.SvcPluginVal
 	}
 	if lbStr, ok := config.DefaultServerServiceToLoadBalancer[clsType]; ok {
 		lbPlugin, err := g.plugins.GetPlugin(common.TypeLoadBalancer, lbStr)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to lookup plugin %s, error %v", lbStr, err)
 			return values
 		}
@@ -521,7 +521,7 @@ func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler Cach
 	log.GetBaseLogger().Infof("%s, start to register event handler for %s", g.GetSDKContextID(), svcKey)
 	err := g.connector.RegisterServiceHandler(svcEventHandler)
 	log.GetBaseLogger().Infof("%s, finish register event handler for %s, err %v", g.GetSDKContextID(), svcKey, err)
-	if nil != err {
+	if err != nil {
 		// 出错了，这时候要清理自己，并通知已经注册的成员
 		actualSvcObject.MakeInValid(err.(model.SDKError))
 		handler.OnEventDeleted(svcKey, actualSvcObject.LoadValue(false))
@@ -574,7 +574,7 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 				}
 				err := g.engine.SyncReportStat(model.CircuitBreakStat,
 					&circuitBreakGauge{changeInstance: updateInstance, previousCBStatus: preCBStatus})
-				if nil != err {
+				if err != nil {
 					log.GetBaseLogger().Errorf("fail to report circuitbreak change, error %v", err)
 				}
 			case localregistry.PropertyHealthCheckStatus:
@@ -1129,7 +1129,7 @@ func messageToServiceRule(cachedValue interface{}, value proto.Message,
 	if cacheLoaded {
 		svcRule.CacheLoaded = 1
 	}
-	if err := svcRule.ValidateAndBuildCache(); nil != err {
+	if err := svcRule.ValidateAndBuildCache(); err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to validate service rule for service %s, namespace %s, error is %v",
 			respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(), err)

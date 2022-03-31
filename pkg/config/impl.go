@@ -342,7 +342,7 @@ func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
 	var err error
 	if model.IsFile(DefaultConfigFile) {
 		cfg, err = LoadConfigurationByDefaultFile()
-		if nil != err {
+		if err != nil {
 			log.Printf("fail to load default config from %s, err is %v", DefaultConfigFile, err)
 		}
 	}
@@ -358,7 +358,7 @@ func LoadConfigurationByFile(path string) (*ConfigurationImpl, error) {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid context file %s", path)
 	}
 	buff, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to read context file %s", path)
 	}
 	return LoadConfiguration(buff)
@@ -375,12 +375,12 @@ func LoadConfiguration(buf []byte) (*ConfigurationImpl, error) {
 	cfg := &ConfigurationImpl{}
 	cfg.Init()
 	decoder := yaml.NewDecoder(bytes.NewBuffer(buf))
-	if err = decoder.Decode(cfg); nil != err {
+	if err = decoder.Decode(cfg); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"fail to decode config string")
 	}
 	cfg.SetDefault()
-	if err = cfg.Verify(); nil != err {
+	if err = cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"fail to verify config string")
 	}

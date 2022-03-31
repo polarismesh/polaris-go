@@ -148,12 +148,12 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 		return nil
 	}
 	err := info.Validate()
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	inst := info.GetCalledInstance().(*pb.InstanceInProto)
 	cbNode, err := createCircuitBreakNode(info.GetCircuitBreakerStatus(), inst.GetCircuitBreakerStatus())
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "invalid circuitbreak status change")
 	}
 	s.addCircuitBreakNode(cbNode, inst.GetInstanceLocalValue())
@@ -447,7 +447,7 @@ func (s *Reporter) uploadStatusHistory() {
 			deadline := timeStart.Add(*s.config.ReportInterval)
 			s.uploadToMonitor = true
 			err := s.connectToMonitor(deadline)
-			if nil != err {
+			if err != nil {
 				log.GetStatReportLogger().Errorf("fail to connect to monitor to report service info, error %v", err)
 				s.uploadToMonitor = false
 			}
@@ -467,7 +467,7 @@ func (s *Reporter) uploadStatusHistory() {
 func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var err error
 	s.connection, err = s.connectionManager.GetConnection("ReportStatus", sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return err
 	}
@@ -475,20 +475,20 @@ func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var clientCtx context.Context
 	clientCtx, s.clientCancel = context.WithDeadline(context.Background(), deadline)
 	s.cacheClient, err = client.CollectSDKCache(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report sdk cache, err: %s", err.Error())
 		s.closeConnection()
 		return err
 	}
 	s.circuitBreakClient, err = client.CollectCircuitBreak(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report circuitbreak status, err: %s,"+
 			" monitor server is %s", err.Error(), s.connection.ConnID)
 		s.closeConnection()
 		return err
 	}
 	s.meshClient, err = client.CollectMeshResource(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report mesh config status, err: %s,"+
 			" monitor server is %s", err.Error(), s.connection.ConnID)
 		s.closeConnection()
@@ -601,12 +601,12 @@ func (s *Reporter) sendStatusToMonitor(serviceKey *model.ServiceKey, sh *statusH
 		return
 	}
 	err := s.cacheClient.Send(req)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, id: %s, err %s, monitor server is %s",
 			req.Id, err.Error(), s.connection.ConnID)
 	}
 	resp, err := s.cacheClient.Recv()
-	if nil != err || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+	if err != nil || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, resp is %v, err is %v, monitor server is %s",
 			resp, err, s.connection.ConnID)
 	} else {
@@ -650,12 +650,12 @@ func (s *Reporter) sendMeshStatusToMonitor(mk *meshKey, sh *meshStatusHistory) (
 		return
 	}
 	err := s.meshClient.Send(req)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, id: %s, err %s, monitor server is %s",
 			req.Id, err.Error(), s.connection.ConnID)
 	}
 	resp, err := s.meshClient.Recv()
-	if nil != err || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+	if err != nil || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 		log.GetStatReportLogger().Errorf("fail to report sdk mesh cache, resp is %v, err is %v, monitor server is %s",
 			resp, err, s.connection.ConnID)
 	} else {

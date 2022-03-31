@@ -30,31 +30,29 @@ func CheckAddInstances(event *common.ServiceEventObject) *model.InstanceAddEvent
 	addEvent := &model.InstanceAddEvent{}
 	newList := event.NewValue.(*pb.ServiceInstancesInProto).GetInstances()
 	if event.OldValue == nil {
-		for _, v := range newList {
+		addEvent.Instances = append(addEvent.Instances, newList...)
+		return addEvent
+	}
+
+	oldList := event.OldValue.(*pb.ServiceInstancesInProto).GetInstances()
+	isAdd := false
+	for _, v := range newList {
+		isAdd = true
+		for _, v1 := range oldList {
+			if v.GetId() == v1.GetId() {
+				isAdd = false
+				break
+			}
+		}
+		if isAdd {
 			addEvent.Instances = append(addEvent.Instances, v)
 		}
-		return addEvent
-	} else {
-		oldList := event.OldValue.(*pb.ServiceInstancesInProto).GetInstances()
-		isAdd := false
-		for _, v := range newList {
-			isAdd = true
-			for _, v1 := range oldList {
-				if v.GetId() == v1.GetId() {
-					isAdd = false
-					break
-				}
-			}
-			if isAdd {
-				addEvent.Instances = append(addEvent.Instances, v)
-			}
-		}
-		if len(addEvent.Instances) != 0 {
-			return addEvent
-		} else {
-			return nil
-		}
 	}
+
+	if len(addEvent.Instances) != 0 {
+		return addEvent
+	}
+	return nil
 }
 
 func CheckUpdateInstances(event *common.ServiceEventObject) *model.InstanceUpdateEvent {
@@ -78,12 +76,12 @@ func CheckUpdateInstances(event *common.ServiceEventObject) *model.InstanceUpdat
 		}
 		if len(upEvent.UpdateList) != 0 {
 			return upEvent
-		} else {
-			return nil
 		}
-	} else {
+
 		return nil
 	}
+
+	return nil
 }
 
 func CheckDeleteInstances(event *common.ServiceEventObject) *model.InstanceDeleteEvent {
@@ -93,29 +91,27 @@ func CheckDeleteInstances(event *common.ServiceEventObject) *model.InstanceDelet
 	delEvent := &model.InstanceDeleteEvent{}
 	oldList := event.OldValue.(*pb.ServiceInstancesInProto).GetInstances()
 	if event.NewValue == nil {
-		for _, v := range oldList {
+		delEvent.Instances = append(delEvent.Instances, oldList...)
+		return delEvent
+	}
+
+	newList := event.NewValue.(*pb.ServiceInstancesInProto).GetInstances()
+	isDel := false
+	for _, v := range oldList {
+		isDel = true
+		for _, v1 := range newList {
+			if v.GetId() == v1.GetId() {
+				isDel = false
+				break
+			}
+		}
+		if isDel {
 			delEvent.Instances = append(delEvent.Instances, v)
 		}
-		return delEvent
-	} else {
-		newList := event.NewValue.(*pb.ServiceInstancesInProto).GetInstances()
-		isDel := false
-		for _, v := range oldList {
-			isDel = true
-			for _, v1 := range newList {
-				if v.GetId() == v1.GetId() {
-					isDel = false
-					break
-				}
-			}
-			if isDel {
-				delEvent.Instances = append(delEvent.Instances, v)
-			}
-		}
-		if len(delEvent.Instances) != 0 {
-			return delEvent
-		} else {
-			return nil
-		}
 	}
+
+	if len(delEvent.Instances) != 0 {
+		return delEvent
+	}
+	return nil
 }

@@ -38,14 +38,14 @@ import (
 // RegisterInstance 同步注册服务
 func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	var err error
-	if err = g.waitDiscoverReady(); nil != err {
+	if err = g.waitDiscoverReady(); err != nil {
 		return nil, err
 	}
 	opKey := connector.OpKeyRegisterInstance
 	startTime := clock.GetClock().Now()
 	// 获取server连接
 	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
-	if nil != err {
+	if err != nil {
 		return nil, connector.NetworkError(g.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
 			fmt.Sprintf("fail to get connection, opKey %s", opKey))
 	}
@@ -65,7 +65,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 	}
 	pbResp, err := namingClient.RegisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
-	if nil != err {
+	if err != nil {
 		return nil, connector.NetworkError(g.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
 			fmt.Sprintf("fail to registerInstance, request %s, "+
 				"reason is fail to send request, reqID %s, server %s", *req, reqID, conn.ConnID))
@@ -100,14 +100,14 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 // DeregisterInstance 同步反注册服务
 func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) error {
 	var err error
-	if err = g.waitDiscoverReady(); nil != err {
+	if err = g.waitDiscoverReady(); err != nil {
 		return err
 	}
 	opKey := connector.OpKeyDeregisterInstance
 	startTime := clock.GetClock().Now()
 	// 获取server连接
 	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
 	// 释放server连接
@@ -126,7 +126,7 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 	}
 	pbResp, err := namingClient.DeregisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
-	if nil != err {
+	if err != nil {
 		return connector.NetworkError(g.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
 			fmt.Sprintf("fail to deregisterInstance, request %s, "+
 				"reason is fail to send request, reqID %s, server %s", *req, reqID, conn.ConnID))
@@ -159,14 +159,14 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 // Heartbeat 心跳上报
 func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	var err error
-	if err = g.waitDiscoverReady(); nil != err {
+	if err = g.waitDiscoverReady(); err != nil {
 		return err
 	}
 	opKey := connector.OpKeyInstanceHeartbeat
 	startTime := clock.GetClock().Now()
 	// 获取心跳server连接
 	conn, err := g.connManager.GetConnection(opKey, config.HealthCheckCluster)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
 	// 释放server连接
@@ -185,7 +185,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	}
 	pbResp, err := namingClient.Heartbeat(ctx, reqProto)
 	endTime := clock.GetClock().Now()
-	if nil != err {
+	if err != nil {
 		return connector.NetworkError(g.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
 			fmt.Sprintf("fail to heartbeat, request %s, reason is fail to send request, reqID %s, server %s",
 				*req, reqID, conn.ConnID))
@@ -243,14 +243,14 @@ func (g *Connector) waitDiscoverReady() error {
 // 异常场景：当服务端不可用或者上报失败，则返回error，调用者需进行重试
 func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportClientResponse, error) {
 	var err error
-	if err = g.waitDiscoverReady(); nil != err {
+	if err = g.waitDiscoverReady(); err != nil {
 		return nil, err
 	}
 	opKey := connector.OpKeyReportClient
 	startTime := clock.GetClock().Now()
 	// 获取server连接
 	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeNetworkError, err, fmt.Sprintf("fail to get connection, opKey %s", opKey))
 	}
 	// 释放server连接
@@ -273,7 +273,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	}
 	pbResp, err := namingClient.ReportClient(ctx, reqProto)
 	endTime := g.valueCtx.Now()
-	if nil != err {
+	if err != nil {
 		return nil, connector.NetworkError(g.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
 			fmt.Sprintf("fail to send request, opKey %s, reqID %s, connID %s", opKey, reqID, conn.ConnID))
 	}
@@ -299,7 +299,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	}
 	// 持久化本地信息
 	if nil != req.PersistHandler {
-		if err = req.PersistHandler(pbResp); nil != err {
+		if err = req.PersistHandler(pbResp); err != nil {
 			log.GetBaseLogger().Errorf("fail to persist client report response, err is %v", err)
 		}
 	}

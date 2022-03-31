@@ -57,7 +57,7 @@ type PolarisProvider struct {
 // Run . execute
 func (svr *PolarisProvider) Run() {
 	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
-	if nil != err {
+	if err != nil {
 		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
 	}
 
@@ -87,7 +87,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
@@ -98,6 +98,7 @@ func (svr *PolarisProvider) registerService() {
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
 	ticker := time.NewTicker(time.Duration(10 * time.Second))
+	defer ticker.Stop()
 	for range ticker.C {
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
 		heartbeatRequest.Namespace = namespace
@@ -106,7 +107,7 @@ func (svr *PolarisProvider) doHeartbeat() {
 		heartbeatRequest.Port = port
 		heartbeatRequest.ServiceToken = token
 		err := svr.provider.Heartbeat(heartbeatRequest)
-		if nil != err {
+		if err != nil {
 			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
 		}
 		time.Sleep(2 * time.Second)
@@ -122,7 +123,7 @@ func main() {
 		return
 	}
 	provider, err := api.NewProviderAPI()
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
 	defer provider.Destroy()
@@ -140,7 +141,7 @@ func main() {
 
 func getLocalHost(serverAddr string) (string, error) {
 	conn, err := net.Dial("tcp", serverAddr)
-	if nil != err {
+	if err != nil {
 		return "", err
 	}
 	localAddr := conn.LocalAddr().String()

@@ -107,7 +107,7 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -199,11 +199,11 @@ func (t *EventSubscribeSuit) TestInstanceEvent(c *check.C) {
 
 func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service, path string) error {
 	buf, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	route := &namingpb.Routing{}
-	if err = jsonpb.UnmarshalString(string(buf), route); nil != err {
+	if err = jsonpb.UnmarshalString(string(buf), route); err != nil {
 		return err
 	}
 	return mockServer.RegisterRouteRule(svc, route)

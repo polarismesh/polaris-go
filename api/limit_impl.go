@@ -34,11 +34,11 @@ func (c *limitAPI) SDKContext() SDKContext {
 
 // GetQuota 获取限流配额
 func (c *limitAPI) GetQuota(request QuotaRequest) (QuotaFuture, error) {
-	if err := checkAvailable(c); nil != err {
+	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
 	mRequest := request.(*model.QuotaRequestImpl)
-	if err := mRequest.Validate(); nil != err {
+	if err := mRequest.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().AsyncGetQuota(mRequest)
@@ -59,7 +59,7 @@ func newLimitAPI() (LimitAPI, error) {
 // newLimitAPIByConfig 通过配置对象创建SDK LimitAPI对象
 func newLimitAPIByConfig(cfg config.Configuration) (LimitAPI, error) {
 	context, err := InitContextByConfig(cfg)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &limitAPI{context}, nil
@@ -73,7 +73,7 @@ func newLimitAPIByContext(context SDKContext) LimitAPI {
 // newLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
 func newLimitAPIByFile(path string) (LimitAPI, error) {
 	context, err := InitContextByFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return &limitAPI{context: context}, nil
