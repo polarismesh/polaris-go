@@ -65,4 +65,6 @@ var (
 	NewProviderAPIByContext = newProviderAPIByContext
 	// NewProviderAPIByDefaultConfigFile 通过系统默认配置文件创建ProviderAPI
 	NewProviderAPIByDefaultConfigFile = newProviderAPIByDefaultConfigFile
+	// NewProviderAPIByAddress 通过address创建ProviderAPI对象
+	NewProviderAPIByAddress = newProviderAPIByAddress
 )

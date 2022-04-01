@@ -120,6 +120,9 @@ func main() {
 		return
 	}
 	provider, err := api.NewProviderAPI()
+	// 或者使用以下方法,则不需要创建配置文件
+	//provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
+
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
