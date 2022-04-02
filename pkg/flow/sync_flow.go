@@ -338,6 +338,12 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 	// 方法开始时间
 	startTime := e.globalCtx.Now()
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
+
+	// 如果注册请求没有设置 Location 信息，则由内部自动设置
+	if instance.Location == nil {
+		instance.Location = e.globalCtx.GetCurrentLocation().GetLocation()
+	}
+
 	resp, err := data.RetrySyncCall("register", &svcKey, instance, func(request interface{}) (interface{}, error) {
 		return e.connector.RegisterInstance(request.(*model.InstanceRegisterRequest))
 	}, param)

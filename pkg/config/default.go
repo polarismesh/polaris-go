@@ -127,6 +127,8 @@ const (
 	DefaultMapKeyValueSeparator = ":"
 	// 默认Map组装str (key:value) 二元组分割符
 	DefaultMapKVTupleSeparator = "|"
+	// 默认实例地理位置提供者插件名称
+	DefaultLocationProvider = ""
 )
 
 // 默认埋点server的端口，与上面的IP一一对应
@@ -353,6 +355,9 @@ func (a *APIConfigImpl) Verify() error {
 	if *a.RetryInterval < DefaultAPIRetryInterval {
 		return fmt.Errorf("global.api.retryInterval must be greater than %v", DefaultAPIRetryInterval)
 	}
+	if len(a.LocationProvider) == 0 {
+		return fmt.Errorf("global.api.locationProvider is empty")
+	}
 	return nil
 }
 
@@ -372,6 +377,9 @@ func (a *APIConfigImpl) SetDefault() {
 	}
 	if len(a.BindIP) > 0 {
 		a.BindIPValue = a.BindIP
+	}
+	if len(a.LocationProvider) > 0 {
+		a.LocationProvider = DefaultLocationProvider
 	}
 }
 

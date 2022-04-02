@@ -169,6 +169,10 @@ type APIConfig interface {
 	GetRetryInterval() time.Duration
 	// SetRetryInterval 设置api调用重试时间
 	SetRetryInterval(time.Duration)
+	// GetLocationProvider 获取地理位置的提供者插件名称
+	GetLocationProvider() string
+	// SetLocationProvider 设置地理位置的提供者插件名称
+	SetLocationProvider(string)
 }
 
 // StatReporterConfig 统计上报配置
