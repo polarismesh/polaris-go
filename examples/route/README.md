@@ -41,7 +41,7 @@ go build -o consumer.exe
 
 ### Create service
 
-Create the corresponding service through the Polaris console in advance. If it is installed through the local one-click installation package, open the console directly in the browser through 127.0.0.1:8091
+Create the corresponding service through the Polaris console in advance. If it is installed through the local one-click installation package, open the console directly in the browser through 127.0.0.1:8080
 
 ![create_service](./image/create_service.png)
 
