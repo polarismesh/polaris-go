@@ -8,32 +8,46 @@
 
 ## 如何构建
 
+> provider
+
 直接依赖go mod进行构建
 
 - linux/mac构建命令
 ```
-go build -o route
+cd ./provider
+go build -o provider
 ```
 - windows构建命令
 ```
-go build -o route.exe
+cd ./consumer
+go build -o provider.exe
 ```
+
+> consumer
+
+- linux/mac构建命令
+```
+cd ./consumer
+go build -o consumer
+```
+- windows构建命令
+```
+cd ./consumer
+go build -o consumer.exe
+```
+
 
 ## 如何使用
 
 ### 创建服务
 
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8091打开控制台
+预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8080打开控制台
 
 ![create_service](./image/create_service.png)
 
 ### 创建路由规则
 
 ![create_service_rule](./image/create_service_rule.png)
-
-### 创建服务实例
-
-![create_service_instances](./image/create_service_instances.png)
 
 ### 修改配置
 
@@ -45,28 +59,47 @@ global:
     addresses:
     - 127.0.0.1:8091
 ```
-
 ### 执行程序
 
-直接执行生成的可执行程序
+直接执行生成的可执行程序, 对于provider进程
+
+> provider
 
 - linux/mac运行命令
 ```
-./route --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
+./provider --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
+./provider --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
 - windows运行命令
 ```
-./route.exe --service="provider service name" --namespace="provider namespace name" --selfService="consumer service name" --selfNamespace="consumer namespace name"
+./provider.exe --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider.exe --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
+./provider.exe --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider.exe --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
-### 期望结果
+> consumer
 
-运行后，最终会打印具有标签`env=test`的服务实例
+
+- linux/mac运行命令
+```
+./consumer --selfNamespace={selfName} --selfService=EchoConsumer
+```
+
+- windows运行命令
+```
+./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
+```
+
+### 验证
+
+通过设置请求头参数***env***的值，实现路由到不同的服务实例
 
 ```
-➜  route git:(feat_demo) ✗ ./route --service="polaris_go_provider"
-2021/12/12 16:58:34 start to invoke GetInstancesRequest operation
-2021/12/12 16:58:34 instance GetInstances 0 is 127.0.0.5:8080 metadata=>map[string]string{"env":"test", "protocol":"", "version":""}
-2021/12/12 16:58:34 instance GetInstances 1 is 127.0.0.4:8080 metadata=>map[string]string{"env":"test", "protocol":"", "version":""}
+curl -H 'env: pre' http://127.0.0.1:18080/echo
+
+Hello, I'm EchoServerGolang Provider env=pre
 ```
