@@ -184,6 +184,12 @@ func newConsumerAPIByDefaultConfigFile() (ConsumerAPI, error) {
 	return NewConsumerAPIByFile(config.DefaultConfigFile)
 }
 
+// newConsumerAPIByAddress 通过address创建ConsumerAPI
+func newConsumerAPIByAddress(address ...string) (ConsumerAPI, error) {
+	conf := config.NewDefaultConfiguration(address)
+	return newConsumerAPIByConfig(conf)
+}
+
 // InstanceRequest 实例请求
 type InstanceRequest struct {
 	// 服务标识
