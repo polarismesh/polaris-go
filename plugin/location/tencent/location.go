@@ -35,10 +35,21 @@ const (
 	qCloudApi               string = "http://metadata.tencentyun.com/latest/meta-data/placement/%s"
 )
 
+// init 注册插件
+func init() {
+	plugin.RegisterPlugin(&LocationProvider{})
+}
+
 // LocationProvider 腾讯云
 type LocationProvider struct {
 	*plugin.PluginBase
 	locCache *model.Location
+}
+
+// Init 初始化插件
+func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
+	p.PluginBase = plugin.NewPluginBase(ctx)
+	return nil
 }
 
 // Type 插件类型
@@ -49,6 +60,11 @@ func (p *LocationProvider) Type() common.Type {
 // Name 插件名称
 func (p *LocationProvider) Name() string {
 	return locationProviderTencent
+}
+
+// Destroy 销毁插件，可用于释放资源
+func (p *LocationProvider) Destroy() error {
+	return nil
 }
 
 // GetLocation 获取地理位置信息

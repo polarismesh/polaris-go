@@ -33,10 +33,26 @@ const (
 	envKeyCampus string = "POLARIS_INSTANCE_CAMPUS"
 )
 
+// init 注册插件
+func init() {
+	plugin.RegisterPlugin(&LocationProvider{})
+}
+
 // LocationProvider 从环境变量获取地域信息
 type LocationProvider struct {
 	*plugin.PluginBase
 	locCache *model.Location
+}
+
+// Init 初始化插件
+func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
+	p.PluginBase = plugin.NewPluginBase(ctx)
+	return nil
+}
+
+// Destroy 销毁插件，可用于释放资源
+func (p *LocationProvider) Destroy() error {
+	return nil
 }
 
 // Type 插件类型

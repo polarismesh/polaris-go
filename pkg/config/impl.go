@@ -56,6 +56,7 @@ type GlobalConfigImpl struct {
 	API             *APIConfigImpl             `yaml:"api" json:"api"`
 	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector" json:"serverConnector"`
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
+	Location        *LocationConfigImpl        `yaml:"location" json:"location"`
 }
 
 // GetSystem 获取系统配置
@@ -76,6 +77,10 @@ func (g *GlobalConfigImpl) GetServerConnector() ServerConnectorConfig {
 // GetStatReporter cl5.global.statReporter前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 	return g.StatReporter
+}
+
+func (g *GlobalConfigImpl) GetLocation() LocationConfig {
+	return g.Location
 }
 
 // ConsumerConfigImpl 消费者配置
@@ -247,14 +252,13 @@ func ServiceClusterToServiceKey(config ServerClusterConfig) model.ServiceKey {
 
 // APIConfigImpl API访问相关的配置
 type APIConfigImpl struct {
-	Timeout          *time.Duration `yaml:"timeout" json:"timeout"`
-	BindIntf         string         `yaml:"bindIf" json:"bindIf"`
-	BindIP           string         `yaml:"bindIP" json:"bindIP"`
-	BindIPValue      string         `yaml:"-" json:"-"`
-	ReportInterval   *time.Duration `yaml:"reportInterval" json:"reportInterval"`
-	MaxRetryTimes    int            `yaml:"maxRetryTimes" json:"maxRetryTimes"`
-	RetryInterval    *time.Duration `yaml:"retryInterval" json:"retryInterval"`
-	LocationProvider string         `yaml:"locationProvider" json:"locationProvider"`
+	Timeout        *time.Duration `yaml:"timeout" json:"timeout"`
+	BindIntf       string         `yaml:"bindIf" json:"bindIf"`
+	BindIP         string         `yaml:"bindIP" json:"bindIP"`
+	BindIPValue    string         `yaml:"-" json:"-"`
+	ReportInterval *time.Duration `yaml:"reportInterval" json:"reportInterval"`
+	MaxRetryTimes  int            `yaml:"maxRetryTimes" json:"maxRetryTimes"`
+	RetryInterval  *time.Duration `yaml:"retryInterval" json:"retryInterval"`
 }
 
 // GetTimeout 默认调用超时时间
@@ -315,16 +319,6 @@ func (a *APIConfigImpl) GetRetryInterval() time.Duration {
 // SetRetryInterval 重试周期
 func (a *APIConfigImpl) SetRetryInterval(interval time.Duration) {
 	a.RetryInterval = &interval
-}
-
-// GetLocationProvider 获取地理位置的提供者插件名称
-func (a *APIConfigImpl) GetLocationProvider() string {
-	return a.LocationProvider
-}
-
-// SetLocationProvider 设置地理位置的提供者插件名称
-func (a *APIConfigImpl) SetLocationProvider(provider string) {
-	a.LocationProvider = provider
 }
 
 // NewDefaultConfiguration 创建默认配置对象

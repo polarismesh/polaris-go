@@ -30,6 +30,11 @@ var (
 	ReportHandlerForLocation = "locationReport"
 )
 
+// init 注册插件
+func init() {
+	plugin.RegisterPlugin(&ReportHandler{})
+}
+
 type ReportHandler struct {
 	*plugin.PluginBase
 	globalCtx        model.ValueContext
@@ -51,12 +56,14 @@ func (h *ReportHandler) Init(ctx *plugin.InitContext) error {
 	h.PluginBase = plugin.NewPluginBase(ctx)
 	h.globalCtx = ctx.ValueCtx
 
-	locProvider, err := ctx.Plugins.GetPlugin(common.TypeLocationProvider,
-		ctx.Config.GetGlobal().GetAPI().GetLocationProvider())
-	if err != nil {
-		return err
+	providerName := ctx.Config.GetGlobal().GetLocation().GetProvider()
+	if len(providerName) != 0 {
+		locProvider, err := ctx.Plugins.GetPlugin(common.TypeLocationProvider, providerName)
+		if err != nil {
+			return err
+		}
+		h.locationProvider = locProvider.(location.LocationProvider)
 	}
-	h.locationProvider = locProvider.(location.LocationProvider)
 
 	return nil
 }

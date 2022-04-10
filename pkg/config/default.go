@@ -355,9 +355,6 @@ func (a *APIConfigImpl) Verify() error {
 	if *a.RetryInterval < DefaultAPIRetryInterval {
 		return fmt.Errorf("global.api.retryInterval must be greater than %v", DefaultAPIRetryInterval)
 	}
-	if len(a.LocationProvider) == 0 {
-		return fmt.Errorf("global.api.locationProvider is empty")
-	}
 	return nil
 }
 
@@ -377,9 +374,6 @@ func (a *APIConfigImpl) SetDefault() {
 	}
 	if len(a.BindIP) > 0 {
 		a.BindIPValue = a.BindIP
-	}
-	if len(a.LocationProvider) > 0 {
-		a.LocationProvider = DefaultLocationProvider
 	}
 }
 
@@ -402,6 +396,9 @@ func (g *GlobalConfigImpl) Verify() error {
 	if err = g.StatReporter.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = g.Location.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -411,6 +408,7 @@ func (g *GlobalConfigImpl) SetDefault() {
 	g.ServerConnector.SetDefault()
 	g.System.SetDefault()
 	g.StatReporter.SetDefault()
+	g.Location.SetDefault()
 }
 
 // 全局配置初始化
@@ -422,6 +420,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.ServerConnector.Init()
 	g.StatReporter = &StatReporterConfigImpl{}
 	g.StatReporter.Init()
+	g.Location = &LocationConfigImpl{}
+	g.Location.Init()
 }
 
 // 初始化ConsumerConfigImpl

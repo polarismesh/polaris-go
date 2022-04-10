@@ -42,6 +42,8 @@ type GlobalConfig interface {
 	GetServerConnector() ServerConnectorConfig
 	// GetStatReporter global.statReporter前缀开头的所有配置项
 	GetStatReporter() StatReporterConfig
+	// GetLocation global.location前缀开头的所有配置项
+	GetLocation() LocationConfig
 }
 
 // ConsumerConfig consumer config object
@@ -169,10 +171,6 @@ type APIConfig interface {
 	GetRetryInterval() time.Duration
 	// SetRetryInterval 设置api调用重试时间
 	SetRetryInterval(time.Duration)
-	// GetLocationProvider 获取地理位置的提供者插件名称
-	GetLocationProvider() string
-	// SetLocationProvider 设置地理位置的提供者插件名称
-	SetLocationProvider(string)
 }
 
 // StatReporterConfig 统计上报配置
@@ -187,6 +185,16 @@ type StatReporterConfig interface {
 	GetChain() []string
 	// SetChain 设置统计上报器插件链
 	SetChain([]string)
+}
+
+// LocationConfig SDK获取自身当前地理位置配置
+type LocationConfig interface {
+	BaseConfig
+	PluginConfig
+	// GetProvider 获取地理位置的提供者插件名称
+	GetProvider() string
+	// SetProvider 设置地理位置的提供者插件名称
+	SetProvider(string)
 }
 
 // ServerConnectorConfig 与名字服务服务端的连接配置

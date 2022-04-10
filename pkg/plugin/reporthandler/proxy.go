@@ -37,12 +37,12 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 
 // HandleRequest Handling Request body for Report
 func (p *Proxy) HandleRequest(req *model.ReportClientRequest) {
-	p.HandleRequest(req)
+	p.ReportHandler.HandleRequest(req)
 }
 
 // HandleResponse Handling Report Responsive Body
 func (p *Proxy) HandleResponse(resp *model.ReportClientResponse) {
-	p.HandleResponse(resp)
+	p.ReportHandler.HandleResponse(resp)
 }
 
 // init 注册proxy
