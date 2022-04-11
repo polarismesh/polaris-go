@@ -41,8 +41,8 @@ func (p *Proxy) HandleRequest(req *model.ReportClientRequest) {
 }
 
 // HandleResponse Handling Report Responsive Body
-func (p *Proxy) HandleResponse(resp *model.ReportClientResponse) {
-	p.ReportHandler.HandleResponse(resp)
+func (p *Proxy) HandleResponse(resp *model.ReportClientResponse, err error) {
+	p.ReportHandler.HandleResponse(resp, err)
 }
 
 // init 注册proxy

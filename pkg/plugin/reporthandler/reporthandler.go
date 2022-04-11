@@ -39,7 +39,7 @@ type ReportHandler interface {
 	HandleRequest(req *model.ReportClientRequest)
 
 	// HandleResponse Handling Report Responsive Body
-	HandleResponse(resp *model.ReportClientResponse)
+	HandleResponse(resp *model.ReportClientResponse, err error)
 }
 
 // init Register ReportHandler plugin

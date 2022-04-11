@@ -88,7 +88,12 @@ func (h *ReportHandler) HandleRequest(req *model.ReportClientRequest) {
 }
 
 // HandleResponse Handling Report Responsive Body
-func (h *ReportHandler) HandleResponse(resp *model.ReportClientResponse) {
+func (h *ReportHandler) HandleResponse(resp *model.ReportClientResponse, err error) {
+	if err != nil {
+		h.updateLocation(nil, err.(model.SDKError))
+		return
+	}
+
 	loc := &model.Location{
 		Region: resp.Region,
 		Zone:   resp.Zone,

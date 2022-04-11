@@ -120,12 +120,16 @@ func (r *ReportClientCallBack) Process(
 	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		// 发生错误也要重试，直到获取到地域信息为止
+		for i := range r.reportChain.Chain {
+			handler := r.reportChain.Chain[i]
+			handler.HandleResponse(reportClientResp, err)
+		}
 		return model.CONTINUE
 	}
 
 	for i := range r.reportChain.Chain {
 		handler := r.reportChain.Chain[i]
-		handler.HandleResponse(reportClientResp)
+		handler.HandleResponse(reportClientResp, nil)
 	}
 	return model.CONTINUE
 }
