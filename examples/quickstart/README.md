@@ -1,55 +1,48 @@
-# QuickStart
+# Polaris Go
 
 [中文文档](./README-zh.md)
 
-## Catalog description
+## Illustrate
 
-> provider
+The quick experience DEMO is divided into two parts
 
-The Polaris adjusted terminal sample contains the simplest basic operation of the adjusted terminal
+- consumer : exposes a `GET:/echo` method for users through `http` agreement
+- provier : exposed a `GET:/echo` by `http` agreement for home adjustment service
 
-> consumer
+Call relationship diagram is as follows
 
-Polaris main tuning terminal sample contains the simplest basic client operation
+![](./quickstart-demo.png)
 
-## How To Build
+## How to use
 
-> provider
+### Build command
 
-- linux/mac build command
+- build provider executable file
+
 ```
+# linux/mac 
 cd ./provider
 go build -o provider
-```
 
-- windows build command
-```
+# windows
 cd ./consumer
 go build -o provider.exe
 ```
 
-> consumer
+- build consumer executable file
 
-- linux/mac build command
 ```
+# linux/mac
 cd ./consumer
 go build -o consumer
-```
-- windows build command
-```
+
+# windows
 cd ./consumer
 go build -o consumer.exe
 ```
-
-## How To Use 
-
-### Create Service
-
-Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8080
-
 ### Change setting
 
-To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
+Specify the Arctic Star server address, you need to edit the Polaris.yaml file, fill in the server address.
 
 ```
 global:
@@ -58,32 +51,26 @@ global:
     - 127.0.0.1:8091
 ```
 
-### Execute Program
+### Execute program
 
-Directly execute the generated executable program
+- run the executable of the provider
 
-> provider
-
-- linux/mac run command
 ```
+# linux/mac
 ./provider
-```
 
-- windows run command
-```
+# windows
 ./provider.exe
 ```
 
-> consumer
+- run the executable of the consumer
 
 
-- linux/mac run command
 ```
+# linux/mac
 ./consumer
-```
 
-- windows run command
-```
+# windows
 ./consumer.exe
 ```
 

@@ -38,14 +38,17 @@ var (
 )
 
 func initArgs() {
+	// 设置 provier 所在的命名空间
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
+	// 设置 provider 的服务名称
 	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+	// 设置 consumer 的 http-server 的监听端口
 	flag.IntVar(&port, "port", 7879, "port")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 }
 
-// PolarisProvider .
+// PolarisProvider 被调服务的封装，该 Provider 是一个 http 服务
 type PolarisProvider struct {
 	provider  api.ProviderAPI
 	namespace string
@@ -54,7 +57,10 @@ type PolarisProvider struct {
 	port      int
 }
 
-// Run . execute
+// Run 启动 provider
+// step 1: 获取 provier 的 IP 信息
+// step 2: 将 provier 注册到北极星中
+// step 3: 启动 provider 的 http 服务
 func (svr *PolarisProvider) Run() {
 	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
 	if err != nil {
@@ -66,6 +72,7 @@ func (svr *PolarisProvider) Run() {
 	svr.runWebServer()
 }
 
+// runWebServer 启动 http-server 服务，提供 /echo 路径进行调用
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -77,6 +84,7 @@ func (svr *PolarisProvider) runWebServer() {
 	}
 }
 
+// registerService 将 provider 注册到北极星当中
 func (svr *PolarisProvider) registerService() {
 	log.Printf("start to invoke register operation")
 	registerRequest := &api.InstanceRegisterRequest{}
@@ -95,9 +103,10 @@ func (svr *PolarisProvider) registerService() {
 	go svr.doHeartbeat()
 }
 
+// doHeartbeat 进行心跳上报，维持该 provider 在北极星的健康状态
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(10 * time.Second))
+	ticker := time.NewTicker(time.Duration(5 * time.Second))
 	defer ticker.Stop()
 	for range ticker.C {
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
@@ -110,7 +119,6 @@ func (svr *PolarisProvider) doHeartbeat() {
 		if err != nil {
 			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
 		}
-		time.Sleep(2 * time.Second)
 	}
 
 }
