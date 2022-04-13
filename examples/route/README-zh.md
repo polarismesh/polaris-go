@@ -67,18 +67,18 @@ global:
 
 - linux/mac运行命令
 ```
-./provider --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
-./provider --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
-./provider --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
-./provider --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
+./provider --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider --metadata="env=test" > provider-20001.log 2>&1 &
+./provider --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
 - windows运行命令
 ```
-./provider.exe --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
-./provider.exe --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
-./provider.exe --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
-./provider.exe --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
+./provider.exe --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider.exe --metadata="env=test" > provider-20001.log 2>&1 &
+./provider.exe --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider.exe --metadata="env=prod" > provider-20003.log 2>&1 &
 ```
 
 > consumer

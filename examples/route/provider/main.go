@@ -41,7 +41,6 @@ var (
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "EchoServerGolang", "service")
-	flag.IntVar(&port, "port", 7879, "port")
 
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
@@ -82,8 +81,8 @@ func (svr *PolarisProvider) Run() {
 	}
 
 	host = tmpHost
-	svr.registerService()
 	svr.runWebServer()
+	svr.registerService()
 }
 
 func (svr *PolarisProvider) runWebServer() {
@@ -118,7 +117,7 @@ func (svr *PolarisProvider) registerService() {
 
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(10 * time.Second))
+	ticker := time.NewTicker(time.Duration(5 * time.Second))
 	for range ticker.C {
 		heartbeatRequest := &api.InstanceHeartbeatRequest{}
 		heartbeatRequest.Namespace = namespace
@@ -130,7 +129,6 @@ func (svr *PolarisProvider) doHeartbeat() {
 		if nil != err {
 			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
 		}
-		time.Sleep(2 * time.Second)
 	}
 
 }
