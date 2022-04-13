@@ -100,8 +100,32 @@ func DeregisterRequestToProto(request *model.InstanceDeRegisterRequest) (pbInsta
 // 将客户端上报请转化为服务端需要的proto
 func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance *namingpb.Client) {
 	pbInstance = &namingpb.Client{
-		Host:    &wrappers.StringValue{Value: request.Host},
-		Version: &wrappers.StringValue{Value: request.Version},
+		Host: &wrappers.StringValue{
+			Value: request.Host,
+		},
+		Type: 0,
+		Version: &wrappers.StringValue{
+			Value: request.Version,
+		},
+		Id: &wrappers.StringValue{
+			Value: "",
+		},
+		Stat: statInfoToProto(request.StatInfos),
 	}
 	return pbInstance
+}
+
+func statInfoToProto(infos []model.StatInfo) []*namingpb.StatInfo {
+	ret := make([]*namingpb.StatInfo, 0, len(infos))
+
+	for i := range infos {
+		ret = append(ret, &namingpb.StatInfo{
+			Target:   &wrappers.StringValue{Value: infos[i].Target},
+			Protocol: &wrappers.StringValue{Value: infos[i].Protocol},
+			Path:     &wrappers.StringValue{Value: infos[i].Path},
+			Port:     &wrappers.UInt32Value{Value: infos[i].Port},
+		})
+	}
+
+	return ret
 }

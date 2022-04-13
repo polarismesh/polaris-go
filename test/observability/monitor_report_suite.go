@@ -38,9 +38,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/monitor"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/monitor"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )

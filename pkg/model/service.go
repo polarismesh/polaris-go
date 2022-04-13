@@ -731,6 +731,8 @@ const (
 	RetSuccess RetStatus = 1
 	// 调用失败
 	RetFail RetStatus = 2
+	// 调用超时
+	RetTimeout RetStatus = 3
 )
 
 // ServiceCallResult 服务调用结果
@@ -738,12 +740,47 @@ type ServiceCallResult struct {
 	EmptyInstanceGauge
 	// 上报的服务实例
 	CalledInstance Instance
+	// 调用接口方法
+	Method string
 	// 必选，本地服务调用的状态，正常or异常
 	RetStatus RetStatus
 	// 必选，本地服务调用的返回码
 	RetCode *int32
 	// 必选，被调服务实例获取接口的最大时延
 	Delay *time.Duration
+}
+
+type RateLimitGauge struct {
+	EmptyInstanceGauge
+	Namespace string
+	Service   string
+	Result    QuotaResultCode
+	Labels    map[string]string
+}
+
+type CircuitBreakGauge struct {
+	EmptyInstanceGauge
+	ChangeInstance Instance
+	Method         string
+	CBStatus       CircuitBreakerStatus
+}
+
+// 获取变化前的熔断状态
+func (cbg *CircuitBreakGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
+	return cbg.CBStatus
+}
+
+// 获取状态发生改变的实例
+func (cbg *CircuitBreakGauge) GetCalledInstance() Instance {
+	return cbg.ChangeInstance
+}
+
+// 检测指标是否合法
+func (cbg *CircuitBreakGauge) Validate() error {
+	if !reflect2.IsNil(cbg.ChangeInstance) {
+		return nil
+	}
+	return NewSDKError(ErrCodeAPIInvalidArgument, nil, "empty change instance")
 }
 
 // APICallKey API调用的唯一标识
@@ -1235,6 +1272,14 @@ type InstanceRegisterResponse struct {
 	Existed bool
 }
 
+// StatInfo 监控插件元数据信息
+type StatInfo struct {
+	Target   string
+	Port     uint32
+	Path     string
+	Protocol string
+}
+
 // ReportClientRequest 客户端上报请求信息
 type ReportClientRequest struct {
 	// 客户端IP地址
@@ -1244,6 +1289,10 @@ type ReportClientRequest struct {
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置
 	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout time.Duration
+	// 地理位置信息
+	Location *Location
+	// 监控插件的上报信息
+	StatInfos []StatInfo
 	// 持久化回调
 	PersistHandler func(message proto.Message) error
 }

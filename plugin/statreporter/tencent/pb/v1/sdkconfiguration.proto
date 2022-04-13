@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package v1;
+
+import "sdktoken.proto";
+import "google/protobuf/timestamp.proto";
+
+// SDK的配置信息
+message SDKConfig {
+  SDKToken token = 1;
+  string config = 2;
+  google.protobuf.Timestamp take_effect_time = 3;
+  string location = 4;
+  string version = 5;
+  string client = 6;
+  string plugins = 7;
+  google.protobuf.Timestamp init_finish_time = 8;
+  google.protobuf.Timestamp report_time = 9;
+}

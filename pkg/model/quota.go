@@ -142,34 +142,71 @@ type QuotaAllocator interface {
 	Release()
 }
 
-// NewQuotaFuture 创建分配future 可以直接传入
-func NewQuotaFuture(resp *QuotaResponse, deadline time.Time, allocator QuotaAllocator) *QuotaFutureImpl {
-	future := &QuotaFutureImpl{}
-	future.allocator = allocator
-	var cancel context.CancelFunc
-	future.deadlineCtx, cancel = context.WithDeadline(context.Background(), deadline)
-	future.resp = resp
-	if nil != resp {
-		// 已经有结果，则直接结束context
-		cancel()
-		future.cancel = nil
-	} else {
-		future.cancel = cancel
+type quotaFutureOption func(f *QuotaFutureImpl)
+
+func WithQuotaFutureReq(req *QuotaRequestImpl) quotaFutureOption {
+	return func(f *QuotaFutureImpl) {
+		f.req = req
 	}
-	if nil == allocator {
+}
+
+func WithQuotaFutureResp(resp *QuotaResponse) quotaFutureOption {
+	return func(f *QuotaFutureImpl) {
+		f.resp = resp
+	}
+}
+
+func WithQuotaFutureDeadline(deadline time.Time) quotaFutureOption {
+	return func(f *QuotaFutureImpl) {
+		var cancel context.CancelFunc
+		f.deadlineCtx, cancel = context.WithDeadline(context.Background(), deadline)
+		f.cancel = cancel
+	}
+}
+
+func WithQuotaFutureQuotaAllocator(allocator QuotaAllocator) quotaFutureOption {
+	return func(f *QuotaFutureImpl) {
+		f.allocator = allocator
+	}
+}
+
+func WithQuotaFutureHooks(hooks ...finishHook) quotaFutureOption {
+	return func(f *QuotaFutureImpl) {
+		f.hooks = hooks
+	}
+}
+
+// NewQuotaFuture 创建分配future 可以直接传入
+func NewQuotaFuture(options ...quotaFutureOption) *QuotaFutureImpl {
+	future := &QuotaFutureImpl{}
+
+	for i := range options {
+		options[i](future)
+	}
+
+	if nil != future.resp {
+		// 已经有结果，则直接结束context
+		future.cancel()
+		future.cancel = nil
+	}
+	if nil == future.allocator {
 		future.released = true
 	}
 	return future
 }
 
+type finishHook func(req *QuotaRequestImpl, res *QuotaResponse)
+
 // QuotaFutureImpl 异步获取配额的future
 type QuotaFutureImpl struct {
 	mutex       sync.Mutex
+	req         *QuotaRequestImpl
 	resp        *QuotaResponse
 	released    bool
 	deadlineCtx context.Context
 	allocator   QuotaAllocator
 	cancel      context.CancelFunc
+	hooks       []finishHook
 }
 
 // Done 分配是否结束
@@ -195,6 +232,13 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	if q.cancel != nil {
 		q.cancel()
 	}
+
+	if q.hooks != nil {
+		for i := range q.hooks {
+			q.hooks[i](q.req, q.resp)
+		}
+	}
+
 	return q.resp
 }
 
