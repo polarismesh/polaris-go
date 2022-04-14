@@ -21,17 +21,17 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 )
 
-//一致性hash配置对象
+// 一致性hash配置对象
 type Config struct {
 	HashFunction string `yaml:"hashFunction" json:"hashFunction"`
 }
 
-//检验一致性hash配置
+// 检验一致性hash配置
 func (c *Config) Verify() error {
 	return nil
 }
 
-//设置一致性hash默认值
+// 设置一致性hash默认值
 func (c *Config) SetDefault() {
 	if len(c.HashFunction) == 0 {
 		c.HashFunction = hash.DefaultHashFuncName

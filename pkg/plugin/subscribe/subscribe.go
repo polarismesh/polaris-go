@@ -30,14 +30,14 @@ var (
 type Subscribe interface {
 	plugin.Plugin
 
-	//执行消息处理逻辑
+	// 执行消息处理逻辑
 	DoSubScribe(event *common.PluginEvent) error
 
-	//订阅service消息
+	// 订阅service消息
 	WatchService(key model.ServiceKey) (interface{}, error)
 }
 
-//初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeSubScribe, new(Subscribe))
 }

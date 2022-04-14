@@ -20,6 +20,11 @@ package rulebase
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -28,12 +33,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/modern-go/reflect2"
-	"sync"
 )
 
-//RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
+// RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type RuleBasedInstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -44,17 +46,17 @@ type RuleBasedInstancesFilter struct {
 	systemCfg             config.SystemConfig
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *RuleBasedInstancesFilter) Type() common.Type {
 	return common.TypeServiceRouter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *RuleBasedInstancesFilter) Name() string {
 	return config.DefaultServiceRouterRuleBased
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *RuleBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
@@ -67,19 +69,19 @@ func (g *RuleBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *RuleBasedInstancesFilter) Destroy() error {
 	return nil
 }
 
-//是否需要启动规则路由
+// 是否需要启动规则路由
 func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	dstRoutes := g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
 	sourceRoutes := g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
 	return len(dstRoutes) > 0 || len(sourceRoutes) > 0
 }
 
-//GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
+// GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
 func (g *RuleBasedInstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	var dstFilteredInstances, sourceFilteredInstances *model.Cluster
@@ -153,10 +155,10 @@ finally:
 		notMatchedDstText := getNotMatchedDestinationText(summary.notMatchedDestinations)
 		invalidRegexDstText := getNotMatchedDestinationText(summary.invalidRegexDestinations)
 		weightZeroDstText := getNotMatchedDestinationText(summary.weightZeroDestinations)
-		regexCompileErrText :=  getErrorRegexText(summary.errorRegexes)
+		regexCompileErrText := getErrorRegexText(summary.errorRegexes)
 		errorText := fmt.Sprintf("route rule not match, rule status: %s, sourceService %s, used variables %v,"+
 			" dstService %s, notMatchedSource is %s, invalidRegexSource is %s, matchedSource is %s,"+
-			" notMatchedDestination is %s, invalidRegexDestination is %s, zeroWeightDestination is %s," +
+			" notMatchedDestination is %s, invalidRegexDestination is %s, zeroWeightDestination is %s,"+
 			" regexCompileErrors is %s, please check your route rule of service %s",
 			ruleStatus.String(), model.ToStringService(routeInfo.SourceService, true), routeInfo.EnvironmentVariables,
 			model.ToStringService(routeInfo.DestService, false), notMatchedSrcText, invalidRegexSourceText,
@@ -169,21 +171,21 @@ finally:
 	return result, nil
 }
 
-//格式化不匹配的源规则
+// 格式化不匹配的源规则
 func getSourcesText(sources []*namingpb.Source) string {
 	fakeRoute := &namingpb.Route{Sources: sources}
 	jsonText, _ := (&jsonpb.Marshaler{}).MarshalToString(fakeRoute)
 	return jsonText
 }
 
-//格式化不匹配的目标规则
+// 格式化不匹配的目标规则
 func getNotMatchedDestinationText(notMatchedDestinations []*namingpb.Destination) string {
 	fakeRoute := &namingpb.Route{Destinations: notMatchedDestinations}
 	jsonText, _ := (&jsonpb.Marshaler{}).MarshalToString(fakeRoute)
 	return jsonText
 }
 
-//将正则表达式的出错信息转化为 json 字符串
+// 将正则表达式的出错信息转化为 json 字符串
 func getErrorRegexText(regexErrors map[string]string) string {
 	if len(regexErrors) == 0 {
 		return "{}"
@@ -209,19 +211,19 @@ func (g *RuleBasedInstancesFilter) validateParams(routeInfo *servicerouter.Route
 
 	var err error
 	// 被调规则如果存在, 主流程必须保证已初始化
-	if err = checkRouteRule(routeInfo.DestRouteRule); nil != err {
+	if err = checkRouteRule(routeInfo.DestRouteRule); err != nil {
 		return false, err
 	}
 
 	// 主调规则如果存在, 主流程必须保证已初始化
-	if err = checkRouteRule(routeInfo.SourceRouteRule); nil != err {
+	if err = checkRouteRule(routeInfo.SourceRouteRule); err != nil {
 		return false, err
 	}
 
 	return true, nil
 }
 
-//校验路由规则
+// 校验路由规则
 func checkRouteRule(routeRule model.ServiceRule) error {
 	if reflect2.IsNil(routeRule) {
 		return nil
@@ -240,7 +242,7 @@ func checkRouteRule(routeRule model.ServiceRule) error {
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&RuleBasedInstancesFilter{})
 }

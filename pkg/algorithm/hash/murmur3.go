@@ -18,10 +18,11 @@
 package hash
 
 import (
-	"github.com/modern-go/reflect2"
-	"github.com/spaolacci/murmur3"
 	"hash"
 	"sync"
+
+	"github.com/modern-go/reflect2"
+	"github.com/spaolacci/murmur3"
 )
 
 const DefaultHashFuncName = "murmur3"
@@ -30,7 +31,7 @@ var (
 	murmur3HashPool = &sync.Pool{}
 )
 
-//通过seed的算法获取hash值
+// murmur3HashWithSeed 通过seed的算法获取hash值
 func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	var pooled = seed == 0
 	var hasher hash.Hash64
@@ -46,7 +47,7 @@ func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	}
 	var value uint64
 	var err error
-	if err = WriteBuffer(hasher, buf); nil == err {
+	if err = WriteBuffer(hasher, buf); err == nil {
 		value = hasher.Sum64()
 	}
 	if pooled {
@@ -55,7 +56,7 @@ func murmur3HashWithSeed(buf []byte, seed uint32) (uint64, error) {
 	return value, err
 }
 
-//包初始化函数
+// init 包初始化函数
 func init() {
 	RegisterHashFunc(DefaultHashFuncName, murmur3HashWithSeed)
 }

@@ -20,25 +20,26 @@ package ratelimit
 import (
 	"encoding/binary"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net"
+	"os"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
-	"io/ioutil"
-	"log"
-	"net"
-	"os"
 )
 
 var (
-	//限流规则的路径
+	// 限流规则的路径
 	rulePaths = map[string]string{
 		LocalTestSvcName:    "testdata/ratelimit_rule_v2/local_normal.json",
 		RemoteTestSvcName:   "testdata/ratelimit_rule_v2/remote_normal.json",
@@ -67,7 +68,7 @@ var (
 const (
 	discoverHost = "127.0.0.1"
 	discoverPort = 10083
-	//rateLimitHostInt      = 159780726
+	// rateLimitHostInt      = 159780726
 	rateLimitHostInt      = 2130706433
 	rateLimitPort         = 18081
 	rateLimitHttpPort     = 18080
@@ -97,7 +98,7 @@ const (
 	labelTestUin = "test_uin"
 )
 
-//限流通用的测试套
+// 限流通用的测试套
 type CommonRateLimitSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -107,14 +108,14 @@ type CommonRateLimitSuite struct {
 	rules    map[string]*namingpb.RateLimit
 }
 
-//整形转地址
+// 整形转地址
 func int2ip(nn uint32) string {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, nn)
 	return ip.String()
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
 	util.DeleteDir(util.BackupDir)
 	cr.grpcServer, cr.grpcListener, cr.mockServer = util.SetupMockDiscover(discoverHost, discoverPort)
@@ -134,7 +135,7 @@ func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
 			rateLimitHost, rateLimitHttpPort, rateLimitSvcName, token, true)
 		instance.Metadata = map[string]string{"protocol": "http"}
 	}
-	//注册限流服务器地址
+	// 注册限流服务器地址
 	var err error
 	cr.rules, err = loadRateLimitRules()
 	c.Assert(err, check.IsNil)
@@ -146,7 +147,7 @@ func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
 	}
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (cr *CommonRateLimitSuite) TearDownSuite(c *check.C, s util.NamingTestSuite) {
 	cr.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -155,16 +156,16 @@ func (cr *CommonRateLimitSuite) TearDownSuite(c *check.C, s util.NamingTestSuite
 	util.InsertLog(s, c.GetTestLog())
 }
 
-//加载限流规则文件
+// 加载限流规则文件
 func loadRateLimitRules() (map[string]*namingpb.RateLimit, error) {
 	outputs := make(map[string]*namingpb.RateLimit, 0)
 	for svcName, rulePath := range rulePaths {
 		buf, err := ioutil.ReadFile(rulePath)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 		rateLimit := &namingpb.RateLimit{}
-		if err = jsonpb.UnmarshalString(string(buf), rateLimit); nil != err {
+		if err = jsonpb.UnmarshalString(string(buf), rateLimit); err != nil {
 			return nil, err
 		}
 		outputs[svcName] = rateLimit
@@ -184,7 +185,7 @@ func loadRateLimitRules() (map[string]*namingpb.RateLimit, error) {
 	return outputs, nil
 }
 
-//注册所需的所有服务
+// 注册所需的所有服务
 func registerServices(mockServer mock.NamingServer) map[string]*namingpb.Service {
 	services := make(map[string]*namingpb.Service)
 	for svcName, namespace := range svcNames {
@@ -200,7 +201,7 @@ func registerServices(mockServer mock.NamingServer) map[string]*namingpb.Service
 	return services
 }
 
-//单次获取限流配额
+// 单次获取限流配额
 func doSingleGetQuota(
 	c *check.C, limitAPI api.LimitAPI, svcName string, labels map[string]string) *model.QuotaResponse {
 	quotaReq := api.NewQuotaRequest()

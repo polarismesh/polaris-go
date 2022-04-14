@@ -23,19 +23,19 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of StatReporter
+// Proxy proxy of StatReporter
 type Proxy struct {
 	StatReporter
 	engine model.Engine
 }
 
-//设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.StatReporter = plug.(StatReporter)
 	p.engine = engine
 }
 
-//注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeStatReporter, &Proxy{})
 }

@@ -20,8 +20,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"strings"
+
+	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -51,7 +52,7 @@ type DNSQuestion struct {
 	Qclass uint16
 }
 
-//序列化
+// 序列化
 func (q *DNSQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	oldLen := buffer.Len()
 	err := packDomainName(q.Name, buffer)
@@ -167,7 +168,7 @@ type BasePolarisQuestion struct {
 	data []byte
 }
 
-//序列化
+// 序列化
 func (q *BasePolarisQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	oldLen := buffer.Len()
 	err := packUint16(uint16(len(q.data)), buffer)
@@ -231,7 +232,7 @@ type PolarisGetResourceQuestion struct {
 	Req *v1.DiscoverRequest
 }
 
-//序列化
+// 序列化
 func (q *PolarisGetResourceQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	var err error
 	q.data, err = proto.Marshal(q.Req)
@@ -257,7 +258,7 @@ type PolarisReportClientQuestion struct {
 	Req *v1.Client
 }
 
-//序列化
+// 序列化
 func (q *PolarisReportClientQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	var err error
 	q.data, err = proto.Marshal(q.Req)
@@ -283,7 +284,7 @@ type PolarisInstanceQuestion struct {
 	Req *v1.Instance
 }
 
-//序列化
+// 序列化
 func (q *PolarisInstanceQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	var err error
 	q.data, err = proto.Marshal(q.Req)

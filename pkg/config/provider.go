@@ -19,39 +19,40 @@ package config
 
 import (
 	"errors"
+
 	"github.com/hashicorp/go-multierror"
 )
 
 var (
-	//默认打开限流能力
+	// 默认打开限流能力
 	DefaultRateLimitEnable = true
 )
 
-//服务提供者配置
+// ProviderConfigImpl 服务提供者配置
 type ProviderConfigImpl struct {
-	//限流配置
+	// 限流配置
 	RateLimit *RateLimitConfigImpl `yaml:"rateLimit" json:"rateLimit"`
 }
 
-//是否启用限流能力
+// GetRateLimit 是否启用限流能力
 func (p *ProviderConfigImpl) GetRateLimit() RateLimitConfig {
 	return p.RateLimit
 }
 
-//校验配置参数
+// Verify 校验配置参数
 func (p *ProviderConfigImpl) Verify() error {
 	if nil == p {
 		return errors.New("ProviderConfig is nil")
 	}
 	var errs error
 	var err error
-	if err = p.RateLimit.Verify(); nil != err {
+	if err = p.RateLimit.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
 }
 
-//设置默认参数
+// SetDefault 设置默认参数
 func (p *ProviderConfigImpl) SetDefault() {
 	if nil == p.RateLimit {
 		p.RateLimit = &RateLimitConfigImpl{}
@@ -59,7 +60,7 @@ func (p *ProviderConfigImpl) SetDefault() {
 	p.RateLimit.SetDefault()
 }
 
-//配置初始化
+// Init 配置初始化
 func (p *ProviderConfigImpl) Init() {
 	p.RateLimit = &RateLimitConfigImpl{}
 	p.RateLimit.Init()

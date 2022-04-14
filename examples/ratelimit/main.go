@@ -20,8 +20,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"log"
 	"os"
 	"os/signal"
@@ -29,6 +27,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 )
 
 //通过的请求数量
@@ -58,7 +59,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "TestSvc", "service")
+	flag.StringVar(&service, "service", "", "service")
 	flag.StringVar(&labels, "labels", "", "labels")
 	flag.IntVar(&concurrency, "concurrency", 1, "concurrency")
 	flag.IntVar(&interval, "interval", 20, "interval")
@@ -82,7 +83,7 @@ func main() {
 	quotaReq.SetNamespace(namespace)
 	quotaReq.SetService(service)
 	limitAPI, err = api.NewLimitAPI()
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to create limitAPI, err: %v", err)
 	}
 	scalableRand := rand.NewScalableRand()
@@ -98,7 +99,7 @@ func main() {
 		go getQuota(wg, stop, i)
 	}
 	//合建chan
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	//监听所有信号
 	signal.Notify(c)
 	var previousIntervalPass int64
@@ -138,10 +139,11 @@ func getQuota(wg *sync.WaitGroup, stop <-chan struct{}, id int) {
 			return
 		default:
 			result, err := limitAPI.GetQuota(quotaReq)
-			if nil != err {
+			if err != nil {
 				log.Fatalf("fail to get quota, err: %v", err)
 			}
 			atomic.AddInt64(&allReq, 1)
+			log.Printf("thread %d request quota-ret : %d", id, result.Get().Code)
 			if result.Get().Code == api.QuotaResultOk {
 				atomic.AddInt64(&passReq, 1)
 			}

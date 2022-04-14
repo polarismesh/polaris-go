@@ -22,14 +22,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//AlarmReporter 【扩展点接口】上报告警信息
+// AlarmReporter 【扩展点接口】上报告警信息
 type AlarmReporter interface {
 	plugin.Plugin
-	//告警回调接口
+	// ReportAlarm 告警回调接口
 	ReportAlarm(level int, message string) error
 }
 
-//初始化
+// 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeAlarmReporter, new(AlarmReporter))
 }

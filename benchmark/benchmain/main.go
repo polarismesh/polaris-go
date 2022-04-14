@@ -21,10 +21,6 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/benchmark/flags"
-	"github.com/polarismesh/polaris-go/benchmark/stats"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"log"
 	"math/rand"
 	"os"
@@ -36,6 +32,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/benchmark/flags"
+	"github.com/polarismesh/polaris-go/benchmark/stats"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
@@ -324,7 +325,7 @@ func rpcDirectBenchmark(start startFunc, stop stopFunc, bf stats.Features, s *st
 	runBenchmark(caller, start, stop, bf, s, operationRpcDirect)
 }
 
-//单协程运行上下文
+// 单协程运行上下文
 type runContext struct {
 	data []interface{}
 }
@@ -351,7 +352,7 @@ func makeFuncSync(bf stats.Features) (rpcCallFunc, rpcCleanupFunc) {
 		}
 		req := ctx.data[0].(*api.GetOneInstanceRequest)
 		instanceRsp, err := tc.GetOneInstance(req)
-		if nil != err {
+		if err != nil {
 			log.Fatalf("fail to invoke %d call for service %s, err is %v", index, req.Service, err)
 		}
 		instance := instanceRsp.Instances[0]
@@ -370,7 +371,7 @@ func makeFuncSync(bf stats.Features) (rpcCallFunc, rpcCleanupFunc) {
 func makeClient() (api.ConsumerAPI, func()) {
 	var err error
 	var consumerAPI api.ConsumerAPI
-	if consumerAPI, err = api.NewConsumerAPI(); nil != err {
+	if consumerAPI, err = api.NewConsumerAPI(); err != nil {
 		log.Fatalf("fail to init consumer api, error is %v", err)
 	}
 	return consumerAPI, func() {
@@ -410,7 +411,7 @@ func runBenchmark(caller rpcCallFunc, start startFunc, stop stopFunc, bf stats.F
 	stop(count)
 }
 
-//进行排序运算
+// 进行排序运算
 func rpcSortArray(array []int) {
 	sort.Ints(array)
 }

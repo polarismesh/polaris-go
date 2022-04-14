@@ -21,15 +21,16 @@ It has these top-level messages:
 */
 package pb
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
-import v11 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-import _ "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-import _ "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-import _ "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-import _ "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+import (
+	"fmt"
+	"math"
+
+	"github.com/golang/protobuf/proto"
+	google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
+
+	_ "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	v11 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

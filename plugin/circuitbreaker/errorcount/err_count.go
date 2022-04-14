@@ -18,6 +18,8 @@
 package errorcount
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -29,10 +31,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	common2 "github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/common"
-	"time"
 )
 
-//熔断器
+// CircuitBreaker 熔断器
 type CircuitBreaker struct {
 	*plugin.PluginBase
 	wholeCfg        config.Configuration
@@ -40,17 +41,17 @@ type CircuitBreaker struct {
 	halfOpenHandler *common.HalfOpenConversionHandler
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *CircuitBreaker) Type() common2.Type {
 	return common2.TypeCircuitBreaker
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *CircuitBreaker) Name() string {
 	return config.DefaultCircuitBreakerErrCount
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.wholeCfg = ctx.Config
@@ -62,38 +63,34 @@ func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//获取实例的滑窗
+// 获取实例的滑窗
 func (g *CircuitBreaker) getSliceWindows(instance model.Instance) []*metric.SliceWindow {
 	instanceInProto := instance.(*pb.InstanceInProto)
 	return instanceInProto.GetSliceWindows(g.ID())
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *CircuitBreaker) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable enable
 func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	} else {
-		return true
-	}
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 const (
-	//错误数统计窗口下标
+	// 错误数统计窗口下标
 	metricIdxErrCount = iota
-	//最大窗口下标
+	// 最大窗口下标
 	metricIdxMax
 )
 
-//统计维度
+// 统计维度
 const (
-	//连续错误数
+	// 连续错误数
 	keyContinuousFailCount = iota + common.MaxHalfOpenDimension
-	//总统计维度
+	// 总统计维度
 	maxDimension
 )
 
@@ -103,18 +100,18 @@ var (
 		if gauge.GetRetStatus() == model.RetFail {
 			failCount = bucket.AddMetric(keyContinuousFailCount, 1)
 		} else {
-			//一次成功则重置连续失败次数为0
+			// 一次成功则重置连续失败次数为0
 			bucket.SetMetric(keyContinuousFailCount, 0)
 		}
 		return failCount
 	}
 )
 
-//正常状态下的统计
+// 正常状态下的统计
 func (g *CircuitBreaker) regularStat(gauge model.InstanceGauge, metricWindow *metric.SliceWindow) bool {
 	failCount := metricWindow.AddGauge(gauge, addMetricWindow)
 	cfg := g.GetErrorCountConfig(gauge.GetNamespace(), gauge.GetService())
-	//只有相同才发，避免发送多次实时任务
+	// 只有相同才发，避免发送多次实时任务
 	if failCount == int64(cfg.GetContinuousErrorThreshold()) {
 		calledInstance := gauge.GetCalledInstance()
 		log.GetBaseLogger().Infof("instance(service=%s, namespace=%s, host=%s, port=%d, instanceId=%s) "+
@@ -126,12 +123,12 @@ func (g *CircuitBreaker) regularStat(gauge model.InstanceGauge, metricWindow *me
 	return false
 }
 
-//实时上报健康状态并进行连续失败熔断判断，返回当前实例是否需要进行立即熔断
+// Stat 实时上报健康状态并进行连续失败熔断判断，返回当前实例是否需要进行立即熔断
 func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	instance := gauge.GetCalledInstance()
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil != cbStatus && cbStatus.GetStatus() == model.Open {
-		//熔断状态不进行统计
+		// 熔断状态不进行统计
 		return false, nil
 	}
 	metricWindows := g.getSliceWindows(gauge.GetCalledInstance())
@@ -141,6 +138,7 @@ func (g *CircuitBreaker) Stat(gauge model.InstanceGauge) (bool, error) {
 	return g.regularStat(gauge, metricWindows[metricIdxErrCount]), nil
 }
 
+// GetErrorCountConfig .获取错误的连续错误数熔断配置
 func (g *CircuitBreaker) GetErrorCountConfig(namespace string, service string) config.ErrorCountConfig {
 	cfg := g.cfg
 	serviceSp := g.wholeCfg.GetConsumer().GetServiceSpecific(namespace, service)
@@ -150,13 +148,13 @@ func (g *CircuitBreaker) GetErrorCountConfig(namespace string, service string) c
 	return cfg
 }
 
-//熔断器从关闭到打开
+// 熔断器从关闭到打开
 func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metric.SliceWindow, now time.Time) bool {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil != cbStatus && cbStatus.GetStatus() != model.Close {
 		return false
 	}
-	//统计错误率
+	// 统计错误率
 	cfg := g.GetErrorCountConfig(instance.GetNamespace(), instance.GetService())
 	timeRange := &metric.TimeRange{
 		Start: now.Add(0 - cfg.GetMetricStatTimeWindow()),
@@ -168,7 +166,7 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 			"failCount to calc closeToOpen is %d for instance %s", failCount, instance.GetId())
 	}
 	if failCount >= int64(cfg.GetContinuousErrorThreshold()) {
-		//达到阈值可进行熔断
+		// 达到阈值可进行熔断
 		log.GetDetectLogger().Infof(
 			"closeToOpen %s: instance(id=%s, address=%s:%d) match condition for failCount=%d(threshold=%d)",
 			g.Name(), instance.GetId(), instance.GetHost(), instance.GetPort(),
@@ -178,8 +176,9 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, metricWindow *metr
 	return false
 }
 
-//定期或触发式进行熔断计算，返回需要进行状态转换的实例ID
-//入参包括全量服务实例，以及当前周期的健康探测结果
+// CircuitBreak 熔断计算
+// 定期或触发式进行熔断计算，返回需要进行状态转换的实例ID
+// 入参包括全量服务实例，以及当前周期的健康探测结果
 func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreaker.Result, error) {
 	result := circuitbreaker.NewCircuitBreakerResult(clock.GetClock().Now())
 	for _, instance := range instances {
@@ -221,18 +220,18 @@ func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreak
 	return result, nil
 }
 
-//生成滑窗
+// 生成滑窗
 func (g *CircuitBreaker) generateSliceWindow(event *common2.PluginEvent) error {
 	localValue := event.EventObject.(*local.DefaultInstanceLocalValue)
 	metricWindows := make([]*metric.SliceWindow, metricIdxMax)
 	metricWindows[metricIdxErrCount] = metric.NewSliceWindow(g.Name(),
 		g.cfg.GetMetricNumBuckets(), g.cfg.GetBucketInterval(), maxDimension, clock.GetClock().Now().UnixNano())
-	//metricWindows[metricIdxHalfOpen] = g.halfOpenHandler.CreateHalfOpenMetricWindow(g.Name())
+	// metricWindows[metricIdxHalfOpen] = g.halfOpenHandler.CreateHalfOpenMetricWindow(g.Name())
 	localValue.SetSliceWindows(g.ID(), metricWindows)
 	return nil
 }
 
-//init 插件注册
+// init 插件注册
 func init() {
 	plugin.RegisterConfigurablePlugin(&CircuitBreaker{}, &Config{})
 }

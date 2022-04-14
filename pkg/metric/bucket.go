@@ -18,54 +18,59 @@
 package metric
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/log"
 )
 
-//资源统计序列
+// ResMetricArray 资源统计序列
 type ResMetricArray struct {
-	//统计序列
+	// 统计序列
 	metrics []int64
 }
 
-//创建资源统计序列
+// NewResMetricArray 创建资源统计序列
 func NewResMetricArray(metricSize int) *ResMetricArray {
 	return &ResMetricArray{
 		metrics: make([]int64, metricSize),
 	}
 }
 
-//获取统计值
+// GetMetric 获取统计值
 func (r *ResMetricArray) GetMetric(dimension int) int64 {
 	return atomic.LoadInt64(&r.metrics[dimension])
 }
 
+// SwapMetric .交换统计
 func (r *ResMetricArray) SwapMetric(dimension int, newValue int64) int64 {
 	return atomic.SwapInt64(&r.metrics[dimension], newValue)
 }
 
-//累加统计值
+// AddMetric 累加统计值
 func (r *ResMetricArray) AddMetric(dimension int, value int64) int64 {
 	return atomic.AddInt64(&r.metrics[dimension], value)
 }
 
-//重置统计值
+// SetMetric 重置统计值
 func (r *ResMetricArray) SetMetric(dimension int, value int64) {
 	atomic.StoreInt64(&r.metrics[dimension], value)
 }
 
-//timeRange的类型
+// IntervalType timeRange的类型
 type IntervalType int
 
 const (
+	// IncludeStart .
 	IncludeStart IntervalType = iota
+	// IncludeEnd .
 	IncludeEnd
+	// IncludeBoth .
 	IncludeBoth
 )
 
-//将IntervalType转化为string
+// String 将IntervalType转化为string
 func (i IntervalType) String() string {
 	switch i {
 	case IncludeStart:
@@ -78,23 +83,26 @@ func (i IntervalType) String() string {
 	return "InvalidIntervalType"
 }
 
-//时间段
+// TimeRange 时间段
 type TimeRange struct {
-	//起始时间
+	// Start 起始时间
 	Start time.Time
-	//结束时间
+	// End 结束时间
 	End time.Time
-	//时间段类型
+	// Type 时间段类型
 	Type IntervalType
 }
 
 const (
+	// Before .
 	Before int = iota
+	// Inside .
 	Inside
+	// After .
 	After
 )
 
-//判断时间点是否在范围中
+// IsTimeInBucket 判断时间点是否在范围中
 func (t *TimeRange) IsTimeInBucket(value time.Time) int {
 	if value.Before(t.Start) {
 		return Before
@@ -105,34 +113,34 @@ func (t *TimeRange) IsTimeInBucket(value time.Time) int {
 	return After
 }
 
-//统计单元
+// Bucket 统计单元
 type Bucket struct {
-	//滑桶的起始时间，单位毫秒
+	// 滑桶的起始时间，单位毫秒
 	startTime int64
-	//同步锁，控制滑桶的变更
+	// 同步锁，控制滑桶的变更
 	mutex *sync.RWMutex
-	//所归属的滑窗
+	// 所归属的滑窗
 	window *SliceWindow
-	//统计序列
+	// 统计序列
 	metrics *ResMetricArray
 }
 
-//获取统计值
+// GetMetric 获取统计值
 func (b *Bucket) GetMetric(dimension int) int64 {
 	return b.metrics.GetMetric(dimension)
 }
 
-//累加统计值
+// AddMetric 累加统计值
 func (b *Bucket) AddMetric(dimension int, value int64) int64 {
 	return b.metrics.AddMetric(dimension, value)
 }
 
-//设置统计值
+// SetMetric 设置统计值
 func (b *Bucket) SetMetric(dimension int, value int64) {
 	b.metrics.SetMetric(dimension, value)
 }
 
-//计算时间范围内的桶的统计值，如果这个桶包括在时间范围内，那么计算，否则不计入
+// CalcBucketMetrics 计算时间范围内的桶的统计值，如果这个桶包括在时间范围内，那么计算，否则不计入
 func (b *Bucket) CalcBucketMetrics(dimensions []int, startTime int64, endTime int64, rangeType IntervalType) []int64 {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
@@ -153,8 +161,8 @@ func (b *Bucket) CalcBucketMetrics(dimensions []int, startTime int64, endTime in
 	return values
 }
 
-//一个bucket是否在对应区间内
-//根据区间起止时间和区间类型区分
+// inRange 一个bucket是否在对应区间内
+// 根据区间起止时间和区间类型区分
 func (b *Bucket) inRange(startTime int64, endTime int64, bucketStartTime int64, rangeType IntervalType) bool {
 	res := false
 	bucketEndTime := bucketStartTime + b.window.bucketIntervalMilli
@@ -169,7 +177,7 @@ func (b *Bucket) inRange(startTime int64, endTime int64, bucketStartTime int64, 
 	return res
 }
 
-//计算维度下所有的时间段的值之和
+// CalcMetrics 计算维度下所有的时间段的值之和
 func (s *SliceWindow) CalcMetrics(dimension int, timeRange *TimeRange) int64 {
 	startNanoseconds := GetCurrentMilliseconds(timeRange.Start)
 	endNanoseconds := GetCurrentMilliseconds(timeRange.End)
@@ -189,7 +197,7 @@ func (s *SliceWindow) CalcMetrics(dimension int, timeRange *TimeRange) int64 {
 	return total
 }
 
-//计算多个维度下的统计值
+// CalcMetricsInMultiDimensions 计算多个维度下的统计值
 func (s *SliceWindow) CalcMetricsInMultiDimensions(dimensions []int, timeRange *TimeRange) []int64 {
 	startNanoseconds := GetCurrentMilliseconds(timeRange.Start)
 	endNanoseconds := GetCurrentMilliseconds(timeRange.End)

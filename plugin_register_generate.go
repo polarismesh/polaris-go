@@ -1,4 +1,5 @@
-//+build ignore
+//go:build ignore
+// +build ignore
 
 /**
  * Tencent is pleased to support the open source community by making polaris-go available.
@@ -70,7 +71,7 @@ func main() {
 
 func genImports(file, pack string, mi map[string]string) {
 	openComment, err := ioutil.ReadFile(fileTemplate)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("Failed to read template file, %s\n", fileTemplate)
 	}
 	outs := string(openComment) + header + "package " + pack + "\n\n" + "import ("

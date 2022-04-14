@@ -19,7 +19,7 @@ package ratelimit
 
 import "github.com/polarismesh/polaris-go/pkg/flow/quota"
 
-//统计限流次数
+// 统计限流次数
 type limitedStat struct {
 	reason        string
 	limitedNum    int64
@@ -36,27 +36,27 @@ type passStat struct {
 	passNum int64
 }
 
-//存储限流统计数据
+// 存储限流统计数据
 type statData struct {
 	trafficShapingLimited map[quota.LimitMode]*limitedStat
 	amountStats           map[limitedStatKey]*limitedStat
-	ruleMatchLabels string
+	ruleMatchLabels       string
 }
 
-//limitedStat的数组
+// limitedStat的数组
 type limitedSlice []*limitedStat
 
-//len
+// len
 func (l limitedSlice) Len() int {
 	return len(l)
 }
 
-//swap
+// swap
 func (l limitedSlice) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-//less
+// less
 func (l limitedSlice) Less(i, j int) bool {
 	return l[i].validDuration > l[j].validDuration
 }

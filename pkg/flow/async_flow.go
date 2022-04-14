@@ -23,14 +23,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// 同步获取配额信息
+// AsyncGetQuota 同步获取配额信息
 func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFutureImpl, error) {
 	commonRequest := data.PoolGetCommonRateLimitRequest()
 	commonRequest.InitByGetQuotaRequest(request, e.configuration)
 	startTime := clock.GetClock().Now()
 	future, err := e.flowQuotaAssistant.GetQuota(commonRequest)
 	consumeTime := clock.GetClock().Now().Sub(startTime)
-	if nil != err {
+	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		(&commonRequest.CallResult).SetDelay(consumeTime)

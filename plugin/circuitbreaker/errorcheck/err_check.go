@@ -18,6 +18,8 @@
 package errorcheck
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -27,7 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	common2 "github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/common"
-	"time"
 )
 
 // CircuitBreaker 通过定时探测进行熔断的熔断器
@@ -37,17 +38,17 @@ type CircuitBreaker struct {
 	halfOpenHandler *common.HalfOpenConversionHandler
 }
 
-//插件类型
+// Type 插件类型
 func (g *CircuitBreaker) Type() common2.Type {
 	return common2.TypeCircuitBreaker
 }
 
-//插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *CircuitBreaker) Name() string {
 	return config.DefaultCircuitBreakerErrCheck
 }
 
-//初始化插件
+// Init 初始化插件
 func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.healthCheckCfg = ctx.Config.GetConsumer().GetHealthCheck()
@@ -55,23 +56,23 @@ func (g *CircuitBreaker) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *CircuitBreaker) Destroy() error {
 	return nil
 }
 
-//插件是否启用
+// IsEnable 插件是否启用
 func (g *CircuitBreaker) IsEnable(cfg config.Configuration) bool {
 	return true
 }
 
-//进行调用统计，返回当前实例是否需要进行立即熔断
+// Stat 进行调用统计，返回当前实例是否需要进行立即熔断
 func (g *CircuitBreaker) Stat(model.InstanceGauge) (bool, error) {
 	return false, nil
 }
 
-//进行熔断计算，返回需要进行状态转换的实例ID
-//入参包括全量服务实例，以及当前周期的健康探测结果
+// CircuitBreak 进行熔断计算，返回需要进行状态转换的实例ID
+// 入参包括全量服务实例，以及当前周期的健康探测结果
 func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreaker.Result, error) {
 	if g.healthCheckCfg.GetWhen() != config.HealthCheckAlways {
 		return nil, nil
@@ -115,7 +116,7 @@ func (g *CircuitBreaker) CircuitBreak(instances []model.Instance) (*circuitbreak
 	return result, nil
 }
 
-// openByCheck 打开了探测，通过探测结果来判断熔断器开启
+// closeToOpen 打开了探测，通过探测结果来判断熔断器开启
 func (g *CircuitBreaker) closeToOpen(instance model.Instance, now time.Time) bool {
 	cbStatus := instance.GetCircuitBreakerStatus()
 	if nil != cbStatus && cbStatus.GetStatus() != model.Close {
@@ -128,7 +129,7 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, now time.Time) boo
 		return false
 	}
 	odStatus := instanceLocalValue.GetActiveDetectStatus()
-	//log.GetBaseLogger().Infof("health check status is %v, name %s, instance %s:%d", odStatus, g.Name(), instance.GetHost(), instance.GetPort())
+	// log.GetBaseLogger().Infof("health check status is %v, name %s, instance %s:%d", odStatus, g.Name(), instance.GetHost(), instance.GetPort())
 	if odStatus != nil && odStatus.GetStatus() == model.Dead &&
 		now.Sub(odStatus.GetStartTime()) <= g.healthCheckCfg.GetInterval() {
 		return true
@@ -136,7 +137,7 @@ func (g *CircuitBreaker) closeToOpen(instance model.Instance, now time.Time) boo
 	return false
 }
 
-//init 插件注册
+// init 插件注册
 func init() {
 	plugin.RegisterConfigurablePlugin(&CircuitBreaker{}, nil)
 }

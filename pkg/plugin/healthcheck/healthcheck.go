@@ -18,17 +18,18 @@
 package healthcheck
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//HealthChecker 【扩展点接口】主动健康探测策略
+// HealthChecker 【扩展点接口】主动健康探测策略
 type HealthChecker interface {
 	plugin.Plugin
-	// 对单个实例进行探测，返回探测结果
+	// DetectInstance 对单个实例进行探测，返回探测结果
 	// DetectInstance 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
 	DetectInstance(model.Instance) (DetectResult, error)
 }
@@ -50,7 +51,7 @@ type DetectResultImp struct {
 	DetectInstance model.Instance // 探测的实例
 }
 
-// GetDetectType 探测类型，与探测插件名相同
+// IsSuccess 探测类型，与探测插件名相同
 func (r *DetectResultImp) IsSuccess() bool {
 	return r.Success
 }
@@ -65,7 +66,7 @@ func (r *DetectResultImp) GetDetectInstance() model.Instance {
 	return r.DetectInstance
 }
 
-//初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeHealthCheck, new(HealthChecker))
 }

@@ -18,19 +18,20 @@
 package servicerouter
 
 import (
+	"sync"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"sync"
 )
 
-//proxy of ServiceRouter
+// Proxy proxy of ServiceRouter
 type Proxy struct {
 	ServiceRouter
 	engine model.Engine
 }
 
-//路由调用统计数据
+// RouteGauge 路由调用统计数据
 type RouteGauge struct {
 	model.EmptyInstanceGauge
 	PluginID         int32
@@ -42,7 +43,7 @@ type RouteGauge struct {
 	Status           RouteStatus
 }
 
-// 清理gauge
+// clear 清理gauge
 func (r *RouteGauge) clear() {
 	r.PluginID = 0
 	r.SrcService.Namespace = ""
@@ -54,10 +55,10 @@ func (r *RouteGauge) clear() {
 	r.Status = Normal
 }
 
-//获取PluginMethodGauge的pool
+// 获取PluginMethodGauge的pool
 var routeStatPool = &sync.Pool{}
 
-//从pluginStatPool中获取PluginMethodGauge
+// getRouteStatFromPool 从pluginStatPool中获取PluginMethodGauge
 func getRouteStatFromPool() *RouteGauge {
 	value := routeStatPool.Get()
 	if nil == value {
@@ -68,12 +69,12 @@ func getRouteStatFromPool() *RouteGauge {
 	return res
 }
 
-//从缓存池中获取路由统计信息结构
+// poolPutRouteStat 从缓存池中获取路由统计信息结构
 func poolPutRouteStat(gauge *RouteGauge) {
 	routeStatPool.Put(gauge)
 }
 
-//上报路由调用信息
+// reportRouteStat 上报路由调用信息
 func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 	svcInstances model.ServiceInstances, res *RouteResult) {
 	gauge := getRouteStatFromPool()
@@ -96,13 +97,13 @@ func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 	poolPutRouteStat(gauge)
 }
 
-//设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.ServiceRouter = plug.(ServiceRouter)
 	p.engine = engine
 }
 
-//proxy ServiceRouter GetFilteredInstances
+// GetFilteredInstances proxy ServiceRouter GetFilteredInstances
 func (p *Proxy) GetFilteredInstances(
 	routeInfo *RouteInfo, serviceClusters model.ServiceClusters, withinCluster *model.Cluster) (*RouteResult, error) {
 	result, err := p.ServiceRouter.GetFilteredInstances(routeInfo, serviceClusters, withinCluster)
@@ -111,7 +112,7 @@ func (p *Proxy) GetFilteredInstances(
 	return result, err
 }
 
-//注册proxy
+// 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeServiceRouter, &Proxy{})
 }

@@ -15,7 +15,7 @@ message RateLimitRequest {
   //命令字
   RateLimitCmd cmd = 1;
   //初始化请求
-  RateLimitInitRequest rateLimitInitRequest  = 2;
+  RateLimitInitRequest rateLimitInitRequest = 2;
   //上报请求
   RateLimitReportRequest rateLimitReportRequest = 3;
 }
@@ -25,7 +25,7 @@ message RateLimitResponse {
   //命令字
   RateLimitCmd cmd = 1;
   //初始化请求
-  RateLimitInitResponse rateLimitInitResponse  = 2;
+  RateLimitInitResponse rateLimitInitResponse = 2;
   //上报请求
   RateLimitReportResponse rateLimitReportResponse = 3;
 }

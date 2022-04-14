@@ -21,39 +21,39 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//限流的类型
+// RateLimitType 限流的类型
 type RateLimitType int
 
 const (
 	TrafficShapingLimited RateLimitType = 0
 	QuotaLimited          RateLimitType = 1
 	WindowDeleted         RateLimitType = 2
-	//QuotaRequested        RateLimitType = 3
+	// QuotaRequested        RateLimitType = 3
 	QuotaGranted RateLimitType = 4
 )
 
 type LimitMode int
 
 const (
-	//未知类型，用于兼容前面pb
+	// 未知类型，用于兼容前面pb
 	LimitUnknownMode LimitMode = 0
-	//全局类型，与限流server发生交互
+	// 全局类型，与限流server发生交互
 	LimitGlobalMode LimitMode = 1
-	//本地类型，使用本地限流算法
+	// 本地类型，使用本地限流算法
 	LimitLocalMode LimitMode = 2
-	//降级类型，因为无法连接限流server，导致必须使用本地限流算法
+	// 降级类型，因为无法连接限流server，导致必须使用本地限流算法
 	LimitDegradeMode LimitMode = 3
 )
 
-//限流统计gauge
+// 限流统计gauge
 type RateLimitGauge struct {
 	model.EmptyInstanceGauge
-	Window      *RateLimitWindow
-	Namespace   string
-	Service     string
-	Type        RateLimitType
-	//限流周期， 单位秒
+	Window    *RateLimitWindow
+	Namespace string
+	Service   string
+	Type      RateLimitType
+	// 限流周期， 单位秒
 	Duration uint32
-	//限流发生时的mode, 和plugin的pb要保持一致
+	// 限流发生时的mode, 和plugin的pb要保持一致
 	LimitModeType LimitMode
 }

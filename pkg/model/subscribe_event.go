@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -34,7 +35,7 @@ type SubScribeEvent interface {
 	GetSubScribeEventType() SubScribeEventType
 }
 
-// 实例事件
+// InstanceEvent 实例事件
 type InstanceEvent struct {
 	AddEvent    *InstanceAddEvent
 	UpdateEvent *InstanceUpdateEvent
@@ -46,33 +47,33 @@ func (e *InstanceEvent) GetSubScribeEventType() SubScribeEventType {
 	return EventInstance
 }
 
-// 实例Add事件
+// InstanceAddEvent 实例Add事件
 type InstanceAddEvent struct {
 	Instances []Instance
 }
 
-//实例one update struct
+// OneInstanceUpdate 实例one update struct
 type OneInstanceUpdate struct {
 	Before Instance
 	After  Instance
 }
 
-//实例Update事件
+// InstanceUpdateEvent 实例Update事件
 type InstanceUpdateEvent struct {
 	UpdateList []OneInstanceUpdate
 }
 
-//实例Delete事件
+// InstanceDeleteEvent 实例Delete事件
 type InstanceDeleteEvent struct {
 	Instances []Instance
 }
 
-// WatchService req
+// WatchServiceRequest WatchService req
 type WatchServiceRequest struct {
 	Key ServiceKey
 }
 
-// WatchServiceRequest 校验
+// Validate WatchServiceRequest 校验
 func (req *WatchServiceRequest) Validate() error {
 	if nil == req {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "WatchServiceRequest can not be nil")

@@ -18,25 +18,27 @@
 package data
 
 import (
+	"time"
+
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/modern-go/reflect2"
-	"time"
 )
 
-//控制参数提供者
+// ControlParamProvider 控制参数提供者
 type ControlParamProvider interface {
-	//获取超时值指针
+	// 获取超时值指针
 	GetTimeoutPtr() *time.Duration
-	//设置超时时间间隔
+	// 设置超时时间间隔
 	SetTimeout(duration time.Duration)
-	//获取重试次数指针
+	// 获取重试次数指针
 	GetRetryCountPtr() *int
-	//设置重试次数
+	// 设置重试次数
 	SetRetryCount(int)
 }
 
-//为服务注册的请求设置默认值
+// BuildControlParam 为服务注册的请求设置默认值
 func BuildControlParam(
 	provider ControlParamProvider, cfg config.Configuration, param *model.ControlParam) {
 	if reflect2.IsNil(provider) || nil == provider.GetTimeoutPtr() {
@@ -54,5 +56,4 @@ func BuildControlParam(
 		provider.SetTimeout(param.Timeout)
 		provider.SetRetryCount(param.MaxRetry)
 	}
-
 }

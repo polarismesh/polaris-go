@@ -20,10 +20,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (
@@ -52,7 +53,7 @@ func main() {
 		return
 	}
 	consumer, err := api.NewConsumerAPI()
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
 	defer consumer.Destroy()
@@ -70,7 +71,7 @@ func main() {
 		registerRequest.ServiceToken = token
 		registerRequest.SetHealthy(true)
 		resp, err := provider.Register(registerRequest)
-		if nil != err {
+		if err != nil {
 			log.Fatalf("fail to register instance %d, err is %v", i, err)
 		}
 		log.Printf("register instance %d response: instanceId %s", i, resp.InstanceID)
@@ -82,7 +83,7 @@ func main() {
 	log.Printf("start http health check server")
 	go func() {
 		err = startHTTPServer(fmt.Sprintf("%s:%d", host, startPort))
-		if nil != err {
+		if err != nil {
 			log.Fatalf("fail to start http health check server, err is %v", err)
 		}
 	}()
@@ -92,7 +93,7 @@ func main() {
 	getAllRequest.Namespace = namespace
 	getAllRequest.Service = service
 	allInstResp, err := consumer.GetAllInstances(getAllRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to getAllInstances, err is %v", err)
 	}
 	instances := allInstResp.GetInstances()
@@ -132,7 +133,7 @@ func startHTTPServer(address string) error {
 	})
 	log.Printf("httpserver ready, addr %s", address)
 	err := http.ListenAndServe(address, mux)
-	if nil != err {
+	if err != nil {
 		log.Printf("httpserver err %v", err)
 	}
 	return err

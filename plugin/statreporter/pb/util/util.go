@@ -22,7 +22,7 @@ import (
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
 )
 
-//将model sdktoken 转化为 pb形式的
+// GetPBSDkToken 将model sdktoken 转化为 pb形式的
 func GetPBSDkToken(t model.SDKToken) *monitorpb.SDKToken {
 	return &monitorpb.SDKToken{
 		Ip:       t.IP,

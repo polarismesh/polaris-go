@@ -20,21 +20,24 @@ package common
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
-	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
+	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/plugin"
+
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
@@ -42,19 +45,19 @@ import (
 )
 
 const (
-	//需要发往服务端的请求跟踪标识
+	// 需要发往服务端的请求跟踪标识
 	headerRequestID = "request-id"
-	//失败时的最大超时时间
+	// 失败时的最大超时时间
 	maxConnTimeout = 100 * time.Millisecond
-	//任务重试间隔
+	// 任务重试间隔
 	taskRetryInterval = 200 * time.Millisecond
-	//接收线程获取连接的间隔
+	// 接收线程获取连接的间隔
 	receiveConnInterval = 1 * time.Second
-	//发送者任务线程轮询时间间隔
+	// 发送者任务线程轮询时间间隔
 	syncInterval = 500 * time.Millisecond
-	//间隔多久打印任务队列信息
+	// 间隔多久打印任务队列信息
 	logInterval = 5 * time.Minute
-	////请求discover服务的任务转化为以自身为cluster的数量最大值为2，一个实例，一个路由
+	// //请求discover服务的任务转化为以自身为cluster的数量最大值为2，一个实例，一个路由
 	maxDiscoverClusterNum = 2
 )
 
@@ -62,42 +65,42 @@ var (
 	mu sync.Mutex
 )
 
-//Connector cl5服务端代理，使用GRPC协议对接
+// DiscoverConnector cl5服务端代理，使用GRPC协议对接
 type DiscoverConnector struct {
 	*common.RunContext
 	ServiceConnector      *plugin.PluginBase
 	connectionIdleTimeout time.Duration
 	messageTimeout        time.Duration
-	//普通任务队列
+	// 普通任务队列
 	taskChannel chan *clientTask
-	//高优先级重试任务队列，只会在系统服务未ready时候会往队列塞值
+	// 高优先级重试任务队列，只会在系统服务未ready时候会往队列塞值
 	retryPriorityTaskChannel chan model.ServiceEventKey
-	//定时轮询任务集合
+	// 定时轮询任务集合
 	updateTaskSet *sync.Map
-	//连接管理器
+	// 连接管理器
 	connManager network.ConnectionManager
 	valueCtx    model.ValueContext
-	//通过本地缓存加载成功的系统服务
+	// 通过本地缓存加载成功的系统服务
 	cachedServerServices []model.ServiceEventKey
-	//discover服务的命名空间和服务名
+	// discover服务的命名空间和服务名
 	discoverKey            model.ServiceKey
 	discoverInstancesReady bool
 	discoverRoutingReady   bool
-	//请求discover服务的任务转化为以自身为cluster的数量
+	// 请求discover服务的任务转化为以自身为cluster的数量
 	discoverClusterNum int
 	queueSize          int32
-	//创建具体调度客户端的逻辑
+	// 创建具体调度客户端的逻辑
 	createClient DiscoverClientCreator
 	scalableRand *rand.ScalableRand
 }
 
-//任务对象，用于在connector协程中做轮转处理
+// 任务对象，用于在connector协程中做轮转处理
 type clientTask struct {
 	updateTask *serviceUpdateTask
 	op         taskOp
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverClientCreator) {
 	ctxConfig := ctx.Config
 	g.RunContext = common.NewRunContext()
@@ -115,7 +118,7 @@ func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverC
 	}
 }
 
-//初始化connector调度主协程
+// StartUpdateRoutines 初始化connector调度主协程
 func (g *DiscoverConnector) StartUpdateRoutines() {
 	g.updateTaskSet = &sync.Map{}
 	g.taskChannel = make(chan *clientTask, g.queueSize)
@@ -125,7 +128,7 @@ func (g *DiscoverConnector) StartUpdateRoutines() {
 	go g.doLog()
 }
 
-//将存储在原子变量里面的时间转化为string
+// 将存储在原子变量里面的时间转化为string
 func atomicTimeToString(v atomic.Value) string {
 	timeValue := v.Load()
 	if reflect2.IsNil(timeValue) {
@@ -134,7 +137,7 @@ func atomicTimeToString(v atomic.Value) string {
 	return timeValue.(time.Time).Format("2006-01-02 15:04:05")
 }
 
-//定时打印任务队列状态的协程
+// 定时打印任务队列状态的协程
 func (g *DiscoverConnector) doLog() {
 	logLoop := time.NewTicker(logInterval)
 	defer logLoop.Stop()
@@ -158,12 +161,12 @@ func (g *DiscoverConnector) doLog() {
 	}
 }
 
-//用于recv协程通知send协程关于链路故障的问题
+// ClientFailEvent 用于recv协程通知send协程关于链路故障的问题
 type ClientFailEvent struct {
 	connID uint32
 }
 
-//定时线程进行重试检查，防止send线程高负载
+// 定时线程进行重试检查，防止send线程高负载
 func (g *DiscoverConnector) doRetry() {
 	retryLoop := time.NewTicker(taskRetryInterval / 2)
 	defer retryLoop.Stop()
@@ -188,7 +191,7 @@ func (g *DiscoverConnector) doRetry() {
 	}
 }
 
-//执行任务重试调度
+// 执行任务重试调度
 func (g *DiscoverConnector) scheduleRetry(task *serviceUpdateTask) {
 	task.retryLock.Lock()
 	defer task.retryLock.Unlock()
@@ -205,7 +208,7 @@ func (g *DiscoverConnector) scheduleRetry(task *serviceUpdateTask) {
 	}
 }
 
-//执行异步更新及数据获取主流程
+// 执行异步更新及数据获取主流程
 func (g *DiscoverConnector) doSend() {
 	updateTicker := time.NewTicker(syncInterval)
 	defer func() {
@@ -216,7 +219,7 @@ func (g *DiscoverConnector) doSend() {
 		select {
 		case <-g.Done():
 			if nil != streamingClient {
-				//如果刚好连接切换，还没有执行到clearIdleClient，旧连接可能还是活跃的，关闭连接避免泄露
+				// 如果刚好连接切换，还没有执行到clearIdleClient，旧连接可能还是活跃的，关闭连接避免泄露
 				streamingClient.CloseStream(true)
 			}
 			log.GetBaseLogger().Infof("doSend routine of grpc connector has benn terminated")
@@ -231,7 +234,7 @@ func (g *DiscoverConnector) doSend() {
 			}
 			g.updateTaskSet.Range(func(k, v interface{}) bool {
 				task := v.(*serviceUpdateTask)
-				//首先进行状态判断，判断状态是否属于长稳运行任务
+				// 首先进行状态判断，判断状态是否属于长稳运行任务
 				if atomic.LoadUint32(&task.longRun) != longRunning || !task.needUpdate() {
 					return true
 				}
@@ -248,14 +251,14 @@ func (g *DiscoverConnector) doSend() {
 	}
 }
 
-//重试更新任务
+// 重试更新任务
 func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err error, notReady bool) {
 	updateTask.retryLock.Lock()
 	defer updateTask.retryLock.Unlock()
 	if atomic.CompareAndSwapUint32(&updateTask.longRun, firstTask, retryTask) {
 		log.GetBaseLogger().Warnf("retry: task %s for error %v", updateTask.ServiceEventKey, err)
 		if notReady {
-			//如果是等待首次连接的，则缩短重试间隔
+			// 如果是等待首次连接的，则缩短重试间隔
 			updateTask.retryDeadline = time.After(clock.TimeStep())
 		} else {
 			updateTask.retryDeadline = time.After(taskRetryInterval)
@@ -271,10 +274,10 @@ func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err e
 	}
 }
 
-//最大的消息打印大小，超过该大小的消息则不打印到日志中
+// 最大的消息打印大小，超过该大小的消息则不打印到日志中
 const maxLogMsgSize = 4 * 1024 * 1024
 
-//打印应答消息
+// 打印应答消息
 func logDiscoverResponse(resp *namingpb.DiscoverResponse, connection *network.Connection) {
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		svcKey := model.ServiceEventKey{
@@ -296,7 +299,7 @@ func logDiscoverResponse(resp *namingpb.DiscoverResponse, connection *network.Co
 	}
 }
 
-//服务发现应答转为事件，从应答里面获取调用discover的返回码
+// 服务发现应答转为事件，从应答里面获取调用discover的返回码
 func discoverResponseToEvent(resp *namingpb.DiscoverResponse,
 	svcEventKey model.ServiceEventKey, connection *network.Connection) (*serverconnector.ServiceEvent, model.ErrCode) {
 	svcEvent := &serverconnector.ServiceEvent{ServiceEventKey: svcEventKey}
@@ -321,7 +324,7 @@ func discoverResponseToEvent(resp *namingpb.DiscoverResponse,
 	return svcEvent, svcCode
 }
 
-//将任务加入调度列表
+// 将任务加入调度列表
 func (g *DiscoverConnector) addUpdateTaskSet(updateTask *serviceUpdateTask) {
 	if atomic.CompareAndSwapUint32(&updateTask.longRun, firstTask, longRunning) {
 		log.GetBaseLogger().Infof("serviceEvent %s update has been scheduled, interval %v",
@@ -330,7 +333,7 @@ func (g *DiscoverConnector) addUpdateTaskSet(updateTask *serviceUpdateTask) {
 	}
 }
 
-//上报调用结果
+// 上报调用结果
 func (g *DiscoverConnector) reportCallStatus(
 	curClient *StreamingClient, updateTask *serviceUpdateTask, errCode int32, isSuccess bool) {
 	consumeTime := GetUpdateTaskRequestTime(updateTask)
@@ -341,21 +344,21 @@ func (g *DiscoverConnector) reportCallStatus(
 	}
 }
 
-//处理添加服务实例更新任务
+// 处理添加服务实例更新任务
 func (g *DiscoverConnector) onAddListener(
 	streamingClient *StreamingClient, updateTask *serviceUpdateTask) *StreamingClient {
 	return g.processUpdateTask(streamingClient, updateTask)
 }
 
-//处理删除服务实例更新任务
+// 处理删除服务实例更新任务
 func (g *DiscoverConnector) onDelListener(taskKey *model.ServiceEventKey) {
-	//log.GetBaseLogger().Infof("serviceEvent %s update has been cancelled", *taskKey)
+	// log.GetBaseLogger().Infof("serviceEvent %s update has been cancelled", *taskKey)
 	log.GetBaseLogger().Infof("%s, onDelListener: task %s removed from updateTaskSet",
 		g.ServiceConnector.GetSDKContextID(), *taskKey)
 	g.updateTaskSet.Delete(*taskKey)
 }
 
-//处理消费者任务
+// 处理消费者任务
 func (g *DiscoverConnector) onClientTask(streamingClient *StreamingClient, clientTask *clientTask) *StreamingClient {
 	switch clientTask.op {
 	case opAddListener:
@@ -366,41 +369,41 @@ func (g *DiscoverConnector) onClientTask(streamingClient *StreamingClient, clien
 	return streamingClient
 }
 
-//流式客户端，带连接
+// StreamingClient 流式客户端，带连接
 type StreamingClient struct {
-	//所属的discoverConnector
+	// 所属的discoverConnector
 	connector *DiscoverConnector
-	//用于确保原子关闭
+	// 用于确保原子关闭
 	once sync.Once
-	//连接是否可用
+	// 连接是否可用
 	endStream uint32
-	//在doSend协程，是否发现了streamingClient的错误，如超时
+	// 在doSend协程，是否发现了streamingClient的错误，如超时
 	hasError uint32
-	//实际的连接信息
+	// 实际的连接信息
 	connection     *network.Connection
 	reqID          string
 	discoverClient DiscoverClient
-	//互斥锁，用于守护任务队列
+	// 互斥锁，用于守护任务队列
 	mutex        sync.Mutex
 	pendingTasks map[model.ServiceEventKey]*serviceUpdateTask
-	//最后一次更新时间，存放的是*time.Time
+	// 最后一次更新时间，存放的是*time.Time
 	lastRecvTime atomic.Value
 
 	// WithTimeout Context return cancel()
 	cancel context.CancelFunc
 }
 
-//关闭流并释放连接
+// CloseStream 关闭流并释放连接
 func (s *StreamingClient) CloseStream(closeSend bool) bool {
 	endStreamOk := atomic.CompareAndSwapUint32(&s.endStream, 0, 1)
 	if endStreamOk {
-		//进行closeStream操作
+		// 进行closeStream操作
 		if closeSend {
 			log.GetNetworkLogger().Debugf(
 				"%s, connection %s(%s) reqID %s start to closeSend",
 				s.connector.ServiceConnector.GetSDKContextID(), s.connection.ConnID, s.reqID, s.connection.Address)
-			if err := s.discoverClient.CloseSend(); nil != err {
-				//这里一般不会出现错误，只是为了处理告警
+			if err := s.discoverClient.CloseSend(); err != nil {
+				// 这里一般不会出现错误，只是为了处理告警
 				log.GetNetworkLogger().Warnf("%s, fail to doCloseSend, error is %v",
 					s.connector.ServiceConnector.GetSDKContextID(), err)
 			}
@@ -415,14 +418,14 @@ func (s *StreamingClient) CloseStream(closeSend bool) bool {
 	return endStreamOk
 }
 
-//获取最后一次更新时间
+// 获取最后一次更新时间
 func (s *StreamingClient) getLastRecvTime() *time.Time {
 	lastRecvTimeValue := s.lastRecvTime.Load()
 	lastRecvTime := lastRecvTimeValue.(time.Time)
 	return &lastRecvTime
 }
 
-//获取回调函数
+// 获取回调函数
 func (s *StreamingClient) getSvcUpdateTasks(key *model.ServiceEventKey) (tasks []*serviceUpdateTask) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -440,42 +443,41 @@ func (s *StreamingClient) getSvcUpdateTasks(key *model.ServiceEventKey) (tasks [
 	return tasks
 }
 
-//设置流关闭
-//func (s *StreamingClient) markEndStream() bool {
+// 设置流关闭
+// func (s *StreamingClient) markEndStream() bool {
 //	endStreamOk := atomic.CompareAndSwapUint32(&s.endStream, 0, 1)
 //	if endStreamOk {
 //		log.GetBaseLogger().Debugf("stream %s mark end", s.reqID)
 //	}
 //	return endStreamOk
-//}
+// }
 
-//设置流关闭
+// IsEndStream 设置流关闭
 func (s *StreamingClient) IsEndStream() bool {
 	return atomic.LoadUint32(&s.endStream) > 0
 }
 
-//校验Recv收到的错误和应答，看看这次请求是否成功，需要怎么上报discover的实例状态
-//返回值：report，是否需要上报失败；code，上报的返回码；discoverErr，转化成SDKError，不为空说明这次Recv失败了
+// 校验Recv收到的错误和应答，看看这次请求是否成功，需要怎么上报discover的实例状态
+// 返回值：report，是否需要上报失败；code，上报的返回码；discoverErr，转化成SDKError，不为空说明这次Recv失败了
 func (s *StreamingClient) checkErrorReport(grpcErr error, resp *namingpb.DiscoverResponse) (report bool, code int32,
 	discoverErr model.SDKError) {
-	//如果接收的时候出现了错误，那么根据错误进行判断
+	// 如果接收的时候出现了错误，那么根据错误进行判断
 	if grpcErr != nil {
 		closeBySelf := s.CloseStream(false)
 		discoverErr = model.NewSDKError(model.ErrCodeInvalidResponse, grpcErr,
 			"invalid response from %s(%s), reqID %s",
 			s.connection.ConnID, s.connection.Address, s.reqID)
-		//由doSend关闭了连接
+		// 由doSend关闭了连接
 		if !closeBySelf {
-			//如果doSend发现有错误，allTaskTimeout或者idle，那么上报超时错误
+			// 如果doSend发现有错误，allTaskTimeout或者idle，那么上报超时错误
 			if atomic.LoadUint32(&s.hasError) == 1 {
 				return true, int32(model.ErrorCodeRpcTimeout), discoverErr
-			} else {
-				//如果doSend没发现错误，也进行了CloseStream，那么就是进行了切换连接，不进行上报
-				return false, 0, discoverErr
 			}
+			// 如果doSend没发现错误，也进行了CloseStream，那么就是进行了切换连接，不进行上报
+			return false, 0, discoverErr
 		}
-		//如果receiveAndNotify由于错误关闭了streamingClient，那么就是由于Recv过程中出现了错误，
-		//现在统一返回ErrCodeInvalidServerResponse，表示discover没有返回正常的数据
+		// 如果receiveAndNotify由于错误关闭了streamingClient，那么就是由于Recv过程中出现了错误，
+		// 现在统一返回ErrCodeInvalidServerResponse，表示discover没有返回正常的数据
 		return true, int32(model.ErrCodeInvalidServerResponse), discoverErr
 	}
 	msgErr := pb.ValidateMessage(nil, resp)
@@ -489,7 +491,7 @@ func (s *StreamingClient) checkErrorReport(grpcErr error, resp *namingpb.Discove
 	return false, 0, nil
 }
 
-//使用streamClient进行收包，并更新服务信息
+// 使用streamClient进行收包，并更新服务信息
 func (s *StreamingClient) receiveAndNotify() {
 	log.GetBaseLogger().Infof("%s, receiveAndNotify of streamingClient %s start to receive message",
 		s.connector.ServiceConnector.GetSDKContextID(), s.reqID)
@@ -502,9 +504,9 @@ func (s *StreamingClient) receiveAndNotify() {
 				s.connector.ServiceConnector.GetSDKContextID(), s.connection, s.reqID, grpcErr)
 		}
 		report, code, discoverErr := s.checkErrorReport(grpcErr, resp)
-		//处理与discover连接出现的问题
+		// 处理与discover连接出现的问题
 		if nil != discoverErr {
-			//grpc请求有问题，上报connection down
+			// grpc请求有问题，上报connection down
 			s.connector.connManager.ReportConnectionDown(s.connection.ConnID)
 			updateTasks := s.getSvcUpdateTasks(nil)
 			if len(updateTasks) > 0 {
@@ -515,13 +517,13 @@ func (s *StreamingClient) receiveAndNotify() {
 					s.connector.retryUpdateTask(updateTask, discoverErr, false)
 				}
 			}
-			//出现了错误，退出收包协程
+			// 出现了错误，退出收包协程
 			log.GetBaseLogger().Infof("%s, receiveAndNotify of streamClient %s terminated",
 				s.connector.ServiceConnector.GetSDKContextID(), s.reqID)
 			return
 		}
 		logDiscoverResponse(resp, s.connection)
-		//触发回调
+		// 触发回调
 		svcKey := &model.ServiceEventKey{
 			ServiceKey: model.ServiceKey{
 				Namespace: resp.GetService().GetNamespace().GetValue(),
@@ -529,21 +531,21 @@ func (s *StreamingClient) receiveAndNotify() {
 			},
 			Type: pb.GetEventType(resp.Type),
 		}
-		//获取服务的回调列表
+		// 获取服务的回调列表
 		tasks := s.getSvcUpdateTasks(svcKey)
 		if len(tasks) > 0 {
-			//执行正常回调操作
+			// 执行正常回调操作
 			updateTask := tasks[0]
 			updateTask.lastUpdateTime.Store(time.Now())
 			atomic.AddUint64(&updateTask.successUpdates, 1)
-			//g.reportCallStatus(curClient, updateTask, nil, true)
-			//触发回调事件
+			// g.reportCallStatus(curClient, updateTask, nil, true)
+			// 触发回调事件
 			svcEvent, discoverCode := discoverResponseToEvent(resp, updateTask.ServiceEventKey, s.connection)
-			//没有返回grpc错误，返回的消息是合法且不是返回了500错误，认为这次调用成功了
+			// 没有返回grpc错误，返回的消息是合法且不是返回了500错误，认为这次调用成功了
 			s.connector.connManager.ReportSuccess(s.connection.ConnID, int32(discoverCode), GetUpdateTaskRequestTime(updateTask))
 			svcDeleted := updateTask.handler.OnServiceUpdate(svcEvent)
 			if !svcDeleted {
-				//服务如果没有被删除，则添加后续轮询
+				// 服务如果没有被删除，则添加后续轮询
 				s.connector.addUpdateTaskSet(updateTask)
 			}
 		} else {
@@ -553,8 +555,8 @@ func (s *StreamingClient) receiveAndNotify() {
 	}
 }
 
-//检查链接是否可用，返回false代表链接不可用，需要新建连接
-//连接如果可用，则把task加入连接回调列表
+// 检查链接是否可用，返回false代表链接不可用，需要新建连接
+// 连接如果可用，则把task加入连接回调列表
 func (g *DiscoverConnector) checkStreamingClientAvailable(
 	streamingClient *StreamingClient, task *serviceUpdateTask) bool {
 	if nil == streamingClient {
@@ -566,7 +568,7 @@ func (g *DiscoverConnector) checkStreamingClientAvailable(
 	streamingClient.mutex.Lock()
 	defer streamingClient.mutex.Unlock()
 	if nil == streamingClient.pendingTasks {
-		//队列已经清空，证明stream已经出问题，无需继续发送
+		// 队列已经清空，证明stream已经出问题，无需继续发送
 		return false
 	}
 	taskType := atomic.LoadUint32(&task.longRun)
@@ -585,8 +587,8 @@ func (g *DiscoverConnector) checkStreamingClientAvailable(
 	streamingClient.pendingTasks[task.ServiceEventKey] = task
 	return true
 	//
-	//var available = false
-	//if !streamingClient.isEndStream() {
+	// var available = false
+	// if !streamingClient.isEndStream() {
 	//	streamingClient.mutex.Lock()
 	//	if !streamingClient.isEndStream() {
 	//		taskType := atomic.LoadUint32(&task.longRun)
@@ -606,20 +608,20 @@ func (g *DiscoverConnector) checkStreamingClientAvailable(
 	//		available = true
 	//	}
 	//	streamingClient.mutex.Unlock()
-	//}
-	//return available
+	// }
+	// return available
 }
 
-//创建新的客户端数据流
+// 创建新的客户端数据流
 func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient *StreamingClient, err error) {
-	//构造新的streamingClient
+	// 构造新的streamingClient
 	streamingClient = &StreamingClient{
 		pendingTasks: make(map[model.ServiceEventKey]*serviceUpdateTask, 0),
 		connector:    g,
 	}
 	streamingClient.connection, err = g.connManager.GetConnection(OpKeyDiscover, task.targetCluster)
 	taskType := atomic.LoadUint32(&task.longRun)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get connection of %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), task.targetCluster, err)
 		goto finally
@@ -627,7 +629,7 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 	streamingClient.reqID = NextDiscoverReqID()
 	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(streamingClient.reqID,
 		streamingClient.connection, 0)
-	if nil != err {
+	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get streaming client from %s, reqID %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), streamingClient.connection, streamingClient.reqID, err)
 		goto finally
@@ -638,13 +640,13 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 		log.GetNetworkLogger().Infof("%s, newStream: add first or retry task %s to new streamingClient %s pendingTasks",
 			g.ServiceConnector.GetSDKContextID(), task, streamingClient.reqID)
 	}
-	//这里面还没有发给接收线程，都是单线程操作，所以不用加锁
+	// 这里面还没有发给接收线程，都是单线程操作，所以不用加锁
 	streamingClient.pendingTasks[task.ServiceEventKey] = task
 	streamingClient.lastRecvTime.Store(time.Now())
-	//启动streamingClient的接收协程
+	// 启动streamingClient的接收协程
 	go streamingClient.receiveAndNotify()
 finally:
-	if nil != err {
+	if err != nil {
 		if nil != streamingClient.connection {
 			g.connManager.ReportConnectionDown(streamingClient.connection.ConnID)
 			streamingClient.connection.Release(OpKeyDiscover)
@@ -657,7 +659,7 @@ finally:
 	return streamingClient, nil
 }
 
-//是否需要关闭流
+// 是否需要关闭流
 func (g *DiscoverConnector) needCloseSend(lastRecvTime time.Time) bool {
 	if !lastRecvTime.Add(g.connectionIdleTimeout).Before(time.Now()) {
 		return false
@@ -665,7 +667,7 @@ func (g *DiscoverConnector) needCloseSend(lastRecvTime time.Time) bool {
 	return true
 }
 
-//获取超时任务列表
+// 获取超时任务列表
 func (s *StreamingClient) allTaskTimeout(msgTimeout time.Duration) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -673,13 +675,13 @@ func (s *StreamingClient) allTaskTimeout(msgTimeout time.Duration) bool {
 		return false
 	}
 	var allTaskTimeout = true
-	//是否至少检查过一个任务
+	// 是否至少检查过一个任务
 	var taskChecked bool
 	now := time.Now()
 	for _, task := range s.pendingTasks {
 		msgSendTimeValue := task.msgSendTime.Load()
 		if reflect2.IsNil(msgSendTimeValue) {
-			//未发送请求不予处理
+			// 未发送请求不予处理
 			continue
 		}
 		msgSendTime := msgSendTimeValue.(time.Time)
@@ -688,13 +690,13 @@ func (s *StreamingClient) allTaskTimeout(msgTimeout time.Duration) bool {
 		if msgPassTime <= msgTimeout {
 			allTaskTimeout = false
 		} else {
-			//有个任务超时了，进行上报并打印日志
+			// 有个任务超时了，进行上报并打印日志
 			s.connector.connManager.ReportFail(s.connection.ConnID, int32(model.ErrorCodeRpcTimeout), msgPassTime)
 			log.GetNetworkLogger().Infof("%s, allTaskTimeout: task %s timeout, sendTime %v, now %v",
 				s.connector.ServiceConnector.GetSDKContextID(), task, msgSendTime, now)
 		}
 	}
-	//如果一个任务都没有，则不做超时判断
+	// 如果一个任务都没有，则不做超时判断
 	if !taskChecked {
 		allTaskTimeout = false
 	}
@@ -707,7 +709,7 @@ func (s *StreamingClient) allTaskTimeout(msgTimeout time.Duration) bool {
 	return false
 }
 
-//处理已经发生切换的streamClient
+// 处理已经发生切换的streamClient
 func (g *DiscoverConnector) clearSwitchedClient(client *StreamingClient) bool {
 	if !network.IsAvailableConnection(client.connection) {
 		log.GetNetworkLogger().Infof("%s, client connection %s has switched",
@@ -717,13 +719,13 @@ func (g *DiscoverConnector) clearSwitchedClient(client *StreamingClient) bool {
 	return false
 }
 
-//通知并清理所有的超时请求
+// 通知并清理所有的超时请求
 func (g *DiscoverConnector) clearTimeoutClient(client *StreamingClient) bool {
 	isTimeout := client.allTaskTimeout(g.messageTimeout)
 	if !isTimeout {
 		return false
 	}
-	//进行closeStream操作
+	// 进行closeStream操作
 	log.GetBaseLogger().Warnf(
 		"connection %s(%s) reqID %s has pending tasks after timeout %v, start to terminate",
 		client.connection.ConnID, client.reqID, client.connection.Address, g.messageTimeout)
@@ -732,9 +734,9 @@ func (g *DiscoverConnector) clearTimeoutClient(client *StreamingClient) bool {
 	return true
 }
 
-//清理空闲连接，当连接超过一段时间内没有任何收包，则会被清理
+// 清理空闲连接，当连接超过一段时间内没有任何收包，则会被清理
 func (g *DiscoverConnector) clearIdleClient(client *StreamingClient, forceClear bool) {
-	//检查是否超时
+	// 检查是否超时
 	lastRecvTime := client.getLastRecvTime()
 	needClose := g.needCloseSend(*lastRecvTime)
 	if needClose {
@@ -743,15 +745,15 @@ func (g *DiscoverConnector) clearIdleClient(client *StreamingClient, forceClear 
 	if !forceClear && !needClose {
 		return
 	}
-	//进行closeStream操作
+	// 进行closeStream操作
 	client.CloseStream(true)
 }
 
-//异步处理发现事件
+// 异步处理发现事件
 func (g *DiscoverConnector) asyncUpdateTask(
 	streamingClient *StreamingClient, task *serviceUpdateTask) *StreamingClient {
-	//服务发现请求是否已经准备可以处理
-	//需要获取discover集群完毕，以及地域信息获取完毕
+	// 服务发现请求是否已经准备可以处理
+	// 需要获取discover集群完毕，以及地域信息获取完毕
 	var notReadyErr error
 	if !g.connManager.IsReady() {
 		notReadyErr = fmt.Errorf("discover is not ready")
@@ -769,9 +771,9 @@ func (g *DiscoverConnector) asyncUpdateTask(
 		streamingClient = nil
 	}
 	if nil == streamingClient {
-		//构造新的streamingClient
+		// 构造新的streamingClient
 		streamingClient, err = g.newStream(task)
-		if nil != err {
+		if err != nil {
 			log.GetBaseLogger().Errorf("fail to create stream for service %v, error is %+v", task.ServiceEventKey, err)
 			return nil
 		}
@@ -786,25 +788,25 @@ func (g *DiscoverConnector) asyncUpdateTask(
 	}
 	atomic.AddUint64(&task.totalRequests, 1)
 	err = streamingClient.discoverClient.Send(request)
-	if nil != err {
-		//由receive协程来处理该错误的连接
+	if err != nil {
+		// 由receive协程来处理该错误的连接
 		log.GetNetworkLogger().Errorf("%s, asyncUpdateTask: fail to send request for service %s from "+
 			"streamingClient %s, error is %+v", g.ServiceConnector.GetSDKContextID(), task, streamingClient.reqID, err)
 	}
 	return streamingClient
 }
 
-//处理更新任务
+// 处理更新任务
 func (g *DiscoverConnector) processUpdateTask(
 	streamingClient *StreamingClient, task *serviceUpdateTask) *StreamingClient {
 	if !task.needUpdate() {
-		//未到更新时间
+		// 未到更新时间
 		return streamingClient
 	}
 	log.GetBaseLogger().Debugf("start to process task %s", task.ServiceEventKey)
 	if task.targetCluster == config.BuiltinCluster {
 		svcDeleted, err := g.syncUpdateTask(task)
-		if nil != err {
+		if err != nil {
 			g.retryUpdateTask(task, err, true)
 			return streamingClient
 		}
@@ -817,54 +819,54 @@ func (g *DiscoverConnector) processUpdateTask(
 	return g.asyncUpdateTask(streamingClient, task)
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *DiscoverConnector) Destroy() error {
 	g.RunContext.Destroy()
 	return nil
 }
 
 const (
-	//首次执行的任务
+	// 首次执行的任务
 	firstTask uint32 = iota
-	//重试执行的任务
+	// 重试执行的任务
 	retryTask
-	//长稳调度的任务
+	// 长稳调度的任务
 	longRunning
 )
 
-//将longRun状态转化为string
+// 将longRun状态转化为string
 var longRunMap = map[uint32]string{
 	firstTask:   "firstTask",
 	retryTask:   "retryTask",
 	longRunning: "longRunning",
 }
 
-//serviceUpdateTask 服务更新任务
+// serviceUpdateTask 服务更新任务
 type serviceUpdateTask struct {
 	model.ServiceEventKey
-	//标识已经在长期运行的任务
+	// 标识已经在长期运行的任务
 	longRun        uint32
 	updateInterval time.Duration
-	//发起服务的发现的目标cluster
+	// 发起服务的发现的目标cluster
 	targetCluster  config.ClusterType
 	handler        serverconnector.EventHandler
 	msgSendTime    atomic.Value
 	lastUpdateTime atomic.Value
 	totalRequests  uint64
 	successUpdates uint64
-	//到达某个时间点进行重试
+	// 到达某个时间点进行重试
 	retryDeadline <-chan time.Time
-	//已经准备好重试前的准备动作
+	// 已经准备好重试前的准备动作
 	retryLock *sync.Mutex
 }
 
-//将一个更新任务格式化为string
+// String 将一个更新任务格式化为string
 func (s *serviceUpdateTask) String() string {
 	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v, longRun: %s}",
 		s.Namespace, s.Service, s.Type, longRunMap[atomic.LoadUint32(&s.longRun)])
 }
 
-//needUpdate 返回当前任务是否到达了更新间隔
+// needUpdate 返回当前任务是否到达了更新间隔
 func (s *serviceUpdateTask) needUpdate() bool {
 	if atomic.LoadUint32(&s.longRun) == firstTask {
 		return true
@@ -878,19 +880,19 @@ func (s *serviceUpdateTask) needUpdate() bool {
 	return !curTime.Before(updateTime)
 }
 
-//needLog 是否需要将当前任务定时打印到日志
+// needLog 是否需要将当前任务定时打印到日志
 func (s *serviceUpdateTask) needLog() bool {
 	lastUpdateTimeValue := s.lastUpdateTime.Load()
 	if reflect2.IsNil(lastUpdateTimeValue) {
 		return true
 	}
 	curTime := time.Now()
-	//如果在三倍的更新时间之内都没有更新的话，打印一次日志
+	// 如果在三倍的更新时间之内都没有更新的话，打印一次日志
 	updateTime := lastUpdateTimeValue.(time.Time).Add(3 * s.updateInterval)
 	return !curTime.Before(updateTime)
 }
 
-//转换为服务发现的请求对象
+// 转换为服务发现的请求对象
 func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
 	var request = &namingpb.DiscoverRequest{
 		Type: pb.GetProtoRequestType(s.Type),
@@ -900,7 +902,7 @@ func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
 			Revision:  &wrappers.StringValue{Value: s.handler.GetRevision()},
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
-		//网格请求
+		// 网格请求
 		MeshConfig: s.handler.GetMeshConfig(),
 		Mesh: &namingpb.Mesh{
 			Id: &wrappers.StringValue{Value: s.Service},
@@ -914,8 +916,8 @@ func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
 	return request
 }
 
-//RegisterServiceHandler 注册服务监听器
-//异常场景：当key不合法或者sdk已经退出过程中，则返回error
+// RegisterServiceHandler 注册服务监听器
+// 异常场景：当key不合法或者sdk已经退出过程中，则返回error
 func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnector.ServiceEventHandler) error {
 	updateTask := &serviceUpdateTask{
 		handler:       svcEventHandler.Handler,
@@ -926,7 +928,7 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	updateTask.Service = svcEventHandler.Service
 	updateTask.Namespace = svcEventHandler.Namespace
 	updateTask.Type = svcEventHandler.Type
-	//增加随机秒数[0~3)，为了让更新不要聚集
+	// 增加随机秒数[0~3)，为了让更新不要聚集
 	mu.Lock()
 	diffSecond := g.scalableRand.Intn(3)
 	mu.Unlock()
@@ -936,7 +938,7 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	return g.addFirstTask(updateTask)
 }
 
-//往队列插入任务
+// 往队列插入任务
 func (g *DiscoverConnector) addFirstTask(updateTask *serviceUpdateTask) error {
 	task := &clientTask{updateTask: updateTask, op: opAddListener}
 	log.GetBaseLogger().Infof("%s, addFirstTask: start to add first task for %s",
@@ -946,15 +948,15 @@ func (g *DiscoverConnector) addFirstTask(updateTask *serviceUpdateTask) error {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil,
 			"RegisterServiceHandler: serverConnector has been destroyed")
 	case g.taskChannel <- task:
-		//这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
+		// 这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
 		log.GetBaseLogger().Infof("%s, addFirstTask: finish add first task for %s",
 			g.ServiceConnector.GetSDKContextID(), updateTask)
 	}
 	return nil
 }
 
-//DeRegisterEventHandler 反注册事件监听器
-//异常场景：当sdk已经退出过程中，则返回error
+// DeRegisterServiceHandler 反注册事件监听器
+// 异常场景：当sdk已经退出过程中，则返回error
 func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 	updateTask := &serviceUpdateTask{}
 	updateTask.Service = key.Service
@@ -970,14 +972,14 @@ func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey)
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil,
 			"DeRegisterServiceHandler: serverConnector has been destroyed")
 	case g.taskChannel <- task:
-		//这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
+		// 这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
 		log.GetBaseLogger().Infof("%s, DeRegisterServiceHandler: finish add deregister task %s",
 			g.ServiceConnector.GetSDKContextID(), updateTask)
 	}
 	return nil
 }
 
-// 更新服务端地址
+// UpdateServers 更新服务端地址
 // 异常场景：当地址列表为空，或者地址全部连接失败，则返回error，调用者需进行重试
 func (g *DiscoverConnector) UpdateServers(key *model.ServiceEventKey) error {
 	if nil != g.connManager {
@@ -988,12 +990,12 @@ func (g *DiscoverConnector) UpdateServers(key *model.ServiceEventKey) error {
 	return nil
 }
 
-//同步进行服务或规则发现
+// 同步进行服务或规则发现
 func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error) {
 	var curTime = time.Now()
-	//获取服务发现server连接
+	// 获取服务发现server连接
 	connection, err := g.connManager.GetConnection(OpKeyDiscover, task.targetCluster)
-	if nil != err {
+	if err != nil {
 		return false, err
 	}
 	defer connection.Release(OpKeyDiscover)
@@ -1002,7 +1004,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	if cancel != nil {
 		defer cancel()
 	}
-	if nil != err {
+	if err != nil {
 		return false, err
 	}
 	log.GetBaseLogger().Debugf("sync stream %s created, connection %s, timeout %v",
@@ -1011,20 +1013,20 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	task.msgSendTime.Store(curTime)
 	atomic.AddUint64(&task.totalRequests, 1)
 	err = discoverClient.Send(request)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to send request for service %v, error is %+v", task.ServiceEventKey, err)
 		return false, err
 	}
 	resp, err := discoverClient.Recv()
 	var sdkErr model.SDKError
-	if nil != err {
+	if err != nil {
 		sdkErr = model.NewSDKError(model.ErrCodeNetworkError, err,
 			"error while receiving from %s(%s), reqID %s",
 			connection.ConnID, connection.Address, reqID)
 	} else {
 		err = pb.ValidateMessage(nil, resp)
-		if nil != err {
+		if err != nil {
 			sdkErr = model.NewSDKError(model.ErrCodeInvalidResponse, err,
 				"invalid response from %s(%s), reqID %s",
 				connection.ConnID, connection.Address, reqID)
@@ -1033,7 +1035,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	if nil != sdkErr {
 		return false, sdkErr
 	}
-	//打印应答报文
+	// 打印应答报文
 	logDiscoverResponse(resp, connection)
 	svcEvent, _ := discoverResponseToEvent(resp, task.ServiceEventKey, connection)
 	atomic.AddUint64(&task.successUpdates, 1)

@@ -19,19 +19,21 @@ package ratelimit
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
 
-//网络异常测试套
+// 网络异常测试套
 type NetworkFailTestingSuite struct {
 	CommonRateLimitSuite
 	mockRateLimitServer *MockRateLimitServer
@@ -39,33 +41,33 @@ type NetworkFailTestingSuite struct {
 	mockGRPCListener    net.Listener
 }
 
-//用例名称
+// 用例名称
 func (rt *NetworkFailTestingSuite) GetName() string {
 	return "NetworkFailTestingSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (rt *NetworkFailTestingSuite) SetUpSuite(c *check.C) {
 	rt.CommonRateLimitSuite.SetUpSuite(c, false)
-	//限流打桩服务
+	// 限流打桩服务
 	rt.mockRateLimitServer = NewMockRateLimitServer()
 	rt.mockGRPCServer = grpc.NewServer()
 	rlimitV2.RegisterRateLimitGRPCV2Server(rt.mockGRPCServer, rt.mockRateLimitServer)
 	var err error
 	rt.mockGRPCListener, err = net.Listen(
 		"tcp", fmt.Sprintf("%s:%d", mockRateLimitHost, mockRateLimitPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening mock rateLimitServer: %v", err))
 	}
 	go func() {
 		rt.mockGRPCServer.Serve(rt.mockGRPCListener)
 	}()
-	//打桩的server
+	// 打桩的server
 	rLimitSvc, ok := rt.services[mockRateLimitName]
 	c.Assert(ok, check.Equals, true)
 	token := rLimitSvc.GetToken().GetValue()
 	rt.mockServer.RegisterServerInstance(mockRateLimitHost, mockRateLimitPort, mockRateLimitName, token, true)
-	//无法连通的server
+	// 无法连通的server
 	rLimitSvc, ok = rt.services[NotExistsRateLimitName]
 	c.Assert(ok, check.Equals, true)
 	token = rLimitSvc.GetToken().GetValue()
@@ -73,13 +75,13 @@ func (rt *NetworkFailTestingSuite) SetUpSuite(c *check.C) {
 		mockRateLimitHost, NotExistRateLimitPort, NotExistsRateLimitName, token, true)
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (rt *NetworkFailTestingSuite) TearDownSuite(c *check.C) {
 	rt.mockGRPCServer.Stop()
 	rt.CommonRateLimitSuite.TearDownSuite(c, rt)
 }
 
-//测试初始化接口4xx失败
+// 测试初始化接口4xx失败
 func (rt *NetworkFailTestingSuite) TestInit4xx(c *check.C) {
 	ctxCount := 2
 	rt.mockRateLimitServer.MarkOperation4XX(OperationInit)
@@ -117,11 +119,11 @@ func (rt *NetworkFailTestingSuite) TestInit4xx(c *check.C) {
 	}
 	wg.Wait()
 	fmt.Printf("passed amount is %d\n", passed)
-	//远端初始化失败，使用本地配额
+	// 远端初始化失败，使用本地配额
 	c.Assert(passed >= 200 && passed <= 400, check.Equals, true)
 }
 
-//测试上报接口延迟较高
+// 测试上报接口延迟较高
 func (rt *NetworkFailTestingSuite) TestDelayReturn(c *check.C) {
 	ctxCount := 2
 	rt.mockRateLimitServer.MarkOperationDelay(OperationInit)
@@ -164,11 +166,11 @@ func (rt *NetworkFailTestingSuite) TestDelayReturn(c *check.C) {
 	}
 	wg.Wait()
 	fmt.Printf("passed amount is %d\n", passed)
-	//远端初始化失败，使用本地配额
+	// 远端初始化失败，使用本地配额
 	c.Assert(passed >= 400 && passed <= 700, check.Equals, true)
 }
 
-//测试上报接口不返回
+// 测试上报接口不返回
 func (rt *NetworkFailTestingSuite) TestReportNoReturn(c *check.C) {
 	ctxCount := 2
 	rt.mockRateLimitServer.MarkOperationNoReturn(OperationReport)
@@ -210,11 +212,11 @@ func (rt *NetworkFailTestingSuite) TestReportNoReturn(c *check.C) {
 	}
 	wg.Wait()
 	fmt.Printf("passed amount is %d\n", passed)
-	//远端初始化失败，使用本地配额
+	// 远端初始化失败，使用本地配额
 	c.Assert(passed >= 100 && passed <= 220, check.Equals, true)
 }
 
-//测试节点down机
+// 测试节点down机
 func (rt *NetworkFailTestingSuite) TestConnectFail(c *check.C) {
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
@@ -231,6 +233,6 @@ func (rt *NetworkFailTestingSuite) TestConnectFail(c *check.C) {
 	}
 	timePassed := time.Since(startTime)
 	fmt.Printf("passed amount is %d, timePassed is %v\n", passed, timePassed)
-	//远端初始化失败，使用本地配额
+	// 远端初始化失败，使用本地配额
 	c.Assert(passed >= 150 && passed <= 300, check.Equals, true)
 }

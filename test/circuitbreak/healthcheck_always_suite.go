@@ -19,36 +19,38 @@ package circuitbreak
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"os"
-	"time"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	checkAlwaysNamespace = "testCheckAlways"
-	//测试的默认服务名
+	// 测试的默认服务名
 	checkAlwaysService = "svcAlways"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	checkAlwaysIPAdress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	checkAlwaysPort = 8008
-	//所有实例数量
+	// 所有实例数量
 	instanceTotal = 5
 )
 
-// HealthCheckTestingSuite 消费者API测试套
+// HealthCheckAlwaysTestingSuite 消费者API测试套
 type HealthCheckAlwaysTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -60,7 +62,7 @@ func (t *HealthCheckAlwaysTestingSuite) GetName() string {
 	return "HealthCheckAlwaysSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -92,7 +94,7 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	mockServer.GenTestInstancesWithHostPort(testService, instanceTotal, "127.0.0.1", 1024)
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -116,7 +118,7 @@ const (
 	healthPort1030 = 1027
 )
 
-// TestTCPDetection 测试持久化探测
+// TestHttpDetectAlways 测试持久化探测
 func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	healthPorts := []int{healthPort1025, healthPort1030}
 	for _, port := range healthPorts {
@@ -137,7 +139,7 @@ func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer sdkCtx.Destroy()
 	consumerAPI := api.NewConsumerAPIByContext(sdkCtx)
-	//随机获取一个实例，并将这个实例作为熔断的目标
+	// 随机获取一个实例，并将这个实例作为熔断的目标
 	request := &api.GetInstancesRequest{}
 	request.Namespace = checkAlwaysNamespace
 	request.Service = checkAlwaysService
@@ -148,8 +150,8 @@ func (t *HealthCheckAlwaysTestingSuite) TestHttpDetectAlways(c *check.C) {
 	time.Sleep(10 * time.Second)
 	resp, err = consumerAPI.GetInstances(request)
 	c.Assert(err, check.IsNil)
-	//for _, instance := range resp.Instances {
+	// for _, instance := range resp.Instances {
 	//	fmt.Printf("instance :%d, value is %v\n", instance.GetPort(), instance.GetCircuitBreakerStatus())
-	//}
+	// }
 	c.Assert(len(resp.Instances), check.Equals, len(healthPorts))
 }

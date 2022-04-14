@@ -19,14 +19,15 @@ package localchannel
 
 import (
 	"errors"
+	"sync"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/plugin/subscribe/utils"
-	"sync"
-	"time"
 )
 
 var (
@@ -39,7 +40,7 @@ type SubscribeLocalChannel struct {
 
 	registerServices []model.ServiceKey
 
-	eventChannelMap sync.Map //map[model.ServiceKey]chan model.SubScribeEvent
+	eventChannelMap sync.Map // map[model.ServiceKey]chan model.SubScribeEvent
 	lock            *sync.Mutex
 }
 
@@ -137,7 +138,7 @@ func (s *SubscribeLocalChannel) WatchService(key model.ServiceKey) (interface{},
 	return value, nil
 }
 
-//注册插件和配置
+// init 注册插件和配置
 func init() {
 	plugin.RegisterConfigurablePlugin(&SubscribeLocalChannel{}, &Config{})
 }

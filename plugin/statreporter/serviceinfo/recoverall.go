@@ -18,17 +18,19 @@
 package serviceinfo
 
 import (
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/uuid"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -36,16 +38,16 @@ const (
 	RecoverAll   uint32 = 1
 )
 
-//在一个cluster的全死全活状态发生改变时触发
+// onRecoverAllChanged 在一个cluster的全死全活状态发生改变时触发
 func (s *Reporter) onRecoverAllChanged(event *common.PluginEvent) error {
 	cluster := event.EventObject.(*model.Cluster)
 	svcLocalValue := cluster.GetClusters().GetServiceInstances().(*pb.ServiceInstancesInProto).GetServiceLocalValue()
-	//if svcLocalValue.GetServiceDataByPluginId(s.ID()) == nil {
+	// if svcLocalValue.GetServiceDataByPluginId(s.ID()) == nil {
 	//	return nil
-	//}
+	// }
 	serviceRecoverAllMap := svcLocalValue.GetServiceDataByPluginId(s.ID()).(*serviceRecoverAllMap)
 	clusterRecord := s.getClusterRecoverAllRecord(serviceRecoverAllMap.clusterRecords, cluster.ClusterKey, true)
-	//如果现在cluster是全死全活，并且之前不是全死全活状态，那么添加一个开始全死全活的记录
+	// 如果现在cluster是全死全活，并且之前不是全死全活状态，那么添加一个开始全死全活的记录
 	if cluster.HasLimitedInstances && atomic.CompareAndSwapUint32(&clusterRecord.currentStatus, NoRecoverAll, RecoverAll) {
 		serviceRecoverAllMap.changeList.addStatus(&recoverAllChange{clusterInfo: clusterRecord.clusterInfo,
 			statusChange: monitorpb.RecoverAllStatus_Start,
@@ -53,7 +55,7 @@ func (s *Reporter) onRecoverAllChanged(event *common.PluginEvent) error {
 		}, s.globalCtx.Now())
 		printRecoverAllCluster(cluster, true)
 	}
-	//如果现在cluster不是全死全活，并且之前的记录是全死全活，那么添加一个结束全死全活的记录
+	// 如果现在cluster不是全死全活，并且之前的记录是全死全活，那么添加一个结束全死全活的记录
 	if !cluster.HasLimitedInstances &&
 		atomic.CompareAndSwapUint32(&clusterRecord.currentStatus, RecoverAll, NoRecoverAll) {
 		serviceRecoverAllMap.changeList.addStatus(&recoverAllChange{
@@ -63,12 +65,12 @@ func (s *Reporter) onRecoverAllChanged(event *common.PluginEvent) error {
 		}, s.globalCtx.Now())
 		printRecoverAllCluster(cluster, false)
 	}
-	//更新这个cluster的最后检测时间
+	// 更新这个cluster的最后检测时间
 	clusterRecord.lastCheckTime.Store(s.globalCtx.Now())
 	return nil
 }
 
-//打印全死全活cluster的信息
+// printRecoverAllCluster 打印全死全活cluster的信息
 func printRecoverAllCluster(cluster *model.Cluster, recoverAllStart bool) {
 	allInstances := cluster.GetClusterValue().GetAllInstanceSet()
 	selectableInstances := cluster.GetClusterValue().GetInstancesSet(true, false)
@@ -87,7 +89,7 @@ func printRecoverAllCluster(cluster *model.Cluster, recoverAllStart bool) {
 	}
 }
 
-//清空过期的clusterkey
+// cleanExpiredClusterRecoverAllRecord 清空过期的clusterkey
 func (s *Reporter) cleanExpiredClusterRecoverAllRecord() {
 	now := s.globalCtx.Now()
 	registry := s.registry
@@ -119,7 +121,7 @@ func (s *Reporter) cleanExpiredClusterRecoverAllRecord() {
 	}
 }
 
-//获取或创建某个cluster的全死全活记录
+// getClusterRecoverAllRecord 获取或创建某个cluster的全死全活记录
 func (s *Reporter) getClusterRecoverAllRecord(svc *sync.Map, key model.ClusterKey,
 	createWhenEmpty bool) *clusterRecoverAllCheck {
 	res, ok := svc.Load(key)
@@ -136,7 +138,7 @@ func (s *Reporter) getClusterRecoverAllRecord(svc *sync.Map, key model.ClusterKe
 	return res.(*clusterRecoverAllCheck)
 }
 
-//发送熔断和全死全活记录
+// sendCircuitBreakHistory 发送熔断和全死全活记录
 func (s *Reporter) sendCircuitBreakHistory() {
 	registry := s.registry
 	if nil == registry {
@@ -202,12 +204,12 @@ func (s *Reporter) sendCircuitBreakHistory() {
 			return
 		}
 		err := s.circuitBreakClient.Send(msg)
-		if nil != err {
+		if err != nil {
 			log.GetStatReportLogger().Errorf("fail to report circuitbreak status, id: %s, err %s，"+
 				" monitor server is %s", msg.Id, err.Error(), s.connection.ConnID)
 		}
 		resp, err := s.circuitBreakClient.Recv()
-		if nil != err || resp.Id.GetValue() != msg.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+		if err != nil || resp.Id.GetValue() != msg.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 			log.GetStatReportLogger().Errorf("fail to report circuitbreak status, resp is %v, err is %v,"+
 				" monitor server is %s", resp, err, s.connection.ConnID)
 		} else {
@@ -217,7 +219,7 @@ func (s *Reporter) sendCircuitBreakHistory() {
 	}
 }
 
-//获取当前周期该服务的所有全死全活变化
+// getAllRecoverRecords 获取当前周期该服务的所有全死全活变化
 func (s *Reporter) getAllRecoverRecords(svcInst *pb.ServiceInstancesInProto) []*monitorpb.RecoverAllChange {
 	var res []*monitorpb.RecoverAllChange
 	svcLocalValue := svcInst.GetServiceLocalValue()

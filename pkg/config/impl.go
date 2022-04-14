@@ -23,33 +23,34 @@ import (
 	"log"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"gopkg.in/yaml.v2"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//ConfigurationImpl cl5全局配置
+// ConfigurationImpl cl5全局配置
 type ConfigurationImpl struct {
 	Global   *GlobalConfigImpl   `yaml:"global" json:"global"`
 	Consumer *ConsumerConfigImpl `yaml:"consumer" json:"consumer"`
 	Provider *ProviderConfigImpl `yaml:"provider" json:"provider"`
 }
 
-//GetGlobal cl5.global前缀开头的所有配置项
+// GetGlobal cl5.global前缀开头的所有配置项
 func (c *ConfigurationImpl) GetGlobal() GlobalConfig {
 	return c.Global
 }
 
-//GetConsumer cl5.consumer前缀开头的所有配置项
+// GetConsumer cl5.consumer前缀开头的所有配置项
 func (c *ConfigurationImpl) GetConsumer() ConsumerConfig {
 	return c.Consumer
 }
 
-//GetConsumer consumer前缀开头的所有配置项
+// GetProvider consumer前缀开头的所有配置项
 func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 	return c.Provider
 }
 
-// 全局配置
+// GlobalConfigImpl 全局配置
 type GlobalConfigImpl struct {
 	System          *SystemConfigImpl          `yaml:"system" json:"system"`
 	API             *APIConfigImpl             `yaml:"api" json:"api"`
@@ -57,27 +58,27 @@ type GlobalConfigImpl struct {
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
 }
 
-//获取系统配置
+// GetSystem 获取系统配置
 func (g *GlobalConfigImpl) GetSystem() SystemConfig {
 	return g.System
 }
 
-//GetAPI global.api前缀开头的所有配置项
+// GetAPI global.api前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetAPI() APIConfig {
 	return g.API
 }
 
-//GetServerConnector global.serverConnector前缀开头的所有配置项
+// GetServerConnector global.serverConnector前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetServerConnector() ServerConnectorConfig {
 	return g.ServerConnector
 }
 
-//cl5.global.statReporter前缀开头的所有配置项
+// GetStatReporter cl5.global.statReporter前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 	return g.StatReporter
 }
 
-// 消费者配置
+// ConsumerConfigImpl 消费者配置
 type ConsumerConfigImpl struct {
 	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache" json:"localCache"`
 	ServiceRouter    *ServiceRouterConfigImpl  `yaml:"serviceRouter" json:"serviceRouter"`
@@ -88,37 +89,37 @@ type ConsumerConfigImpl struct {
 	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific" json:"servicesSpecific"`
 }
 
-//GetLocalCache consumer.localCache前缀开头的所有配置
+// GetLocalCache consumer.localCache前缀开头的所有配置
 func (c *ConsumerConfigImpl) GetLocalCache() LocalCacheConfig {
 	return c.LocalCache
 }
 
-//GetServiceRouter consumer.serviceRouter前缀开头的所有配置
+// GetServiceRouter consumer.serviceRouter前缀开头的所有配置
 func (c *ConsumerConfigImpl) GetServiceRouter() ServiceRouterConfig {
 	return c.ServiceRouter
 }
 
-//GetLoadbalancer consumer.loadbalancer前缀开头的所有配置
+// GetLoadbalancer consumer.loadbalancer前缀开头的所有配置
 func (c *ConsumerConfigImpl) GetLoadbalancer() LoadbalancerConfig {
 	return c.Loadbalancer
 }
 
-//GetLoadbalancer consumer.circuitbreaker前缀开头的所有配置
+// GetCircuitBreaker consumer.circuitbreaker前缀开头的所有配置
 func (c *ConsumerConfigImpl) GetCircuitBreaker() CircuitBreakerConfig {
 	return c.CircuitBreaker
 }
 
-// GetHealthCheckConfig get health check config
+// GetHealthCheck get health check config
 func (c *ConsumerConfigImpl) GetHealthCheck() HealthCheckConfig {
 	return c.HealthCheck
 }
 
-//订阅配置
+// GetSubScribe 订阅配置
 func (c *ConsumerConfigImpl) GetSubScribe() SubscribeConfig {
 	return c.Subscribe
 }
 
-//服务独立配置
+// GetServiceSpecific 服务独立配置
 func (c *ConsumerConfigImpl) GetServiceSpecific(namespace string, service string) ServiceSpecificConfig {
 	for _, v := range c.ServicesSpecific {
 		if v.Namespace == namespace && v.Service == service {
@@ -128,46 +129,46 @@ func (c *ConsumerConfigImpl) GetServiceSpecific(namespace string, service string
 	return nil
 }
 
-//系统配置
+// SystemConfigImpl 系统配置
 type SystemConfigImpl struct {
-	//SDK运行模式
+	// SDK运行模式
 	Mode model.RunMode `yaml:"mode" json:"mode"`
-	//服务发现集群
+	// 服务发现集群
 	DiscoverCluster *ServerClusterConfigImpl `yaml:"discoverCluster" json:"discoverCluster"`
-	//健康检查集群
+	// 健康检查集群
 	HealthCheckCluster *ServerClusterConfigImpl `yaml:"healthCheckCluster" json:"healthCheckCluster"`
-	//监控上报集群
+	// 监控上报集群
 	MonitorCluster *ServerClusterConfigImpl `yaml:"monitorCluster" json:"monitorCluster"`
-	//传入的路由规则variables
+	// 传入的路由规则variables
 	Variables map[string]string `yaml:"variables" json:"variables"`
 }
 
-//SDK运行模式，agent还是noagent
+// GetMode SDK运行模式，agent还是noagent
 func (s *SystemConfigImpl) GetMode() model.RunMode {
 	return s.Mode
 }
 
-//设置SDK运行模式
+// SetMode 设置SDK运行模式
 func (s *SystemConfigImpl) SetMode(mode model.RunMode) {
 	s.Mode = mode
 }
 
-//服务发现集群
+// GetDiscoverCluster 服务发现集群
 func (s *SystemConfigImpl) GetDiscoverCluster() ServerClusterConfig {
 	return s.DiscoverCluster
 }
 
-//健康检查集群
+// GetHealthCheckCluster 健康检查集群
 func (s *SystemConfigImpl) GetHealthCheckCluster() ServerClusterConfig {
 	return s.HealthCheckCluster
 }
 
-//监控上报集群
+// GetMonitorCluster 监控上报集群
 func (s *SystemConfigImpl) GetMonitorCluster() ServerClusterConfig {
 	return s.MonitorCluster
 }
 
-//获取一个路由variable
+// GetVariable 获取一个路由variable
 func (s *SystemConfigImpl) GetVariable(key string) (string, bool) {
 	if s.Variables == nil {
 		return "", false
@@ -176,7 +177,7 @@ func (s *SystemConfigImpl) GetVariable(key string) (string, bool) {
 	return value, ok
 }
 
-//设置一个路由variable
+// SetVariable 设置一个路由variable
 func (s *SystemConfigImpl) SetVariable(key, value string) {
 	if s.Variables == nil {
 		s.Variables = make(map[string]string)
@@ -184,46 +185,46 @@ func (s *SystemConfigImpl) SetVariable(key, value string) {
 	s.Variables[key] = value
 }
 
-//取消一个路由variable
+// UnsetVariable 取消一个路由variable
 func (s *SystemConfigImpl) UnsetVariable(key string) {
 	if s.Variables != nil {
 		delete(s.Variables, key)
 	}
 }
 
-//单个服务集群配置
+// ServerClusterConfigImpl 单个服务集群配置
 type ServerClusterConfigImpl struct {
 	Namespace       string         `yaml:"namespace" json:"namespace"`
 	Service         string         `yaml:"service" json:"service"`
 	RefreshInterval *time.Duration `yaml:"refreshInterval" json:"refreshInterval"`
 }
 
-//获取命名空间
+// GetNamespace 获取命名空间
 func (s *ServerClusterConfigImpl) GetNamespace() string {
 	return s.Namespace
 }
 
-//设置命名空间
+// SetNamespace 设置命名空间
 func (s *ServerClusterConfigImpl) SetNamespace(namespace string) {
 	s.Namespace = namespace
 }
 
-//获取服务名
+// GetService 获取服务名
 func (s *ServerClusterConfigImpl) GetService() string {
 	return s.Service
 }
 
-//设置服务名
+// SetService 设置服务名
 func (s *ServerClusterConfigImpl) SetService(service string) {
 	s.Service = service
 }
 
-//获取系统服务刷新间隔
+// GetRefreshInterval 获取系统服务刷新间隔
 func (s *ServerClusterConfigImpl) GetRefreshInterval() time.Duration {
 	return *s.RefreshInterval
 }
 
-//获取系统服务刷新间隔
+// SetRefreshInterval 获取系统服务刷新间隔
 func (s *ServerClusterConfigImpl) SetRefreshInterval(interval time.Duration) {
 	s.RefreshInterval = &interval
 }
@@ -280,7 +281,7 @@ func (a *APIConfigImpl) GetBindIP() string {
 	return a.BindIPValue
 }
 
-//设置默认客户端绑定的网卡地址
+// SetBindIP 设置默认客户端绑定的网卡地址
 func (a *APIConfigImpl) SetBindIP(bindIPValue string) {
 	a.BindIPValue = bindIPValue
 }
@@ -341,7 +342,7 @@ func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
 	var err error
 	if model.IsFile(DefaultConfigFile) {
 		cfg, err = LoadConfigurationByDefaultFile()
-		if nil != err {
+		if err != nil {
 			log.Printf("fail to load default config from %s, err is %v", DefaultConfigFile, err)
 		}
 	}
@@ -351,13 +352,13 @@ func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
 	return NewDefaultConfiguration(nil)
 }
 
-//LoadConfigurationByFile 通过文件加载配置项
+// LoadConfigurationByFile 通过文件加载配置项
 func LoadConfigurationByFile(path string) (*ConfigurationImpl, error) {
 	if !model.IsFile(path) {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "invalid context file %s", path)
 	}
 	buff, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to read context file %s", path)
 	}
 	return LoadConfiguration(buff)
@@ -368,18 +369,18 @@ func LoadConfigurationByDefaultFile() (*ConfigurationImpl, error) {
 	return LoadConfigurationByFile(DefaultConfigFile)
 }
 
-//LoadConfiguration 加载配置项
+// LoadConfiguration 加载配置项
 func LoadConfiguration(buf []byte) (*ConfigurationImpl, error) {
 	var err error
 	cfg := &ConfigurationImpl{}
 	cfg.Init()
 	decoder := yaml.NewDecoder(bytes.NewBuffer(buf))
-	if err = decoder.Decode(cfg); nil != err {
+	if err = decoder.Decode(cfg); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"fail to decode config string")
 	}
 	cfg.SetDefault()
-	if err = cfg.Verify(); nil != err {
+	if err = cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"fail to verify config string")
 	}

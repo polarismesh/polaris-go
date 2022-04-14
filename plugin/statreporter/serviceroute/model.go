@@ -18,14 +18,16 @@
 package serviceroute
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/modern-go/reflect2"
 	"sync"
 	"sync/atomic"
+
+	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-//路由统计数据的key
+// routeStatKey 路由统计数据的key
 type routeStatKey struct {
 	plugId        int32
 	retCode       model.ErrCode
@@ -35,33 +37,33 @@ type routeStatKey struct {
 	status        servicerouter.RouteStatus
 }
 
-//路由规则的key，标识一种路由规则
+// ruleKey 路由规则的key，标识一种路由规则
 type ruleKey struct {
 	plugId        int32
 	srcService    model.ServiceKey
 	routeRuleType servicerouter.RuleType
 }
 
-//路由结果的key，标识一种路由结果
+// resultKey 路由结果的key，标识一种路由结果
 type resultKey struct {
 	errCode    model.ErrCode
 	status     servicerouter.RouteStatus
 	clusterKey model.ClusterKey
 }
 
-//存储服务路由数据的结构
+// routeStatData 存储服务路由数据的结构
 type routeStatData struct {
 	currentStore atomic.Value
 	preStore     atomic.Value
 	store        *sync.Map
 }
 
-//初始化routeStatData
+// init 初始化routeStatData
 func (r *routeStatData) init() {
 	r.currentStore.Store(&sync.Map{})
 }
 
-//添加一个服务路由的统计数据
+// putNewStat 添加一个服务路由的统计数据
 func (r *routeStatData) putNewStat(gauge *servicerouter.RouteGauge) {
 	rule := ruleKey{
 		plugId:        gauge.PluginID,
@@ -78,7 +80,7 @@ func (r *routeStatData) putNewStat(gauge *servicerouter.RouteGauge) {
 	currentData := r.currentStore.Load().(*sync.Map)
 	dataInf, ok := currentData.Load(rule)
 	if !ok {
-		//var value uint32
+		// var value uint32
 		dataInf, _ = currentData.LoadOrStore(rule, &sync.Map{})
 	}
 	dataMap := dataInf.(*sync.Map)
@@ -91,7 +93,7 @@ func (r *routeStatData) putNewStat(gauge *servicerouter.RouteGauge) {
 	atomic.AddUint32(value, 1)
 }
 
-//获取一个服务下面的所有路由规则的统计数据
+// getRouteRecord 获取一个服务下面的所有路由规则的统计数据
 func (r *routeStatData) getRouteRecord() map[ruleKey]map[resultKey]uint32 {
 	var currentMap, preMap map[ruleKey]map[resultKey]uint32
 	currentSyncMap := r.currentStore.Load().(*sync.Map)
@@ -107,7 +109,7 @@ func (r *routeStatData) getRouteRecord() map[ruleKey]map[resultKey]uint32 {
 	return currentMap
 }
 
-//将两个map[ruleKey]map[resultKey]uint32进行结合
+// combineTwoRuleMaps 将两个map[ruleKey]map[resultKey]uint32进行结合
 func combineTwoRuleMaps(currentMap, preMap map[ruleKey]map[resultKey]uint32) {
 	for pk, pv := range preMap {
 		if cv, ok := currentMap[pk]; !ok {
@@ -123,7 +125,7 @@ func combineTwoRuleMaps(currentMap, preMap map[ruleKey]map[resultKey]uint32) {
 	}
 }
 
-//从一个syncMap中获取一个map[ruleKey]map[resultKey]uint32
+// getRouteRecordFromMap 从一个syncMap中获取一个map[ruleKey]map[resultKey]uint32
 func getRouteRecordFromMap(m *sync.Map) map[ruleKey]map[resultKey]uint32 {
 	ruleResultMap := make(map[ruleKey]map[resultKey]uint32)
 	m.Range(func(k, v interface{}) bool {
@@ -133,7 +135,7 @@ func getRouteRecordFromMap(m *sync.Map) map[ruleKey]map[resultKey]uint32 {
 		var ok bool
 		if resultMap, ok = ruleResultMap[key]; !ok {
 			resultMap = make(map[resultKey]uint32)
-			//ruleResultMap[key] = resultMap
+			// ruleResultMap[key] = resultMap
 		}
 		resultSyncMap.Range(func(rk, rv interface{}) bool {
 			value := rv.(*uint32)

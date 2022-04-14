@@ -19,46 +19,49 @@ package subscribe
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/jsonpb"
 	"io/ioutil"
-
-	//namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 	"log"
 	"net"
 	"os"
 	"time"
+
+	"github.com/golang/protobuf/jsonpb"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+
+	// namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	consumerNamespace = "testns"
-	//测试的默认服务名
+	// 测试的默认服务名
 	consumerService = "svc1"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	consumerIPAddress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	consumerPort = 8008
 )
 
 const (
-	//直接过滤的实例数
+	// 直接过滤的实例数
 	normalInstances    = 3
 	isolatedInstances  = 2
 	unhealthyInstances = 1
 	allInstances       = normalInstances + isolatedInstances + unhealthyInstances
 )
 
-//限流相关的用例集
+// 限流相关的用例集
 type EventSubscribeSuit struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -71,7 +74,7 @@ func (t *EventSubscribeSuit) addInstance() []*namingpb.Instance {
 	return t.mockServer.GenTestInstancesWithHostPort(t.testService, 1, consumerIPAddress, 2000)
 }
 
-//初始化测试套件
+// 初始化测试套件
 func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -104,7 +107,7 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -113,7 +116,7 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	}()
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *EventSubscribeSuit) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -196,11 +199,11 @@ func (t *EventSubscribeSuit) TestInstanceEvent(c *check.C) {
 
 func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service, path string) error {
 	buf, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	route := &namingpb.Routing{}
-	if err = jsonpb.UnmarshalString(string(buf), route); nil != err {
+	if err = jsonpb.UnmarshalString(string(buf), route); err != nil {
 		return err
 	}
 	return mockServer.RegisterRouteRule(svc, route)

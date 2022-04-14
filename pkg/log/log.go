@@ -19,72 +19,73 @@ package log
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/hashicorp/go-multierror"
-	"github.com/modern-go/reflect2"
 	"log"
 	"sync/atomic"
+
+	"github.com/hashicorp/go-multierror"
+	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
-	//zap实现的logger
+	// LoggerZap zap实现的logger
 	LoggerZap = "zaplog"
 )
 
-/**
- * @brief 日志对象，封装了日志打印的接口逻辑
- */
+// Logger logger object
+// @brief 日志对象，封装了日志打印的接口逻辑
 type Logger interface {
-	//打印trace级别的日志
+	// Tracef 打印trace级别的日志
 	Tracef(format string, args ...interface{})
-	//打印debug级别的日志
+	// Debugf 打印debug级别的日志
 	Debugf(format string, args ...interface{})
-	//打印info级别的日志
+	// Infof 打印info级别的日志
 	Infof(format string, args ...interface{})
-	//打印warn级别的日志
+	// Warnf 打印warn级别的日志
 	Warnf(format string, args ...interface{})
-	//打印error级别的日志
+	// Errorf 打印error级别的日志
 	Errorf(format string, args ...interface{})
-	//打印fatalf级别的日志
+	// Fatalf 打印fatalf级别的日志
 	Fatalf(format string, args ...interface{})
-	//判断当前级别是否满足日志打印的最低级别
+	// IsLevelEnabled 判断当前级别是否满足日志打印的最低级别
 	IsLevelEnabled(l int) bool
-	//动态设置日志打印级别
+	// SetLogLevel 动态设置日志打印级别
 	SetLogLevel(l int) error
 }
 
-//可以返回日志目录的日志对象
+// DirLogger 可以返回日志目录的日志对象
 type DirLogger interface {
 	Logger
 	GetLogDir() string
 }
 
 const (
-	//跟踪级别
+	// TraceLog 跟踪级别
 	TraceLog int = iota
-	//调试级别
+	// DebugLog 调试级别
 	DebugLog
-	//一般日志级别
+	// InfoLog 一般日志级别
 	InfoLog
-	//警告日志级别
+	// WarnLog 警告日志级别
 	WarnLog
-	//错误日志级别
+	// ErrorLog 错误日志级别
 	ErrorLog
-	//致命级别
+	// FatalLog 致命级别
 	FatalLog
-	//当要禁止日志的时候,可以设置此级别
+	// NoneLog 当要禁止日志的时候,可以设置此级别
 	NoneLog
 
-	//最小日志级别
+	// 最小日志级别
 	minLogLevel = TraceLog
-	//最大日志级别
+	// 最大日志级别
 	maxLogLevel = NoneLog
 )
 
-//全局日志容器对象
+// 全局日志容器对象
 var logContainer = newContainer()
 
-// severityName contains the string representation of each severity.
+// SeverityName severity Name contains the string representation of each severity.
 var SeverityName = []string{
 	TraceLog: "TRACE",
 	DebugLog: "DEBUG",
@@ -107,55 +108,53 @@ func newContainer() *container {
 	return cont
 }
 
-//日志类型
+// 日志类型
 const (
-	//基础日志对象
+	// BaseLogger 基础日志对象
 	BaseLogger = iota
-	//统计日志对象
+	// StatLogger 统计日志对象
 	StatLogger
-	//统计日志上报对象，记录上报日志的情况
+	// StatReportLogger 统计日志上报对象，记录上报日志的情况
 	StatReportLogger
-	//探测日志对象
+	// DetectLogger 探测日志对象
 	DetectLogger
-	//与系统服务进行网络交互的相关日志
+	// NetworkLogger 与系统服务进行网络交互的相关日志
 	NetworkLogger
-	//日志对象总量
+	// MaxLogger 日志对象总量
 	MaxLogger
 )
 
-/**
- * @brief 日志容器接口
- */
+// container 日志容器接口
 type container struct {
 	loggers []*atomic.Value
 }
 
-//设置基础日志对象1
+// SetBaseLogger 设置基础日志对象1
 func (c *container) SetBaseLogger(logger Logger) {
 	c.loggers[BaseLogger].Store(&logger)
 }
 
-//设置统计日志对象
+// SetStatLogger 设置统计日志对象
 func (c *container) SetStatLogger(logger Logger) {
 	c.loggers[StatLogger].Store(&logger)
 }
 
-//设置统计上报日志对象
+// SetStatReportLogger 设置统计上报日志对象
 func (c *container) SetStatReportLogger(logger Logger) {
 	c.loggers[StatReportLogger].Store(&logger)
 }
 
-//设置探测日志对象
+// SetDetectLogger 设置探测日志对象
 func (c *container) SetDetectLogger(logger Logger) {
 	c.loggers[DetectLogger].Store(&logger)
 }
 
-//设置网络交互日志对象
+// SetNetworkLogger 设置网络交互日志对象
 func (c *container) SetNetworkLogger(logger Logger) {
 	c.loggers[NetworkLogger].Store(&logger)
 }
 
-//获取基础日志对象
+// GetBaseLogger 获取基础日志对象
 func (c *container) GetBaseLogger() Logger {
 	value := c.loggers[BaseLogger].Load()
 	if reflect2.IsNil(value) {
@@ -164,7 +163,7 @@ func (c *container) GetBaseLogger() Logger {
 	return *(value.(*Logger))
 }
 
-//获取统计日志对象
+// GetStatLogger 获取统计日志对象
 func (c *container) GetStatLogger() Logger {
 	value := c.loggers[StatLogger].Load()
 	if reflect2.IsNil(value) {
@@ -173,7 +172,7 @@ func (c *container) GetStatLogger() Logger {
 	return *(value.(*Logger))
 }
 
-//获取统计上报日志对象
+// GetStatReportLogger 获取统计上报日志对象
 func (c *container) GetStatReportLogger() Logger {
 	value := c.loggers[StatReportLogger].Load()
 	if reflect2.IsNil(value) {
@@ -182,7 +181,7 @@ func (c *container) GetStatReportLogger() Logger {
 	return *(value.(*Logger))
 }
 
-//获取探测日志对象
+// GetDetectLogger 获取探测日志对象
 func (c *container) GetDetectLogger() Logger {
 	value := c.loggers[DetectLogger].Load()
 	if reflect2.IsNil(value) {
@@ -191,7 +190,7 @@ func (c *container) GetDetectLogger() Logger {
 	return *(value.(*Logger))
 }
 
-//获取网络日志对象
+// GetNetworkLogger 获取网络日志对象
 func (c *container) GetNetworkLogger() Logger {
 	value := c.loggers[NetworkLogger].Load()
 	if reflect2.IsNil(value) {
@@ -200,52 +199,52 @@ func (c *container) GetNetworkLogger() Logger {
 	return *(value.(*Logger))
 }
 
-//全局设置基础日志对象
+// SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
 }
 
-//全局设置统计日志对象
+// SetStatLogger 全局设置统计日志对象
 func SetStatLogger(logger Logger) {
 	logContainer.SetStatLogger(logger)
 }
 
-//全局设置统计上报日志对象
+// SetStatReportLogger 全局设置统计上报日志对象
 func SetStatReportLogger(logger Logger) {
 	logContainer.SetStatReportLogger(logger)
 }
 
-//全局设置探测日志对象
+// SetDetectLogger 全局设置探测日志对象
 func SetDetectLogger(logger Logger) {
 	logContainer.SetDetectLogger(logger)
 }
 
-//全局设置网络交互日志对象
+// SetNetworkLogger 全局设置网络交互日志对象
 func SetNetworkLogger(logger Logger) {
 	logContainer.SetNetworkLogger(logger)
 }
 
-//获取全局基础日志对象
+// GetBaseLogger 获取全局基础日志对象
 func GetBaseLogger() Logger {
 	return logContainer.GetBaseLogger()
 }
 
-//获取全局统计日志对象
+// GetStatLogger 获取全局统计日志对象
 func GetStatLogger() Logger {
 	return logContainer.GetStatLogger()
 }
 
-//获取统计上报日志对象
+// GetStatReportLogger 获取统计上报日志对象
 func GetStatReportLogger() Logger {
 	return logContainer.GetStatReportLogger()
 }
 
-//获取全局探测日志对象
+// GetDetectLogger 获取全局探测日志对象
 func GetDetectLogger() Logger {
 	return logContainer.GetDetectLogger()
 }
 
-//获取全局网络交互日志对象
+// GetNetworkLogger 获取全局网络交互日志对象
 func GetNetworkLogger() Logger {
 	return logContainer.GetNetworkLogger()
 }
@@ -288,11 +287,11 @@ type Options struct {
 	// is to retain at most 1000 logs.
 	RotationMaxBackups int
 
-	//The min log level that actual log output
+	// The min log level that actual log output
 	LogLevel int
 }
 
-//校验日志级别
+// VerifyLogLevel 校验日志级别
 func VerifyLogLevel(level int) error {
 	if level < minLogLevel || level > maxLogLevel {
 		return fmt.Errorf("logLevel must be in [%d, %d], now is %d", minLogLevel, maxLogLevel, level)
@@ -300,7 +299,7 @@ func VerifyLogLevel(level int) error {
 	return nil
 }
 
-//校验日志配置项
+// Verify 校验日志配置项
 func (o Options) Verify() error {
 	var errs error
 	if len(o.RotateOutputPath) == 0 {
@@ -315,54 +314,54 @@ func (o Options) Verify() error {
 	if o.RotationMaxSize == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("RotationMaxSize is required"))
 	}
-	if err := VerifyLogLevel(o.LogLevel); nil != err {
+	if err := VerifyLogLevel(o.LogLevel); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	return errs
 }
 
-//创建logger的函数
+// 创建logger的函数
 type loggerCreator func(string, *Options, int) (Logger, error)
 
-//logger插件集合
+// logger插件集合
 var loggerCreators = make(map[string]loggerCreator, 0)
 
-//注册Logger插件
+// RegisterLoggerCreator 注册Logger插件
 func RegisterLoggerCreator(name string, creator loggerCreator) {
 	loggerCreators[name] = creator
 	if name == DefaultLogger {
-		//初始化默认基础日志
+		// 初始化默认基础日志
 		var errs error
 		var err error
-		if err = ConfigDefaultBaseLogger(name); nil != err {
+		if err = ConfigDefaultBaseLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default base logger %s", name)))
 		}
-		if err = ConfigDefaultStatLogger(name); nil != err {
+		if err = ConfigDefaultStatLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default stat logger %s", name)))
 		}
-		if err = ConfigDefaultDetectLogger(name); nil != err {
+		if err = ConfigDefaultDetectLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default detect logger %s", name)))
 		}
-		if err = ConfigDefaultStatReportLogger(name); nil != err {
+		if err = ConfigDefaultStatReportLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default statReport logger %s", name)))
 		}
-		if err = ConfigDefaultNetworkLogger(name); nil != err {
+		if err = ConfigDefaultNetworkLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default network logger %s", name)))
 		}
-		if nil != errs {
+		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
 	}
 }
 
-//配置日志插件
+// configLogger 配置日志插件
 func configLogger(pluginName string, loggerName string, options *Options, defaultLevel int) (logger Logger, err error) {
-	if err = options.Verify(); nil != err {
+	if err = options.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"configLogger: fail to verify options %+v", *options)
 	}
@@ -371,64 +370,64 @@ func configLogger(pluginName string, loggerName string, options *Options, defaul
 		return nil, model.NewSDKError(model.ErrCodePluginError, nil,
 			"configLogger: plugin name %s not registered", pluginName)
 	}
-	if logger, err = creator(loggerName, options, defaultLevel); nil != err {
+	if logger, err = creator(loggerName, options, defaultLevel); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"configLogger: fail to create logger for plugin %s, options %+v", pluginName, *options)
 	}
 	return logger, nil
 }
 
-//配置基础日志器
+// ConfigBaseLogger 配置基础日志器
 func ConfigBaseLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, baseLoggerName, options, DefaultBaseLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetBaseLogger(logger)
 	return nil
 }
 
-//配置统计日志器
+// ConfigStatLogger 配置统计日志器
 func ConfigStatLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, statLoggerName, options, DefaultStatLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetStatLogger(logger)
 	return nil
 }
 
-//
+// ConfigStatReportLogger 配置统计上报日志器
 func ConfigStatReportLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, statReportLoggerName, options, DefaultStatReportLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetStatReportLogger(logger)
 	return nil
 }
 
-//配置探测日志器
+// ConfigDetectLogger 配置探测日志器
 func ConfigDetectLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, detectLoggerName, options, DefaultDetectLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetDetectLogger(logger)
 	return nil
 }
 
-//配置网络交互日志器
+// ConfigNetworkLogger 配置网络交互日志器
 func ConfigNetworkLogger(pluginName string, options *Options) error {
 	logger, err := configLogger(pluginName, networkLoggerName, options, DefaultNetworkLogLevel)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	SetNetworkLogger(logger)
 	return nil
 }
 
-//配置默认的日志插件
+// CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
 		ErrorOutputPaths:   []string{DefaultErrorOutputPath},
@@ -440,28 +439,28 @@ func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	}
 }
 
-//配置默认的基础日志器
+// ConfigDefaultBaseLogger 配置默认的基础日志器
 func ConfigDefaultBaseLogger(pluginName string) error {
 	return ConfigBaseLogger(pluginName, CreateDefaultLoggerOptions(DefaultBaseLogRotationFile, DefaultBaseLogLevel))
 }
 
-//配置默认的统计日志器
+// ConfigDefaultStatLogger 配置默认的统计日志器
 func ConfigDefaultStatLogger(pluginName string) error {
 	return ConfigStatLogger(pluginName, CreateDefaultLoggerOptions(DefaultStatLogRotationFile, DefaultStatLogLevel))
 }
 
-//配置默认的统计上报日志器
+// ConfigDefaultStatReportLogger 配置默认的统计上报日志器
 func ConfigDefaultStatReportLogger(pluginName string) error {
 	return ConfigStatReportLogger(pluginName, CreateDefaultLoggerOptions(DefaultStatReportLogRotationFile,
 		DefaultStatReportLogLevel))
 }
 
-//配置默认的探测日志器
+// ConfigDefaultDetectLogger 配置默认的探测日志器
 func ConfigDefaultDetectLogger(pluginName string) error {
 	return ConfigDetectLogger(pluginName, CreateDefaultLoggerOptions(DefaultDetectLogRotationFile, DefaultDetectLogLevel))
 }
 
-//配置默认的网络交互日志器
+// ConfigDefaultNetworkLogger 配置默认的网络交互日志器
 func ConfigDefaultNetworkLogger(pluginName string) error {
 	return ConfigNetworkLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultNetworkLogRotationFile, DefaultNetworkLogLevel))

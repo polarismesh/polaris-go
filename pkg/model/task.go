@@ -17,29 +17,31 @@
 
 package model
 
-import "time"
+import (
+	"time"
+)
 
-//任务值类型
+// TaskValue 任务值类型
 type TaskValue interface {
-	//比较两个元素
+	// 比较两个元素
 	CompareTo(interface{}) int
-	//删除前进行检查，返回true才删除，该检查是同步操作
+	// 删除前进行检查，返回true才删除，该检查是同步操作
 	EnsureDeleted(value interface{}) bool
 }
 
-//定时任务处理的数据
+// TaskValues 定时任务处理的数据
 type TaskValues interface {
-	//获取启动状态
+	// 获取启动状态
 	Started() bool
-	//增加数据
-	//对于非立即启动的任务，首次增加value时，协程才开始启动
+	// 增加数据
+	// 对于非立即启动的任务，首次增加value时，协程才开始启动
 	AddValue(key interface{}, value TaskValue)
-	//删除数据
-	//当缓存数据列表为空时，对于非长稳运行的任务，则会结束协程
+	// 删除数据
+	// 当缓存数据列表为空时，对于非长稳运行的任务，则会结束协程
 	DeleteValue(key interface{}, value TaskValue)
 }
 
-//任务处理结果
+// 任务处理结果
 type TaskResult int
 
 const (
@@ -60,46 +62,46 @@ const (
 	EventStop
 )
 
-//回调接口
+// PeriodicCallBack 回调接口
 type PeriodicCallBack interface {
-	//任务回调函数
-	//参数说明：
-	//lastProcessTime：上一次任务处理时间
-	//taskKey：任务数据主键
-	//taskValue: 任务数据值
-	//返回值：
-	//TaskResult：后续是否继续执行，本次是否忽略
+	// 任务回调函数
+	// 参数说明：
+	// lastProcessTime：上一次任务处理时间
+	// taskKey：任务数据主键
+	// taskValue: 任务数据值
+	// 返回值：
+	// TaskResult：后续是否继续执行，本次是否忽略
 	Process(taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) TaskResult
-	//OnTaskEvent 任务事件回调
+	// OnTaskEvent 任务事件回调
 	OnTaskEvent(event TaskEvent)
 }
 
-//周期执行的任务信息（含高优先级任务)
+// PeriodicTask 周期执行的任务信息（含高优先级任务)
 type PeriodicTask struct {
-	//任务标识
+	// 任务标识
 	Name string
-	//定时任务回调
+	// 定时任务回调
 	CallBack PeriodicCallBack
-	//是否需要处理高优先级任务
+	// 是否需要处理高优先级任务
 	TakePriority bool
-	//是否长稳运行
+	// 是否长稳运行
 	LongRun bool
-	//调度周期
+	// 调度周期
 	Period time.Duration
-	//是否延迟启动，为true的话，则会延迟一个周期再执行第一次任务
+	// 是否延迟启动，为true的话，则会延迟一个周期再执行第一次任务
 	DelayStart bool
 }
 
-//调度高优先级任务
+// PriorityCallBack 调度高优先级任务
 type PriorityCallBack interface {
-	//处理任务内容
+	// 处理任务内容
 	Process()
 }
 
-//任务结构
+// PriorityTask 任务结构
 type PriorityTask struct {
-	//任务标识
+	// 任务标识
 	Name string
-	//任务执行回调函数
+	// 任务执行回调函数
 	CallBack PriorityCallBack
 }

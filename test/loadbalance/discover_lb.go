@@ -19,23 +19,25 @@ package loadbalance
 
 import (
 	"fmt"
+	"log"
+	"math"
+	"net"
+	"os"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"math"
-	"net"
-	"os"
 )
 
-//LBTestingSuite 消费者API测试套
+// InnerServiceLBTestingSuite 消费者API测试套
 type InnerServiceLBTestingSuite struct {
 	grpcServer        *grpc.Server
 	grpcListener      net.Listener
@@ -46,7 +48,7 @@ type InnerServiceLBTestingSuite struct {
 	monitorToken string
 }
 
-//设置模拟桩服务器
+// SetUpSuite 设置模拟桩服务器
 func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -65,7 +67,7 @@ func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -76,7 +78,7 @@ func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
 }
 
-//SetUpSuite 结束测试套程序
+// TearDownSuite SetUpSuite 结束测试套程序
 func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -84,6 +86,7 @@ func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
 	}
 }
 
+// TestConnManger 测试连接管理器
 func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
 	service := &namingpb.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},

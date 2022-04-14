@@ -19,17 +19,17 @@ package canary
 
 import (
 	"errors"
+
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/modern-go/reflect2"
 )
 
-const ()
-
-//CanaryRouterFilter 金丝雀过滤器
+// CanaryRouterFilter 金丝雀过滤器
 type CanaryRouterFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -37,17 +37,17 @@ type CanaryRouterFilter struct {
 	recoverAll            bool
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *CanaryRouterFilter) Type() common.Type {
 	return common.TypeServiceRouter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *CanaryRouterFilter) Name() string {
 	return config.DefaultServiceRouterCanary
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *CanaryRouterFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.PluginBase = plugin.NewPluginBase(ctx)
@@ -57,22 +57,22 @@ func (g *CanaryRouterFilter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *CanaryRouterFilter) Destroy() error {
 	return nil
 }
 
-//CanaryRouterFilter 插件模式进行服务实例过滤，并返回过滤后的实例列表
+// CanaryRouterFilter 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 
-	//enableCanary := clusters.IsCanaryEnabled()
-	//if !enableCanary {
+	// enableCanary := clusters.IsCanaryEnabled()
+	// if !enableCanary {
 	//	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	//	cls := model.NewCluster(clusters, withinCluster)
 	//	result.OutputCluster = cls
 	//	return result, nil
-	//}
+	// }
 	canary := routeInfo.Canary
 	var result *servicerouter.RouteResult
 	var err error
@@ -82,7 +82,7 @@ func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.Route
 		result, err = g.noCanaryFilter(clusters, withinCluster)
 	}
 	if err != nil {
-		//返回给外层，靠filterOnly兜底
+		// 返回给外层，靠filterOnly兜底
 		if result == nil || reflect2.IsNil(result) {
 			result = servicerouter.PoolGetRouteResult(g.valueCtx)
 		}
@@ -97,7 +97,7 @@ func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.Route
 	}
 }
 
-//带金丝雀标签的处理过滤
+// 带金丝雀标签的处理过滤
 func (g *CanaryRouterFilter) canaryFilter(canaryValue string,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	availableCluster, status, err := g.canaryAvailableFilter(canaryValue, clusters, withinCluster)
@@ -117,7 +117,7 @@ func (g *CanaryRouterFilter) canaryFilter(canaryValue string,
 	return nil, errors.New("no instances after canaryFilter")
 }
 
-//带金丝雀过滤可用实例
+// 带金丝雀过滤可用实例
 func (g *CanaryRouterFilter) canaryAvailableFilter(canaryValue string, clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*model.Cluster, servicerouter.RouteStatus, error) {
 	targetCluster := model.NewCluster(clusters, withinCluster)
@@ -150,7 +150,7 @@ func (g *CanaryRouterFilter) canaryAvailableFilter(canaryValue string, clusters 
 	return nil, servicerouter.Normal, errors.New("no available instances")
 }
 
-//带金丝雀过滤limited实例
+// 带金丝雀过滤limited实例
 func (g *CanaryRouterFilter) canaryLimitedFilter(canaryValue string, clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*model.Cluster, error) {
 	targetCluster := model.NewCluster(clusters, withinCluster)
@@ -165,7 +165,7 @@ func (g *CanaryRouterFilter) canaryLimitedFilter(canaryValue string, clusters mo
 	return nil, errors.New("no available instances")
 }
 
-//不带金丝雀route
+// 不带金丝雀route
 func (g *CanaryRouterFilter) noCanaryFilter(clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	availableCluster, status, err := g.noCanaryAvailableFilter(clusters, withinCluster)
@@ -185,7 +185,7 @@ func (g *CanaryRouterFilter) noCanaryFilter(clusters model.ServiceClusters,
 	return nil, errors.New("no instances after canaryFilter")
 }
 
-//不带金丝雀过滤可用实例
+// 不带金丝雀过滤可用实例
 func (g *CanaryRouterFilter) noCanaryAvailableFilter(clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*model.Cluster, servicerouter.RouteStatus, error) {
 	notContainMetaKeyCluster := model.NewCluster(clusters, withinCluster)
@@ -210,7 +210,7 @@ func (g *CanaryRouterFilter) noCanaryAvailableFilter(clusters model.ServiceClust
 	return nil, servicerouter.Normal, errors.New("no available instances")
 }
 
-//不带金丝雀过滤limited实例
+// 不带金丝雀过滤limited实例
 func (g *CanaryRouterFilter) noCanaryLimitedFilter(clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*model.Cluster, error) {
 	targetCluster := model.NewCluster(clusters, withinCluster)
@@ -225,12 +225,12 @@ func (g *CanaryRouterFilter) noCanaryLimitedFilter(clusters model.ServiceCluster
 	return nil, errors.New("no available instances")
 }
 
-//是否需要启动规则路由
+// 是否需要启动规则路由
 func (g *CanaryRouterFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	return clusters.IsCanaryEnabled()
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&CanaryRouterFilter{})
 }

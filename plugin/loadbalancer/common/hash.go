@@ -22,19 +22,19 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 )
 
-//计算hash值
+// 计算hash值
 func CalcHashValue(criteria *loadbalancer.Criteria, hashFunc hash.HashFuncWithSeed) (uint64, error) {
 	return CalcHashValueWithSeed(criteria, hashFunc, 0)
 }
 
-//计算hash值
+// 计算hash值
 func CalcHashValueWithSeed(
 	criteria *loadbalancer.Criteria, hashFunc hash.HashFuncWithSeed, seed uint32) (uint64, error) {
 	var hashValue uint64
 	var err error
 	if len(criteria.HashKey) > 0 {
 		hashValue, err = hashFunc(criteria.HashKey, seed)
-		if nil != err {
+		if err != nil {
 			return 0, err
 		}
 	} else {

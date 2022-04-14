@@ -18,10 +18,11 @@
 package plugin
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"sync"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
 type PluginAPI int
@@ -60,7 +61,7 @@ const (
 	MethodWatchService
 )
 
-//将plugin的api编号转化为名字
+// 将plugin的api编号转化为名字
 var methodMap = map[PluginAPI]string{
 	MethodReportAlarm:                 "ReportAlarm",
 	MethodStat:                        "Stat",
@@ -74,7 +75,7 @@ var methodMap = map[PluginAPI]string{
 	MethodLoadPersistedMessage:        "LoadPersistedMessage",
 	MethodGetServiceRouteRule:         "GetServiceRouteRule",
 	MethodLoadServiceRouteRule:        "LoadServiceRouteRule",
-	MethodLoadMeshConfig: 			   "LoadMeshConfig",
+	MethodLoadMeshConfig:              "LoadMeshConfig",
 	MethodGetServiceRateLimitRule:     "GetServiceRateLimitRule",
 	MethodLoadServiceRateLimitRule:    "LoadServiceRateLimitRule",
 	MethodDetectInstance:              "DetectInstance",
@@ -95,14 +96,14 @@ var methodMap = map[PluginAPI]string{
 	MethodWatchService:                "WatchService",
 }
 
-//获取插件api的名字
+// GetPluginAPIName 获取插件api的名字
 func GetPluginAPIName(p PluginAPI) string {
 	return methodMap[p]
 }
 
 type PluginAPIDelayRange int
 
-//API延时范围常量
+// API延时范围常量
 const (
 	PluginApiDelayBelow10 PluginAPIDelayRange = iota
 	PluginApiDelayBelow20
@@ -113,7 +114,7 @@ const (
 	PluginApiDelayMax
 )
 
-//将api的延时范围转化为string
+// String 将api的延时范围转化为string
 func (d PluginAPIDelayRange) String() string {
 	return delayRangeMap[d]
 }
@@ -123,7 +124,7 @@ const (
 	timeSetp      = 10 * time.Millisecond
 )
 
-//将api的延时范围转化为string
+// 将api的延时范围转化为string
 var delayRangeMap = map[PluginAPIDelayRange]string{
 	PluginApiDelayBelow10: "[0ms,10ms)",
 	PluginApiDelayBelow20: "[10ms,20ms)",
@@ -133,7 +134,7 @@ var delayRangeMap = map[PluginAPIDelayRange]string{
 	PluginApiDelayOver50:  "[50ms,)",
 }
 
-//将插件接口调用延时转化为PluginAPIDelayRange
+// GetPluginAPIDelayRange 将插件接口调用延时转化为PluginAPIDelayRange
 func GetPluginAPIDelayRange(delay time.Duration) PluginAPIDelayRange {
 	if delay > maxDelayRange {
 		delay = maxDelayRange
@@ -142,7 +143,7 @@ func GetPluginAPIDelayRange(delay time.Duration) PluginAPIDelayRange {
 	return PluginAPIDelayRange(diff)
 }
 
-//插件接口统计数据
+// PluginMethodGauge 插件接口统计数据
 type PluginMethodGauge struct {
 	model.EmptyInstanceGauge
 	PluginType   common.Type
@@ -153,10 +154,10 @@ type PluginMethodGauge struct {
 	DelayRange   PluginAPIDelayRange
 }
 
-//获取PluginMethodGauge的pool
+// 获取PluginMethodGauge的pool
 var pluginStatPool = &sync.Pool{}
 
-//从pluginStatPool中获取PluginMethodGauge
+// getPluginStatFromPool 从pluginStatPool中获取PluginMethodGauge
 func getPluginStatFromPool() *PluginMethodGauge {
 	value := pluginStatPool.Get()
 	if nil == value {
@@ -165,13 +166,13 @@ func getPluginStatFromPool() *PluginMethodGauge {
 	return value.(*PluginMethodGauge)
 }
 
-//将PluginMethodGauge放回pluginStatPool中
+// PoolPutPluginMethodGauge 将PluginMethodGauge放回pluginStatPool中
 func PoolPutPluginMethodGauge(g *PluginMethodGauge) {
 	pluginStatPool.Put(g)
 }
 
-////上报一次插件接口调用结果
-//func ReportPluginStat(p plugin.Plugin, engine model.Engine, api PluginAPI, err error, delay time.Duration) {
+// //上报一次插件接口调用结果
+// func ReportPluginStat(p plugin.Plugin, engine model.Engine, api PluginAPI, err error, delay time.Duration) {
 //	errCode := model.ErrCodeSuccess
 //	success := true
 //	if err != nil {
@@ -187,4 +188,4 @@ func PoolPutPluginMethodGauge(g *PluginMethodGauge) {
 //	statGauge.DelayRange = GetPluginAPIDelayRange(delay)
 //	engine.SyncReportStat(model.PluginAPIStat, statGauge)
 //	PoolPutPluginMethodGauge(statGauge)
-//}
+// }

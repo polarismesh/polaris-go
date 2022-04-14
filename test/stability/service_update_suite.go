@@ -20,45 +20,47 @@ package stability
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"sync"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"os"
-	"sync"
-	"time"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	svcUpdateNamespace = "testSvcUpdateNs"
-	//测试的默认服务名
+	// 测试的默认服务名
 	svcUpdateServiceSync = "svc1"
-	//测试的健康状态变更服务名
+	// 测试的健康状态变更服务名
 	svcHealthModifyServiceSync = "healthySvc1"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	svcUpdateIPAdress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	svcUpdatePort = 11211
-	//初始化服务实例数
+	// 初始化服务实例数
 	instanceCount = 4
-	//测试多服务首次并发拉取的场景
+	// 测试多服务首次并发拉取的场景
 	svcCount = 50
-	//批量服务名
+	// 批量服务名
 	batchSvcName = "batchSvc%d"
-	//不存在服务名
+	// 不存在服务名
 	notExistSvcName = "notExistSvc"
 )
 
-//服务更新测试套
+// 服务更新测试套
 type ServiceUpdateSuite struct {
 	mutex                 sync.Mutex
 	mockServer            mock.NamingServer
@@ -70,7 +72,7 @@ type ServiceUpdateSuite struct {
 	grpcListener          net.Listener
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -107,7 +109,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	}
 	t.mockServer.RegisterService(healthModifySvc)
 	t.healthModifyInstances = t.mockServer.GenTestInstances(healthModifySvc, instanceCount)
-	//生成批量服务
+	// 生成批量服务
 	for i := 0; i < svcCount; i++ {
 		svc := &namingpb.Service{
 			Name:      &wrappers.StringValue{Value: fmt.Sprintf(batchSvcName, i)},
@@ -119,7 +121,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	}
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -128,7 +130,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *ServiceUpdateSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -137,7 +139,7 @@ func (t *ServiceUpdateSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//获取用例名
+// 获取用例名
 func (t *ServiceUpdateSuite) GetName() string {
 	return "ServiceUpdateSuite"
 }
@@ -148,7 +150,7 @@ const (
 	getWorkerCount = 10
 )
 
-//比较实例列表
+// 比较实例列表
 func compareInstances(expectInstances []*namingpb.Instance, obtainInstances []model.Instance) bool {
 	obtainMap := make(map[string]model.Instance, 0)
 	for _, instance := range obtainInstances {
@@ -172,7 +174,7 @@ func compareInstances(expectInstances []*namingpb.Instance, obtainInstances []mo
 	return true
 }
 
-//测试添加实例是否可以通过同步SDK获取
+// 测试添加实例是否可以通过同步SDK获取
 func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 	log.Printf("Start to TestDynamicAddService")
 	defer util.DeleteDir(util.BackupDir)
@@ -200,7 +202,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 			for {
 				select {
 				case <-ctx.Done():
-					//log.Printf("context TestDynamicAddService exits")
+					// log.Printf("context TestDynamicAddService exits")
 					break ForEnd
 				default:
 					request := &api.GetInstancesRequest{}
@@ -220,7 +222,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 			})
 		}(i)
 	}
-	//启动定时删除服务实例的协程
+	// 启动定时删除服务实例的协程
 	go func() {
 		log.Printf("start worker to set add/delete instance")
 		var instanceBackup *namingpb.Instance
@@ -254,7 +256,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 	wg.Wait()
 }
 
-//修改revision信息
+// 修改revision信息
 func (t *ServiceUpdateSuite) modifyRevision(typ model.EventType) {
 	t.mockServer.SetServiceRevision(t.testServiceToken, uuid.New().String(), model.ServiceEventKey{
 		ServiceKey: model.ServiceKey{
@@ -265,14 +267,14 @@ func (t *ServiceUpdateSuite) modifyRevision(typ model.EventType) {
 	})
 }
 
-//同步运行代码块
+// 同步运行代码块
 func syncRun(mutex *sync.Mutex, handle func()) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	handle()
 }
 
-//测试频繁变更实例健康状态是否会出现不一致问题
+// 测试频繁变更实例健康状态是否会出现不一致问题
 func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 	log.Printf("Start to TestDynamicModifyInstance")
 	defer util.DeleteDir(util.BackupDir)
@@ -303,7 +305,7 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 			for {
 				select {
 				case <-ctx.Done():
-					//log.Printf("context TestDynamicModifyInstance exits")
+					// log.Printf("context TestDynamicModifyInstance exits")
 					break ForEnd
 				default:
 					request := &api.GetInstancesRequest{}
@@ -313,8 +315,8 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 					response, err := consumerAPI.GetInstances(request)
 					c.Assert(err, check.IsNil)
 					instances = response.Instances
-					//instancesCount := len(instances)
-					//log.Printf("instances count %d", instancesCount)
+					// instancesCount := len(instances)
+					// log.Printf("instances count %d", instancesCount)
 					time.Sleep(1 * time.Second)
 				}
 			}
@@ -325,7 +327,7 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 			})
 		}(i)
 	}
-	//启动定时设置健康状态协程
+	// 启动定时设置健康状态协程
 	go func() {
 		log.Printf("start worker to set healthy status")
 		var lastHealthy bool
@@ -347,7 +349,7 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 	wg.Wait()
 }
 
-//批量拉取服务
+// 批量拉取服务
 func batchGetServices(c *check.C, consumerAPI api.ConsumerAPI) {
 	wg := &sync.WaitGroup{}
 	wg.Add(svcCount)
@@ -360,7 +362,7 @@ func batchGetServices(c *check.C, consumerAPI api.ConsumerAPI) {
 			request.Namespace = svcUpdateNamespace
 			request.Service = svcName
 			_, err := consumerAPI.GetOneInstance(request)
-			if nil != err {
+			if err != nil {
 				hasError = true
 				log.Printf("error on service %s:%s, detail: %v", request.Namespace, request.Service, err)
 			}
@@ -370,7 +372,7 @@ func batchGetServices(c *check.C, consumerAPI api.ConsumerAPI) {
 	wg.Wait()
 }
 
-//测试服务超时被删除后，重新拉取的问题
+// 测试服务超时被删除后，重新拉取的问题
 func (t *ServiceUpdateSuite) TestFirstMultipleServices(c *check.C) {
 	log.Printf("Start to TestMultipleServices")
 	defer util.DeleteDir(util.BackupDir)
@@ -381,9 +383,9 @@ func (t *ServiceUpdateSuite) TestFirstMultipleServices(c *check.C) {
 	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	cfg.GetGlobal().GetAPI().SetMaxRetryTimes(5)
-	//设置超时
-	//cfg.GetConsumer().GetLocalCache().SetServiceExpireTime(10 * time.Second)
-	//设置处理一个服务需要50ms
+	// 设置超时
+	// cfg.GetConsumer().GetLocalCache().SetServiceExpireTime(10 * time.Second)
+	// 设置处理一个服务需要50ms
 	t.mockServer.SetMethodInterval(50 * time.Millisecond)
 	var err error
 	var consumerAPI api.ConsumerAPI

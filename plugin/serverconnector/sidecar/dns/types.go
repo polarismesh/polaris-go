@@ -137,7 +137,7 @@ const (
 	TypeMAILA uint16 = 254
 	TypeANY   uint16 = 255
 
-	//polaris
+	// polaris
 	TypePackCtrl             uint16 = 10000
 	TypePolarisDetailErrInfo uint16 = 10001
 	TypePolarsHead           uint16 = 10002

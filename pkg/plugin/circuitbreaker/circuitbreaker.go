@@ -18,32 +18,33 @@
 package circuitbreaker
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"time"
 )
 
-//InstanceCircuitBreaker 【扩展点接口】节点熔断
+// InstanceCircuitBreaker 【扩展点接口】节点熔断
 type InstanceCircuitBreaker interface {
 	plugin.Plugin
-	//进行调用统计，返回当前实例是否需要进行立即熔断
+	// Stat 进行调用统计，返回当前实例是否需要进行立即熔断
 	Stat(model.InstanceGauge) (bool, error)
-	//进行熔断计算，返回需要进行状态转换的实例ID
-	//入参包括全量服务实例，以及当前周期的健康探测结果
+	// CircuitBreak 进行熔断计算，返回需要进行状态转换的实例ID
+	// 入参包括全量服务实例，以及当前周期的健康探测结果
 	CircuitBreak(instances []model.Instance) (*Result, error)
 }
 
-//熔断结算结果
+// Result 熔断结算结果
 type Result struct {
 	Now time.Time
-	//需要开启熔断器的实例ID
+	// 需要开启熔断器的实例ID
 	InstancesToOpen model.HashSet
-	//需要转换成半开状态的实例ID
+	// 需要转换成半开状态的实例ID
 	InstancesToHalfOpen model.HashSet
-	//需要关闭熔断器的实例ID
+	// 需要关闭熔断器的实例ID
 	InstancesToClose model.HashSet
-	//该熔断器在实例进入半开状态后最多允许的请求数
+	// 该熔断器在实例进入半开状态后最多允许的请求数
 	RequestCountAfterHalfOpen int
 }
 
@@ -80,7 +81,7 @@ func (r *Result) IsEmpty() bool {
 	return len(r.InstancesToClose) == 0 && len(r.InstancesToHalfOpen) == 0 && len(r.InstancesToOpen) == 0
 }
 
-//初始化
+// 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeCircuitBreaker, new(InstanceCircuitBreaker))
 }

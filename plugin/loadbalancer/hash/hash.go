@@ -28,41 +28,41 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-//hash负载均衡插件
+// hash负载均衡插件
 type LoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *LoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *LoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerHash
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *LoadBalancer) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	var err error
 	g.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(g.Name()).(*Config)
 	g.hashFunc, err = hash.GetHashFunc(g.cfg.HashFunction)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to init hashFunc")
 	}
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *LoadBalancer) Destroy() error {
 	return nil
 }
 
-//ChooseInstance 获取单个服务实例
+// ChooseInstance 获取单个服务实例
 func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
 	cluster := criteria.Cluster
@@ -78,19 +78,19 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
 	}
 	hashValue, err := lbcommon.CalcHashValue(criteria, g.hashFunc)
-	if nil != err {
+	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to cal hash value")
 	}
 	targetValue := hashValue % uint64(targetInstances.TotalWeight())
 	weightedSlice := targetInstances
-	//按照权重区间来寻找
+	// 按照权重区间来寻找
 	targetIndex := search.BinarySearch(weightedSlice, uint64(targetValue))
 	instanceIndex := targetInstances.GetInstances()[targetIndex]
 	instance = svcInstances.GetInstances()[instanceIndex.Index]
 	return instance, nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterConfigurablePlugin(&LoadBalancer{}, &Config{})
 }

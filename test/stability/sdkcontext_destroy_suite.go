@@ -18,34 +18,36 @@
 package stability
 
 import (
-	"github.com/polarismesh/polaris-go/api"
-	plog "github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/test/util"
-	"gopkg.in/check.v1"
 	"log"
 	"runtime"
 	"strings"
 	"time"
+
+	"gopkg.in/check.v1"
+
+	"github.com/polarismesh/polaris-go/api"
+	plog "github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/test/util"
 )
 
-//SDKContextDestroySuite
+// SDKContextDestroySuite
 type SDKContextDestroySuite struct {
 }
 
-//设置套件
+// 设置套件
 func (s *SDKContextDestroySuite) SetUpSuite(c *check.C) {
 }
 
-//销毁套件
+// 销毁套件
 func (s *SDKContextDestroySuite) TearDownSuite(c *check.C) {
 }
 
-//获取用例名
+// 获取用例名
 func (s *SDKContextDestroySuite) GetName() string {
 	return "SDKContextDestroySuite"
 }
 
-//打印整体堆栈信息
+// 打印整体堆栈信息
 func getAllStack() string {
 	buf := make([]byte, 64<<10)
 	buf = buf[:runtime.Stack(buf, true)]
@@ -54,7 +56,7 @@ func getAllStack() string {
 
 const lumberJackPrefix = "github.com/natefinch/lumberjack.(*Logger).millRun"
 
-//从调用栈解析routines数量，返回普通routines数量，lumberjack数量
+// 从调用栈解析routines数量，返回普通routines数量，lumberjack数量
 func parseRoutines(stack string) (int, int) {
 	var normalCount int
 	var lumberjackCount int
@@ -73,11 +75,11 @@ func parseRoutines(stack string) (int, int) {
 	return normalCount, lumberjackCount
 }
 
-//测试consumer api的销毁
+// 测试consumer api的销毁
 func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start to TestConsumerDestroy")
-	//等待golang一些系统初始化任务完成
+	// 等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
 	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
@@ -100,11 +102,11 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	c.Assert(lumberjackCount < plog.MaxLogger, check.Equals, true)
 }
 
-//测试provider api的销毁
+// 测试provider api的销毁
 func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start to TestProviderDestroy")
-	//等待golang一些系统初始化任务完成
+	// 等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
 	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
@@ -122,7 +124,7 @@ func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	var lumberjackCount int
 	routinesCount, lumberjackCount = parseRoutines(getAllStack())
 	afterDestroyRoutinesNum := routinesCount
-	//log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)
+	// log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)
 	c.Assert(preCreateRoutinesNum, check.Equals, afterDestroyRoutinesNum)
 	c.Assert(lumberjackCount < plog.MaxLogger, check.Equals, true)
 }

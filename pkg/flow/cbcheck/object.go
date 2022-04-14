@@ -19,13 +19,14 @@ package cbcheck
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//熔断状态模型，实现了CircuitBreakerStatus接口
+// circuitBreakerStatus 熔断状态模型，实现了CircuitBreakerStatus接口
 type circuitBreakerStatus struct {
 	circuitBreaker string
 	status         model.Status
@@ -48,27 +49,27 @@ type circuitBreakerStatus struct {
 	statusLock int32
 }
 
-//获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
+// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
 func (c *circuitBreakerStatus) AllocatedRequestsAfterHalfOpen() int32 {
 	return atomic.LoadInt32(&c.allocatedRequestsAfterHalfOpen)
 }
 
-//获取状态转换锁
+// AcquireStatusLock 获取状态转换锁
 func (c *circuitBreakerStatus) AcquireStatusLock() bool {
 	return atomic.CompareAndSwapInt32(&c.statusLock, 0, 1)
 }
 
-//获取进入半开状态之后分配的请求数
+// GetRequestsAfterHalfOpen 获取进入半开状态之后分配的请求数
 func (c *circuitBreakerStatus) GetRequestsAfterHalfOpen() int32 {
 	return atomic.LoadInt32(&c.halfOpenRequests)
 }
 
-//获取进入半开状态之后的成功请求数
+// GetFailRequestsAfterHalfOpen 获取进入半开状态之后的成功请求数
 func (c *circuitBreakerStatus) GetFailRequestsAfterHalfOpen() int32 {
 	return atomic.LoadInt32(&c.halfOpenFailRequests)
 }
 
-//添加半开状态下面的请求数
+// AddRequestCountAfterHalfOpen 添加半开状态下面的请求数
 func (c *circuitBreakerStatus) AddRequestCountAfterHalfOpen(n int32, success bool) int32 {
 	if !success {
 		atomic.AddInt32(&c.halfOpenFailRequests, n)
@@ -76,28 +77,28 @@ func (c *circuitBreakerStatus) AddRequestCountAfterHalfOpen(n int32, success boo
 	return atomic.AddInt32(&c.halfOpenRequests, n)
 }
 
-//标识被哪个熔断器熔断
+// GetCircuitBreaker 标识被哪个熔断器熔断
 func (c *circuitBreakerStatus) GetCircuitBreaker() string {
 	return c.circuitBreaker
 }
 
-//熔断状态
+// GetStatus 熔断状态
 func (c *circuitBreakerStatus) GetStatus() model.Status {
 	return c.status
 }
 
-//状态转换的时间
+// GetStartTime 状态转换的时间
 func (c *circuitBreakerStatus) GetStartTime() time.Time {
 	return c.startTime
 }
 
-//打印熔断状态数据
+// String 打印熔断状态数据
 func (c circuitBreakerStatus) String() string {
 	return fmt.Sprintf("{circuitBreaker:%s, status:%v, startTime:%v}",
 		c.circuitBreaker, c.status, c.startTime)
 }
 
-//是否可以分配请求
+// IsAvailable 是否可以分配请求
 func (c *circuitBreakerStatus) IsAvailable() bool {
 	if nil == c || model.Close == c.status {
 		return true
@@ -108,12 +109,12 @@ func (c *circuitBreakerStatus) IsAvailable() bool {
 	return atomic.LoadInt32(&c.halfOpenQuota) > 0
 }
 
-//获取分配了最后配额的时间
+// GetFinalAllocateTimeInt64 获取分配了最后配额的时间
 func (c *circuitBreakerStatus) GetFinalAllocateTimeInt64() int64 {
 	return atomic.LoadInt64(&c.finalAllocTime)
 }
 
-//执行实例到请求的分配
+// Allocate 执行实例到请求的分配
 func (c *circuitBreakerStatus) Allocate() bool {
 	if nil == c || model.Close == c.status {
 		return true
@@ -122,11 +123,11 @@ func (c *circuitBreakerStatus) Allocate() bool {
 		return false
 	}
 	left := atomic.AddInt32(&c.halfOpenQuota, -1)
-	//如果刚好是0，即分配了最后一个半开配额，记录时间
+	// 如果刚好是0，即分配了最后一个半开配额，记录时间
 	if left == 0 {
 		atomic.StoreInt64(&c.finalAllocTime, clock.GetClock().Now().UnixNano())
 	}
-	//如果进行了分配的话，那么只要left大于等于0即可
+	// 如果进行了分配的话，那么只要left大于等于0即可
 	allocated := left >= 0
 	if allocated {
 		atomic.AddInt32(&c.allocatedRequestsAfterHalfOpen, 1)

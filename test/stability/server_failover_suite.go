@@ -19,19 +19,21 @@ package stability
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"os"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"os"
 )
 
-//server失效的测试用例
+// server失效的测试用例
 type ServerFailOverSuite struct {
 	builtInServer   mock.NamingServer
 	discoverServers []mock.NamingServer
@@ -51,7 +53,7 @@ const (
 	instanceCountFailOver = 10
 )
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *ServerFailOverSuite) SetUpSuite(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 	// get the grpc server wired up
@@ -84,7 +86,7 @@ func (t *ServerFailOverSuite) SetUpSuite(c *check.C) {
 	t.grpcServers = append(t.grpcServers, grpcServer)
 }
 
-//创建并监听mock服务端
+// 创建并监听mock服务端
 func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -97,7 +99,7 @@ func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 	}
 	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", listenHostFailOver, port))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", listenHostFailOver, port)
@@ -107,7 +109,7 @@ func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 	return grpcServer, mockServer
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *ServerFailOverSuite) TearDownSuite(c *check.C) {
 	for _, grpcServer := range t.grpcServers {
 		grpcServer.Stop()
@@ -118,12 +120,12 @@ func (t *ServerFailOverSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//获取用例名
+// 获取用例名
 func (t *ServerFailOverSuite) GetName() string {
 	return "ServerFailOverSuite"
 }
 
-//设置是否让服务发现server超时
+// 设置是否让服务发现server超时
 func (t *ServerFailOverSuite) makeDiscoverTimeout(count int, value bool) {
 	for i, server := range t.discoverServers {
 		if i >= count {
@@ -134,9 +136,9 @@ func (t *ServerFailOverSuite) makeDiscoverTimeout(count int, value bool) {
 	}
 }
 
-//测试节点部分失效的场景
-//unstable case
-//func (t *ServerFailOverSuite) TestDiscoverFailOver(c *check.C) {
+// 测试节点部分失效的场景
+// unstable case
+// func (t *ServerFailOverSuite) TestDiscoverFailOver(c *check.C) {
 //	log.Printf("start to TestDefaultFailOver")
 //	defer util.DeleteDir(util.BackupDir)
 //
@@ -163,4 +165,4 @@ func (t *ServerFailOverSuite) makeDiscoverTimeout(count int, value bool) {
 //	time.Sleep(2 * time.Second)
 //	t.makeDiscoverTimeout(len(t.discoverServers) - 2, false)
 //	wg.Wait()
-//}
+// }

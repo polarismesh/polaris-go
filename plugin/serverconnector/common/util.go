@@ -20,14 +20,16 @@ package common
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/network"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/modern-go/reflect2"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/network"
 )
 
 type taskOp int
@@ -59,42 +61,42 @@ const (
 	OpKeyRateLimitMetricReport = "RateLimitMetricReport"
 )
 
-//生成GetInstances调用的请求Id
+// 生成GetInstances调用的请求Id
 func NextDiscoverReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixDiscover, uuid.New().ID())
 }
 
-//生成RegisterService调用的请求Id
+// 生成RegisterService调用的请求Id
 func NextRegisterInstanceReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRegisterInstance, uuid.New().ID())
 }
 
-//生成RegisterService调用的请求Id
+// 生成RegisterService调用的请求Id
 func NextDeRegisterInstanceReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixDeregisterInstance, uuid.New().ID())
 }
 
-//生成RegisterService调用的请求Id
+// 生成RegisterService调用的请求Id
 func NextHeartbeatReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixInstanceHeartbeat, uuid.New().ID())
 }
 
-//生成ReportClient调用的请求Id
+// 生成ReportClient调用的请求Id
 func NextReportClientReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixReportClient, uuid.New().ID())
 }
 
-//生成RateLimit初始化调用的请求Id
+// 生成RateLimit初始化调用的请求Id
 func NextRateLimitInitReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRateLimitInit, uuid.New().ID())
 }
 
-//生成RateLimit配额获取调用的请求Id
+// 生成RateLimit配额获取调用的请求Id
 func NextRateLimitAcquireReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRateLimitAcquire, uuid.New().ID())
 }
 
-//获取连接错误码
+// 获取连接错误码
 func GetConnErrorCode(err error) int32 {
 	code, ok := status.FromError(err)
 	if ok {
@@ -103,7 +105,7 @@ func GetConnErrorCode(err error) int32 {
 	return int32(model.ErrCodeNetworkError)
 }
 
-//返回网络错误，并回收连接
+// 返回网络错误，并回收连接
 func NetworkError(connManager network.ConnectionManager, conn *network.Connection,
 	errCode int32, err error, startTime time.Time, msg string) model.SDKError {
 	endTime := clock.GetClock().Now()
@@ -114,7 +116,7 @@ func NetworkError(connManager network.ConnectionManager, conn *network.Connectio
 	return model.NewSDKError(model.ErrCodeNetworkError, err, msg)
 }
 
-//获取一个updateTask的请求更新时间
+// 获取一个updateTask的请求更新时间
 func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 	consumeTime := maxConnTimeout
 	msgSendTimeValue := updateTask.msgSendTime.Load()
@@ -124,8 +126,8 @@ func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 	return consumeTime
 }
 
-//创建传输grpc头的valueContext
-//func CreateHeaderContext(timeout time.Duration, reqID string) context.Context {
+// 创建传输grpc头的valueContext
+// func CreateHeaderContext(timeout time.Duration, reqID string) context.Context {
 //	md := metadata.New(map[string]string{headerRequestID: reqID})
 //	var ctx context.Context
 //	if timeout > 0 {
@@ -134,9 +136,9 @@ func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 //		ctx = context.Background()
 //	}
 //	return metadata.NewOutgoingContext(ctx, md)
-//}
+// }
 
-//创建传输grpc头的valueContext
+// 创建传输grpc头的valueContext
 func CreateHeaderContext(timeout time.Duration, headers map[string]string) (context.Context, context.CancelFunc) {
 	md := metadata.New(headers)
 	var ctx context.Context
@@ -150,8 +152,7 @@ func CreateHeaderContext(timeout time.Duration, headers map[string]string) (cont
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
 
-
-//创建传输grpc头的valueContext
+// 创建传输grpc头的valueContext
 func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.Context, context.CancelFunc) {
 	md := metadata.New(map[string]string{headerRequestID: reqID})
 	var ctx context.Context

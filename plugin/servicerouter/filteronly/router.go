@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-//RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
+// RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -33,17 +33,17 @@ type InstancesFilter struct {
 	recoverAll            bool
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *InstancesFilter) Type() common.Type {
 	return common.TypeServiceRouter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *InstancesFilter) Name() string {
 	return config.DefaultServiceRouterFilterOnly
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
@@ -53,23 +53,23 @@ func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *InstancesFilter) Destroy() error {
 	return nil
 }
 
-//GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
+// GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	return GetFilteredInstances(g.valueCtx, routeInfo, clusters, g.percentOfMinInstances, withinCluster, g.recoverAll)
 }
 
-//是否需要启动规则路由
+// 是否需要启动规则路由
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	return true
 }
 
-//GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
+// GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
 func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters,
 	percentOfMinInstances float64, withinCluster *model.Cluster, recoverAll bool) (*servicerouter.RouteResult, error) {
 	outCluster := model.NewCluster(clusters, withinCluster)
@@ -81,7 +81,7 @@ func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.Route
 	healthyCount := healthyInstances.Count()
 	hasLimitedInstances := false
 	if recoverAll && allInstancesCount > 0 && healthyCount <= minInstances {
-		//全死全活
+		// 全死全活
 		hasLimitedInstances = true
 	}
 	outCluster.HasLimitedInstances = hasLimitedInstances
@@ -91,7 +91,7 @@ func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.Route
 	return result, nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterPlugin(&InstancesFilter{})
 }

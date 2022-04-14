@@ -21,6 +21,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	gyaml "github.com/ghodss/yaml"
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"github.com/modern-go/reflect2"
+	"gopkg.in/yaml.v2"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -35,40 +46,31 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/version"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	gyaml "github.com/ghodss/yaml"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"github.com/modern-go/reflect2"
-	"gopkg.in/yaml.v2"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
 	opReportStat = "ReportStat"
 )
 
-//遍历统计数据进行上报
+// 遍历统计数据进行上报
 type iterateFunc func(handler *statHandler, registry localregistry.LocalRegistry)
 
-//统计操作handler
+// 统计操作handler
 type statHandler struct {
 	reporter *Stat2MonitorReporter
-	//统计类型
+	// 统计类型
 	metricType model.MetricType
-	//增加统计数据的函数
+	// 增加统计数据的函数
 	addStatFunc addDimensionFunc
-	//发送统计数据的函数
-	//sendStatFunc sendStatFunc
-	//统计窗口
+	// 发送统计数据的函数
+	// sendStatFunc sendStatFunc
+	// 统计窗口
 	apiWindow *dimensionRecord
-	//遍历统计信息并发送到monitor
+	// 遍历统计信息并发送到monitor
 	iterateAndSendFunc iterateFunc
 }
 
-//获取统计窗口
+// GetWindow 获取统计窗口
 func (h *statHandler) GetWindow(info model.InstanceGauge) *dimensionRecord {
 	if h.metricType == model.SDKAPIStat {
 		return h.apiWindow
@@ -79,7 +81,7 @@ func (h *statHandler) GetWindow(info model.InstanceGauge) *dimensionRecord {
 	retCode := info.GetRetCodeValue()
 	windowInf, loaded := windowsMap.windows.Load(retCode)
 	if !loaded {
-		//window := metric.NewSliceWindow(h.reporter.Name(), h.reporter.cfg.MetricsNumBuckets*2,
+		// window := metric.NewSliceWindow(h.reporter.Name(), h.reporter.cfg.MetricsNumBuckets*2,
 		//	h.reporter.cfg.GetBucketInterval(), numKeySvc, clock.GetClock().Now().UnixNano())
 		window := newDimensionRecord(numKeySvc, numKeySvcDelay)
 		windowInf, loaded = windowsMap.windows.LoadOrStore(retCode, window)
@@ -88,7 +90,7 @@ func (h *statHandler) GetWindow(info model.InstanceGauge) *dimensionRecord {
 	return windowInf.(*dimensionRecord)
 }
 
-//Stat2FileReporter 打印统计日志到本地文件中
+// Stat2MonitorReporter 打印统计日志到本地文件中
 type Stat2MonitorReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -97,37 +99,37 @@ type Stat2MonitorReporter struct {
 	connectionManager network.ConnectionManager
 	sdkStatHandler    *statHandler
 	svcStatHandler    *statHandler
-	//与monitor的连接
+	// 与monitor的连接
 	conn       *network.Connection
 	cancelFunc context.CancelFunc
-	//发送sdk统计数据的stream
+	// 发送sdk统计数据的stream
 	sdkClient monitorpb.GrpcAPI_CollectSDKAPIStatisticsClient
-	//发送服务调用统计数据的stream
+	// 发送服务调用统计数据的stream
 	svcClient monitorpb.GrpcAPI_CollectServiceStatisticsClient
 	sdkToken  model.SDKToken
-	//全局上下文
+	// 全局上下文
 	globalCtx model.ValueContext
-	//全局配置marshal的字符串
+	// 全局配置marshal的字符串
 	globalCfgStr atomic.Value
-	//sdk加载的插件
+	// sdk加载的插件
 	sdkPlugins string
-	//插件工厂
+	// 插件工厂
 	plugins plugin.Supplier
-	//本地缓存插件
+	// 本地缓存插件
 	registry localregistry.LocalRegistry
 }
 
-//Type 插件类型
+// Type 插件类型
 func (s *Stat2MonitorReporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (s *Stat2MonitorReporter) Name() string {
 	return "stat2Monitor"
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (s *Stat2MonitorReporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.globalCtx = ctx.ValueCtx
@@ -149,25 +151,25 @@ func (s *Stat2MonitorReporter) Init(ctx *plugin.InitContext) error {
 		addStatFunc:        addSDKStatToBucket,
 		iterateAndSendFunc: iterateSDKStat,
 	}
-	//apiArraySize := allIndexSize
+	// apiArraySize := allIndexSize
 	s.sdkStatHandler.apiWindow = newDimensionRecord(allIndexSize, 0)
-	//metric.NewSliceWindow("SDKStat",
-	//s.cfg.MetricsNumBuckets*2, s.cfg.GetBucketInterval(), apiArraySize, clock.GetClock().Now().UnixNano())
+	// metric.NewSliceWindow("SDKStat",
+	// s.cfg.MetricsNumBuckets*2, s.cfg.GetBucketInterval(), apiArraySize, clock.GetClock().Now().UnixNano())
 	s.svcStatHandler = &statHandler{
 		metricType:         model.ServiceStat,
 		reporter:           s,
 		addStatFunc:        addSvcStatToBucket,
 		iterateAndSendFunc: iterateSvcStat,
 	}
-	//s.cfg.localCacheName = ctx.Config.GetConsumer().GetLocalCache().GetType()
-	if err := s.getLocalRegistryAndConfigInfo(ctx); nil != err {
+	// s.cfg.localCacheName = ctx.Config.GetConsumer().GetLocalCache().GetType()
+	if err := s.getLocalRegistryAndConfigInfo(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-//start 启动定时协程
+// start 启动定时协程
 func (g *Stat2MonitorReporter) Start() error {
 	go g.uploadStat()
 	return nil
@@ -200,7 +202,7 @@ func (g *Stat2MonitorReporter) Destroy() error {
 	return nil
 }
 
-//ReportStat 上报统计信息
+// ReportStat 上报统计信息
 func (s *Stat2MonitorReporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	err := s.handleStat(t, info)
 	if err != nil {
@@ -209,7 +211,7 @@ func (s *Stat2MonitorReporter) ReportStat(t model.MetricType, info model.Instanc
 	return nil
 }
 
-//处理统计数据，校验正确后添加指标到window
+// 处理统计数据，校验正确后添加指标到window
 func (s *Stat2MonitorReporter) handleStat(metricType model.MetricType, info model.InstanceGauge) error {
 	var handler *statHandler
 	switch metricType {
@@ -226,7 +228,7 @@ func (s *Stat2MonitorReporter) handleStat(metricType model.MetricType, info mode
 	return nil
 }
 
-//定期上报统计数据
+// 定期上报统计数据
 func (s *Stat2MonitorReporter) uploadStat() {
 	t := time.NewTicker(*s.cfg.MetricsReportWindow)
 	defer t.Stop()
@@ -236,7 +238,7 @@ func (s *Stat2MonitorReporter) uploadStat() {
 			log.GetBaseLogger().Infof("uploadStat of statReporter stat_monitor has been terminated")
 			return
 		case <-t.C:
-			//如果registry没有获取到的话，等待下一次
+			// 如果registry没有获取到的话，等待下一次
 			registry := s.registry
 			if nil == registry {
 				log.GetBaseLogger().Warnf("registry not ready, wait for next period")
@@ -245,11 +247,11 @@ func (s *Stat2MonitorReporter) uploadStat() {
 			now := s.globalCtx.Now()
 			log.GetStatReportLogger().Infof("start to upload stat info to monitor")
 
-			//连接monitor
+			// 连接monitor
 			monitorDeadline := now.Add(*s.cfg.MetricsReportWindow)
 			s.connectMonitor(monitorDeadline)
 
-			//遍历两种统计数据的key，并且发送到monitor中
+			// 遍历两种统计数据的key，并且发送到monitor中
 			s.svcStatHandler.iterateAndSendFunc(s.svcStatHandler, registry)
 			s.sdkStatHandler.iterateAndSendFunc(s.sdkStatHandler, registry)
 			s.resetConnection()
@@ -258,16 +260,16 @@ func (s *Stat2MonitorReporter) uploadStat() {
 	}
 }
 
-//用于上报的instanceKey
+// 用于上报的instanceKey
 type instanceCallKey struct {
 	model.InstanceKey
 	resCode int32
 }
 
-//遍历sdk统计数据的key，并且进行上报
+// 遍历sdk统计数据的key，并且进行上报
 func iterateSDKStat(handler *statHandler, registry localregistry.LocalRegistry) {
 	metrics := handler.GetWindow(nil).getDimension32Values(sdkDimensions)
-	//m := []uint32{0}
+	// m := []uint32{0}
 	apiKey := model.APICallKey{
 		APIName:    0,
 		RetCode:    0,
@@ -276,17 +278,17 @@ func iterateSDKStat(handler *statHandler, registry localregistry.LocalRegistry) 
 	log.GetBaseLogger().Debugf("len, %v, upload metrics, %v", len(metrics), metrics)
 	for i := 0; i < len(metrics); i++ {
 		if metrics[i] > 0 {
-			//m[0] = metrics[i]
+			// m[0] = metrics[i]
 			apiKey.APIName = model.ApiOperation(reveseIdx[i][apiOperationIdx])
 			apiKey.DelayRange = model.ApiDelayRange(reveseIdx[i][delayIdx])
 			apiKey.RetCode = model.ErrCodeFromIndex(reveseIdx[i][errcodeIdx])
 			handler.reporter.sendSdkStatReq(&apiKey, metrics[i])
-			//handler.sendStatFunc(&apiKey, m)
+			// handler.sendStatFunc(&apiKey, m)
 		}
 	}
 }
 
-//遍历服务
+// 遍历服务
 func iterateSvcStat(handler *statHandler, registry localregistry.LocalRegistry) {
 	services := registry.GetServices()
 	instanceKey := instanceCallKey{}
@@ -315,7 +317,7 @@ func iterateSvcStat(handler *statHandler, registry localregistry.LocalRegistry) 
 					instanceKey.Port = int(inst.GetPort())
 					instanceKey.resCode = resCode.(int32)
 					handler.reporter.sendSvcStatReq(&instanceKey, resMetrics, delayMetrics)
-					//handler.sendStatFunc(&instanceKey, resMetrics)
+					// handler.sendStatFunc(&instanceKey, resMetrics)
 				}
 				return true
 			})
@@ -323,9 +325,9 @@ func iterateSvcStat(handler *statHandler, registry localregistry.LocalRegistry) 
 	}
 }
 
-//根据统计数据生成sdk统计请求
+// 根据统计数据生成sdk统计请求
 func (s *Stat2MonitorReporter) sendSdkStatReq(sdkKey *model.APICallKey, metric uint32) {
-	//sdkKey := sdkKeyValue.(*model.APICallKey)
+	// sdkKey := sdkKeyValue.(*model.APICallKey)
 	id := "sdk" + uuid.New().String()
 	success := true
 	result := monitorpb.APIResultType_Success
@@ -358,16 +360,16 @@ func (s *Stat2MonitorReporter) sendSdkStatReq(sdkKey *model.APICallKey, metric u
 			},
 		},
 	}
-	//log2.Printf("send sdk req, %v\n", req)
+	// log2.Printf("send sdk req, %v\n", req)
 	log.GetStatLogger().Infof("%s", sdkStatToString(req))
 	if nil != s.sdkClient {
 		err := s.sdkClient.Send(req)
-		if nil != err {
+		if err != nil {
 			log.GetStatReportLogger().Errorf("fail to send sdk stat data32, err: %s, monitor server is %s",
 				err.Error(), s.conn.ConnID)
 		} else {
 			resp, err := s.sdkClient.Recv()
-			if nil != err || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
+			if err != nil || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 				log.GetStatReportLogger().Errorf("fail to receive resp for id %v, resp is %v,"+
 					" monitor server is %s", id, resp, s.conn.ConnID)
 			} else {
@@ -381,10 +383,10 @@ func (s *Stat2MonitorReporter) sendSdkStatReq(sdkKey *model.APICallKey, metric u
 	}
 }
 
-//生成服务调用统计数据请求
+// 生成服务调用统计数据请求
 func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, resMetrics []uint32,
 	delayMetrics []int64) {
-	//dimensionKey := dimensionKeyValue.(*instanceCallKey)
+	// dimensionKey := dimensionKeyValue.(*instanceCallKey)
 	for i, idx := range svcResIdx {
 		if resMetrics[idx] > 0 {
 			var dimIdx int
@@ -415,7 +417,7 @@ func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, res
 				Value: &monitorpb.ServiceIndicator{
 					TotalRequestPerMinute: &wrappers.UInt32Value{Value: resMetrics[dimIdx]},
 					TotalDelayPerMinute: &wrappers.UInt64Value{
-						//发送的延迟时间以ms为单位
+						// 发送的延迟时间以ms为单位
 						Value: uint64(time.Duration(delayMetrics[delayIndex]).Nanoseconds() / 1000000),
 					},
 				},
@@ -427,12 +429,12 @@ func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, res
 			log.GetStatLogger().Infof("uid: %s | %s", s.sdkToken.UID, svcStatToString(req))
 			if nil != s.svcClient {
 				err := s.svcClient.Send(req)
-				if nil != err {
+				if err != nil {
 					log.GetStatReportLogger().Errorf("fail to send sdk service data32, err: %s, monitor server is %s",
 						err.Error(), s.conn.ConnID)
 				} else {
 					resp, err := s.svcClient.Recv()
-					if nil != err || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
+					if err != nil || resp.GetId().GetValue() != id || resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 						log.GetStatReportLogger().Errorf("fail to reveice resp for id %v, resp is %v,"+
 							" monitor server is %s", id, resp, s.conn.ConnID)
 					} else {
@@ -448,11 +450,11 @@ func (s *Stat2MonitorReporter) sendSvcStatReq(dimensionKey *instanceCallKey, res
 	}
 }
 
-//创建与monitor的连接
+// 创建与monitor的连接
 func (s *Stat2MonitorReporter) connectMonitor(monitorDeadline time.Time) {
 	var err error
 	s.conn, err = s.connectionManager.GetConnection(opReportStat, sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return
 	}
@@ -460,16 +462,16 @@ func (s *Stat2MonitorReporter) connectMonitor(monitorDeadline time.Time) {
 	ctx, c := context.WithDeadline(context.Background(), monitorDeadline)
 	s.cancelFunc = c
 	s.sdkClient, err = client.CollectSDKAPIStatistics(ctx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report sdk stat, err: %s", err.Error())
 	}
 	s.svcClient, err = client.CollectServiceStatistics(ctx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report service stat, err: %s", err.Error())
 	}
 }
 
-//关闭与monitor的连接
+// 关闭与monitor的连接
 func (s *Stat2MonitorReporter) resetConnection() {
 	if nil != s.sdkClient {
 		s.sdkClient.CloseSend()
@@ -491,14 +493,14 @@ func (s *Stat2MonitorReporter) resetConnection() {
 	s.svcClient = nil
 }
 
-//实例的滑窗集合，不同的返回码都有一个对应滑窗
+// 实例的滑窗集合，不同的返回码都有一个对应滑窗
 type instanceCallWindows struct {
 	windows    *sync.Map
 	updateTime int64
 	readTime   int64
 }
 
-//为实例生成服务调用滑窗
+// 为实例生成服务调用滑窗
 func (s *Stat2MonitorReporter) generateSliceWindow(event *common.PluginEvent) error {
 	localValue := event.EventObject.(*local.DefaultInstanceLocalValue)
 	localValue.SetExtendedData(s.ID(), &instanceCallWindows{
@@ -507,16 +509,16 @@ func (s *Stat2MonitorReporter) generateSliceWindow(event *common.PluginEvent) er
 	return nil
 }
 
-//设置本地缓存插件和全局配置转化的字符串
+// 设置本地缓存插件和全局配置转化的字符串
 func (s *Stat2MonitorReporter) getLocalRegistryAndConfigInfo(ctx *plugin.InitContext) error {
 	s.registry, _ = data.GetRegistry(ctx.Config, ctx.Plugins)
 	yamlByte, _ := yaml.Marshal(ctx.Config)
 	cfgByte, err := gyaml.YAMLToJSON(yamlByte)
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to convert yaml-format Config to json")
 	}
 	s.globalCfgStr.Store(string(cfgByte))
-	//s.globalCfgTime.Store(clock.GetClock().Now())
+	// s.globalCfgTime.Store(clock.GetClock().Now())
 	pluginMap := make(map[string][]string)
 	for _, typ := range common.LoadedPluginTypes {
 		pluginNames := s.plugins.GetPluginsByType(typ)
@@ -529,13 +531,13 @@ func (s *Stat2MonitorReporter) getLocalRegistryAndConfigInfo(ctx *plugin.InitCon
 	return nil
 }
 
-//上报sdk配置
+// 上报sdk配置
 func (s *Stat2MonitorReporter) reportSDKConfig() error {
 	globalCfgStr, takeEffectTime, initFinishTime := s.getConfigInfo()
 	if len(globalCfgStr) == 0 {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "global Config info not ready")
 	}
-	//如果discover没有ready，那么首次不要进行上报配置
+	// 如果discover没有ready，那么首次不要进行上报配置
 	if atomic.CompareAndSwapUint32(&s.hasReportConfig, 0, 1) && !s.connectionManager.IsReady() {
 		log.GetStatReportLogger().Infof("%s, discover not ready, sleep 1s to wait discover ready to report config",
 			s.GetSDKContextID())
@@ -553,14 +555,14 @@ func (s *Stat2MonitorReporter) reportSDKConfig() error {
 		}
 	}
 	conn, err := s.connectionManager.GetConnection(opReportStat, sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to connect to polaris.monitor")
 	}
 	defer conn.Release(opReportStat)
 	reportClient := monitorpb.NewGrpcAPIClient(network.ToGRPCConn(conn.Conn))
-	//t, _ := s.globalCtx.GetValue(model.ContextKeyToken)
-	//sdkToken := t.(model.SDKToken)
+	// t, _ := s.globalCtx.GetValue(model.ContextKeyToken)
+	// sdkToken := t.(model.SDKToken)
 	now := clock.GetClock().Now()
 	req := &monitorpb.SDKConfig{
 		Token:          util.GetPBSDkToken(s.sdkToken),
@@ -584,7 +586,7 @@ func (s *Stat2MonitorReporter) reportSDKConfig() error {
 	ctx, cancel := context.WithDeadline(context.Background(), s.globalCtx.Now().Add(*s.cfg.MetricsReportWindow))
 	defer cancel()
 	resp, err := reportClient.CollectSDKConfiguration(ctx, req)
-	if nil != err || resp.GetId().GetValue() != req.Token.Uid ||
+	if err != nil || resp.GetId().GetValue() != req.Token.Uid ||
 		resp.GetCode().GetValue() != monitorpb.ReceiveSuccess {
 		err = model.NewSDKError(model.ErrCodeInvalidResponse, err, "invalid resp from monitor")
 		log.GetStatReportLogger().Errorf("fail to reveice resp for Config of  %v, resp is %v, monitor server is %s",
@@ -595,7 +597,7 @@ func (s *Stat2MonitorReporter) reportSDKConfig() error {
 	return err
 }
 
-//获取配置相关信息
+// 获取配置相关信息
 func (s *Stat2MonitorReporter) getConfigInfo() (string, time.Time, time.Time) {
 	str := s.globalCfgStr.Load()
 	var cfgStr string
@@ -620,8 +622,8 @@ func (s *Stat2MonitorReporter) createSvcLocalValue(event *common.PluginEvent) er
 	return nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterConfigurablePlugin(&Stat2MonitorReporter{}, &Config{})
-	//plugin.RegisterPlugin(&Stat2MonitorReporter{})
+	// plugin.RegisterPlugin(&Stat2MonitorReporter{})
 }

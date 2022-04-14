@@ -20,6 +20,13 @@ package serviceinfo
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	sysconfig "github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -33,18 +40,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
 	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/uuid"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (
 	keyExpireDuration = 3 * time.Hour
 )
 
-//上报缓存信息的插件
+// Reporter 上报缓存信息的插件
 type Reporter struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -56,33 +58,33 @@ type Reporter struct {
 	meshClient         monitorpb.GrpcAPI_CollectMeshResourceClient
 	clientCancel       context.CancelFunc
 	uploadToMonitor    bool
-	//本地缓存插件
+	// 本地缓存插件
 	registry         localregistry.LocalRegistry
 	registryPlugName string
-	//全局ctx
+	// 全局ctx
 	globalCtx model.ValueContext
-	//用于存储周期内的服务历史变更
+	// 用于存储周期内的服务历史变更
 	statusMap *sync.Map
-	//用于存储周期内的网格规则变更记录
+	// 用于存储周期内的网格规则变更记录
 	meshStatusMap *sync.Map
-	//插件工厂
+	// 插件工厂
 	plugins plugin.Supplier
-	//全死全活发生和结束的原因
+	// 全死全活发生和结束的原因
 	recoverAllStartReason string
 	recoverAllEndReason   string
 }
 
-//插件类型
+// Type 插件类型
 func (s *Reporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-//插件名称
+// Name 插件名称
 func (s *Reporter) Name() string {
 	return "serviceCache"
 }
 
-// enable
+// IsEnable enable
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -96,7 +98,7 @@ func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	return false
 }
 
-//初始化
+// Init 初始化
 func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.globalCtx = ctx.ValueCtx
@@ -134,37 +136,37 @@ func (s *Reporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// 启动上报协程
+// Start 启动上报协程
 func (s *Reporter) Start() error {
 	go s.uploadStatusHistory()
 	return nil
 }
 
-//这个插件不实现ReportStat接口，按照服务变化来收集统计信息
+// ReportStat 这个插件不实现ReportStat接口，按照服务变化来收集统计信息
 func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) error {
 	if t != model.CircuitBreakStat {
 		return nil
 	}
 	err := info.Validate()
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	inst := info.GetCalledInstance().(*pb.InstanceInProto)
 	cbNode, err := createCircuitBreakNode(info.GetCircuitBreakerStatus(), inst.GetCircuitBreakerStatus())
-	if nil != err {
+	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "invalid circuitbreak status change")
 	}
 	s.addCircuitBreakNode(cbNode, inst.GetInstanceLocalValue())
 	return nil
 }
 
-//服务实例信息变更情况
+// 服务实例信息变更情况
 type instancesChangeData struct {
 	revision string
 	changes  *monitorpb.InstancesChange
 }
 
-//在缓存服务发生变化时触发事件并进行处理
+// 在缓存服务发生变化时触发事件并进行处理
 func (s *Reporter) onCacheChanged(event *common.PluginEvent) error {
 	var rv model.RegistryValue
 	deleteCache := common.OnServiceDeleted == event.EventType
@@ -243,7 +245,7 @@ func (s *Reporter) onCacheChanged(event *common.PluginEvent) error {
 	return nil
 }
 
-//根据事件类型计算实例变更状况
+// 根据事件类型计算实例变更状况
 func calculateInstancesChange(eventType common.PluginEventType,
 	eventObj *common.ServiceEventObject) (*monitorpb.InstancesChange, string, string) {
 	res := &monitorpb.InstancesChange{}
@@ -271,7 +273,7 @@ func calculateInstancesChange(eventType common.PluginEventType,
 	return res, oldRevision, newRevision
 }
 
-//打印实例变化
+// 打印实例变化
 func logChangeInstances(svcKey *model.ServiceKey, oldRevision string, newRevision string,
 	instances *monitorpb.InstancesChange) {
 	log.GetBaseLogger().Infof("service instances of %s change, oldRevision %s, newRevision %s,"+
@@ -290,9 +292,9 @@ func logChangeInstances(svcKey *model.ServiceKey, oldRevision string, newRevisio
 	}
 }
 
-//创建一个completeinstances数组
+// 创建一个completeinstances数组
 func createCompleteInstances(insts []model.Instance) []*monitorpb.ChangeInstance {
-	//insts := svcInst.GetInstances()
+	// insts := svcInst.GetInstances()
 	res := make([]*monitorpb.ChangeInstance, len(insts))
 	for idx, inst := range insts {
 		cinst := &monitorpb.ChangeInstance{
@@ -306,12 +308,12 @@ func createCompleteInstances(insts []model.Instance) []*monitorpb.ChangeInstance
 	return res
 }
 
-//获取一个完整实例的info
+// 获取一个完整实例的info
 func totalInstanceInfo(inst model.Instance) string {
 	return fmt.Sprintf("healthy:%v;isolate:%v;weight:%d", inst.IsHealthy(), inst.IsIsolated(), inst.GetWeight())
 }
 
-//获取一个有过修改的实例信息
+// 获取一个有过修改的实例信息
 func getModifiedInstance(oldInst, newInst model.Instance) *monitorpb.ChangeInstance {
 	var info = []string{"", "", ""}
 	var change bool
@@ -347,7 +349,7 @@ func getModifiedInstance(oldInst, newInst model.Instance) *monitorpb.ChangeInsta
 	}
 }
 
-//计算实例变更情况
+// 计算实例变更情况
 func getChangedInstances(change *monitorpb.InstancesChange, oldSvcInstances model.ServiceInstances,
 	newSvcInstances model.ServiceInstances) {
 	oldInstances := oldSvcInstances.GetInstances()
@@ -379,7 +381,7 @@ func getChangedInstances(change *monitorpb.InstancesChange, oldSvcInstances mode
 	change.DeletedInstances = createCompleteInstances(deleteInstances)
 }
 
-//处理每个具体的限流规则
+// 处理每个具体的限流规则
 func (s *Reporter) handleRateLimitRuleRevisions(rulesMap *sync.Map, diffInfo *common.RateLimitDiffInfo,
 	currentTime time.Time) {
 	for k, v := range diffInfo.UpdatedRules {
@@ -402,7 +404,7 @@ func (s *Reporter) handleRateLimitRuleRevisions(rulesMap *sync.Map, diffInfo *co
 	}
 }
 
-//处理网格规则变更记录
+// 处理网格规则变更记录
 func (s *Reporter) handleMeshConfigRevision(resourceMap *sync.Map, diffInfo *common.MeshResourceDiffInfo,
 	currentTime time.Time) {
 	for k, v := range diffInfo.UpdatedResources {
@@ -425,7 +427,7 @@ func (s *Reporter) handleMeshConfigRevision(resourceMap *sync.Map, diffInfo *com
 	}
 }
 
-//定时上报协程
+// 定时上报协程
 func (s *Reporter) uploadStatusHistory() {
 	t := time.NewTicker(*s.config.ReportInterval)
 	cleanTimer := time.NewTicker(keyExpireDuration)
@@ -445,7 +447,7 @@ func (s *Reporter) uploadStatusHistory() {
 			deadline := timeStart.Add(*s.config.ReportInterval)
 			s.uploadToMonitor = true
 			err := s.connectToMonitor(deadline)
-			if nil != err {
+			if err != nil {
 				log.GetStatReportLogger().Errorf("fail to connect to monitor to report service info, error %v", err)
 				s.uploadToMonitor = false
 			}
@@ -461,11 +463,11 @@ func (s *Reporter) uploadStatusHistory() {
 	}
 }
 
-//连接到monitor
+// 连接到monitor
 func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var err error
 	s.connection, err = s.connectionManager.GetConnection("ReportStatus", sysconfig.MonitorCluster)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to connect to monitor, err: %s", err.Error())
 		return err
 	}
@@ -473,20 +475,20 @@ func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	var clientCtx context.Context
 	clientCtx, s.clientCancel = context.WithDeadline(context.Background(), deadline)
 	s.cacheClient, err = client.CollectSDKCache(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report sdk cache, err: %s", err.Error())
 		s.closeConnection()
 		return err
 	}
 	s.circuitBreakClient, err = client.CollectCircuitBreak(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report circuitbreak status, err: %s,"+
 			" monitor server is %s", err.Error(), s.connection.ConnID)
 		s.closeConnection()
 		return err
 	}
 	s.meshClient, err = client.CollectMeshResource(clientCtx)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to create stream to report mesh config status, err: %s,"+
 			" monitor server is %s", err.Error(), s.connection.ConnID)
 		s.closeConnection()
@@ -495,7 +497,7 @@ func (s *Reporter) connectToMonitor(deadline time.Time) error {
 	return nil
 }
 
-//关闭连接
+// 关闭连接
 func (s *Reporter) closeConnection() {
 	s.clientCancel()
 	s.clientCancel = nil
@@ -514,15 +516,15 @@ func (s *Reporter) closeConnection() {
 	s.connection.Release("ReportStatus")
 }
 
-//发送版本变更记录统计数据
+// 发送版本变更记录统计数据
 func (s *Reporter) sendRevisionHistory() {
 	s.statusMap.Range(func(key, value interface{}) bool {
 		svcKey := key.(model.ServiceKey)
 		sh := value.(*statusHistory)
-		//svcStatus, svcSeq, svcCount := sh.histories[serviceStatus].getNodes()
-		//routingStatus, routingSeq, routingCount := sh.histories[routingStatus].getNodes()
-		//rateLimitStatus, rateLimitSeq, rateLimitCount := sh.histories[rateLimitStatus].getNodes()
-		//shLastTime := sh.lastUpdateTime.Load().(time.Time)
+		// svcStatus, svcSeq, svcCount := sh.histories[serviceStatus].getNodes()
+		// routingStatus, routingSeq, routingCount := sh.histories[routingStatus].getNodes()
+		// rateLimitStatus, rateLimitSeq, rateLimitCount := sh.histories[rateLimitStatus].getNodes()
+		// shLastTime := sh.lastUpdateTime.Load().(time.Time)
 		keyDeleted := s.sendStatusToMonitor(&svcKey, sh)
 		if keyDeleted {
 			s.statusMap.Delete(key)
@@ -531,7 +533,7 @@ func (s *Reporter) sendRevisionHistory() {
 	})
 }
 
-//将网格变更记录上传到monitor
+// 将网格变更记录上传到monitor
 func (s *Reporter) sendMeshRevisionHistory() {
 	s.meshStatusMap.Range(func(key, value interface{}) bool {
 		meshKey := key.(meshKey)
@@ -544,7 +546,7 @@ func (s *Reporter) sendMeshRevisionHistory() {
 	})
 }
 
-//将数据上报给monitor
+// 将数据上报给monitor
 func (s *Reporter) sendStatusToMonitor(serviceKey *model.ServiceKey, sh *statusHistory) (deleteSvc bool) {
 	svcStatus, svcSeq, svcCount := sh.histories[serviceStatus].getNodes()
 	routingStatus, routingSeq, routingCount := sh.histories[routingStatus].getNodes()
@@ -575,8 +577,8 @@ func (s *Reporter) sendStatusToMonitor(serviceKey *model.ServiceKey, sh *statusH
 	if svcCount > 0 {
 		instHistory = &monitorpb.InstancesHistory{}
 		s.fillInstancesChange(instHistory, svcStatus, svcCount)
-		//instHistory.Revision = make([]*monitorpb.RevisionHistory, svcCount, svcCount)
-		//s.fillRevisions(instHistory.Revision, svcStatus, svcCount)
+		// instHistory.Revision = make([]*monitorpb.RevisionHistory, svcCount, svcCount)
+		// s.fillRevisions(instHistory.Revision, svcStatus, svcCount)
 	}
 	if routingCount > 0 {
 		routingHistory = &monitorpb.RoutingHistory{}
@@ -599,12 +601,12 @@ func (s *Reporter) sendStatusToMonitor(serviceKey *model.ServiceKey, sh *statusH
 		return
 	}
 	err := s.cacheClient.Send(req)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, id: %s, err %s, monitor server is %s",
 			req.Id, err.Error(), s.connection.ConnID)
 	}
 	resp, err := s.cacheClient.Recv()
-	if nil != err || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+	if err != nil || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, resp is %v, err is %v, monitor server is %s",
 			resp, err, s.connection.ConnID)
 	} else {
@@ -648,12 +650,12 @@ func (s *Reporter) sendMeshStatusToMonitor(mk *meshKey, sh *meshStatusHistory) (
 		return
 	}
 	err := s.meshClient.Send(req)
-	if nil != err {
+	if err != nil {
 		log.GetStatReportLogger().Errorf("fail to report sdk cache, id: %s, err %s, monitor server is %s",
 			req.Id, err.Error(), s.connection.ConnID)
 	}
 	resp, err := s.meshClient.Recv()
-	if nil != err || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
+	if err != nil || resp.Id.GetValue() != req.Id || resp.Code.GetValue() != monitorpb.ReceiveSuccess {
 		log.GetStatReportLogger().Errorf("fail to report sdk mesh cache, resp is %v, err is %v, monitor server is %s",
 			resp, err, s.connection.ConnID)
 	} else {
@@ -667,7 +669,7 @@ func (s *Reporter) sendMeshStatusToMonitor(mk *meshKey, sh *meshStatusHistory) (
 	return deleteConfig
 }
 
-//获取每个单独的网格规则的变更记录
+// 获取每个单独的网格规则的变更记录
 func (s *Reporter) getSingleMeshResourceRevisions(resourceMap *sync.Map) []*monitorpb.SingleMeshResourceRuleHistory {
 	var res []*monitorpb.SingleMeshResourceRuleHistory
 	resourceMap.Range(func(k, v interface{}) bool {
@@ -691,7 +693,7 @@ func (s *Reporter) getSingleMeshResourceRevisions(resourceMap *sync.Map) []*moni
 	return res
 }
 
-//将每个具有ruleId的限流规则的版本号变化提取出来
+// 将每个具有ruleId的限流规则的版本号变化提取出来
 func (s *Reporter) getSingleRateLimitRevisions(rulesMap *sync.Map) []*monitorpb.SingleRateLimitRuleHistory {
 	var res []*monitorpb.SingleRateLimitRuleHistory
 	rulesMap.Range(func(k, v interface{}) bool {
@@ -714,7 +716,7 @@ func (s *Reporter) getSingleRateLimitRevisions(rulesMap *sync.Map) []*monitorpb.
 	return res
 }
 
-//生成发送的实例信息变更数据
+// 生成发送的实例信息变更数据
 func (s *Reporter) fillInstancesChange(history *monitorpb.InstancesHistory, nodes *statusNode, count uint32) {
 	history.Revision = make([]*monitorpb.RevisionHistory, count)
 	for i := uint32(0); i < count; i++ {
@@ -732,7 +734,7 @@ func (s *Reporter) fillInstancesChange(history *monitorpb.InstancesHistory, node
 	}
 }
 
-//生成发送的pb数据
+// 生成发送的pb数据
 func (s *Reporter) fillRevisions(revisions []*monitorpb.RevisionHistory, nodes *statusNode, count uint32) {
 	for i := uint32(0); i < count; i++ {
 		revisions[i] = &monitorpb.RevisionHistory{
@@ -747,7 +749,7 @@ func (s *Reporter) fillRevisions(revisions []*monitorpb.RevisionHistory, nodes *
 	}
 }
 
-//获取或者创建statusHistory
+// 获取或者创建statusHistory
 func (s *Reporter) getStatusHistory(svcKey *model.ServiceKey, createWhenEmpty bool) *statusHistory {
 	res, ok := s.statusMap.Load(*svcKey)
 	if ok {
@@ -760,7 +762,7 @@ func (s *Reporter) getStatusHistory(svcKey *model.ServiceKey, createWhenEmpty bo
 	return res.(*statusHistory)
 }
 
-//获取或者创建meshStatusHistory
+// 获取或者创建meshStatusHistory
 func (s *Reporter) getMeshStatusHistory(mk *meshKey, createWhenEmpty bool) *meshStatusHistory {
 	res, ok := s.meshStatusMap.Load(*mk)
 	if ok {
@@ -778,27 +780,27 @@ func (s *Reporter) getMeshStatusHistory(mk *meshKey, createWhenEmpty bool) *mesh
 	return res.(*meshStatusHistory)
 }
 
-//设置熔断数据
+// 设置熔断数据
 func (s *Reporter) generateCircuitBreakData(event *common.PluginEvent) {
 	localValue := event.EventObject.(*local.DefaultInstanceLocalValue)
 	localValue.SetExtendedData(s.ID(), newStatusList())
 }
 
-//插入一个熔断状态数据结构
+// 插入一个熔断状态数据结构
 func (s *Reporter) insertCircuitBreakStatus(event *common.PluginEvent) error {
 	localValue := event.EventObject.(*local.DefaultInstanceLocalValue)
 	localValue.SetExtendedData(s.ID(), newStatusList())
 	return nil
 }
 
-//往实例的熔断列表中添加一个状态变化
+// 往实例的熔断列表中添加一个状态变化
 func (s *Reporter) addCircuitBreakNode(cbNode *circuitBreakNode, localValue local.InstanceLocalValue) {
 	cbIf := localValue.GetExtendedData(s.ID())
 	cbList := cbIf.(*statusList)
 	cbList.addStatus(cbNode, s.globalCtx.Now())
 }
 
-//创建一个服务的全死全活记录数据结构
+// 创建一个服务的全死全活记录数据结构
 func (s *Reporter) createSvcLocalValue(event *common.PluginEvent) error {
 	lv := event.EventObject.(local.ServiceLocalValue)
 	lv.SetServiceDataByPluginId(s.ID(),
@@ -806,7 +808,7 @@ func (s *Reporter) createSvcLocalValue(event *common.PluginEvent) error {
 	return nil
 }
 
-// destroy 解决匿名组合中该函数二义性问题
+// Destroy 解决匿名组合中该函数二义性问题
 func (s *Reporter) Destroy() error {
 	err := s.PluginBase.Destroy()
 	if err != nil {
@@ -819,7 +821,7 @@ func (s *Reporter) Destroy() error {
 	return nil
 }
 
-//注册上报插件
+// 注册上报插件
 func init() {
 	plugin.RegisterConfigurablePlugin(&Reporter{}, &Config{})
 }

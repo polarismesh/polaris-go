@@ -19,9 +19,6 @@ package serviceroute
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
 	"log"
 	"math/rand"
 	"net"
@@ -29,26 +26,31 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 )
 
 const (
 	srNamespace   = "srNS"
 	srService     = "srSvc"
 	srIPAddr      = "127.0.0.1"
-	srPort        = 8009 //需要跟配置文件一致(sr_nearby.yaml)
+	srPort        = 8009 // 需要跟配置文件一致(sr_nearby.yaml)
 	srMonitorAddr = "127.0.0.1"
 	srMonitorPort = 8010
 )
 
-//NearbyTestingSuite 路由API测试套
+// NearbyTestingSuite 路由API测试套
 type NearbyTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -87,7 +89,7 @@ func (t *NearbyTestingSuite) setupServer(ipAddr string, port int) (*grpc.Server,
 
 	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, port))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, port)
@@ -143,7 +145,7 @@ func (t *NearbyTestingSuite) addInstanceV2(region, zone, campus string, health b
 	t.mocksvr.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
 }
 
-//设置模拟桩服务器
+// 设置模拟桩服务器
 func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 	t.serviceToken = uuid.New().String()
@@ -165,7 +167,7 @@ func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *NearbyTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
@@ -175,7 +177,7 @@ func (t *NearbyTestingSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//返回默认的测试配置对象
+// 返回默认的测试配置对象
 func (t *NearbyTestingSuite) getDefaultTestConfiguration(c *check.C) config.Configuration {
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
 	c.Assert(err, check.IsNil)
@@ -185,7 +187,7 @@ func (t *NearbyTestingSuite) getDefaultTestConfiguration(c *check.C) config.Conf
 	return cfg
 }
 
-//测试strictnearby的效果
+// 测试strictnearby的效果
 func (t *NearbyTestingSuite) TestStrictNearby(c *check.C) {
 	log.Printf("Start to TestStrictNearby: ")
 	defer util.DeleteDir(util.BackupDir)
@@ -198,35 +200,35 @@ func (t *NearbyTestingSuite) TestStrictNearby(c *check.C) {
 	t.mocksvr.SetLocation("A", "a", "0")
 }
 
-//进行就近路由时，匹配到idc级别
+// 进行就近路由时，匹配到idc级别
 func (t *NearbyTestingSuite) TestEnabledNearbyWithIDC(c *check.C) {
 	log.Println("Start to TestEnabledNearbyWithIDC")
 	t.testEnabledNearby(true, c)
 }
 
-//进行就近路由匹配，以城市为最小级别
+// 进行就近路由匹配，以城市为最小级别
 func (t *NearbyTestingSuite) TestEnabledNearbyWithoutIDC(c *check.C) {
 	log.Println("Start to TestEnabledNearbyWithoutIDC")
 	t.testEnabledNearby(false, c)
 }
 
-//就近路由测试的流程，可以根据匹不匹配idc进行不同的测试
+// 就近路由测试的流程，可以根据匹不匹配idc进行不同的测试
 func (t *NearbyTestingSuite) testEnabledNearby(matchIDC bool, c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//enableStat := false
-	//cfg.Global.StatReporter.Enable = &enableStat
-	//c.Assert(err, check.IsNil)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// enableStat := false
+	// cfg.Global.StatReporter.Enable = &enableStat
+	// c.Assert(err, check.IsNil)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetGlobal().GetStatReporter().SetEnable(true)
 	setRouteRecordMonitor(cfg)
-	//sr_nearby.yaml的配置中的匹配级别王idc，如果不匹配到该级别，那么改为zone
+	// sr_nearby.yaml的配置中的匹配级别王idc，如果不匹配到该级别，那么改为zone
 	if !matchIDC {
 		cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("zone")
-		//cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
+		// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
 		//	"matchLevel": "zone",
-		//})
+		// })
 	}
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -237,7 +239,7 @@ func (t *NearbyTestingSuite) testEnabledNearby(matchIDC bool, c *check.C) {
 		t.addInstance("A", "a", strconv.Itoa(i), true)
 	}
 
-	//这里要先sleep一下，让定时协程先跑起来，获取到客户端的地域信息
+	// 这里要先sleep一下，让定时协程先跑起来，获取到客户端的地域信息
 	time.Sleep(5 * time.Second)
 
 	request := &api.GetInstancesRequest{}
@@ -260,9 +262,9 @@ func (t *NearbyTestingSuite) testEnabledNearby(matchIDC bool, c *check.C) {
 
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
-	//让定时器逻辑至少跑一次
+	// 让定时器逻辑至少跑一次
 	time.Sleep(5 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -276,18 +278,18 @@ func (t *NearbyTestingSuite) testEnabledNearby(matchIDC bool, c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：3个不健康
-//A-b-1实例：3个健康，6个不健康
-//B-b-2实例：10个健康A-b-1实例
-//期望：返回3个健康A-b-1实例（降级到region，健康实例比例为3/(3+3+6)=0.25）
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：3个不健康
+// A-b-1实例：3个健康，6个不健康
+// B-b-2实例：10个健康A-b-1实例
+// 期望：返回3个健康A-b-1实例（降级到region，健康实例比例为3/(3+3+6)=0.25）
 func (t *NearbyTestingSuite) TestCaseNB1(c *check.C) {
 	log.Printf("Start to TestCase1: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -321,7 +323,7 @@ func (t *NearbyTestingSuite) TestCaseNB1(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(5 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -335,18 +337,18 @@ func (t *NearbyTestingSuite) TestCaseNB1(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：3个健康，1个不健康
-//A-b-1实例：3个健康
-//B-b-2实例：10个健康A-b-1实例
-//期望：返回3个健康A-a-0实例（不降级，健康实例比例为0.75）
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：3个健康，1个不健康
+// A-b-1实例：3个健康
+// B-b-2实例：10个健康A-b-1实例
+// 期望：返回3个健康A-a-0实例（不降级，健康实例比例为0.75）
 func (t *NearbyTestingSuite) TestCase2(c *check.C) {
 	log.Printf("Start to TestCase2: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -369,7 +371,7 @@ func (t *NearbyTestingSuite) TestCase2(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -383,18 +385,18 @@ func (t *NearbyTestingSuite) TestCase2(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：4个不健康
-//A-b-1实例：4个不健康
-//B-b-2实例：4个健康
-//期望：返回4个健康B-b-2实例（降级到""，健康实例比例为0.333）
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：4个不健康
+// A-b-1实例：4个不健康
+// B-b-2实例：4个健康
+// 期望：返回4个健康B-b-2实例（降级到""，健康实例比例为0.333）
 func (t *NearbyTestingSuite) TestCase3(c *check.C) {
 	log.Printf("Start to TestCase3: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -417,7 +419,7 @@ func (t *NearbyTestingSuite) TestCase3(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -431,18 +433,18 @@ func (t *NearbyTestingSuite) TestCase3(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：4个不健康
-//A-b-1实例：4个不健康
-//B-b-2实例：4个不健康
-//期望：返回4个不健康A-a-0实例（不降级，触发全死全活）
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：4个不健康
+// A-b-1实例：4个不健康
+// B-b-2实例：4个不健康
+// 期望：返回4个不健康A-a-0实例（不降级，触发全死全活）
 func (t *NearbyTestingSuite) TestCase4(c *check.C) {
 	log.Printf("Start to TestCase4: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -465,7 +467,7 @@ func (t *NearbyTestingSuite) TestCase4(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -479,18 +481,18 @@ func (t *NearbyTestingSuite) TestCase4(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：0个
-//A-b-1实例：4个不健康
-//B-b-2实例：4个不健康
-//期望：返回4个健康B-b-2实例（降级到region，触发全死全活）
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：0个
+// A-b-1实例：4个不健康
+// B-b-2实例：4个不健康
+// 期望：返回4个健康B-b-2实例（降级到region，触发全死全活）
 func (t *NearbyTestingSuite) TestCase5(c *check.C) {
 	log.Printf("Start to TestCase5: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -513,7 +515,7 @@ func (t *NearbyTestingSuite) TestCase5(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -527,27 +529,27 @@ func (t *NearbyTestingSuite) TestCase5(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：100，matchLevel：campus，lowestMatchLevel：zone
-//A-a-0实例：0个
-//A-b-1实例：4个不健康
-//B-b-2实例：4个不健康
-//期望：返回错误，在zone和campus两个级别之间没有足够的实例
+// recover percent: 0.2，开启降级，降级percent：100，matchLevel：campus，lowestMatchLevel：zone
+// A-a-0实例：0个
+// A-b-1实例：4个不健康
+// B-b-2实例：4个不健康
+// 期望：返回错误，在zone和campus两个级别之间没有足够的实例
 func (t *NearbyTestingSuite) TestCase6(c *check.C) {
 	log.Printf("Start to TestCase6: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("campus")
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMaxMatchLevel("zone")
-	//cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
+	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
 	//	"matchLevel": "campus",
 	//	"lowestMatchLevel": "zone",
-	//})
+	// })
 	t.batchAddInstance(0, 0, 0, 0, 4, 0, 4, 0)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -561,7 +563,7 @@ func (t *NearbyTestingSuite) TestCase6(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -575,27 +577,27 @@ func (t *NearbyTestingSuite) TestCase6(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，不开启降级，matchLevel：zone
-//A-a-0实例：4个不健康
-//A-b-1实例：4个健康
-//B-b-2实例：4个健康
-//期望：开启全死全活，返回4个不健康A-a-0实例（不降级，触发全死全活）；关闭全死全活，不返回实例
+// recover percent: 0.2，不开启降级，matchLevel：zone
+// A-a-0实例：4个不健康
+// A-b-1实例：4个健康
+// B-b-2实例：4个健康
+// 期望：开启全死全活，返回4个不健康A-a-0实例（不降级，触发全死全活）；关闭全死全活，不返回实例
 func (t *NearbyTestingSuite) TestCase7(c *check.C) {
 	log.Printf("Start to TestCase7: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("zone")
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetEnableDegradeByUnhealthyPercent(false)
-	//cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
+	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
 	//	"matchLevel": "zone",
 	//	"enableDegradeByUnhealthyPercent": false,
-	//})
+	// })
 	t.batchAddInstance(4, 0, 0, 0, 4, 4, 4, 4)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -621,7 +623,7 @@ func (t *NearbyTestingSuite) TestCase7(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -635,31 +637,31 @@ func (t *NearbyTestingSuite) TestCase7(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//测试由metadata控制就近路由的开启
+// 测试由metadata控制就近路由的开启
 func (t *NearbyTestingSuite) TestMetadataNearby(c *check.C) {
 	log.Println("Start to TestMetadataNearby")
 	defer util.DeleteDir(util.BackupDir)
 
-	//将metadata的值设为非法的"invalid"，在这种情况下，会按默认方式关闭就近路由
+	// 将metadata的值设为非法的"invalid"，在这种情况下，会按默认方式关闭就近路由
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "invalid")
 
-	//健康的不能匹配到城市的实例
+	// 健康的不能匹配到城市的实例
 	for i := 0; i < 5; i++ {
 		t.addInstance("B", "b", "1", true)
 	}
 
-	//不健康的不能匹配到城市的实例
+	// 不健康的不能匹配到城市的实例
 	for i := 0; i < 3; i++ {
 		t.addInstance("B", "b", "1", false)
 	}
 
-	//可以匹配到城市级别的实例
+	// 可以匹配到城市级别的实例
 	t.addInstance("A", "a", "1", true)
 
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//enableStat := false
-	//cfg.Global.StatReporter.Enable = &enableStat
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// enableStat := false
+	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg := t.getDefaultTestConfiguration(c)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -676,25 +678,25 @@ func (t *NearbyTestingSuite) TestMetadataNearby(c *check.C) {
 	c.Assert(len(resp.GetInstances()), check.Equals, 9)
 
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//这里要先sleep一下，更新服务元数据,因为更新服务有0到10s随机时间，13s是个安全范围
+	// 这里要先sleep一下，更新服务元数据,因为更新服务有0到10s随机时间，13s是个安全范围
 	time.Sleep(13 * time.Second)
-	//测试monitor接收的数据对不对
-	//checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[string]uint32{
+	// 测试monitor接收的数据对不对
+	// checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[string]uint32{
 	//	routerKey{
 	//		Namespace: srNamespace,
 	//		Service:   srService,
 	//		Plugin:    config.DefaultServiceRouterNearbyBased,
 	//	}: {"Success": 1},
-	//}, c)
+	// }, c)
 	t.mockMonitor.SetServiceRouteRecords(nil)
 	request.SkipRouteFilter = false
 	resp, err = consumer.GetInstances(request)
 	c.Assert(err, check.IsNil)
-	//在进行就近路由匹配后
+	// 在进行就近路由匹配后
 	c.Assert(len(resp.GetInstances()), check.Equals, 1)
 	t.mocksvr.ClearServiceInstances(t.testService)
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -708,27 +710,27 @@ func (t *NearbyTestingSuite) TestMetadataNearby(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//recover percent: 0.2，开启降级，降级percent：50，matchLevel：zone，lowestMatchLevel：""
-//A-a-0实例：2个健康，2个不健康
-//A-b-1实例：2个健康
-//B-b-2实例：4个健康
-//期望：返回2个健康A-a-0实例和2个健康A-b-1实例（降级到region，不触发全死全活）
+// recover percent: 0.2，开启降级，降级percent：50，matchLevel：zone，lowestMatchLevel：""
+// A-a-0实例：2个健康，2个不健康
+// A-b-1实例：2个健康
+// B-b-2实例：4个健康
+// 期望：返回2个健康A-a-0实例和2个健康A-b-1实例（降级到region，不触发全死全活）
 func (t *NearbyTestingSuite) TestCase8(c *check.C) {
 	log.Printf("Start to TestCase8: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	//cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	//c.Assert(err, check.IsNil)
-	//cfg.GetGlobal().GetStatReporter().SetEnable(false)
+	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
+	// c.Assert(err, check.IsNil)
+	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetUnhealthyPercentToDegrade(50)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("zone")
-	//cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
+	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
 	//	"unhealthyPercentToDegrade": 50,
 	//	"matchLevel": "zone",
-	//})
+	// })
 	t.batchAddInstance(4, 2, 0, 0, 2, 2, 4, 4)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -747,7 +749,7 @@ func (t *NearbyTestingSuite) TestCase8(c *check.C) {
 	azone := 0
 	log.Printf("len of resp: %v", len(resp.GetInstances()))
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -809,7 +811,7 @@ func (t *NearbyTestingSuite) TestCase9(c *check.C) {
 	c.Assert(err, check.IsNil)
 	targetInstance := resp.GetInstances()[0]
 
-	//熔断健康的实例
+	// 熔断健康的实例
 	var errCode int32
 	errCode = 1
 	for i := 0; i < 20; i++ {
@@ -822,7 +824,7 @@ func (t *NearbyTestingSuite) TestCase9(c *check.C) {
 	}
 	time.Sleep(time.Second * 3)
 
-	//只能获取到熔断的实例
+	// 只能获取到熔断的实例
 	for i := 0; i < 10; i++ {
 		resp, err = consumer.GetOneInstance(getInstancesReq)
 		c.Assert(err, check.IsNil)
@@ -832,7 +834,7 @@ func (t *NearbyTestingSuite) TestCase9(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -875,7 +877,7 @@ func (t *NearbyTestingSuite) TestCase10(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -950,7 +952,7 @@ func (t *NearbyTestingSuite) TestCase11(c *check.C) {
 	oneResp, err := consumer.GetOneInstance(getInstancesReq)
 	c.Assert(err, check.IsNil)
 	targetInstance := oneResp.GetInstance()
-	//熔断健康的实例
+	// 熔断健康的实例
 	fmt.Println("-------------circuitbreak on instance")
 	var errCode int32
 	errCode = 1
@@ -1051,7 +1053,7 @@ func (t *NearbyTestingSuite) TestCase11(c *check.C) {
 	t.mocksvr.ClearServiceInstances(t.testService)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "false")
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: srNamespace,
@@ -1065,7 +1067,7 @@ func (t *NearbyTestingSuite) TestCase11(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-//返回一个*api.GetInstancesRequest
+// 返回一个*api.GetInstancesRequest
 func (t *NearbyTestingSuite) getTestServiceReq() *api.GetInstancesRequest {
 	request := &api.GetInstancesRequest{}
 	request.FlowID = 1111
@@ -1076,10 +1078,10 @@ func (t *NearbyTestingSuite) getTestServiceReq() *api.GetInstancesRequest {
 	return request
 }
 
-//type1：A-a-0实例
-//type2：A-a-1实例
-//type3：A-b-1实例
-//type4：B-b-2实例
+// type1：A-a-0实例
+// type2：A-a-1实例
+// type3：A-b-1实例
+// type4：B-b-2实例
 func (t *NearbyTestingSuite) batchAddInstance(type1, health1, type2, health2, type3, health3, type4, health4 int) {
 	for i := 0; i < health1; i++ {
 		t.addInstance("A", "a", "0", true)
@@ -1107,7 +1109,7 @@ func (t *NearbyTestingSuite) batchAddInstance(type1, health1, type2, health2, ty
 	}
 }
 
-//套件名字
+// 套件名字
 func (t *NearbyTestingSuite) GetName() string {
 	return "ServiceRoute"
 }

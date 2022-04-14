@@ -19,6 +19,16 @@ package serviceroute
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"os/user"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -26,32 +36,24 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"os/user"
-	"time"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	canaryNamespace = "dstCanaryNs"
-	//测试的默认服务名
+	// 测试的默认服务名
 	canaryService = "dstCanarySvc"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	canaryIPAddress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	canaryPort = 8118
-	//测试monitor的地址
+	// 测试monitor的地址
 	canaryMonitorIPAddr = "127.0.0.1"
-	//测试monitor的端口
+	// 测试monitor的端口
 	canaryMonitorPort = 8119
 )
 
-//元数据过滤路由插件测试用例
+// 元数据过滤路由插件测试用例
 type CanaryTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -62,12 +64,12 @@ type CanaryTestingSuite struct {
 	testService  *namingpb.Service
 }
 
-//套件名字
+// 套件名字
 func (t *CanaryTestingSuite) GetName() string {
 	return "CanaryTestingSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	fmt.Println("----------------SetUpSuite")
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -98,12 +100,12 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	t.mockServer.RegisterService(t.testService)
-	//t.mockServer.GenTestInstances(t.testService, normalInstances)
-	//t.mockServer.GenTestInstancesWithMeta(t.testService, addMetaCount, map[string]string{addMetaKey: addMetaValue})
+	// t.mockServer.GenTestInstances(t.testService, normalInstances)
+	// t.mockServer.GenTestInstancesWithMeta(t.testService, addMetaCount, map[string]string{addMetaKey: addMetaValue})
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -123,14 +125,14 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (t *CanaryTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//正常逻辑测试
+// 正常逻辑测试
 func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 	DeleteBackUpDir()
 	fmt.Println("-----------TestCanaryNormal01")
@@ -212,7 +214,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 		c.Assert(v.GetId() == v1Inst.GetId(), check.Equals, true)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -282,7 +284,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal02(c *check.C) {
 		c.Assert(instance.GetId() != v1Inst.GetId(), check.Equals, true)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -360,7 +362,7 @@ func CloseCbInstance(instance model.Instance, consumer api.ConsumerAPI, c *check
 	var errCode int32
 	errCode = 1
 	for i := 0; i < 10; i++ {
-		//util.SelectInstanceSpecificNum(c, consumer, instance, 1, 200)
+		// util.SelectInstanceSpecificNum(c, consumer, instance, 1, 200)
 		instance.GetCircuitBreakerStatus().Allocate()
 		err := consumer.UpdateServiceCallResult(
 			&api.ServiceCallResult{
@@ -526,7 +528,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	CircuitBreakerInstance(tarIns2, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns2.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -556,7 +558,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 		c.Assert(v.GetCircuitBreakerStatus(), check.NotNil)
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -581,7 +583,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 		CircuitBreakerInstance(v, consumer, c)
 	}
 	time.Sleep(time.Second * 2)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -607,7 +609,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	}
 
 	time.Sleep(time.Second * 25)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -623,7 +625,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	for _, v := range instMap[CanaryInstance] {
 		CloseCbInstance(v, consumer, c)
 	}
-	//CloseCbInstances(canaryNamespace, canaryService, consumer, c, 2000)
+	// CloseCbInstances(canaryNamespace, canaryService, consumer, c, 2000)
 	time.Sleep(time.Second * 3)
 	for _, v := range instMap[CanaryInstance] {
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Close)
@@ -700,7 +702,7 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	CircuitBreakerInstance(tarIns2, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns2.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -735,7 +737,7 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	for _, v := range instMap[OtherCanaryInstance] {
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -756,7 +758,7 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, NormalInstance)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -820,7 +822,7 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	CircuitBreakerInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -844,7 +846,7 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	time.Sleep(time.Second * 22)
 	CloseCbInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 2)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -865,7 +867,7 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, CanaryInstance)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -927,7 +929,7 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	CircuitBreakerInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -951,7 +953,7 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	time.Sleep(time.Second * 22)
 	CloseCbInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 2)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -972,7 +974,7 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, NormalInstance)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,
@@ -1026,7 +1028,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 	defer t.mockServer.ClearServiceInstances(t.testService)
 	defer t.mockServer.SetServiceMetadata(t.serviceToken, model.CanaryMetadataEnable, "false")
 
-	//测试不带金丝雀标签
+	// 测试不带金丝雀标签
 	var getOneInstanceReq *api.GetOneInstanceRequest
 	getOneInstanceReq = &api.GetOneInstanceRequest{}
 	getOneInstanceReq.FlowID = 1
@@ -1063,7 +1065,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, NormalInstance)
 	}
 
-	//测试带金丝雀标签
+	// 测试带金丝雀标签
 	getOneInstanceReq.Canary = "isCanary"
 	for i := 0; i < 10; i++ {
 		resp, err := consumer.GetOneInstance(getOneInstanceReq)
@@ -1083,7 +1085,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, CanaryInstance)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace:    canaryNamespace,
@@ -1169,7 +1171,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 	getOneInstanceReq.Namespace = canaryNamespace
 	getOneInstanceReq.Service = canaryService
 
-	//测试不带金丝雀标签
+	// 测试不带金丝雀标签
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getOneInstanceReq)
 		c.Assert(err, check.IsNil)
@@ -1190,7 +1192,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, NormalInstance)
 	}
 
-	//测试带金丝雀标签
+	// 测试带金丝雀标签
 	getOneInstanceReq.Canary = "isCanary"
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getOneInstanceReq)
@@ -1209,7 +1211,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, CanaryInstance)
 	}
 	time.Sleep(2 * time.Second)
-	//测试monitor接收的数据对不对
+	// 测试monitor接收的数据对不对
 	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
 		routerKey{
 			Namespace: canaryNamespace,

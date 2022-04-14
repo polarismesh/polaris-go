@@ -19,6 +19,10 @@ package unirate
 
 import (
 	"fmt"
+	"math"
+	"sync/atomic"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -27,28 +31,25 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
-	"math"
-	"sync/atomic"
-	"time"
 )
 
-//基于匀速排队策略的限流控制器
+// 基于匀速排队策略的限流控制器
 type RateLimiterUniformRate struct {
 	*plugin.PluginBase
 	cfg *Config
 }
 
-//Type 插件类型
+// Type 插件类型
 func (g *RateLimiterUniformRate) Type() common.Type {
 	return common.TypeRateLimiter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (g *RateLimiterUniformRate) Name() string {
 	return config.DefaultUniformRateLimiter
 }
 
-//Init 初始化插件
+// Init 初始化插件
 func (g *RateLimiterUniformRate) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	cfgValue := ctx.Config.GetProvider().GetRateLimit().GetPluginConfig(g.Name())
@@ -58,7 +59,7 @@ func (g *RateLimiterUniformRate) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-//Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (g *RateLimiterUniformRate) Destroy() error {
 	return nil
 }
@@ -72,33 +73,33 @@ func (g *RateLimiterUniformRate) IsEnable(cfg config.Configuration) bool {
 	}
 }
 
-//uniforme ratelimiter的窗口实现
+// uniforme ratelimiter的窗口实现
 type quotaWindow struct {
-	//限流规则
+	// 限流规则
 	rule *namingpb.Rule
-	//上次分配配额的时间戳
+	// 上次分配配额的时间戳
 	lastGrantTime int64
-	//等效配额
+	// 等效配额
 	effectiveAmount uint32
-	//等效时间窗
+	// 等效时间窗
 	effectiveDuration time.Duration
-	//为一个实例生成一个配额的平均时间
+	// 为一个实例生成一个配额的平均时间
 	effectiveRate int64
-	//所有实例分配一个配额的平均时间
+	// 所有实例分配一个配额的平均时间
 	totalRate float64
-	//最大排队时间
+	// 最大排队时间
 	maxQueuingDuration int64
-	//是不是有amount为0
+	// 是不是有amount为0
 	rejectAll bool
 }
 
-//服务实例发生变更时，改变effectiveRate
+// 服务实例发生变更时，改变effectiveRate
 func (q *quotaWindow) OnInstancesChanged(instCount int) {
 	newEffectiveRate := q.totalRate * float64(instCount)
 	atomic.StoreInt64(&q.effectiveRate, int64(math.Round(newEffectiveRate)))
 }
 
-//分配配额
+// 分配配额
 func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 	if q.rejectAll {
 		return &ratelimiter.QuotaResult{
@@ -106,7 +107,7 @@ func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 			Info: "uniRate RateLimiter: reject for zero rule amount",
 		}, nil
 	}
-	//需要多久产生这么请求的配额
+	// 需要多久产生这么请求的配额
 	costDuration := atomic.LoadInt64(&q.effectiveRate)
 
 	var waitDuration int64
@@ -118,9 +119,9 @@ func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 		if waitDuration >= 0 {
 			break
 		}
-		//首次访问，尝试更新时间间隔
+		// 首次访问，尝试更新时间间隔
 		if atomic.CompareAndSwapInt64(&q.lastGrantTime, expectedTime, currentTime) {
-			//更新时间成功，此时他是第一个进来的，等待时间归0
+			// 更新时间成功，此时他是第一个进来的，等待时间归0
 			waitDuration = 0
 			break
 		}
@@ -131,16 +132,16 @@ func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 			Info: "uniRate RateLimiter: grant quota",
 		}, nil
 	}
-	//如果等待时间在上限之内，那么放通
+	// 如果等待时间在上限之内，那么放通
 	if waitDuration <= q.maxQueuingDuration {
-		//log.Printf("grant quota, waitDuration %v", waitDuration)
+		// log.Printf("grant quota, waitDuration %v", waitDuration)
 		return &ratelimiter.QuotaResult{
 			Code:      model.QuotaResultOk,
 			QueueTime: time.Duration(waitDuration),
 		}, nil
 	}
-	//如果等待时间超过配置的上限，那么拒绝
-	//归还等待间隔
+	// 如果等待时间超过配置的上限，那么拒绝
+	// 归还等待间隔
 	info := fmt.Sprintf(
 		"uniRate RateLimiter: queueing time %d exceed maxQueuingTime %s",
 		time.Duration(waitDuration), time.Duration(waitDuration))
@@ -151,13 +152,13 @@ func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 	}, nil
 }
 
-//返还token，这个限流器不用实现
+// 返还token，这个限流器不用实现
 func (q *quotaWindow) Release() {
 
 }
 
-//初始化并创建限流窗口
-//主流程会在首次调用，以及规则对象变更的时候，调用该方法
+// 初始化并创建限流窗口
+// 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) (ratelimiter.QuotaBucket, error) {
 	res := &quotaWindow{}
 	res.rule = criteria.DstRule
@@ -173,14 +174,14 @@ func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) (
 			return res, nil
 		}
 		duration, err := pb.ConvertDuration(a.ValidDuration)
-		if nil != err {
+		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err,
 				"invalid rateLimit rule duration %v", a.ValidDuration)
 		}
-		//选出允许qps最低的amount和duration组合，作为effectiveAmount和effectiveDuration
-		//在匀速排队限流器里面，就是每个请求都要间隔同样的时间，
-		//如限制1s 10个请求，那么每个请求只有在上个请求允许过去100ms后才能通过下一个请求
-		//这种机制下面，那么在多个amount组合里面，只要允许qps最低的组合生效，那么所有限制都满足了
+		// 选出允许qps最低的amount和duration组合，作为effectiveAmount和effectiveDuration
+		// 在匀速排队限流器里面，就是每个请求都要间隔同样的时间，
+		// 如限制1s 10个请求，那么每个请求只有在上个请求允许过去100ms后才能通过下一个请求
+		// 这种机制下面，那么在多个amount组合里面，只要允许qps最低的组合生效，那么所有限制都满足了
 		if !effective {
 			res.effectiveAmount = a.MaxAmount.GetValue()
 			res.effectiveDuration = duration
@@ -208,7 +209,7 @@ func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) (
 	return res, nil
 }
 
-//init 注册插件
+// init 注册插件
 func init() {
 	plugin.RegisterConfigurablePlugin(&RateLimiterUniformRate{}, &Config{})
 }

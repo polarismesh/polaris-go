@@ -19,23 +19,25 @@ package pb
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/modern-go/reflect2"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-//兼容接口, trpc-go依赖项
+// NewRoutingRuleInProto 兼容接口, trpc-go依赖项
 func NewRoutingRuleInProto(resp *namingpb.DiscoverResponse) model.ServiceRule {
 	return NewServiceRuleInProto(resp)
 }
 
-//路由规则解析助手
+// RoutingAssistant 路由规则解析助手
 type RoutingAssistant struct {
 }
 
-//解析出具体的规则值
+// ParseRuleValue 解析出具体的规则值
 func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	routingValue := resp.Routing
@@ -45,23 +47,23 @@ func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (prot
 	return routingValue, revision
 }
 
-//规则校验
+// Validate 规则校验
 func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	if reflect2.IsNil(message) {
 		return nil
 	}
 	routingValue := message.(*namingpb.Routing)
 	var err error
-	if err = r.validateRoute("inbound", routingValue.Inbounds, ruleCache); nil != err {
+	if err = r.validateRoute("inbound", routingValue.Inbounds, ruleCache); err != nil {
 		return err
 	}
-	if err = r.validateRoute("outbound", routingValue.Outbounds, ruleCache); nil != err {
+	if err = r.validateRoute("outbound", routingValue.Outbounds, ruleCache); err != nil {
 		return err
 	}
 	return nil
 }
 
-//校验路由规则
+// validateRoute 校验路由规则
 func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Route, ruleCache model.RuleCache) error {
 	if len(routes) == 0 {
 		return nil
@@ -70,7 +72,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 		sources := route.GetSources()
 		if len(sources) > 0 {
 			for _, source := range sources {
-				if err := buildCacheFromMatcher(source.GetMetadata(), ruleCache); nil != err {
+				if err := buildCacheFromMatcher(source.GetMetadata(), ruleCache); err != nil {
 					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(source)
 					return fmt.Errorf("fail to validate %s source route, error is %v, route text is\n%s",
 						direction, err, routeTxt)
@@ -80,7 +82,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 		destinations := route.GetDestinations()
 		if len(destinations) > 0 {
 			for _, destination := range destinations {
-				if err := buildCacheFromMatcher(destination.GetMetadata(), ruleCache); nil != err {
+				if err := buildCacheFromMatcher(destination.GetMetadata(), ruleCache); err != nil {
 					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(destination)
 					return fmt.Errorf("fail to validate %s destination route, error is %v, route text is\n%s",
 						direction, err, routeTxt)
@@ -91,7 +93,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 	return nil
 }
 
-//设置默认值
+// SetDefault 设置默认值
 func (r *RoutingAssistant) SetDefault(message proto.Message) {
 	// do nothing
 }

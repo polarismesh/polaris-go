@@ -20,43 +20,45 @@ package discover
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"github.com/modern-go/reflect2"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"log"
-	"net"
-	"sync"
-	"time"
 )
 
 const (
-	//测试的默认命名空间
+	// 测试的默认命名空间
 	consumerNamespace = "testns"
-	//测试的默认服务名
+	// 测试的默认服务名
 	consumerService = "svc1"
-	//测试服务器的默认地址
+	// 测试服务器的默认地址
 	consumerIPAddress = "127.0.0.1"
-	//测试服务器的端口
+	// 测试服务器的端口
 	consumerPort = 8008
 )
 
 const (
-	//直接过滤的实例数
+	// 直接过滤的实例数
 	normalInstances    = 3
 	isolatedInstances  = 2
 	unhealthyInstances = 1
 	allInstances       = normalInstances + isolatedInstances + unhealthyInstances
 )
 
-//ConsumerTestingSuite 消费者API测试套
+// ConsumerTestingSuite 消费者API测试套
 type ConsumerTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -65,12 +67,12 @@ type ConsumerTestingSuite struct {
 	testService  *namingpb.Service
 }
 
-//套件名字
+// GetName 套件名字
 func (t *ConsumerTestingSuite) GetName() string {
 	return "Consumer"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -105,7 +107,7 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
@@ -114,13 +116,13 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-//SetUpSuite 结束测试套程序
+// TearDownSuite 结束测试套程序
 func (t *ConsumerTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//TestInitConsumerConfigByFile 测试初始化消费者配置文件
+// TestInitConsumerConfigByFile 测试初始化消费者配置文件
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByFile")
 	defer util.DeleteDir(util.BackupDir)
@@ -129,7 +131,7 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 	ctx.Destroy()
 }
 
-//测试以无文件默认配置初始化消费者api
+// TestInitConsumerConfigByDefault 测试以无文件默认配置初始化消费者api
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByDefault")
 	defer util.DeleteDir(util.BackupDir)
@@ -141,13 +143,13 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 	consumerAPI.Destroy()
 }
 
-//测试获取多个服务实例
+// TestGetInstancesNormal 测试获取多个服务实例
 func (t *ConsumerTestingSuite) TestGetInstancesNormal(c *check.C) {
 	log.Printf("Start TestGetInstancesNormal")
 	t.testGetInstances(c, false)
 }
 
-//在mockTimeout宏中，执行测试逻辑
+// 在mockTimeout宏中，执行测试逻辑
 func (t *ConsumerTestingSuite) runWithMockTimeout(mockTimeout bool, handle func()) {
 	t.mockServer.MakeOperationTimeout(mock.OperationDiscoverInstance, mockTimeout)
 	t.mockServer.MakeOperationTimeout(mock.OperationDiscoverRouting, mockTimeout)
@@ -158,7 +160,7 @@ func (t *ConsumerTestingSuite) runWithMockTimeout(mockTimeout bool, handle func(
 	handle()
 }
 
-//测试获取多个服务实例
+// TestGetInstancesTimeout 测试获取多个服务实例
 func (t *ConsumerTestingSuite) TestGetInstancesTimeout(c *check.C) {
 	log.Printf("Start TestGetInstancesTimeout")
 	t.mockServer.SetPrintDiscoverReturn(true)
@@ -167,7 +169,7 @@ func (t *ConsumerTestingSuite) TestGetInstancesTimeout(c *check.C) {
 	t.mockServer.SetPrintDiscoverReturn(false)
 }
 
-//测试获取多个服务实例
+// 测试获取多个服务实例
 func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
@@ -186,7 +188,7 @@ func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
 		endTime := time.Now()
 		consumeTime := endTime.Sub(startTime)
 		fmt.Printf("time consume is %v\n", consumeTime)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("err recv is %v\n", err)
 		}
 		c.Assert(err, check.IsNil)
@@ -221,7 +223,7 @@ func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
 	})
 }
 
-//测试获取单个服务实例
+// 测试获取单个服务实例
 func (t *ConsumerTestingSuite) testGetOneInstance(c *check.C, mockTimeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
@@ -253,19 +255,19 @@ func (t *ConsumerTestingSuite) testGetOneInstance(c *check.C, mockTimeout bool) 
 	})
 }
 
-//测试获取单个服务实例
+// TestGetAllInstanceNormal 测试获取单个服务实例
 func (t *ConsumerTestingSuite) TestGetAllInstanceNormal(c *check.C) {
 	log.Printf("Start TestGetAllInstanceNormal")
 	t.testGetAllInstance(c, false)
 }
 
-//测试获取单个服务实例
+// TestGetAllInstanceTimeout 测试获取单个服务实例
 func (t *ConsumerTestingSuite) TestGetAllInstanceTimeout(c *check.C) {
 	log.Printf("Start TestGetAllInstanceTimeout")
 	t.testGetAllInstance(c, true)
 }
 
-//测试获取全量服务实例
+// 测试获取全量服务实例
 func (t *ConsumerTestingSuite) testGetAllInstance(c *check.C, mockTimeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
@@ -294,7 +296,7 @@ func (t *ConsumerTestingSuite) testGetAllInstance(c *check.C, mockTimeout bool) 
 	})
 }
 
-//测试获取单个实例后，NewServiceCallResult调用查找instance，上报调用结果
+// TestSideCarUpdateServiceCallResult 测试获取单个实例后，NewServiceCallResult调用查找instance，上报调用结果
 func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 	log.Printf("Start TestSideCarUpdateServiceCallResult")
 	util.DeleteDir(util.BackupDir)
@@ -318,9 +320,9 @@ func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 	c.Assert(inst.IsIsolated(), check.Equals, false)
 	c.Assert(inst.IsHealthy(), check.Equals, true)
 	util.DeleteDir(util.BackupDir)
-	//测试ServiceCallResult代码
+	// 测试ServiceCallResult代码
 	insReq := api.InstanceRequest{
-		InstanceId: inst.GetId(),
+		InstanceID: inst.GetId(),
 		ServiceKey: model.ServiceKey{
 			Namespace: inst.GetNamespace(),
 			Service:   inst.GetService(),
@@ -334,9 +336,9 @@ func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 	svcCallResult.SetDelay(consumedTime)
 	err = consumer.UpdateServiceCallResult(svcCallResult)
 	c.Assert(err, check.IsNil)
-	//invalid InstanceRequest Test
+	// invalid InstanceRequest Test
 	invalidInsReq := api.InstanceRequest{
-		InstanceId: "",
+		InstanceID: "",
 		ServiceKey: model.ServiceKey{
 			Namespace: inst.GetNamespace(),
 			Service:   inst.GetService(),
@@ -347,7 +349,7 @@ func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 	c.Assert(nilResult, check.IsNil)
 }
 
-//测试以错误的参数请求实例
+// 测试以错误的参数请求实例
 func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
@@ -364,37 +366,37 @@ func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout boo
 	})
 }
 
-//测试以错误的参数请求实例
+// TestGetInstancesErrorNormal 测试以错误的参数请求实例
 func (t *ConsumerTestingSuite) TestGetInstancesErrorNormal(c *check.C) {
 	log.Printf("Start TestGetInstancesErrorNormal")
 	t.testGetInstancesError(c, false)
 }
 
-//测试以错误的参数请求实例
+// TestGetInstancesErrorTimeout 测试以错误的参数请求实例
 func (t *ConsumerTestingSuite) TestGetInstancesErrorTimeout(c *check.C) {
 	log.Printf("Start TestGetInstancesErrorTimeout")
 	t.testGetInstancesError(c, true)
 }
 
-//构建服务路由规则
+// 构建服务路由规则
 func (t *ConsumerTestingSuite) buildServiceRoutes() {
 	//
 	//
 	//
-	//进站规则
+	// 进站规则
 	t.mockServer.RegisterRouteRule(t.testService, &namingpb.Routing{
 		Revision:  &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: consumerService},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Inbounds: []*namingpb.Route{
 			{
-				//指定源服务为任意服务, 否则因为没有sourceServiceInfo会匹配不了
+				// 指定源服务为任意服务, 否则因为没有sourceServiceInfo会匹配不了
 				Sources: []*namingpb.Source{
 					{
 						Service:   &wrappers.StringValue{Value: "*"},
 						Namespace: &wrappers.StringValue{Value: "*"}},
 				},
-				//根据不同逻辑set来进行目标服务分区路由
+				// 根据不同逻辑set来进行目标服务分区路由
 				Destinations: []*namingpb.Destination{
 					{
 						Metadata: map[string]*namingpb.MatchString{
@@ -420,7 +422,7 @@ func (t *ConsumerTestingSuite) buildServiceRoutes() {
 	})
 }
 
-//获取路由规则的测试
+// 获取路由规则的测试
 func (t *ConsumerTestingSuite) testGetRouteRule(c *check.C, mockTimeout bool) {
 	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
@@ -439,13 +441,13 @@ func (t *ConsumerTestingSuite) testGetRouteRule(c *check.C, mockTimeout bool) {
 	})
 }
 
-//获取路由规则的测试
+// TestGetRouteRuleNormal 获取路由规则的测试
 func (t *ConsumerTestingSuite) TestGetRouteRuleNormal(c *check.C) {
 	log.Printf("Start TestGetRouteRuleNormal")
 	t.testGetRouteRule(c, false)
 }
 
-//获取路由规则的测试
+// TestGetRouteRuleTimeout 获取路由规则的测试
 func (t *ConsumerTestingSuite) TestGetRouteRuleTimeout(c *check.C) {
 	log.Printf("Start TestGetRouteRuleTimeout")
 	t.testGetRouteRule(c, true)
@@ -456,7 +458,7 @@ const (
 	hostPattern = "10.11.123.%d"
 )
 
-//测试多协程同时获取多个服务，看看会不会出现服务信息串了的问题
+// TestMultiGet 测试多协程同时获取多个服务，看看会不会出现服务信息串了的问题
 func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 	log.Printf("Start TestMultiGet")
 	defer util.DeleteDir(util.BackupDir)
@@ -497,6 +499,7 @@ func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 	wg.Wait()
 }
 
+// TestConsumerInit .
 func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 	log.Printf("Start TestConsumerInit")
 	defer util.DeleteDir(util.BackupDir)
@@ -532,8 +535,8 @@ func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 	c.Check(err, check.IsNil)
 }
 
-////测试如果server不返回首次请求，能不能正常获取实例
-//func (t *ConsumerTestingSuite) TestGetOneInstanceNoReturn(c *check.C) {
+// 测试如果server不返回首次请求，能不能正常获取实例
+// func (t *ConsumerTestingSuite) TestGetOneInstanceNoReturn(c *check.C) {
 //	log.Printf("Start TestGetOneInstanceNoReturn")
 //	defer util.DeleteDir(util.BackupDir)
 //	consumer, err := api.NewConsumerAPIByFile("testdata/consumer.yaml")
@@ -557,12 +560,12 @@ func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 //	defer t.mockServer.UnsetFirstNoReturn(svcEventKey)
 //	_, err = consumer.GetOneInstance(request)
 //	c.Assert(err, check.IsNil)
-//}
+// }
 
-//测试可靠性默认服务名
+// 测试可靠性默认服务名
 const reliableConsumerService = "reliableSvc1"
 
-//测试多协程获取服务，且当时服务有大量实例正在上线
+// TestMultiGetWhenUpdate 测试多协程获取服务，且当时服务有大量实例正在上线
 func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 	log.Printf("Start TestMultiGetWhenUpdate")
 	defer util.DeleteDir(util.BackupDir)

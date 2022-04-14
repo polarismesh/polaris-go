@@ -18,7 +18,10 @@
 package startup
 
 import (
+	"time"
+
 	"github.com/golang/protobuf/proto"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -28,18 +31,17 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"time"
 )
 
-//创建上报回调
+// NewReportClientCallBack  创建上报回调
 func NewReportClientCallBack(
 	cfg config.Configuration, supplier plugin.Supplier, globalCtx model.ValueContext) (*ReportClientCallBack, error) {
 	var err error
 	var callback = &ReportClientCallBack{}
-	if callback.connector, err = data.GetServerConnector(cfg, supplier); nil != err {
+	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callback.registry, err = data.GetRegistry(cfg, supplier); nil != err {
+	if callback.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.configuration = cfg
@@ -49,7 +51,7 @@ func NewReportClientCallBack(
 	return callback, nil
 }
 
-//上报客户端状态任务回调
+// ReportClientCallBack 上报客户端状态任务回调
 type ReportClientCallBack struct {
 	connector     serverconnector.ServerConnector
 	registry      localregistry.InstancesRegistry
@@ -59,16 +61,16 @@ type ReportClientCallBack struct {
 }
 
 const (
-	//地域信息持久化数据
+	// 地域信息持久化数据
 	clientInfoPersistFile = "client_info.json"
 )
 
-//从本地缓存加载上报结果信息
+// loadLocalClientReportResult 从本地缓存加载上报结果信息
 func (r *ReportClientCallBack) loadLocalClientReportResult() {
 	resp := &namingpb.Response{}
 	cachedFile := clientInfoPersistFile
 	err := r.registry.LoadPersistedMessage(cachedFile, resp)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
 		return
 	}
@@ -80,7 +82,7 @@ func (r *ReportClientCallBack) loadLocalClientReportResult() {
 	}, nil)
 }
 
-//客户端上报的请求
+// reportClientRequest 客户端上报的请求
 func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest {
 	apiConfig := r.configuration.GetGlobal().GetAPI()
 	clientHost := apiConfig.GetBindIP()
@@ -97,22 +99,22 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	return reportClientReq
 }
 
-//执行任务
+// Process 执行任务
 func (r *ReportClientCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	if !lastProcessTime.IsZero() && time.Since(lastProcessTime) < r.interval {
 		return model.SKIP
 	}
 	reportClientReq := r.reportClientRequest()
-	if err := reportClientReq.Validate(); nil != err {
+	if err := reportClientReq.Validate(); err != nil {
 		log.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
 		return model.TERMINATE
 	}
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
-	if nil != err {
+	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		r.updateLocation(nil, err.(model.SDKError))
-		//发生错误也要重试，直到获取到地域信息为止
+		// 发生错误也要重试，直到获取到地域信息为止
 		return model.CONTINUE
 	}
 	r.updateLocation(&model.Location{
@@ -123,15 +125,15 @@ func (r *ReportClientCallBack) Process(
 	return model.CONTINUE
 }
 
-//OnTaskEvent 任务事件回调
+// OnTaskEvent 任务事件回调
 func (r *ReportClientCallBack) OnTaskEvent(event model.TaskEvent) {
 
 }
 
-//更新区域属性
+// updateLocation 更新区域属性
 func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr model.SDKError) {
 	if nil != location {
-		//已获取到客户端的地域信息，更新到全局上下文
+		// 已获取到客户端的地域信息，更新到全局上下文
 		log.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
 			location.Region, location.Zone, location.Campus)
 	}

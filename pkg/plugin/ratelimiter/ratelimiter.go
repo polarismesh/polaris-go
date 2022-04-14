@@ -18,51 +18,52 @@
 package ratelimiter
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"time"
 )
 
-//配额查询相关的信息
+// InitCriteria 配额查询相关的信息
 type InitCriteria struct {
-	DstRule    *namingpb.Rule
+	DstRule *namingpb.Rule
 }
 
-//单个配额
+// AmountDuration 单个配额
 type AmountDuration struct {
 	AmountUsed    uint32
 	ValidDuration time.Duration
 }
 
-//配额池
+// QuotaBucket 配额池
 type QuotaBucket interface {
-	//在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
+	// 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
 	GetQuota() (*QuotaResult, error)
-	//释放配额（仅对于并发数限流有用）
+	// 释放配额（仅对于并发数限流有用）
 	Release()
 }
 
-//配额分配的结果
+// QuotaResult 配额分配的结果
 type QuotaResult struct {
-	//分配的结果码
+	// 分配的结果码
 	Code model.QuotaResultCode
-	//分配的提示信息
+	// 分配的提示信息
 	Info string
-	//排队时间，标识多长时间后可以有新配额供应
+	// 排队时间，标识多长时间后可以有新配额供应
 	QueueTime time.Duration
 }
 
-// 服务限流处理插件接口
+// ServiceRateLimiter 服务限流处理插件接口
 type ServiceRateLimiter interface {
 	plugin.Plugin
-	//初始化并创建令牌桶/漏桶
-	//主流程会在首次调用，以及规则对象变更的时候，调用该方法
+	// 初始化并创建令牌桶/漏桶
+	// 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 	InitQuota(criteria *InitCriteria) (QuotaBucket, error)
 }
 
-//初始化
+// init 初始化
 func init() {
 	plugin.RegisterPluginInterface(common.TypeRateLimiter, new(ServiceRateLimiter))
 }

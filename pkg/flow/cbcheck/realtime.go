@@ -18,27 +18,28 @@
 package cbcheck
 
 import (
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	"github.com/modern-go/reflect2"
 )
 
-//实时熔断任务
+// RealTimeLimitTask 实时熔断任务
 type RealTimeLimitTask struct {
-	//服务信息
+	// 服务信息
 	SvcKey model.ServiceKey
-	//实例ID
+	// 实例ID
 	InstID string
-	//机器IP
+	// 机器IP
 	Host string
-	//端口号
+	// 端口号
 	Port int
-	//熔断器名字
+	// 熔断器名字
 	CbName string
 }
 
-//创建实时熔断任务
+// NewCircuitBreakRealTimeCallBack 创建实时熔断任务
 func NewCircuitBreakRealTimeCallBack(
 	callBack *CircuitBreakCallBack, task *RealTimeLimitTask) *CircuitBreakRealTimeCallBack {
 	return &CircuitBreakRealTimeCallBack{
@@ -47,13 +48,13 @@ func NewCircuitBreakRealTimeCallBack(
 	}
 }
 
-//实时熔断任务回调
+// CircuitBreakRealTimeCallBack 实时熔断任务回调
 type CircuitBreakRealTimeCallBack struct {
 	commonCallBack *CircuitBreakCallBack
 	task           *RealTimeLimitTask
 }
 
-//处理实时任务
+// Process 处理实时任务
 func (c *CircuitBreakRealTimeCallBack) Process() {
 	svcInstances := c.commonCallBack.registry.GetInstances(&c.task.SvcKey, false, true)
 	if !svcInstances.IsInitialized() {
@@ -69,7 +70,7 @@ func (c *CircuitBreakRealTimeCallBack) Process() {
 	if nil != request {
 		resultStr = request.String()
 	}
-	if nil != err {
+	if err != nil {
 		log.GetDetectLogger().Errorf("fail to do realtime circuitBreak check for %s, result is %s, error: %v",
 			c.task.SvcKey, resultStr, err)
 		return

@@ -20,38 +20,40 @@ package ratelimit
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"gopkg.in/check.v1"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gopkg.in/check.v1"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-//直接拒绝正常用例测试
+// 直接拒绝正常用例测试
 type LocalNormalTestingSuite struct {
 	CommonRateLimitSuite
 }
 
-//用例名称
+// 用例名称
 func (rt *LocalNormalTestingSuite) GetName() string {
 	return "LocalNormalTestingSuite"
 }
 
-//SetUpSuite 启动测试套程序
+// SetUpSuite 启动测试套程序
 func (rt *LocalNormalTestingSuite) SetUpSuite(c *check.C) {
 	rt.CommonRateLimitSuite.SetUpSuite(c, false)
 }
 
-//SetUpSuite 结束测试套程序
+// SetUpSuite 结束测试套程序
 func (rt *LocalNormalTestingSuite) TearDownSuite(c *check.C) {
 	rt.CommonRateLimitSuite.TearDownSuite(c, rt)
 }
 
-//测试本地精准匹配限流
+// 测试本地精准匹配限流
 func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
-	//多个线程跑一段时间，看看每秒通过多少，以及总共通过多少
+	// 多个线程跑一段时间，看看每秒通过多少，以及总共通过多少
 	workerCount := 4
 	wg := &sync.WaitGroup{}
 	wg.Add(workerCount)
@@ -111,7 +113,7 @@ func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
 	fmt.Printf("allocatedPerSeconds is %v\n", allocatedPerSeconds)
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
-			//头部因为时间窗对齐原因，有可能出现不为100
+			// 头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
 		if allocatedPerSecond < 5 {
@@ -123,15 +125,15 @@ func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
 	c.Assert(allocatedTotal >= 800 && allocatedTotal <= 1600, check.Equals, true)
 }
 
-//应用ID到限流结果
+// 应用ID到限流结果
 type AppIdResult struct {
 	appId string
 	code  model.QuotaResultCode
 }
 
-//测试本地精准匹配限流
+// 测试本地精准匹配限流
 func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
-	//2个线程跑20秒，看看每秒通过多少，以及总共通过多少
+	// 2个线程跑20秒，看看每秒通过多少，以及总共通过多少
 	workerCount := 2
 	appIds := []string{"app1", "app2", "app3", "app4", "app5"}
 	wg := &sync.WaitGroup{}
@@ -207,7 +209,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 		fmt.Printf("allocatedPerSeconds for appId %s is %v\n", appId, allocatedPerSeconds)
 		for i, allocatedPerSecond := range allocatedPerSeconds {
 			if i == 0 {
-				//头部因为时间窗对齐原因，有可能出现不为100
+				// 头部因为时间窗对齐原因，有可能出现不为100
 				continue
 			}
 			if allocatedPerSecond < 5 {
@@ -218,9 +220,9 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 	}
 }
 
-//测试本地正则合并匹配限流
+// 测试本地正则合并匹配限流
 func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
-	//2个线程跑20秒，看看每秒通过多少，以及总共通过多少
+	// 2个线程跑20秒，看看每秒通过多少，以及总共通过多少
 	workerCount := 2
 	appIds := []string{"app1", "app2"}
 	routineCount := workerCount * len(appIds)
@@ -281,7 +283,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 	fmt.Printf("allocatedPerSeconds is %v\n", allocatedPerSeconds)
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
-			//头部因为时间窗对齐原因，有可能出现不为100
+			// 头部因为时间窗对齐原因，有可能出现不为100
 			continue
 		}
 		if allocatedPerSecond < 5 {

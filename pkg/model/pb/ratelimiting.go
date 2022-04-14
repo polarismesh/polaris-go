@@ -19,24 +19,26 @@ package pb
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"sort"
-	"strings"
-	"time"
 )
 
-//限流解析助手
+// RateLimitingAssistant 限流解析助手
 type RateLimitingAssistant struct {
 }
 
-//解析出具体的规则值
+// ParseRuleValue 解析出具体的规则值
 func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	rateLimitValue := resp.RateLimit
@@ -46,7 +48,7 @@ func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) 
 	return rateLimitValue, revision
 }
 
-//规则PB缓存
+// RateLimitRuleCache 规则PB缓存
 type RateLimitRuleCache struct {
 	MaxDuration time.Duration
 }
@@ -54,12 +56,12 @@ type RateLimitRuleCache struct {
 // 限流规则集合
 type rateLimitRules []*namingpb.Rule
 
-// 数组长度
+// Len 数组长度
 func (rls rateLimitRules) Len() int {
 	return len(rls)
 }
 
-// 比较数组成员大小
+// Less 比较数组成员大小
 func (rls rateLimitRules) Less(i, j int) bool {
 	// 先按照优先级来比较，数值小的优先级高
 	if rls[i].GetPriority().GetValue() < rls[j].GetPriority().GetValue() {
@@ -68,16 +70,16 @@ func (rls rateLimitRules) Less(i, j int) bool {
 	if rls[i].GetPriority().GetValue() > rls[j].GetPriority().GetValue() {
 		return false
 	}
-	//按字母序升序排列
+	// 按字母序升序排列
 	return strings.Compare(rls[i].GetId().GetValue(), rls[j].GetId().GetValue()) < 0
 }
 
-// 交换数组成员
+// Swap 交换数组成员
 func (rls rateLimitRules) Swap(i, j int) {
 	rls[i], rls[j] = rls[j], rls[i]
 }
 
-//设置默认值
+// SetDefault 设置默认值
 func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 	rateLimiting := message.(*namingpb.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
@@ -103,25 +105,25 @@ func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 	}
 }
 
-//规则校验
+// Validate 规则校验
 func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	rateLimiting := message.(*namingpb.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
 		return nil
 	}
 	for _, rule := range rateLimiting.GetRules() {
-		if err := buildCacheFromMatcher(rule.GetLabels(), ruleCache); nil != err {
+		if err := buildCacheFromMatcher(rule.GetLabels(), ruleCache); err != nil {
 			routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(rule)
 			return fmt.Errorf("fail to validate rate limit rule, error is %v, rule text is\n%s",
 				err, routeTxt)
 		}
-		if err := validateAmount(rule.GetAmounts()); nil != err {
+		if err := validateAmount(rule.GetAmounts()); err != nil {
 			routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(rule)
 			return fmt.Errorf("fail to validate rate limit rule, error is %v, rule text is\n%s",
 				err, routeTxt)
 		}
 		maxDuration, err := GetMaxValidDuration(rule)
-		if nil != err {
+		if err != nil {
 			return fmt.Errorf("fail to parse validDuration in rate limit rule, error is %v", err)
 		}
 		amountPresent := rule.GetReport().GetAmountPercent().GetValue()
@@ -142,14 +144,14 @@ func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.
 
 const minAmountDuration = 1 * time.Second
 
-//校验配额总量
+// validateAmount 校验配额总量
 func validateAmount(amounts []*namingpb.Amount) error {
 	if len(amounts) == 0 {
 		return nil
 	}
 	for _, amount := range amounts {
 		validDuration, err := ConvertDuration(amount.GetValidDuration())
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		if validDuration < minAmountDuration {
@@ -159,7 +161,7 @@ func validateAmount(amounts []*namingpb.Amount) error {
 	return nil
 }
 
-//获取最大校验周期
+// GetMaxValidDuration 获取最大校验周期
 func GetMaxValidDuration(rule *namingpb.Rule) (time.Duration, error) {
 	var maxValidDura time.Duration
 	amounts := rule.GetAmounts()
@@ -168,7 +170,7 @@ func GetMaxValidDuration(rule *namingpb.Rule) (time.Duration, error) {
 	}
 	for _, amount := range amounts {
 		validDura, err := ConvertDuration(amount.GetValidDuration())
-		if nil != err {
+		if err != nil {
 			return validDura, err
 		}
 		if validDura == 0 {

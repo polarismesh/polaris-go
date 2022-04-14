@@ -21,37 +21,37 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// global.statReporter
+// StatReporterConfigImpl global.statReporter
 type StatReporterConfigImpl struct {
-	//是否启动上报
+	// 是否启动上报
 	Enable *bool `yaml:"enable" json:"enable"`
-	//上报插件链
+	// 上报插件链
 	Chain []string `yaml:"chain" json:"chain"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-//是否启用上报
+// IsEnable 是否启用上报
 func (s *StatReporterConfigImpl) IsEnable() bool {
 	return *s.Enable
 }
 
-//设置是否启用上报
+// SetEnable 设置是否启用上报
 func (s *StatReporterConfigImpl) SetEnable(enable bool) {
 	s.Enable = &enable
 }
 
-//插件链条
+// GetChain 插件链条
 func (s *StatReporterConfigImpl) GetChain() []string {
 	return s.Chain
 }
 
-//设置插件链条
+// SetChain 设置插件链条
 func (s *StatReporterConfigImpl) SetChain(chain []string) {
 	s.Chain = chain
 }
 
-//获取一个插件的配置
+// GetPluginConfig 获取一个插件的配置
 func (s *StatReporterConfigImpl) GetPluginConfig(name string) BaseConfig {
 	value, ok := s.Plugin[name]
 	if !ok {
@@ -60,12 +60,12 @@ func (s *StatReporterConfigImpl) GetPluginConfig(name string) BaseConfig {
 	return value.(BaseConfig)
 }
 
-//检测statReporter配置
+// Verify 检测statReporter配置
 func (s *StatReporterConfigImpl) Verify() error {
 	return s.Plugin.Verify()
 }
 
-//设置statReporter默认值
+// SetDefault 设置statReporter默认值
 func (s *StatReporterConfigImpl) SetDefault() {
 	if nil == s.Enable {
 		enable := DefaultStatReportEnabled
@@ -78,13 +78,13 @@ func (s *StatReporterConfigImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeStatReporter)
 }
 
-//配置初始化
+// Init 配置初始化
 func (s *StatReporterConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeStatReporter)
 }
 
-//输出插件具体配置
+// SetPluginConfig 输出插件具体配置
 func (s *StatReporterConfigImpl) SetPluginConfig(plugName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeStatReporter, plugName, value)
 }

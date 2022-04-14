@@ -23,31 +23,31 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of InstanceCircuitBreaker
+// Proxy . proxy of InstanceCircuitBreaker
 type Proxy struct {
 	InstanceCircuitBreaker
 	engine model.Engine
 }
 
-//proxy InstanceCircuitBreaker stat
+// Stat proxy InstanceCircuitBreaker stat
 func (p *Proxy) Stat(gauge model.InstanceGauge) (bool, error) {
 	toCb, err := p.InstanceCircuitBreaker.Stat(gauge)
 	return toCb, err
 }
 
-//proxy InstanceCircuitBreaker CircuitBreak
+// CircuitBreak proxy InstanceCircuitBreaker CircuitBreak
 func (p *Proxy) CircuitBreak(instances []model.Instance) (*Result, error) {
 	cbResult, err := p.InstanceCircuitBreaker.CircuitBreak(instances)
 	return cbResult, err
 }
 
-//设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.InstanceCircuitBreaker = plug.(InstanceCircuitBreaker)
 	p.engine = engine
 }
 
-//注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeCircuitBreaker, &Proxy{})
 }

@@ -19,6 +19,10 @@ package detect
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -27,50 +31,47 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
-//创建健康检查的回调
+// NewHealthCheckCallBack 创建健康检查的回调
 func NewHealthCheckCallBack(cfg config.Configuration, supplier plugin.Supplier) (*HealthCheckCallBack, error) {
 	var err error
 	callback := &HealthCheckCallBack{
 		mutex: &sync.Mutex{},
 	}
-	if callback.healthCheckers, err = data.GetHealthCheckers(cfg, supplier); nil != err {
+	if callback.healthCheckers, err = data.GetHealthCheckers(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callback.registry, err = data.GetRegistry(cfg, supplier); nil != err {
+	if callback.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.healthCheckConfig = cfg.GetConsumer().GetHealthCheck()
 	return callback, nil
 }
 
-//健康探测回调任务
+// HealthCheckCallBack 健康探测回调任务
 type HealthCheckCallBack struct {
-	//探活器
+	// 探活器
 	healthCheckers []healthcheck.HealthChecker
-	//本地缓存
+	// 本地缓存
 	registry localregistry.LocalRegistry
-	//健康检查配置
+	// 健康检查配置
 	healthCheckConfig config.HealthCheckConfig
-	//修改pendingInstances的锁
+	// 修改pendingInstances的锁
 	mutex *sync.Mutex
-	//正在执行健康检查的实例
+	// 正在执行健康检查的实例
 	pendingInstances model.HashSet
-	//任务取消函数
+	// 任务取消函数
 	taskWorkerCancel context.CancelFunc
-	//任务队列
+	// 任务队列
 	taskChannels []chan model.Instance
-	//任务下标
+	// 任务下标
 	taskIndex int64
 }
 
 const channelBuffer = 100
 
-//执行任务
+// Process 执行任务
 func (c *HealthCheckCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
 	svc := taskKey.(model.ServiceKey)
@@ -79,14 +80,14 @@ func (c *HealthCheckCallBack) Process(
 		return model.CONTINUE
 	}
 	err := c.doHealthCheckService(svcInstances)
-	if nil != err {
+	if err != nil {
 		log.GetDetectLogger().Errorf("fail to update instances for %v, error: %v", svc, err)
 		return model.CONTINUE
 	}
 	return model.CONTINUE
 }
 
-//OnTaskEvent 任务事件回调
+// OnTaskEvent 任务事件回调
 func (c *HealthCheckCallBack) OnTaskEvent(event model.TaskEvent) {
 	switch event {
 	case model.EventStart:
@@ -118,7 +119,7 @@ func (c *HealthCheckCallBack) healthCheckLoop(taskChannel chan model.Instance, t
 				Namespace: instance.GetNamespace(),
 				Service:   instance.GetService(),
 			}, instance)
-			if nil != err {
+			if err != nil {
 				log.GetDetectLogger().Infof("[HealthCheck] fail to do health check, err is %v", err)
 			}
 		}

@@ -21,10 +21,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/benchmark/flags"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/hashicorp/go-multierror"
 	"log"
 	"os"
 	"runtime"
@@ -34,6 +30,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hashicorp/go-multierror"
+
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/benchmark/flags"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
@@ -52,7 +54,7 @@ var (
 	defaultMaxConcurrentCalls = []int{1, 4, 8}
 	allOperations             = []string{operationSyncGetOneInstance, operationSyncGetInstances,
 		operationSyncGetOneInstanceUpdate}
-	//时间到
+	// 时间到
 	timeExceed      int32
 	operationToCode = map[string]int{
 		operationSyncGetOneInstance:       opCodeSyncGetOneInstance,
@@ -84,25 +86,25 @@ var (
 	service   = flag.String("service", "", "The service name of the testing service.")
 )
 
-//耗时序列
+// 耗时序列
 type Durations []time.Duration
 
-//总长度
+// 总长度
 func (d Durations) Len() int {
 	return len(d)
 }
 
-//降序
+// 降序
 func (d Durations) Less(i, j int) bool {
 	return d[i] > d[j]
 }
 
-//交换
+// 交换
 func (d Durations) Swap(i, j int) {
 	d[i], d[j] = d[j], d[i]
 }
 
-//校验参数
+// 校验参数
 func validate() error {
 	var errs error
 	if nil == workload || len(*workload) == 0 {
@@ -130,7 +132,7 @@ func validate() error {
 func makeClient() (api.ConsumerAPI, func()) {
 	var err error
 	var consumerAPI api.ConsumerAPI
-	if consumerAPI, err = api.NewConsumerAPI(); nil != err {
+	if consumerAPI, err = api.NewConsumerAPI(); err != nil {
 		log.Fatalf("fail to init consumer api, error is %v", err)
 	}
 	return consumerAPI, func() {
@@ -138,7 +140,7 @@ func makeClient() (api.ConsumerAPI, func()) {
 	}
 }
 
-//拆分测试任务
+// 拆分测试任务
 func splitFeatures(client api.ConsumerAPI) (fes []*feature) {
 	sdkContext := client.(api.SDKOwner).SDKContext()
 	for _, maxConcurrentCall := range *maxConcurrentCalls {
@@ -173,7 +175,7 @@ func splitFeatures(client api.ConsumerAPI) (fes []*feature) {
 	return fes
 }
 
-//单次测试的任务
+// 单次测试的任务
 type feature struct {
 	opCode            int
 	maxQps            int
@@ -192,13 +194,13 @@ type feature struct {
 	allConsume        int64
 }
 
-//任务的字面值输出
+// 任务的字面值输出
 func (f feature) String() string {
 	return fmt.Sprintf("benchTime_%v-maxConcurrentCalls_%v-namespace_%s-service_%s",
 		f.benchTime, f.maxConcurrentCall, f.namespace, f.service)
 }
 
-//运行测试任务
+// 运行测试任务
 func runFeature(fe *feature) {
 	wg := sync.WaitGroup{}
 	wg.Add(fe.maxConcurrentCall)
@@ -233,7 +235,7 @@ func runFeature(fe *feature) {
 	wg.Wait()
 }
 
-//运行测试任务
+// 运行测试任务
 func runQpsLimitFeature(fe *feature) {
 	wg := sync.WaitGroup{}
 	wg.Add(fe.maxConcurrentCall)
@@ -273,7 +275,7 @@ func runQpsLimitFeature(fe *feature) {
 	wg.Wait()
 }
 
-//参数
+// 参数
 type benchOpts struct {
 	memProfileRate   int
 	memProfile       string
@@ -282,32 +284,32 @@ type benchOpts struct {
 	cpuProfile       string
 }
 
-//运行获取单个服务实例并上报
+// 运行获取单个服务实例并上报
 func doSyncGetOneInstanceUpload(fe *feature) {
 	instance, err := fe.consumerClient.GetOneInstance(fe.getOneRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetOneInstance for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 	fe.result.RetStatus = model.RetSuccess
 	fe.result.CalledInstance = instance.Instances[0]
 	err = fe.consumerClient.UpdateServiceCallResult(fe.result)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke UpdateServiceCallResult for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
 
-//运行获取多个服务实例
+// 运行获取多个服务实例
 func doSyncGetOneInstance(fe *feature) {
 	_, err := fe.consumerClient.GetOneInstance(fe.getOneRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetOneInstance for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
 
-//运行获取单个服务实例
+// 运行获取单个服务实例
 func doSyncGetMultiInstances(fe *feature) {
 	_, err := fe.consumerClient.GetInstances(fe.getMultiRequest)
-	if nil != err {
+	if err != nil {
 		log.Fatalf("fail to invoke GetInstances for service %s, err is %v", fe.getOneRequest.Service, err)
 	}
 }
@@ -377,7 +379,7 @@ func writeProfTo(name, fn string) {
 	}
 }
 
-//启动定时器
+// 启动定时器
 func startTimer(startTime time.Time, duration time.Duration) {
 	atomic.StoreInt32(&timeExceed, 0)
 	go func() {
@@ -388,14 +390,14 @@ func startTimer(startTime time.Time, duration time.Duration) {
 	}()
 }
 
-//测试入口
+// 测试入口
 func main() {
 	flag.Parse()
 	if flag.NArg() != 0 {
 		log.Fatal("Error: unparsed arguments: ", flag.Args())
 	}
 	var err error
-	if err = validate(); nil != err {
+	if err = validate(); err != nil {
 		log.Fatalf("fail to validate parameters, error is %v", err)
 	}
 	ops := &benchOpts{

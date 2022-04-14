@@ -20,28 +20,28 @@ package ratelimiter
 import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	common "github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-//proxy of ServiceRateLimiter
+// Proxy proxy of ServiceRateLimiter
 type Proxy struct {
 	ServiceRateLimiter
 	engine model.Engine
 }
 
-//设置
+// SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.ServiceRateLimiter = plug.(ServiceRateLimiter)
 	p.engine = engine
 }
 
-//proxy ServiceRateLimiter InitQuota
+// InitQuota proxy ServiceRateLimiter InitQuota
 func (p *Proxy) InitQuota(criteria *InitCriteria) (QuotaBucket, error) {
 	result, err := p.ServiceRateLimiter.InitQuota(criteria)
 	return result, err
 }
 
-//注册proxy
+// init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeRateLimiter, &Proxy{})
 }

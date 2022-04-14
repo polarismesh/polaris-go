@@ -18,12 +18,13 @@
 package common
 
 import (
+	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/golang/protobuf/ptypes/wrappers"
 )
 
-//将用户的API注册请求结构转换成为server端需要的proto结构
+// 将用户的API注册请求结构转换成为server端需要的proto结构
 func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, "")
@@ -48,7 +49,7 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 	if nil != request.Isolate {
 		pbInstance.Isolate = &wrappers.BoolValue{Value: *request.Isolate}
 	}
-	//开启了远程健康检查
+	// 开启了远程健康检查
 	if nil != request.TTL {
 		pbInstance.HealthCheck = &namingpb.HealthCheck{
 			Type: namingpb.HealthCheck_HEARTBEAT,
@@ -75,21 +76,21 @@ func assembleNamingPbInstance(namespace string, service string, host string,
 	return &pbInstance
 }
 
-//将用户心跳请转化为服务端需要的proto
+// 将用户心跳请转化为服务端需要的proto
 func HeartbeatRequestToProto(request *model.InstanceHeartbeatRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
-//将用户反注册请求转化为服务端需要的proto
+// 将用户反注册请求转化为服务端需要的proto
 func DeregisterRequestToProto(request *model.InstanceDeRegisterRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
-//将客户端上报请转化为服务端需要的proto
+// 将客户端上报请转化为服务端需要的proto
 func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance *namingpb.Client) {
 	pbInstance = &namingpb.Client{
 		Host:    &wrappers.StringValue{Value: request.Host},

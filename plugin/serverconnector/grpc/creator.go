@@ -19,16 +19,18 @@ package grpc
 
 import (
 	"context"
+	"strings"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/stats"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/stats"
-	"strings"
-	"time"
 )
 
-//创建连接
+// 创建连接
 func (g *Connector) CreateConnection(
 	address string, timeout time.Duration, clientInfo *network.ClientInfo) (network.ClosableConn, error) {
 	var opts []grpc.DialOption
@@ -43,7 +45,7 @@ func (g *Connector) CreateConnection(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, opts...)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	return conn, nil
@@ -51,7 +53,7 @@ func (g *Connector) CreateConnection(
 
 // Handler defines the interface for the related stats handling (e.g., RPCs, connections).
 type statHandler struct {
-	//全局上下文
+	// 全局上下文
 	clientInfo *network.ClientInfo
 }
 

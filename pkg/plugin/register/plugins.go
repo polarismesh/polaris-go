@@ -18,7 +18,7 @@
 package register
 
 import (
-	//注册插件类型
+	// 注册插件类型
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/alarmreporter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
@@ -31,7 +31,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 
-	//注册具体插件实例
+	// 注册具体插件实例
 	_ "github.com/polarismesh/polaris-go/plugin/alarmreporter/file"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcheck"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcount"

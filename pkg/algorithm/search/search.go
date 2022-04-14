@@ -17,15 +17,15 @@
 
 package search
 
-//可搜索的数组
+// SearchableSlice 可搜索的数组
 type SearchableSlice interface {
-	//获取某个下标下面的值
+	// GetValue 获取某个下标下面的值
 	GetValue(idx int) uint64
-	//获取数组长度
+	// Count 获取数组长度
 	Count() int
 }
 
-//通过循环方式进行二分查找
+// selectLoop 通过循环方式进行二分查找
 func selectLoop(weightedIndexes SearchableSlice, selector uint64) int {
 	var count = weightedIndexes.Count()
 	var lowp = 0
@@ -58,8 +58,8 @@ func selectLoop(weightedIndexes SearchableSlice, selector uint64) int {
 	}
 }
 
-//二分查找
+// BinarySearch 二分查找
 func BinarySearch(weightedIndexes SearchableSlice, selector uint64) int {
-	//return selectRecursive(weightedIndexes, 0, weightedIndexes.Count(), selector)
+	// return selectRecursive(weightedIndexes, 0, weightedIndexes.Count(), selector)
 	return selectLoop(weightedIndexes, selector)
 }

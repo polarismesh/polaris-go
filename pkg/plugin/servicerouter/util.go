@@ -18,28 +18,29 @@
 package servicerouter
 
 import (
+	"sync"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"sync"
 )
 
-//存放路由结果对象的全局池
+// 存放路由结果对象的全局池
 var routeResultPool = &sync.Pool{}
 
-//获取路由结果对象池
+// GetRouteResultPool 获取路由结果对象池
 func GetRouteResultPool() *sync.Pool {
 	return routeResultPool
 }
 
-// 根据服务路由链，过滤服务节点，返回对应的服务列表
+// GetFilterInstances 根据服务路由链，过滤服务节点，返回对应的服务列表
 func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	serviceInstances model.ServiceInstances) ([]model.Instance, *model.Cluster, *model.ServiceInfo, error) {
 	if len(routers) == 0 {
 		return serviceInstances.GetInstances(), nil, nil, nil
 	}
 	result, err := GetFilterCluster(ctx, routers, routeInfo, serviceInstances.GetServiceClusters())
-	if nil != err {
+	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer GetRouteResultPool().Put(result)
@@ -48,12 +49,12 @@ func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeIn
 	}
 	instances, _ := result.OutputCluster.GetInstances()
 	cls := result.OutputCluster
-	//提供给外部的接口，因此无需进行复用
+	// 提供给外部的接口，因此无需进行复用
 	cls.SetReuse(false)
 	return instances, result.OutputCluster, nil, nil
 }
 
-//执行路由链
+// processServiceRouters 执行路由链
 func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
@@ -63,7 +64,7 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			continue
 		}
 		if nil != result {
-			//回收，下一步即将被新值替换
+			// 回收，下一步即将被新值替换
 			GetRouteResultPool().Put(result)
 		}
 		result, err = router.GetFilteredInstances(routeInfo, svcClusters, cluster)
@@ -71,26 +72,26 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if nil != err {
+		if err != nil {
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
-			//转发规则
+			// 转发规则
 			return result, nil
 		}
 		cluster = result.OutputCluster
 	}
 	if !routeInfo.ignoreFilterOnlyOnEndChain {
-		//需要执行一遍全死全活
+		// 需要执行一遍全死全活
 		if nil != result {
-			//回收，下一步即将被新值替换
+			// 回收，下一步即将被新值替换
 			GetRouteResultPool().Put(result)
 		}
 		result, err = routeInfo.FilterOnlyRouter.GetFilteredInstances(routeInfo, svcClusters, cluster)
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if nil != err {
+		if err != nil {
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
@@ -98,10 +99,10 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 	return result, nil
 }
 
-// 根据服务理由链，过滤服务节点，返回对应的cluster
+// GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
 func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
-	if err := routeInfo.Validate(); nil != err {
+	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
 	}
 	var result *RouteResult
@@ -115,22 +116,22 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 			routeInfo.Init(plugins)
 		}
 		result, err = processServiceRouters(ctx, routers, routeInfo, svcClusters, cluster)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 		if nil != result && nil != result.RedirectDestService {
-			//重定向服务优先返回
+			// 重定向服务优先返回
 			return result, nil
 		}
 	} else {
-		//没有路由规则，则返回全量服务实例
+		// 没有路由规则，则返回全量服务实例
 		cluster.HasLimitedInstances = true
 	}
 	if nil == result {
 		result = PoolGetRouteResult(ctx)
 		result.OutputCluster = cluster
 	}
-	//初始化集群缓存
+	// 初始化集群缓存
 	result.OutputCluster.GetClusterValue()
 	if routerCount > 0 {
 		handlers := plugins.GetEventSubscribers(common.OnRoutedClusterReturned)
@@ -147,7 +148,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 	return result, nil
 }
 
-//通过池子获取路由结果
+// PoolGetRouteResult 通过池子获取路由结果
 func PoolGetRouteResult(ctx model.ValueContext) *RouteResult {
 	value := GetRouteResultPool().Get()
 	if nil == value {

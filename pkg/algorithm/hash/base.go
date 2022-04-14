@@ -23,19 +23,19 @@ import (
 )
 
 var (
-	//hash函数集合
+	// hash函数集合
 	hashFuncMap = make(map[string]HashFuncWithSeed)
 )
 
-//可接受种子的hash函数
+// HashFuncWithSeed 可接受种子的hash函数
 type HashFuncWithSeed func([]byte, uint32) (uint64, error)
 
-//写入buffer
+// WriteBuffer 写入buffer
 func WriteBuffer(writer io.Writer, buf []byte) error {
 	total := len(buf)
 	for total > 0 {
 		length, err := writer.Write(buf)
-		if nil != err {
+		if err != nil {
 			return err
 		}
 		total -= length
@@ -43,7 +43,7 @@ func WriteBuffer(writer io.Writer, buf []byte) error {
 	return nil
 }
 
-//注册hash函数
+// RegisterHashFunc 注册hash函数
 func RegisterHashFunc(name string, hashFunc HashFuncWithSeed) {
 	if _, ok := hashFuncMap[name]; ok {
 		panic("hash function %s has already existed")
@@ -51,7 +51,7 @@ func RegisterHashFunc(name string, hashFunc HashFuncWithSeed) {
 	hashFuncMap[name] = hashFunc
 }
 
-//获取函数函数
+// GetHashFunc 获取函数函数
 func GetHashFunc(name string) (HashFuncWithSeed, error) {
 	hashFunc, ok := hashFuncMap[name]
 	if !ok {

@@ -19,9 +19,20 @@ package stability
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net"
+	"os"
+	"os/user"
+	"time"
+
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -32,15 +43,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"io"
-	"io/ioutil"
-	"log"
-	"net"
-	"os"
-	"os/user"
-	"time"
 )
 
 const (
@@ -58,7 +60,7 @@ var (
 	backupFileCp = backupFile + ".cp"
 )
 
-//缓存持久化测试套件
+// 缓存持久化测试套件
 type CacheTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -67,7 +69,7 @@ type CacheTestingSuite struct {
 	mockServer   mock.NamingServer
 }
 
-//初始化测试套件
+// 初始化测试套件
 func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -96,7 +98,7 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cacheIP, cachePort))
-	if nil != err {
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", cacheIP, cachePort)
@@ -105,18 +107,18 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-//测试套件名字
+// 测试套件名字
 func (t *CacheTestingSuite) GetName() string {
 	return "Cache"
 }
 
-//销毁套件
+// 销毁套件
 func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	for i := 0; i < 5; i++ {
 		if util.DirExist(util.BackupDir) {
 			err := os.RemoveAll(util.BackupDir)
-			if nil == err {
+			if err == nil {
 				break
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -125,7 +127,7 @@ func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-//测试比较之前的缓存数据
+// 测试比较之前的缓存数据
 func (t *CacheTestingSuite) testCacheCompareOriginal(cfg config.Configuration, c *check.C) *model.InstancesResponse {
 	sdkCtx, err := api.InitContextByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -148,7 +150,7 @@ func (t *CacheTestingSuite) testCacheCompareOriginal(cfg config.Configuration, c
 	return origSvcInstances
 }
 
-//测试比较后来的缓存数据
+// 测试比较后来的缓存数据
 func (t *CacheTestingSuite) testCacheCompareForward(
 	origSvcInstances *model.InstancesResponse, cfg config.Configuration, someDefaultServerDown bool, c *check.C) {
 	if someDefaultServerDown {
@@ -169,10 +171,10 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	cachedSvcInstances, err := consumerAPI1.GetInstances(request)
 	c.Assert(err, check.IsNil)
 	fmt.Printf("Instance get before refresh, time: %v, count is %d\n", time.Now(), len(cachedSvcInstances.GetInstances()))
-	//从缓存中加载的服务在网络通畅情况下，会及时更新与server保持一致
+	// 从缓存中加载的服务在网络通畅情况下，会及时更新与server保持一致
 	c.Assert(util.SameInstances(origSvcInstances.Instances, cachedSvcInstances.GetInstances()), check.Equals, false)
 	time.Sleep(serviceRefreshDuration + 5*time.Second)
-	//如果是某些埋点server down掉的话，等待更长的时间，
+	// 如果是某些埋点server down掉的话，等待更长的时间，
 	// 以便与正确的地址建立连接，并更新服务信息
 	if someDefaultServerDown {
 		time.Sleep(20 * time.Second)
@@ -182,7 +184,7 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	fmt.Printf("Instance after refresh, time: %v, count is %d\n", time.Now(), len(cachedSvcInstances.GetInstances()))
 	c.Assert(err, check.IsNil)
 	c.Assert(util.SameInstances(origSvcInstances.Instances, refreshSvcInstances.Instances), check.Equals, false)
-	//上面检测没挂，说明实例信息已经更新了，
+	// 上面检测没挂，说明实例信息已经更新了，
 	// 等待缓存文件落盘再继续检测
 	for {
 		if util.FileExist(backupFile) {
@@ -192,7 +194,7 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	c.Assert(t.checkPersist(refreshSvcInstances.Instances), check.Equals, true)
 }
 
-//测试过程
+// 测试过程
 func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestCacheExpireAndPersist")
@@ -206,7 +208,7 @@ func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
 	t.testCacheCompareForward(origSvcInstances, cfg, false, c)
 }
 
-//测试当一些埋点server down掉时的情景
+// 测试当一些埋点server down掉时的情景
 func (t *CacheTestingSuite) TestCacheWithSomeDefaultServerDown(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestCacheRefreshWithSomeDefaultServerDown")
@@ -220,7 +222,7 @@ func (t *CacheTestingSuite) TestCacheWithSomeDefaultServerDown(c *check.C) {
 	t.testCacheCompareForward(origSvcInstances, cfg, true, c)
 }
 
-//测试服务端的服务被删除后，内存和文件缓存是否被删除
+// 测试服务端的服务被删除后，内存和文件缓存是否被删除
 func (t *CacheTestingSuite) TestServiceDelete(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestServiceDelete")
@@ -254,13 +256,13 @@ func (t *CacheTestingSuite) TestServiceDelete(c *check.C) {
 	t.mockServer.RegisterService(svc)
 }
 
-//重试打开文件
+// 重试打开文件
 func tryOpenFile(backupFile string) (*os.File, error) {
 	var backupJson *os.File
 	var err error
 	for i := 0; i < 5; i++ {
 		backupJson, err = os.OpenFile(backupFile, os.O_RDONLY, 0644)
-		if nil == err {
+		if err == nil {
 			return backupJson, err
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -268,7 +270,7 @@ func tryOpenFile(backupFile string) (*os.File, error) {
 	return nil, err
 }
 
-//检测是否由缓存
+// 检测是否由缓存
 func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 	startTime := time.Now()
 	fmt.Printf("start to checkPersist, %v\n", startTime)
@@ -277,7 +279,7 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 		return false
 	}
 	backupJson, err := tryOpenFile(backupFile)
-	if nil != err {
+	if err != nil {
 		log.Printf("Fail to checkPersist because %s can not be open for %v, startTime: %v\n",
 			backupFile, err, startTime)
 		backupJson.Close()
@@ -301,12 +303,12 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 	return true
 }
 
-//查看备份文件是否存在
+// 查看备份文件是否存在
 func (t *CacheTestingSuite) checkRegistry() bool {
 	return !util.FileExist(backupFile)
 }
 
-//恢复备份文件
+// 恢复备份文件
 func (t *CacheTestingSuite) restoreBackupFile() error {
 	return os.Rename(backupFileCp, backupFile)
 }
@@ -469,7 +471,7 @@ func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_ = result
 	time.Sleep(time.Second * 3)
-	//fmt.Println(runtime.GOOS)
+	// fmt.Println(runtime.GOOS)
 
 	var filePath string
 	filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
@@ -478,7 +480,7 @@ func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-//测试缓存文件有效时间
+// 测试缓存文件有效时间
 func (t *CacheTestingSuite) TestFileCacheAvailableTime(c *check.C) {
 	util.DeleteDir("./testdata/test_log/backup1")
 	err1 := os.Mkdir("./testdata/test_log/backup1", 644)

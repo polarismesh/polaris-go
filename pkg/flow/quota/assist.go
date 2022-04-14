@@ -20,10 +20,16 @@ package quota
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -33,10 +39,6 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -44,31 +46,33 @@ const (
 	RuleNotExists = "quota rule not exists"
 )
 
-//限额流程的辅助类
+// FlowQuotaAssistant 限额流程的辅助类
 type FlowQuotaAssistant struct {
-	//销毁标识
+	// 销毁标识
 	destroyed uint32
-	//是否启用限流，如果不启用，默认都会放通
+	// 是否启用限流，如果不启用，默认都会放通
 	enable bool
-	//流程执行引擎
+	// 流程执行引擎
 	engine model.Engine
-	//插件工厂
+	// 插件工厂
 	supplier plugin.Supplier
-	//并发锁，控制windowSet的加入
+	// 并发锁，控制windowSet的加入
 	mutex *sync.Mutex
-	//服务到windowSet的映射
+	// 服务到windowSet的映射
 	svcToWindowSet *sync.Map
-	//限流server连接器
+	// 限流server连接器
 	asyncRateLimitConnector AsyncRateLimitConnector
-	//任务列表
+	// 任务列表
 	taskValues model.TaskValues
-	//用来控制最大窗口数量的配置项
+	// 通过配置获取的远程集群标识
+	remoteClusterByConfig config.ServerClusterConfig
+	// 用来控制最大窗口数量的配置项
 	windowCount        int32
 	maxWindowSize      int32
 	windowCountLogCtrl uint64
-	//超时淘汰周期
+	// 超时淘汰周期
 	purgeIntervalMilli int64
-	//本地配置的限流规则
+	// 本地配置的限流规则
 	localRules map[model.ServiceKey]model.ServiceRule
 }
 
@@ -97,12 +101,12 @@ func (f *FlowQuotaAssistant) GetWindowCount() int32 {
 	return atomic.LoadInt32(&f.windowCount)
 }
 
-//获取调度任务
+// TaskValues 获取调度任务
 func (f *FlowQuotaAssistant) TaskValues() model.TaskValues {
 	return f.taskValues
 }
 
-//初始化限额辅助
+// Init 初始化限额辅助
 func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
 	f.engine = engine
 	f.supplier = supplier
@@ -112,7 +116,7 @@ func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration,
 		return nil
 	}
 	callback, err := NewRemoteQuotaCallback(cfg, supplier, engine, f.asyncRateLimitConnector)
-	if nil != err {
+	if err != nil {
 		return err
 	}
 	period := config.MinRateLimitReportInterval
@@ -136,13 +140,14 @@ func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration,
 	f.svcToWindowSet = &sync.Map{}
 	localRules := cfg.GetProvider().GetRateLimit().GetRules()
 	if len(localRules) > 0 {
-		if f.localRules, err = rateLimitRuleConversion(localRules); nil != err {
+		if f.localRules, err = rateLimitRuleConversion(localRules); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// rateLimitRuleConversion 获取配额分配窗口集合
 func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey]model.ServiceRule, error) {
 	svcRules := make(map[model.ServiceKey]*namingpb.RateLimit)
 	for _, rule := range rules {
@@ -194,7 +199,7 @@ func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey
 			},
 		}
 		svcRule := pb.NewServiceRuleInProto(respInProto)
-		if err := svcRule.ValidateAndBuildCache(); nil != err {
+		if err := svcRule.ValidateAndBuildCache(); err != nil {
 			return nil, errors.New(fmt.Sprintf("fail to validate config local rule, err is %v", err))
 		}
 		values[svcKey] = svcRule
@@ -202,14 +207,13 @@ func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey
 	return values, nil
 }
 
-//获取配额分配窗口集合
 func (f *FlowQuotaAssistant) DeleteRateLimitWindowSet(svcKey model.ServiceKey) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.svcToWindowSet.Delete(svcKey)
 }
 
-//获取分配窗口集合数量,只用于测试
+// CountRateLimitWindowSet 获取分配窗口集合数量,只用于测试
 func (f *FlowQuotaAssistant) CountRateLimitWindowSet() int {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -221,7 +225,7 @@ func (f *FlowQuotaAssistant) CountRateLimitWindowSet() int {
 	return count
 }
 
-//获取配额分配窗口集合
+// GetRateLimitWindowSet 获取配额分配窗口集合
 func (f *FlowQuotaAssistant) GetRateLimitWindowSet(svcKey model.ServiceKey, create bool) *RateLimitWindowSet {
 	value, ok := f.svcToWindowSet.Load(svcKey)
 	if ok {
@@ -241,7 +245,7 @@ func (f *FlowQuotaAssistant) GetRateLimitWindowSet(svcKey model.ServiceKey, crea
 	return windowSet
 }
 
-// 获取当前所有的限流窗口集合
+// GetAllWindowSets 获取当前所有的限流窗口集合
 func (f *FlowQuotaAssistant) GetAllWindowSets() map[model.ServiceKey]*RateLimitWindowSet {
 	res := make(map[model.ServiceKey]*RateLimitWindowSet)
 	f.svcToWindowSet.Range(func(k, v interface{}) bool {
@@ -253,14 +257,14 @@ func (f *FlowQuotaAssistant) GetAllWindowSets() map[model.ServiceKey]*RateLimitW
 	return res
 }
 
-//获取配额分配窗口
+// GetRateLimitWindow 获取配额分配窗口
 func (f *FlowQuotaAssistant) GetRateLimitWindow(svcKey model.ServiceKey, rule *namingpb.Rule,
 	label string) (*RateLimitWindowSet, *RateLimitWindow) {
 	windowSet := f.GetRateLimitWindowSet(svcKey, true)
 	return windowSet, windowSet.GetRateLimitWindow(rule, label)
 }
 
-//服务更新回调，找到具体的限流窗口集合，然后触发更新
+// 服务更新回调，找到具体的限流窗口集合，然后触发更新
 func (f *FlowQuotaAssistant) OnServiceUpdated(event *common.PluginEvent) error {
 	svcEventObject := event.EventObject.(*common.ServiceEventObject)
 	if svcEventObject.SvcEventKey.Type != model.EventRateLimiting {
@@ -279,7 +283,7 @@ func (f *FlowQuotaAssistant) OnServiceUpdated(event *common.PluginEvent) error {
 	return nil
 }
 
-//服务删除回调
+// OnServiceDeleted 服务删除回调
 func (f *FlowQuotaAssistant) OnServiceDeleted(event *common.PluginEvent) error {
 	svcEventObject := event.EventObject.(*common.ServiceEventObject)
 	if svcEventObject.SvcEventKey.Type != model.EventRateLimiting {
@@ -290,10 +294,10 @@ func (f *FlowQuotaAssistant) OnServiceDeleted(event *common.PluginEvent) error {
 	return nil
 }
 
-//获取配额
+// GetQuota 获取配额
 func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest) (*model.QuotaFutureImpl, error) {
 	if !f.enable {
-		//没有限流规则，直接放通
+		// 没有限流规则，直接放通
 		resp := &model.QuotaResponse{
 			Code: model.QuotaResultOk,
 			Info: Disabled,
@@ -301,11 +305,11 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		return model.NewQuotaFuture(resp, clock.GetClock().Now(), nil), nil
 	}
 	window, err := f.lookupRateLimitWindow(commonRequest)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if nil == window {
-		//没有限流规则，直接放通
+		// 没有限流规则，直接放通
 		resp := &model.QuotaResponse{
 			Code: model.QuotaResultOk,
 			Info: RuleNotExists,
@@ -324,12 +328,12 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 	return window.AllocateQuota()
 }
 
-//计算限流窗口
+// lookupRateLimitWindow 计算限流窗口
 func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	commonRequest *data.CommonRateLimitRequest) (*RateLimitWindow, error) {
 	var err error
 	// 1. 并发获取被调服务信息和限流配置，服务不存在，返回错误
-	if err = f.engine.SyncGetResources(commonRequest); nil != err {
+	if err = f.engine.SyncGetResources(commonRequest); err != nil {
 		sdkErr, ok := err.(model.SDKError)
 		if !ok {
 			return nil, err
@@ -344,14 +348,14 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	var rule *namingpb.Rule
 	var hasContent bool
 	hasContent, rule, err = lookupRule(svcRule, commonRequest.Labels)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if !hasContent {
-		//远程规则没有内容，则匹配本地规则
+		// 远程规则没有内容，则匹配本地规则
 		svcRule = f.localRules[commonRequest.DstService]
 		_, rule, err = lookupRule(svcRule, commonRequest.Labels)
-		if nil != err {
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -363,11 +367,11 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	labelStr := commonRequest.FormatLabelToStr(rule)
 	windowSet, window := f.GetRateLimitWindow(commonRequest.DstService, rule, labelStr)
 	if nil != window {
-		//已经存在限流窗口，则直接分配
+		// 已经存在限流窗口，则直接分配
 		return window, nil
 	}
 
-	//检查是否达到最大限流窗口数量
+	// 检查是否达到最大限流窗口数量
 	nowWindowCount := f.GetWindowCount()
 	log.GetBaseLogger().Tracef("RateLimit nowWindowCount:%d %d", nowWindowCount, f.maxWindowSize)
 	if nowWindowCount >= f.maxWindowSize {
@@ -383,7 +387,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	return windowSet.AddRateLimitWindow(commonRequest, rule, labelStr)
 }
 
-// 寻址规则
+// lookupRule 寻址规则
 func lookupRule(svcRule model.ServiceRule, labels map[string]string) (bool, *namingpb.Rule, error) {
 	if reflect2.IsNil(svcRule) {
 		// 规则集为空
@@ -404,7 +408,7 @@ func lookupRule(svcRule model.ServiceRule, labels map[string]string) (bool, *nam
 	return true, matchRuleByLabels(labels, rateLimiting, ruleCache), nil
 }
 
-//通过业务标签来匹配规则
+// matchRuleByLabels通过业务标签来匹配规则
 func matchRuleByLabels(
 	labels map[string]string, ruleSet *namingpb.RateLimit, ruleCache model.RuleCache) *namingpb.Rule {
 	if len(ruleSet.Rules) == 0 {
@@ -412,11 +416,11 @@ func matchRuleByLabels(
 	}
 	for _, rule := range ruleSet.Rules {
 		if nil != rule.GetDisable() && rule.GetDisable().GetValue() {
-			//规则被停用
+			// 规则被停用
 			continue
 		}
 		if len(rule.Labels) == 0 {
-			//没有业务标签，代表全匹配
+			// 没有业务标签，代表全匹配
 			return rule
 		}
 		var allLabelsMatched = true

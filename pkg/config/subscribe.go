@@ -22,7 +22,7 @@ import (
 )
 
 type SubscribeImpl struct {
-	//上报插件链
+	// 上报插件链
 	Type string `yaml:"type" json:"type"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
@@ -40,22 +40,22 @@ func (s *SubscribeImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeSubScribe)
 }
 
-//verify
+// Verify
 func (s *SubscribeImpl) Verify() error {
 	return nil
 }
 
-//设置插件
+// SetType 设置插件
 func (s *SubscribeImpl) SetType(typeStr string) {
 	s.Type = typeStr
 }
 
-//获取插件
+// GetType 获取插件
 func (s *SubscribeImpl) GetType() string {
 	return s.Type
 }
 
-//GetPluginConfig
+// GetPluginConfig
 func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	if s.Plugin == nil {
 		return nil
@@ -68,7 +68,7 @@ func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	}
 }
 
-//SetPluginConfig
+// SetPluginConfig
 func (s *SubscribeImpl) SetPluginConfig(plugName string, value BaseConfig) error {
 	return nil
 }

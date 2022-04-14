@@ -19,15 +19,16 @@ package maglev
 
 import (
 	"fmt"
+	"math"
+
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
-	"math"
 )
 
-//maglev向量表选择器
+// maglev向量表选择器
 type TableSelector struct {
 	model.SelectorBase
 	nodes             []*model.WeightedIndex
@@ -37,7 +38,7 @@ type TableSelector struct {
 	maxEntriesPerHost float64
 }
 
-//构建表过程中的一些元数据中间信息
+// 构建表过程中的一些元数据中间信息
 type tableBuildEntry struct {
 	node             *model.WeightedIndex
 	offset           uint64
@@ -48,7 +49,7 @@ type tableBuildEntry struct {
 	count            uint64
 }
 
-//构建表数据
+// 构建表数据
 func (t *TableSelector) buildTableEntries(
 	instanceSet *model.InstanceSet, hashFunc hash.HashFuncWithSeed) (float64, []tableBuildEntry, error) {
 	var realInstance model.Instance
@@ -68,11 +69,11 @@ func (t *TableSelector) buildTableEntries(
 		}
 		idBuf := []byte(realInstance.GetId())
 		seed0HashValue, err := hashFunc(idBuf, 0)
-		if nil != err {
+		if err != nil {
 			return 0, nil, fmt.Errorf("fail to get seed0 hash value for %s", realInstance.GetId())
 		}
 		seed1HashValue, err := hashFunc(idBuf, 1)
-		if nil != err {
+		if err != nil {
 			return 0, nil, fmt.Errorf("fail to get seed1 hash value for %s", realInstance.GetId())
 		}
 		entry.node = instanceIdx
@@ -83,7 +84,7 @@ func (t *TableSelector) buildTableEntries(
 	return maxNormalizedWeight, entries, nil
 }
 
-//创建maglev向量选择器
+// 创建maglev向量选择器
 func NewTable(
 	instanceSet *model.InstanceSet, tableSize uint64, hashFunc hash.HashFuncWithSeed, id int32) (*TableSelector, error) {
 	var selector = &TableSelector{
@@ -96,7 +97,7 @@ func NewTable(
 	}
 	selector.nodes = make([]*model.WeightedIndex, tableSize)
 	maxNormalizedWeight, entries, err := selector.buildTableEntries(instanceSet, hashFunc)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	var tableIndex uint64
@@ -135,12 +136,12 @@ func NewTable(
 	return selector, nil
 }
 
-//进行列表排序
+// 进行列表排序
 func (t *TableSelector) permutation(entry *tableBuildEntry) uint64 {
 	return (entry.offset + entry.skip*entry.next) % t.tableSize
 }
 
-//选择实例下标
+// 选择实例下标
 func (t *TableSelector) Select(value interface{}) (int, *model.ReplicateNodes, error) {
 	ringLen := len(t.nodes)
 	if ringLen == 0 {
@@ -148,7 +149,7 @@ func (t *TableSelector) Select(value interface{}) (int, *model.ReplicateNodes, e
 	}
 	criteria := value.(*loadbalancer.Criteria)
 	hashValue, err := common.CalcHashValue(criteria, t.hashFunc)
-	if nil != err {
+	if err != nil {
 		return -1, nil, err
 	}
 	nodeIndex := int(hashValue % t.tableSize)

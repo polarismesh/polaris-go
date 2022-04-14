@@ -18,6 +18,11 @@
 package data
 
 import (
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
@@ -25,30 +30,26 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"sort"
-	"strings"
-	"sync"
-	"time"
 )
 
 var (
-	//缓存查询请求的对象池
+	// 缓存查询请求的对象池
 	instanceRequestPool = &sync.Pool{}
-	//缓存规则查询请求的对象池
+	// 缓存规则查询请求的对象池
 	ruleRequestPool = &sync.Pool{}
-	//限流请求对象池
+	// 限流请求对象池
 	rateLimitRequestPool = &sync.Pool{}
-	//网格规则请求对象池
+	// 网格规则请求对象池
 	meshConfigRequestPool = &sync.Pool{}
-	//网格请求对象池
+	// 网格请求对象池
 	meshRequestPool = &sync.Pool{}
-	//批量服务请求对象池
+	// 批量服务请求对象池
 	servicesRequestPool = &sync.Pool{}
-	//调用结果上报请求对象池
+	// 调用结果上报请求对象池
 	serviceCallResultRequestPool = &sync.Pool{}
 )
 
-//通过池子获取请求对象
+// PoolGetCommonInstancesRequest 通过池子获取请求对象
 func PoolGetCommonInstancesRequest(plugins plugin.Supplier) *CommonInstancesRequest {
 	value := instanceRequestPool.Get()
 	if nil == value {
@@ -59,7 +60,7 @@ func PoolGetCommonInstancesRequest(plugins plugin.Supplier) *CommonInstancesRequ
 	return value.(*CommonInstancesRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutCommonInstancesRequest 归还到请求对象到池子
 func PoolPutCommonInstancesRequest(request *CommonInstancesRequest) {
 	instanceRequestPool.Put(request)
 }
@@ -77,7 +78,7 @@ func PoolPutCommonServiceCallResultRequest(request *CommonServiceCallResultReque
 	serviceCallResultRequestPool.Put(request)
 }
 
-//通过池子获取请求对象
+// PoolGetCommonRuleRequest 通过池子获取请求对象
 func PoolGetCommonRuleRequest() *CommonRuleRequest {
 	value := ruleRequestPool.Get()
 	if nil == value {
@@ -86,12 +87,12 @@ func PoolGetCommonRuleRequest() *CommonRuleRequest {
 	return value.(*CommonRuleRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutCommonRuleRequest 归还到请求对象到池子
 func PoolPutCommonRuleRequest(request *CommonRuleRequest) {
 	ruleRequestPool.Put(request)
 }
 
-//通过池子获取请求对象
+// PoolGetCommonRateLimitRequest 通过池子获取请求对象
 func PoolGetCommonRateLimitRequest() *CommonRateLimitRequest {
 	value := rateLimitRequestPool.Get()
 	if nil == value {
@@ -100,13 +101,13 @@ func PoolGetCommonRateLimitRequest() *CommonRateLimitRequest {
 	return value.(*CommonRateLimitRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutCommonRateLimitRequest 归还到请求对象到池子
 func PoolPutCommonRateLimitRequest(request *CommonRateLimitRequest) {
 	rateLimitRequestPool.Put(request)
 }
 
-//通用的请求对象基类，实现了基本的方法，
-//具体请求可继承此类，根据情况实现具体方法
+// BaseRequest 通用的请求对象基类，实现了基本的方法，
+// 具体请求可继承此类，根据情况实现具体方法
 type BaseRequest struct {
 	FlowID       uint64
 	DstService   model.ServiceKey
@@ -121,58 +122,58 @@ func (br *BaseRequest) clearValues() {
 	br.Trigger.Clear()
 }
 
-//获取DstService
+// GetDstService 获取DstService
 func (br *BaseRequest) GetDstService() *model.ServiceKey {
 	return &br.DstService
 
 }
 
-//获取SrcService
+// GetSrcService 获取SrcService
 func (br *BaseRequest) GetSrcService() *model.ServiceKey {
 	return &br.SrcService
 }
 
-//获取Trigger
+// GetNotifierTrigger 获取Trigger
 func (br *BaseRequest) GetNotifierTrigger() *model.NotifyTrigger {
 	return &br.Trigger
 }
 
-//设置路由规则
+// SetDstRoute 设置路由规则
 func (br *BaseRequest) SetDstRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置ratelimit
+// SetDstRateLimit 设置ratelimit
 func (br *BaseRequest) SetDstRateLimit(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置route
+// SetSrcRoute 设置route
 func (br *BaseRequest) SetSrcRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//获取ControlParam
+// GetControlParam 获取ControlParam
 func (br *BaseRequest) GetControlParam() *model.ControlParam {
 	return &br.ControlParam
 }
 
-//获取结果
+// GetCallResult 获取结果
 func (br *BaseRequest) GetCallResult() *model.APICallResult {
 	return &br.CallResult
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (br *BaseRequest) SetMeshConfig(mc model.MeshConfig) {
-	//do nothing
+	// do nothing
 }
 
-//设置实例
+// SetDstInstances 设置实例
 func (br *BaseRequest) SetDstInstances(instances model.ServiceInstances) {
-	//do nothing
+	// do nothing
 }
 
-//通用请求对象，主要用于在消息过程减少GC
+// CommonInstancesRequest 通用请求对象，主要用于在消息过程减少GC
 type CommonInstancesRequest struct {
 	FlowID          uint64
 	DstService      model.ServiceKey
@@ -189,11 +190,11 @@ type CommonInstancesRequest struct {
 	ControlParam    model.ControlParam
 	CallResult      model.APICallResult
 	response        *model.InstancesResponse
-	//负载均衡算法
+	// 负载均衡算法
 	LbPolicy string
 }
 
-//清理请求体
+// clearValues 清理请求体
 func (c *CommonInstancesRequest) clearValues(cfg config.Configuration) {
 	c.FlowID = 0
 	c.RouteInfo.ClearValue()
@@ -212,7 +213,7 @@ func (c *CommonInstancesRequest) clearValues(cfg config.Configuration) {
 	c.LbPolicy = ""
 }
 
-//通过获取单个请求初始化通用请求对象
+// InitByGetOneRequest 通过获取单个请求初始化通用请求对象
 func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstanceRequest, cfg config.Configuration) {
 	c.clearValues(cfg)
 	c.FlowID = request.FlowID
@@ -246,7 +247,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	BuildControlParam(request, cfg, &c.ControlParam)
 }
 
-//通过获取多个请求初始化通用请求对象
+// InitByGetMultiRequest 通过获取多个请求初始化通用请求对象
 func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstancesRequest, cfg config.Configuration) {
 	c.clearValues(cfg)
 	c.FlowID = request.FlowID
@@ -274,7 +275,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 	BuildControlParam(request, cfg, &c.ControlParam)
 }
 
-//通过获取全部请求初始化通用请求对象
+// InitByGetAllRequest 通过获取全部请求初始化通用请求对象
 func (c *CommonInstancesRequest) InitByGetAllRequest(request *model.GetAllInstancesRequest, cfg config.Configuration) {
 	c.clearValues(cfg)
 	c.FlowID = request.FlowID
@@ -290,7 +291,7 @@ func (c *CommonInstancesRequest) InitByGetAllRequest(request *model.GetAllInstan
 	BuildControlParam(request, cfg, &c.ControlParam)
 }
 
-//通过重定向服务来进行刷新
+// RefreshByRedirect 通过重定向服务来进行刷新
 func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.ServiceInfo) {
 	c.DstService.Namespace = redirectedService.Namespace
 	c.DstService.Service = redirectedService.Service
@@ -300,7 +301,7 @@ func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.Serv
 	c.DstInstances = nil
 }
 
-//构建查询实例的应答
+// BuildInstancesResponse 构建查询实例的应答
 func (c *CommonInstancesRequest) BuildInstancesResponse(flowID uint64, dstService model.ServiceKey,
 	cluster *model.Cluster, instances []model.Instance, totalWeight int, revision string,
 	serviceMetaData map[string]string) *model.InstancesResponse {
@@ -308,64 +309,64 @@ func (c *CommonInstancesRequest) BuildInstancesResponse(flowID uint64, dstServic
 		serviceMetaData)
 }
 
-//获取目标服务
+// GetDstService 获取目标服务
 func (c *CommonInstancesRequest) GetDstService() *model.ServiceKey {
 	return &c.DstService
 }
 
-//获取源服务
+// GetSrcService 获取源服务
 func (c *CommonInstancesRequest) GetSrcService() *model.ServiceKey {
 	return &c.SrcService
 }
 
-//获取缓存查询触发器
+// GetNotifierTrigger 获取缓存查询触发器
 func (c *CommonInstancesRequest) GetNotifierTrigger() *model.NotifyTrigger {
 	return &c.Trigger
 }
 
-//设置目标服务实例
+// SetDstInstances 设置目标服务实例
 func (c *CommonInstancesRequest) SetDstInstances(instances model.ServiceInstances) {
 	c.DstInstances = instances
 	c.Revision = instances.GetRevision()
 }
 
-//设置目标服务路由规则
+// SetDstRoute 设置目标服务路由规则
 func (c *CommonInstancesRequest) SetDstRoute(rule model.ServiceRule) {
 	c.RouteInfo.DestRouteRule = rule
 }
 
-//设置目标服务限流规则
+// SetDstRateLimit 设置目标服务限流规则
 func (c *CommonInstancesRequest) SetDstRateLimit(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (c *CommonInstancesRequest) SetMeshConfig(mc model.MeshConfig) {
-	//do nothing
+	// do nothing
 }
 
-//设置源服务路由规则
+// SetSrcRoute 设置源服务路由规则
 func (c *CommonInstancesRequest) SetSrcRoute(rule model.ServiceRule) {
 	c.RouteInfo.SourceRouteRule = rule
 }
 
-//获取接口调用统计结果
+// GetCallResult 获取接口调用统计结果
 func (c *CommonInstancesRequest) GetCallResult() *model.APICallResult {
 	return &c.CallResult
 }
 
-//获取API调用控制参数
+// GetControlParam 获取API调用控制参数
 func (c *CommonInstancesRequest) GetControlParam() *model.ControlParam {
 	return &c.ControlParam
 }
 
-//获取单个实例数组的持有者
+// SingleInstancesOwner 获取单个实例数组的持有者
 type SingleInstancesOwner interface {
-	//获取单个实例数组引用
+	// 获取单个实例数组引用
 	SingleInstances() []model.Instance
 }
 
-//构建查询实例的应答
+// buildInstancesResponse 构建查询实例的应答
 func buildInstancesResponse(response *model.InstancesResponse, flowID uint64, dstService model.ServiceKey,
 	cluster *model.Cluster, instances []model.Instance, totalWeight int, revision string,
 	serviceMetaData map[string]string) *model.InstancesResponse {
@@ -374,7 +375,7 @@ func buildInstancesResponse(response *model.InstancesResponse, flowID uint64, ds
 	response.ServiceInfo.Namespace = dstService.Namespace
 	response.ServiceInfo.Metadata = serviceMetaData
 	if nil != cluster {
-		//对外返回的cluster，无需池化，因为可能会被别人引用
+		// 对外返回的cluster，无需池化，因为可能会被别人引用
 		cluster.SetReuse(false)
 	}
 	response.Cluster = cluster
@@ -384,7 +385,7 @@ func buildInstancesResponse(response *model.InstancesResponse, flowID uint64, ds
 	return response
 }
 
-//获取对象池中请求
+// PoolGetServicesRequest 获取对象池中请求
 func PoolGetServicesRequest() *ServicesRequest {
 	value := servicesRequestPool.Get()
 	if nil == value {
@@ -393,7 +394,7 @@ func PoolGetServicesRequest() *ServicesRequest {
 	return value.(*ServicesRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutServicesRequest 归还到请求对象到池子
 func PoolPutServicesRequest(request *ServicesRequest) {
 	servicesRequestPool.Put(request)
 }
@@ -403,14 +404,14 @@ type ServicesRequest struct {
 	Services model.Services
 }
 
-//获取services
+// GetServices 获取services
 func (mc *ServicesRequest) GetServices() model.Services {
 	return mc.Services
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (cr *ServicesRequest) SetMeshConfig(mc model.MeshConfig) {
-	//此处复用网格接口
+	// 此处复用网格接口
 	cr.Services = mc
 }
 
@@ -427,7 +428,7 @@ func (cr *ServicesRequest) InitByGetServicesRequest(
 	BuildControlParam(request, cfg, &cr.ControlParam)
 }
 
-//构建答复
+// BuildServicesResponse 构建答复
 func (mc *ServicesRequest) BuildServicesResponse(mesh model.Services) *model.ServicesResponse {
 	resp := model.ServicesResponse{
 		Type:     mesh.GetType(),
@@ -438,7 +439,7 @@ func (mc *ServicesRequest) BuildServicesResponse(mesh model.Services) *model.Ser
 	return &resp
 }
 
-//获取对象池中请求
+// PoolGetMeshConfigRequest 获取对象池中请求
 func PoolGetMeshConfigRequest() *MeshConfigRequest {
 	value := meshConfigRequestPool.Get()
 	if nil == value {
@@ -447,12 +448,12 @@ func PoolGetMeshConfigRequest() *MeshConfigRequest {
 	return value.(*MeshConfigRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutMeshConfigRequest 归还到请求对象到池子
 func PoolPutMeshConfigRequest(request *MeshConfigRequest) {
 	meshConfigRequestPool.Put(request)
 }
 
-//获取对象池中请求
+// PoolGetMeshRequest 获取对象池中请求
 func PoolGetMeshRequest() *MeshRequest {
 	value := meshRequestPool.Get()
 	if nil == value {
@@ -461,29 +462,29 @@ func PoolGetMeshRequest() *MeshRequest {
 	return value.(*MeshRequest)
 }
 
-//归还到请求对象到池子
+// PoolPutMeshRequest 归还到请求对象到池子
 func PoolPutMeshRequest(request *MeshRequest) {
 	meshRequestPool.Put(request)
 }
 
-//网格请求
+// MeshRequest 网格请求
 type MeshRequest struct {
 	BaseRequest
 	Mesh model.Mesh
 }
 
-//获取services
+// GetMesh 获取services
 func (mc *MeshRequest) GetMesh() model.Mesh {
 	return mc.Mesh
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (cr *MeshRequest) SetMeshConfig(mc model.MeshConfig) {
-	//此处复用网格接口
+	// 此处复用网格接口
 	cr.Mesh = mc
 }
 
-//初始化请求
+// InitByGetMeshRequest 初始化请求
 func (cr *MeshRequest) InitByGetMeshRequest(
 	eventType model.EventType, request *model.GetMeshRequest, cfg config.Configuration) {
 	cr.clearValues()
@@ -497,7 +498,7 @@ func (cr *MeshRequest) InitByGetMeshRequest(
 	BuildControlParam(request, cfg, &cr.ControlParam)
 }
 
-//构建答复
+// BuildMeshResponse 构建答复
 func (mc *MeshRequest) BuildMeshResponse(mesh model.Mesh) *model.MeshResponse {
 	resp := model.MeshResponse{
 		Type:     mesh.GetType(),
@@ -508,7 +509,7 @@ func (mc *MeshRequest) BuildMeshResponse(mesh model.Mesh) *model.MeshResponse {
 	return &resp
 }
 
-//网格规则请求
+// MeshConfigRequest 网格规则请求
 type MeshConfigRequest struct {
 	FlowID       uint64
 	DstService   model.ServiceKey
@@ -520,24 +521,24 @@ type MeshConfigRequest struct {
 	MeshType     string
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (cr *MeshConfigRequest) SetMeshConfig(mc model.MeshConfig) {
 	cr.MeshConfig = mc
 }
 
-//获取网格规则
+// GetMeshConfig 获取网格规则
 func (cr *MeshConfigRequest) GetMeshConfig() model.MeshConfig {
 	return cr.MeshConfig
 }
 
 func (cr *MeshConfigRequest) clearValues() {
 	cr.FlowID = 0
-	//cr.DstService = nil
+	// cr.DstService = nil
 	cr.Trigger.EnableMeshConfig = false
 	cr.Trigger.Clear()
 }
 
-//初始化
+// InitByGetRuleRequest 初始化
 func (cr *MeshConfigRequest) InitByGetRuleRequest(
 	eventType model.EventType, request *model.GetMeshConfigRequest, cfg config.Configuration) {
 	cr.clearValues()
@@ -553,7 +554,7 @@ func (cr *MeshConfigRequest) InitByGetRuleRequest(
 	BuildControlParam(request, cfg, &cr.ControlParam)
 }
 
-//构建答复
+// BuildMeshConfigResponse 构建答复
 func (mc *MeshConfigRequest) BuildMeshConfigResponse(mesh model.MeshConfig) *model.MeshConfigResponse {
 	resp := model.MeshConfigResponse{
 		Type:     mesh.GetType(),
@@ -564,53 +565,53 @@ func (mc *MeshConfigRequest) BuildMeshConfigResponse(mesh model.MeshConfig) *mod
 	return &resp
 }
 
-//获取DstService
+// GetDstService 获取DstService
 func (mc *MeshConfigRequest) GetDstService() *model.ServiceKey {
 	return &mc.DstService
 
 }
 
-//获取SrcService
+// 获取SrcService
 func (mc *MeshConfigRequest) GetSrcService() *model.ServiceKey {
 	return &mc.SrcService
 }
 
-//获取Trigger
+// GetNotifierTrigger 获取Trigger
 func (mc *MeshConfigRequest) GetNotifierTrigger() *model.NotifyTrigger {
 	return &mc.Trigger
 }
 
-//设置实例
+// SetDstInstances 设置实例
 func (mc *MeshConfigRequest) SetDstInstances(instances model.ServiceInstances) {
-	//do nothing
+	// do nothing
 }
 
-//设置路由规则
+// SetDstRoute 设置路由规则
 func (mc *MeshConfigRequest) SetDstRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置ratelimit
+// SetDstRateLimit 设置ratelimit
 func (mc *MeshConfigRequest) SetDstRateLimit(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置route
+// SetSrcRoute 设置route
 func (mc *MeshConfigRequest) SetSrcRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//获取ControlParam
+// GetControlParam 获取ControlParam
 func (mc *MeshConfigRequest) GetControlParam() *model.ControlParam {
 	return &mc.ControlParam
 }
 
-//获取结果
+// GetCallResult 获取结果
 func (mc *MeshConfigRequest) GetCallResult() *model.APICallResult {
 	return &mc.CallResult
 }
 
-//通用规则查询请求
+// CommonRuleRequest 通用规则查询请求
 type CommonRuleRequest struct {
 	FlowID       uint64
 	DstService   model.ServiceEventKey
@@ -619,13 +620,13 @@ type CommonRuleRequest struct {
 	response     *model.ServiceRuleResponse
 }
 
-//清理请求体
+// clearValues 清理请求体
 func (cr *CommonRuleRequest) clearValues(cfg config.Configuration) {
 	cr.FlowID = 0
 	cr.response = nil
 }
 
-//通过获取路由规则请求初始化通用请求对象
+// InitByGetRuleRequest 通过获取路由规则请求初始化通用请求对象
 func (cr *CommonRuleRequest) InitByGetRuleRequest(
 	eventType model.EventType, request *model.GetServiceRuleRequest, cfg config.Configuration) {
 	cr.clearValues(cfg)
@@ -640,7 +641,7 @@ func (cr *CommonRuleRequest) InitByGetRuleRequest(
 	BuildControlParam(request, cfg, &cr.ControlParam)
 }
 
-//构建规则查询应答
+// BuildServiceRuleResponse 构建规则查询应答
 func (cr *CommonRuleRequest) BuildServiceRuleResponse(rule model.ServiceRule) *model.ServiceRuleResponse {
 	resp := cr.response
 	resp.Type = rule.GetType()
@@ -653,17 +654,17 @@ func (cr *CommonRuleRequest) BuildServiceRuleResponse(rule model.ServiceRule) *m
 	return resp
 }
 
-//获取接口调用统计结果
+// GetCallResult 获取接口调用统计结果
 func (cr *CommonRuleRequest) GetCallResult() *model.APICallResult {
 	return &cr.CallResult
 }
 
-//获取API调用控制参数
+// GetControlParam 获取API调用控制参数
 func (cr *CommonRuleRequest) GetControlParam() *model.ControlParam {
 	return &cr.ControlParam
 }
 
-//通用限流接口的请求体
+// CommonRateLimitRequest 通用限流接口的请求体
 type CommonRateLimitRequest struct {
 	DstService    model.ServiceKey
 	Cluster       string
@@ -675,7 +676,7 @@ type CommonRateLimitRequest struct {
 	CallResult    model.APICallResult
 }
 
-//清理请求体
+// clearValues 清理请求体
 func (cl *CommonRateLimitRequest) clearValues() {
 	cl.Criteria.DstRule = nil
 	cl.Trigger.Clear()
@@ -683,7 +684,7 @@ func (cl *CommonRateLimitRequest) clearValues() {
 	cl.Labels = nil
 }
 
-//初始化配额获取请求
+// InitByGetQuotaRequest 初始化配额获取请求
 func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequestImpl, cfg config.Configuration) {
 	cl.clearValues()
 	cl.DstService.Namespace = request.GetNamespace()
@@ -696,7 +697,7 @@ func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequ
 	cl.CallResult.RetCode = model.ErrCodeSuccess
 	BuildControlParam(request, cfg, &cl.ControlParam)
 
-	//限流相关同步请求，减少重试此数和重试间隔
+	// 限流相关同步请求，减少重试此数和重试间隔
 	if cl.ControlParam.MaxRetry > 2 {
 		cl.ControlParam.MaxRetry = 2
 	}
@@ -708,57 +709,57 @@ func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequ
 	}
 }
 
-//获取目标服务
+// GetDstService 获取目标服务
 func (cl *CommonRateLimitRequest) GetDstService() *model.ServiceKey {
 	return &cl.DstService
 }
 
-//获取源服务
+// GetSrcService 获取源服务
 func (cl *CommonRateLimitRequest) GetSrcService() *model.ServiceKey {
 	return nil
 }
 
-//获取缓存查询触发器
+// GetNotifierTrigger 获取缓存查询触发器
 func (cl *CommonRateLimitRequest) GetNotifierTrigger() *model.NotifyTrigger {
 	return &cl.Trigger
 }
 
-//设置目标服务实例
+// SetDstInstances 设置目标服务实例
 func (cl *CommonRateLimitRequest) SetDstInstances(instances model.ServiceInstances) {
-	//do nothing
+	// do nothing
 }
 
-//设置目标服务路由规则
+// SetDstRoute 设置目标服务路由规则
 func (cl *CommonRateLimitRequest) SetDstRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//设置目标服务限流规则
+// SetDstRateLimit 设置目标服务限流规则
 func (cl *CommonRateLimitRequest) SetDstRateLimit(rule model.ServiceRule) {
 	cl.RateLimitRule = rule
 }
 
-//设置网格规则
+// SetMeshConfig 设置网格规则
 func (cl *CommonRateLimitRequest) SetMeshConfig(mc model.MeshConfig) {
-	//do nothing
+	// do nothing
 }
 
-//设置源服务路由规则
+// SetSrcRoute 设置源服务路由规则
 func (cl *CommonRateLimitRequest) SetSrcRoute(rule model.ServiceRule) {
-	//do nothing
+	// do nothing
 }
 
-//获取接口调用统计结果
+// GetCallResult 获取接口调用统计结果
 func (cl *CommonRateLimitRequest) GetCallResult() *model.APICallResult {
 	return &cl.CallResult
 }
 
-//获取API调用控制参数
+// GetControlParam 获取API调用控制参数
 func (cl *CommonRateLimitRequest) GetControlParam() *model.ControlParam {
 	return &cl.ControlParam
 }
 
-//格式化字符串
+// FormatLabelToStr 格式化字符串
 func (cl *CommonRateLimitRequest) FormatLabelToStr(rule *namingpb.Rule) string {
 	if len(cl.Labels) == 0 {
 		return ""

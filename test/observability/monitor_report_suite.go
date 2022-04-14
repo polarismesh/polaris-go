@@ -19,6 +19,20 @@ package observability
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
+	"math/rand"
+	"net"
+	"sort"
+	"time"
+
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -29,68 +43,56 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
-	"io/ioutil"
-	"log"
-	"math/rand"
-	"net"
-	"sort"
-	"time"
 )
 
-//consumerAPI各种方法的调用次数
+// consumerAPI各种方法的调用次数
 var (
-	//同步获取一个实例的成功失败数
+	// GetOneInstanceSuccessNum 同步获取一个实例的成功失败数
 	GetOneInstanceSuccessNum = 0
 	GetOneInstanceFailNum    = 0
 
-	//同步获取实例的成功失败数
+	// GetInstancesSuccessNum 同步获取实例的成功失败数
 	GetInstancesSuccessNum = 0
 	GetInstancesFailNum    = 0
 
-	//同步获取路由规则
+	// GetRouteRuleSuccessNum 同步获取路由规则
 	GetRouteRuleSuccessNum = 0
 	GetRouteRuleFailNum    = 0
 
-	//上报服务调用的次数
+	// ServiceCallSuccessNum 上报服务调用的次数
 	ServiceCallSuccessNum = 0
 	ServiceCallFailNum    = 0
 
-	//获取网格调用次数
+	// GetMeshSuccessNum 获取网格调用次数
 	GetMeshSuccessNum = 0
 	GetMeshFailNum    = 0
 )
 
-//providerAPI各种方法调用次数
+// providerAPI各种方法调用次数
 var (
-	//注册实例的成功失败数
+	// RegisterSuccessNum 注册实例的成功失败数
 	RegisterSuccessNum = 0
 	RegisterFailNum    = 0
 
-	//反注册实例的成功失败数
+	// DeregisterSuccessNum 反注册实例的成功失败数
 	DeregisterSuccessNum = 0
 	DeregisterFailNum    = 0
 
-	//心跳的成功失败数
+	// HeartbeatSuccessNum 心跳的成功失败数
 	HeartbeatSuccessNum = 0
 	HeartbeatFailNum    = 0
 
-	//限流的成功失败数
+	// GetQuotaSuccessNum 限流的成功失败数
 	GetQuotaSuccessNum = 0
 	GetQuotaFailNum    = 0
 )
 
 const (
-	//polaris-server的IP端口
-	discoverIp   = "127.0.0.1"
+	// polaris-server的IP端口
+	discoverIP   = "127.0.0.1"
 	discoverPort = 8180
 
-	//上报的服务调用
+	// 上报的服务调用
 	calledSvc = "calledSvc"
 	calledNs  = "calledNs"
 
@@ -100,28 +102,28 @@ const (
 	recoverAllSvc = "recoverAllSvc"
 	recoverAllNs  = "recoverAllNs"
 
-	//用于测试的限流规则的文件路径
+	// 用于测试的限流规则的文件路径
 	rateLimitRulesPath = "testdata/ratelimit_rule/rate_limit_total.json"
 	rateLimitRule2Path = "testdata/ratelimit_rule/rate_limit_rule2.json"
-	//rateLimit里面两个rule的id
+	// rateLimit里面两个rule的id
 	rateLimitRule1Id = "rule1"
 	rateLimitRule2Id = "rule2"
 )
 
-//上报插件测试套件
+// MonitorReportSuite 上报插件测试套件
 type MonitorReportSuite struct {
 	mockServer    mock.NamingServer
 	monitorServer mock.MonitorServer
-	//SERVER
+	// SERVER
 	grpcServer *grpc.Server
-	//MONITOR
+	// MONITOR
 	grpcMonitor           *grpc.Server
 	discoverLisenter      net.Listener
 	monitorListener       net.Listener
 	discoverToken         string
 	monitorToken          string
 	serviceToken          string
-	instanceId            string
+	instanceID            string
 	instPort              uint32
 	instHost              string
 	changeSvcToken        string
@@ -132,7 +134,7 @@ type MonitorReportSuite struct {
 	recoverAllService *namingpb.Service
 }
 
-//初始化套件
+// SetUpSuite 初始化套件
 func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.initStatNum()
 
@@ -148,11 +150,11 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.monitorServer = mock.NewMonitorServer()
 
 	m.mockServer = mock.NewNamingServer()
-	m.mockServer.RegisterServerServices(discoverIp, discoverPort)
+	m.mockServer.RegisterServerServices(discoverIP, discoverPort)
 
 	m.monitorToken = m.mockServer.RegisterServerService(config.ServerMonitorService)
 	m.mockServer.RegisterServerInstance(
-		mock.MonitorIp, mock.MonitorPort, config.ServerMonitorService, m.monitorToken, true)
+		mock.MonitorIP, mock.MonitorPort, config.ServerMonitorService, m.monitorToken, true)
 	m.mockServer.RegisterRouteRule(util.BuildNamingService(config.ServerNamespace, config.ServerMonitorService, ""),
 		m.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 
@@ -169,10 +171,10 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.mockServer.GenTestInstances(testService, 3)
 	m.mockServer.GenInstancesWithStatus(testService, 2, mock.IsolatedStatus, 2048)
 	m.mockServer.GenInstancesWithStatus(testService, 1, mock.UnhealthyStatus, 4096)
-	//获取一个被调服务实例的信息，用于后面调用providerApi
+	// 获取一个被调服务实例的信息，用于后面调用providerApi
 	svcKey := &model.ServiceKey{Namespace: testService.GetNamespace().GetValue(),
 		Service: testService.GetName().GetValue()}
-	m.instanceId = m.mockServer.GetServiceInstances(svcKey)[0].GetId().GetValue()
+	m.instanceID = m.mockServer.GetServiceInstances(svcKey)[0].GetId().GetValue()
 	m.instHost = m.mockServer.GetServiceInstances(svcKey)[0].GetHost().GetValue()
 	m.instPort = m.mockServer.GetServiceInstances(svcKey)[0].GetPort().GetValue()
 
@@ -190,23 +192,23 @@ func (m *MonitorReportSuite) SetUpSuite(c *check.C) {
 	m.mockServer.GenInstancesWithStatus(m.recoverAllService, 2, mock.UnhealthyStatus, 2048)
 
 	namingpb.RegisterPolarisGRPCServer(m.grpcServer, m.mockServer)
-	m.discoverLisenter, err = net.Listen("tcp", fmt.Sprintf("%s:%d", discoverIp, discoverPort))
-	if nil != err {
+	m.discoverLisenter, err = net.Listen("tcp", fmt.Sprintf("%s:%d", discoverIP, discoverPort))
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
-	log.Printf("appserver listening on %s:%d\n", discoverIp, discoverPort)
+	log.Printf("appserver listening on %s:%d\n", discoverIP, discoverPort)
 	util.StartGrpcServer(m.grpcServer, m.discoverLisenter)
 
 	monitorpb.RegisterGrpcAPIServer(m.grpcMonitor, m.monitorServer)
-	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIp, mock.MonitorPort))
-	if nil != err {
+	m.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mock.MonitorIP, mock.MonitorPort))
+	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
 	}
-	log.Printf("appserver listening on %s:%d\n", mock.MonitorIp, mock.MonitorPort)
+	log.Printf("appserver listening on %s:%d\n", mock.MonitorIP, mock.MonitorPort)
 	util.StartGrpcServer(m.grpcMonitor, m.monitorListener)
 }
 
-//设置changeSvc
+// 设置changeSvc
 func (m MonitorReportSuite) setupChangeSvc() {
 	changeService := util.BuildNamingService(changedNs, changedSvc, m.changeSvcToken)
 	m.mockServer.RegisterNamespace(&namingpb.Namespace{
@@ -231,11 +233,11 @@ func (m MonitorReportSuite) setupChangeSvc() {
 		Inbounds:  nil,
 		Outbounds: []*namingpb.Route{
 			{
-				//指定源服务为任意服务, 否则因为没有sourceServiceInfo会匹配不了
+				// 指定源服务为任意服务, 否则因为没有sourceServiceInfo会匹配不了
 				Sources: []*namingpb.Source{
 					{Service: &wrappers.StringValue{Value: "*"}, Namespace: &wrappers.StringValue{Value: "*"}},
 				},
-				//根据不同逻辑set来进行目标服务分区路由
+				// 根据不同逻辑set来进行目标服务分区路由
 				Destinations: []*namingpb.Destination{
 					{
 						Metadata: nil,
@@ -254,14 +256,14 @@ func (m MonitorReportSuite) setupChangeSvc() {
 
 }
 
-//关闭测试套件
+// TearDownSuite 关闭测试套件
 func (m *MonitorReportSuite) TearDownSuite(c *check.C) {
 	m.grpcMonitor.Stop()
 	m.grpcServer.Stop()
 	util.DeleteDir(util.BackupDir)
 }
 
-//产生随机的方法调用次数
+// 产生随机的方法调用次数
 func (m *MonitorReportSuite) initStatNum() {
 	GetOneInstanceSuccessNum = rand.Intn(20) + 1
 	GetOneInstanceFailNum = rand.Intn(20) + 1
@@ -292,7 +294,7 @@ func (m *MonitorReportSuite) initStatNum() {
 
 }
 
-//测试consumerAPI方法的上报
+// TestMonitorReportConsumer 测试consumerAPI方法的上报
 func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	m.monitorServer.SetSvcStat(nil)
@@ -302,28 +304,28 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 	defer consumer.Destroy()
 	defer util.DeleteDir(util.BackupDir)
 
-	//请求一个实例的请求（错误的）
+	// 请求一个实例的请求（错误的）
 	request := &api.GetOneInstanceRequest{}
 	request.FlowID = 1111
 
-	//预热获取monitor
+	// 预热获取monitor
 	request.Namespace = "Polaris"
 	request.Service = "polaris.monitor"
 	_, err = consumer.GetOneInstance(request)
-	//不会发生路由错误
+	// 不会发生路由错误
 	c.Assert(err, check.IsNil)
 	log.Printf("expected getting monitor error %v", err)
 
-	//测试getOneInstance
+	// 测试getOneInstance
 	m.checkGetOneInstance(c, consumer)
 
-	//测试网格规则获取
+	// 测试网格规则获取
 	m.checkGetMeshConfig(c, consumer)
 
-	//获取路由请求
+	// 获取路由请求
 	routeRequest := &api.GetServiceRuleRequest{}
 	routeRequest.FlowID = 1112
-	//命名空间和服务名有误
+	// 命名空间和服务名有误
 	routeRequest.Namespace = calledNs + "err"
 	routeRequest.Service = calledSvc + "err"
 
@@ -332,7 +334,7 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 		c.Assert(er, check.NotNil)
 	}
 
-	//恢复正确
+	// 恢复正确
 	routeRequest.Namespace = calledNs
 	routeRequest.Service = calledSvc
 
@@ -341,7 +343,7 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 		c.Assert(er, check.IsNil)
 	}
 
-	//测试获取所有实例和上报
+	// 测试获取所有实例和上报
 	m.checkGetInstancesAndReport(c, consumer)
 	m.checkInitCalleeService(c, consumer)
 
@@ -350,19 +352,19 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 	sdkStat := m.monitorServer.GetSdkStat()
 	svcStat := m.monitorServer.GetSvcStat()
 	m.checkConsumerStat(sdkStat, svcStat, c)
-	//检测配置信息有没有上传成功
+	// 检测配置信息有没有上传成功
 	sdkCfg := m.monitorServer.GetSdkCfg()
 	m.monitorServer.SetSdkCfg(nil)
 	c.Assert(len(sdkCfg) > 0, check.Equals, true)
 	m.monitorServer.SetPluginStat(nil)
 }
 
-//测试consumer的getOneInstance
+// 测试consumer的getOneInstance
 func (m *MonitorReportSuite) checkGetOneInstance(c *check.C, consumer api.ConsumerAPI) {
 	request := &api.GetOneInstanceRequest{}
 	request.FlowID = 1111
 
-	//恢复正确命名空间和服务名
+	// 恢复正确命名空间和服务名
 	request.Namespace = calledNs
 	request.Service = calledSvc
 
@@ -377,7 +379,7 @@ func (m *MonitorReportSuite) checkGetOneInstance(c *check.C, consumer api.Consum
 		c.Assert(er, check.IsNil)
 	}
 
-	//命名空间和服务名有误
+	// 命名空间和服务名有误
 	request.Namespace = calledNs + "err"
 	request.Service = calledSvc + "err"
 
@@ -387,13 +389,13 @@ func (m *MonitorReportSuite) checkGetOneInstance(c *check.C, consumer api.Consum
 	}
 }
 
-//测试网格获取
+// 测试网格获取
 func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.ConsumerAPI) {
-	//添加辅助服务
+	// 添加辅助服务
 	testbus := "ExistBusiness"
 	consumerNamespace := "testns"
 
-	//添加server网格规则
+	// 添加server网格规则
 	m.mockServer.RegisterMeshConfig(&namingpb.Service{
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Business:  &wrappers.StringValue{Value: testbus},
@@ -423,7 +425,7 @@ func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.Consume
 	request.MeshId = testbus
 	request.MeshType = api.MeshVirtualService
 
-	//resp, err := consumer.GetMeshConfig(request)
+	// resp, err := consumer.GetMeshConfig(request)
 
 	m.mockServer.SetReturnException(true)
 	_, err := consumer.GetMeshConfig(request)
@@ -436,7 +438,7 @@ func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.Consume
 		c.Assert(err, check.IsNil)
 	}
 
-	//命名空间和服务名有误
+	// 命名空间和服务名有误
 	request.Namespace = calledNs + "err2"
 	request.Business = calledSvc + "err2"
 	m.mockServer.SetNotRegisterAssistant(true)
@@ -448,9 +450,9 @@ func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.Consume
 	m.mockServer.SetNotRegisterAssistant(false)
 }
 
-//测试获取所有实例和上报调用结果
+// 测试获取所有实例和上报调用结果
 func (m *MonitorReportSuite) checkGetInstancesAndReport(c *check.C, consumer api.ConsumerAPI) {
-	//获取所有实例请求
+	// 获取所有实例请求
 	requests := &api.GetInstancesRequest{}
 	requests.FlowID = 1113
 	requests.Namespace = calledNs
@@ -464,7 +466,7 @@ func (m *MonitorReportSuite) checkGetInstancesAndReport(c *check.C, consumer api
 		calledInstance = resp.GetInstances()[0]
 	}
 
-	//有误的命名空间和服务名
+	// 有误的命名空间和服务名
 	requests.Service = calledSvc + "err"
 	requests.Namespace = calledNs + "err"
 
@@ -473,7 +475,7 @@ func (m *MonitorReportSuite) checkGetInstancesAndReport(c *check.C, consumer api
 		c.Assert(er, check.NotNil)
 	}
 
-	//上报的服务调用结果
+	// 上报的服务调用结果
 	result := &api.ServiceCallResult{}
 	result.CalledInstance = calledInstance
 	result.Delay = model.ToDurationPtr(50 * time.Millisecond)
@@ -485,14 +487,14 @@ func (m *MonitorReportSuite) checkGetInstancesAndReport(c *check.C, consumer api
 	}
 
 	result.SetRetCode(1)
-	//将结果改为成功
+	// 将结果改为成功
 	result.RetStatus = model.RetSuccess
-	//先上传一个记录
+	// 先上传一个记录
 	er := consumer.UpdateServiceCallResult(result)
 	c.Assert(er, check.IsNil)
-	//等待上报周期过去
+	// 等待上报周期过去
 	time.Sleep(50 * time.Second)
-	//再次恢复上报，测试跨周期上报服务调用
+	// 再次恢复上报，测试跨周期上报服务调用
 	for i := 1; i < ServiceCallSuccessNum; i++ {
 		er := consumer.UpdateServiceCallResult(result)
 		c.Assert(er, check.IsNil)
@@ -509,7 +511,7 @@ func (m *MonitorReportSuite) checkInitCalleeService(c *check.C, consumer api.Con
 	c.Assert(err, check.IsNil)
 }
 
-//检查consumerAPi调用统计
+// 检查consumerAPi调用统计
 func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatistics,
 	svcStat []*monitorpb.ServiceStatistics, c *check.C) {
 	uploadGetInstancesSuccessNum := 0
@@ -520,7 +522,7 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	uploadGetRouteRuleFailNum := 0
 	uploadServiceCallResultSuccessNum := 0
 	uploadServiceCallResultFailNum := 0
-	//mesh
+	// mesh
 	uploadGetMeshSuccessNum := 0
 	uploadGetMeshFailNum := 0
 
@@ -532,11 +534,11 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	for _, s := range sdkStat {
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiGetInstances.String():
-			//因为获取系统服务时也会使用同步api，
-			//所以成功失败数应该大于等于上报服务调用信息次数
+			// 因为获取系统服务时也会使用同步api，
+			// 所以成功失败数应该大于等于上报服务调用信息次数
 			if s.GetKey().GetSuccess().GetValue() {
 				uploadGetInstancesSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
 			} else {
@@ -544,11 +546,11 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 				if s.GetKey().GetResult() == monitorpb.APIResultType_PolarisFail {
 					execptionFailNum++
 				}
-				//c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
+				// c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
 			}
 		case model.ApiGetOneInstance.String():
-			//因为获取系统服务时也会使用同步api，
-			//所以成功失败数应该大于等于上报服务调用信息次数
+			// 因为获取系统服务时也会使用同步api，
+			// 所以成功失败数应该大于等于上报服务调用信息次数
 			if s.GetKey().GetSuccess().GetValue() {
 				uploadGetOneInstanceSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
 			} else {
@@ -556,7 +558,7 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 				if s.GetKey().GetResult() == monitorpb.APIResultType_PolarisFail {
 					execptionFailNum++
 				}
-				//c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
+				// c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
 			}
 		case model.ApiGetRouteRule.String():
 			if s.GetKey().GetSuccess().GetValue() {
@@ -625,7 +627,7 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	c.Assert(hasCalledSvcStat, check.Equals, true)
 }
 
-//测试providerapi方法上报统计情况
+// TestMonitorReportProvider 测试providerapi方法上报统计情况
 func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	log.Printf("Start TestMonitorReportProvider")
@@ -635,14 +637,14 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 
 	log.Printf("TestMonitorReportProvider waiting 30s for system services ready\n")
-	//等待一段时间，让系统服务就绪
+	// 等待一段时间，让系统服务就绪
 	time.Sleep(30 * time.Second)
 
 	registerReq := &api.InstanceRegisterRequest{}
 	registerReq.Namespace = calledNs
 	registerReq.Service = calledSvc
 	registerReq.ServiceToken = m.serviceToken + "err"
-	registerReq.Host = discoverIp
+	registerReq.Host = discoverIP
 	registerReq.Port = 78
 
 	for i := 0; i < RegisterFailNum; i++ {
@@ -660,7 +662,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	deregReq.Namespace = calledNs
 	deregReq.Service = calledSvc
 	deregReq.ServiceToken = m.serviceToken + "err"
-	deregReq.Host = discoverIp
+	deregReq.Host = discoverIP
 	deregReq.Port = 56
 
 	for i := 0; i < DeregisterFailNum; i++ {
@@ -680,7 +682,7 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	heartBeatReq.Port = int(m.instPort)
 	heartBeatReq.Host = m.instHost
 	heartBeatReq.ServiceToken = m.serviceToken + "err"
-	heartBeatReq.InstanceID = m.instanceId
+	heartBeatReq.InstanceID = m.instanceID
 
 	for i := 0; i < HeartbeatFailNum; i++ {
 		err := provider.Heartbeat(heartBeatReq)
@@ -697,14 +699,14 @@ func (m *MonitorReportSuite) TestMonitorReportProvider(c *check.C) {
 	time.Sleep(50 * time.Second)
 	sdkStat := m.monitorServer.GetSdkStat()
 	m.checkProviderStat(sdkStat, c)
-	//检测有没有上传配置信息成功
+	// 检测有没有上传配置信息成功
 	sdkCfg := m.monitorServer.GetSdkCfg()
 	m.monitorServer.SetSdkCfg(nil)
 	c.Assert(len(sdkCfg) > 0, check.Equals, true)
 	m.monitorServer.SetPluginStat(nil)
 }
 
-//测试limitAPI方法上报统计情况
+// TestMonitorReportLimitAPI 测试limitAPI方法上报统计情况
 func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	log.Printf("Start TestMonitorReportLimitAPI")
@@ -716,10 +718,10 @@ func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
 	limitReq := api.NewQuotaRequest()
 	limitReq.SetNamespace(calledNs)
 	limitReq.SetService(calledSvc)
-	//不需要触发限流，只需要获取到限流规则即可
+	// 不需要触发限流，只需要获取到限流规则即可
 	limitReq.SetLabels(map[string]string{"noKey": "noValue"})
 
-	//检查上报的错误码个数
+	// 检查上报的错误码个数
 	for i := 0; i < GetQuotaSuccessNum; i++ {
 		_, err = limit.GetQuota(limitReq)
 		fmt.Printf("GetQuota err is %v\n", err)
@@ -736,7 +738,7 @@ func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
 	time.Sleep(70 * time.Second)
 	sdkStat := m.monitorServer.GetSdkStat()
 	m.checkLimitAPIStat(sdkStat, c)
-	//检测配置信息有没有上传成功
+	// 检测配置信息有没有上传成功
 	sdkCfg := m.monitorServer.GetSdkCfg()
 	m.monitorServer.SetSdkCfg(nil)
 	c.Assert(len(sdkCfg) > 0, check.Equals, true)
@@ -744,7 +746,7 @@ func (m *MonitorReportSuite) TestMonitorReportLimitAPI(c *check.C) {
 	m.monitorServer.SetCacheReport(nil)
 }
 
-//检查limitAPI方法调用统计
+// 检查limitAPI方法调用统计
 func (m *MonitorReportSuite) checkLimitAPIStat(sdkStat []*monitorpb.SDKAPIStatistics, c *check.C) {
 	uploadGetQuotaSuccessNum := 0
 	uploadGetQuotaFailNum := 0
@@ -752,7 +754,7 @@ func (m *MonitorReportSuite) checkLimitAPIStat(sdkStat []*monitorpb.SDKAPIStatis
 	for _, s := range sdkStat {
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiGetQuota.String():
 			if s.GetKey().GetSuccess().GetValue() {
@@ -764,12 +766,12 @@ func (m *MonitorReportSuite) checkLimitAPIStat(sdkStat []*monitorpb.SDKAPIStatis
 	}
 	log.Printf("GetQuotaFailNum: %d, uploadGetQuotaFailNum: %d", GetQuotaFailNum, uploadGetQuotaFailNum)
 	log.Printf("GetQuotaSuccessNum: %d, uploadGetQuotaSuccessNum: %d", GetQuotaSuccessNum, uploadGetQuotaSuccessNum)
-	//一次调用会有2个错误码，一个是规则获取失败的错误码，一个是整体接口的错误码
+	// 一次调用会有2个错误码，一个是规则获取失败的错误码，一个是整体接口的错误码
 	c.Assert(uploadGetQuotaFailNum, check.Equals, 2*GetQuotaFailNum)
 	c.Assert(uploadGetQuotaSuccessNum, check.Equals, GetQuotaSuccessNum)
 }
 
-//检测providerAPI调用统计
+// 检测providerAPI调用统计
 func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatistics, c *check.C) {
 	providerNum := 0
 	uploadRegisterFail := 0
@@ -779,10 +781,10 @@ func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatis
 	uploadHeartbeatFail := 0
 	uploadHeartbeatSucc := 0
 	for _, s := range sdkStat {
-		//统计信息的版本、类型、host要对的上
+		// 统计信息的版本、类型、host要对的上
 		c.Assert(s.GetKey().GetClientVersion().GetValue() == version.Version, check.Equals, true)
 		c.Assert(s.GetKey().GetClientType().GetValue() == version.ClientType, check.Equals, true)
-		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIp, check.Equals, true)
+		c.Assert(s.GetKey().GetClientHost().GetValue() == discoverIP, check.Equals, true)
 		switch s.GetKey().GetSdkApi().GetValue() {
 		case model.ApiRegister.String():
 			if s.GetKey().GetSuccess().GetValue() {
@@ -811,8 +813,8 @@ func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatis
 		}
 	}
 	fmt.Printf("providernum %d\n", providerNum)
-	//必须每种统计都有
-	//c.Assert(providerNum >= 6, check.Equals, true)
+	// 必须每种统计都有
+	// c.Assert(providerNum >= 6, check.Equals, true)
 	c.Assert(uploadRegisterSucc, check.Equals, RegisterSuccessNum)
 	c.Assert(uploadRegisterFail, check.Equals, RegisterFailNum)
 	c.Assert(uploadDeregisterSucc, check.Equals, DeregisterSuccessNum)
@@ -821,14 +823,14 @@ func (m *MonitorReportSuite) checkProviderStat(sdkStat []*monitorpb.SDKAPIStatis
 	c.Assert(uploadHeartbeatFail, check.Equals, HeartbeatFailNum)
 }
 
-//实例状态修改类型
+// 实例状态修改类型
 type changeStatus struct {
 	healthy bool
 	isolate bool
 	weight  uint32
 }
 
-//对changeSvc实例状态进行修改的表
+// 对changeSvc实例状态进行修改的表
 var instChanges = [][]changeStatus{
 	{
 		{true, true, 100},
@@ -849,11 +851,11 @@ var instChanges = [][]changeStatus{
 	},
 }
 
-//测试上报缓存信息的statReporter
+// TestReportCacheInfo 测试上报缓存信息的statReporter
 func (m *MonitorReportSuite) TestReportCacheInfo(c *check.C) {
 	log.Printf("Start TestReportCacheInfo, changeSvcToken: %s", m.changeSvcToken)
 	defer util.DeleteDir(util.BackupDir)
-	//获取所有实例请求
+	// 获取所有实例请求
 	svcRequests := &api.GetInstancesRequest{}
 	svcRequests.FlowID = 1113
 	svcRequests.Namespace = changedNs
@@ -941,7 +943,7 @@ func (m *MonitorReportSuite) TestReportCacheInfo(c *check.C) {
 	m.monitorServer.SetCacheReport(nil)
 }
 
-//获取测试cacheInfo时使用的配置
+// 获取测试cacheInfo时使用的配置
 func getCacheInfoConfiguration() (*config.ConfigurationImpl, error) {
 	configuration, err := config.LoadConfigurationByFile("testdata/monitor.yaml")
 	if err != nil {
@@ -956,7 +958,7 @@ func getCacheInfoConfiguration() (*config.ConfigurationImpl, error) {
 	return configuration, nil
 }
 
-//检测实例信息变更情况是否符合预期
+// 检测实例信息变更情况是否符合预期
 func (m *MonitorReportSuite) checkInstanceChangeInfo(info []*monitorpb.ServiceInfo, c *check.C) {
 	var addInstances []*monitorpb.ChangeInstance
 	var deleteInstances []*monitorpb.ChangeInstance
@@ -977,17 +979,17 @@ func (m *MonitorReportSuite) checkInstanceChangeInfo(info []*monitorpb.ServiceIn
 			}
 		}
 	}
-	//statusSet := make(map[monitorpb.ModifiedInstanceInstanceStatusChange]bool)
+	// statusSet := make(map[monitorpb.ModifiedInstanceInstanceStatusChange]bool)
 	c.Assert(len(modifiedInstances), check.Equals, 9)
-	//for _, mod := range modifiedInstances {
+	// for _, mod := range modifiedInstances {
 	//	weightChange := mod.GetWeightChange()
 	//	c.Assert(weightChange.NewWeight, check.Equals, weightChange.OldWeight * 2)
 	//	statusSet[mod.GetStatusChange()] = true
-	//}
-	//c.Assert(len(statusSet), check.Equals, 9)
+	// }
+	// c.Assert(len(statusSet), check.Equals, 9)
 }
 
-//设置changedSvc服务实例状态
+// 设置changedSvc服务实例状态
 func (m *MonitorReportSuite) setRevisionOfInstance(loopCount int, c *check.C) {
 	svcKey := model.ServiceKey{
 		Namespace: changedNs,
@@ -1002,7 +1004,7 @@ func (m *MonitorReportSuite) setRevisionOfInstance(loopCount int, c *check.C) {
 	}
 }
 
-//测试限流规则的版本号上报
+// TestRateLimitRuleRevisionReport 测试限流规则的版本号上报
 func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 	log.Printf("Start TestRateLimitRuleRevisionReport")
 	defer util.DeleteDir(util.BackupDir)
@@ -1024,11 +1026,11 @@ func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 	c.Assert(err, check.IsNil)
 	originRule2 := originRule2Msg.(*namingpb.Rule)
 
-	//设置规则的初始revision，一开始的rateLimit只有一个rule
+	// 设置规则的初始revision，一开始的rateLimit只有一个rule
 	m.setRateLimitRuleRevisions(originAllRules, map[string]string{rateLimitRule1Id: revisionsOfRateLimit1[0]},
 		revisionsOfRateLimit[0])
 
-	//注册初始的rateLimit
+	// 注册初始的rateLimit
 	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
 
 	configuration, err := config.LoadConfigurationByFile("testdata/monitor.yaml")
@@ -1039,7 +1041,7 @@ func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 		MetricsReportWindow: model.ToDurationPtr(10 * time.Minute),
 		MetricsNumBuckets:   6,
 	})
-	//m.mockServer.SetPrintDiscoverReturn(true)
+	// m.mockServer.SetPrintDiscoverReturn(true)
 	configuration.Consumer.LocalCache.ServiceRefreshInterval = model.ToDurationPtr(100 * time.Millisecond)
 	limitAPI, err := api.NewLimitAPIByConfig(configuration)
 	c.Assert(err, check.IsNil)
@@ -1047,10 +1049,10 @@ func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 	limitReq := api.NewQuotaRequest()
 	limitReq.SetNamespace(calledNs)
 	limitReq.SetService(calledSvc)
-	//不需要触发限流，只需要获取到限流规则即可
+	// 不需要触发限流，只需要获取到限流规则即可
 	limitReq.SetLabels(map[string]string{"noKey": "noValue"})
 	_, err = limitAPI.GetQuota(limitReq)
-	//往rateLimit添加第二个rule
+	// 往rateLimit添加第二个rule
 	m.setSingleRateLimitRule(originAllRules, originRule2, map[string]string{rateLimitRule2Id: revisionsOfRateLimit2[0]},
 		revisionsOfRateLimit[1])
 	m.mockServer.RegisterRateLimitRule(svcPB, proto.Clone(originAllRules).(*namingpb.RateLimit))
@@ -1069,7 +1071,7 @@ func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 
 	svcCaches := m.monitorServer.GetCacheReport(model.ServiceKey{Namespace: calledNs, Service: calledSvc})
 	var totalRevisions, rule1Revisions, rule2Revisions []string
-	//从monitor获取到的cache上报中提取限流规则的版本号变化
+	// 从monitor获取到的cache上报中提取限流规则的版本号变化
 	for _, sc := range svcCaches {
 		for _, totalRevision := range sc.GetRateLimitHistory().GetRevision() {
 			totalRevisions = append(totalRevisions, totalRevision.GetRevision())
@@ -1095,7 +1097,7 @@ func (m *MonitorReportSuite) TestRateLimitRuleRevisionReport(c *check.C) {
 	m.checkStringArrayEqual(revisionsOfRateLimit2, rule2Revisions, c)
 }
 
-//检测两个[]string是否相等
+// 检测两个[]string是否相等
 func (m *MonitorReportSuite) checkStringArrayEqual(arr1 []string, arr2 []string, c *check.C) {
 	c.Assert(len(arr1), check.Equals, len(arr2))
 	for idx, e1 := range arr1 {
@@ -1103,27 +1105,27 @@ func (m *MonitorReportSuite) checkStringArrayEqual(arr1 []string, arr2 []string,
 	}
 }
 
-//从文件中读取rateLimit的定义
+// 从文件中读取rateLimit的定义
 func readRateLimitRuleFromFile(path string, singleRule bool) (proto.Message, error) {
 	buf, err := ioutil.ReadFile(path)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 	if singleRule {
 		rule := &namingpb.Rule{}
-		if err = jsonpb.UnmarshalString(string(buf), rule); nil != err {
+		if err = jsonpb.UnmarshalString(string(buf), rule); err != nil {
 			return nil, err
 		}
 		return rule, err
 	}
 	rateLimit := &namingpb.RateLimit{}
-	if err = jsonpb.UnmarshalString(string(buf), rateLimit); nil != err {
+	if err = jsonpb.UnmarshalString(string(buf), rateLimit); err != nil {
 		return nil, err
 	}
 	return rateLimit, err
 }
 
-//设置限流规则里面的单独一个规则
+// 设置限流规则里面的单独一个规则
 func (m *MonitorReportSuite) setSingleRateLimitRule(rules *namingpb.RateLimit, rule *namingpb.Rule,
 	singleRules map[string]string, totalRevision string) {
 	var exists bool
@@ -1139,7 +1141,7 @@ func (m *MonitorReportSuite) setSingleRateLimitRule(rules *namingpb.RateLimit, r
 	m.setRateLimitRuleRevisions(rules, singleRules, totalRevision)
 }
 
-//设置限流规则的revision
+// 设置限流规则的revision
 func (m *MonitorReportSuite) setRateLimitRuleRevisions(rule *namingpb.RateLimit,
 	singleRules map[string]string, totalRevision string) {
 	log.Printf("set revisions: total: %v, single: %v", totalRevision, singleRules)
@@ -1152,7 +1154,7 @@ func (m *MonitorReportSuite) setRateLimitRuleRevisions(rule *namingpb.RateLimit,
 	}
 }
 
-//测试全死全活上报
+// TestRecoverAllReport 测试全死全活上报
 func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 	log.Printf("TestRecoverAllReport")
 	defer util.DeleteDir(util.BackupDir)
@@ -1172,14 +1174,14 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 	svcRequests.Service = recoverAllSvc
 	consumer, err := api.NewConsumerAPIByConfig(configuration)
 	c.Assert(err, check.IsNil)
-	//这时请求的服务都是不健康实例，触发全死全活
+	// 这时请求的服务都是不健康实例，触发全死全活
 	_, err = consumer.GetInstances(svcRequests)
 	c.Assert(err, check.IsNil)
 	_, err = consumer.GetInstances(svcRequests)
 	c.Assert(err, check.IsNil)
 	m.mockServer.GenTestInstances(m.recoverAllService, 3)
 	time.Sleep(5 * time.Second)
-	//这次请求时生成了健康的实例，关闭全死全活
+	// 这次请求时生成了健康的实例，关闭全死全活
 	_, err = consumer.GetInstances(svcRequests)
 	c.Assert(err, check.IsNil)
 	time.Sleep(6 * time.Second)
@@ -1193,13 +1195,13 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 			recovers = append(recovers, c.Change)
 		}
 	}
-	//应该有两个记录，一次开启，一次关闭全死全后
+	// 应该有两个记录，一次开启，一次关闭全死全后
 	c.Assert(len(recovers), check.Equals, 2)
 	m.monitorServer.SetPluginStat(nil)
 }
 
-////检测插件接口统计信息
-//func (m *MonitorReportSuite) checkPluginStat(c *check.C) {
+// //检测插件接口统计信息
+// func (m *MonitorReportSuite) checkPluginStat(c *check.C) {
 //	pluginStats := m.monitorServer.GetPluginStat()
 //	c.Assert(len(pluginStats) > 0, check.Equals, true)
 //	for _, p := range pluginStats {
@@ -1207,9 +1209,9 @@ func (m *MonitorReportSuite) TestRecoverAllReport(c *check.C) {
 //			c.Assert(r.TotalRequestsPerMinute > 0, check.Equals, true)
 //		}
 //	}
-//}
+// }
 
-// 检查是否有 UpdateServiceCallReport 的monitor上报
+// TestUpdateServiceCallReport 检查是否有 UpdateServiceCallReport 的monitor上报
 func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	m.monitorServer.SetSdkStat(nil)
 	m.monitorServer.SetSvcStat(nil)
@@ -1222,7 +1224,7 @@ func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	request := &api.GetOneInstanceRequest{}
 	request.FlowID = 1111
 
-	//预热获取monitor
+	// 预热获取monitor
 	request.Namespace = "Polaris"
 	request.Service = "polaris.monitor"
 	resp, err := consumer.GetOneInstance(request)
@@ -1230,19 +1232,19 @@ func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	c.Assert(len(resp.GetInstances()) > 0, check.Equals, true)
 	targetInstance := resp.GetInstances()[0]
 
-	//请求一个实例的请求（错误的）
+	// 请求一个实例的请求（错误的）
 	svcCallResult := &api.ServiceCallResult{}
-	//设置被调的实例信息
+	// 设置被调的实例信息
 	svcCallResult.SetCalledInstance(targetInstance)
-	//设置服务调用结果，枚举，成功或者失败
+	// 设置服务调用结果，枚举，成功或者失败
 	svcCallResult.SetRetStatus(api.RetSuccess)
-	//设置服务调用返回码
+	// 设置服务调用返回码
 	svcCallResult.SetRetCode(0)
-	//设置服务调用时延信息
+	// 设置服务调用时延信息
 	svcCallResult.SetDelay(100)
 
 	err = consumer.UpdateServiceCallResult(svcCallResult)
-	//不会发生路由错误
+	// 不会发生路由错误
 	c.Assert(err, check.IsNil)
 
 	log.Printf("TestUpdateServiceCallReport waiting 40s to upload stat\n")
@@ -1258,7 +1260,7 @@ func (m *MonitorReportSuite) TestUpdateServiceCallReport(c *check.C) {
 	c.Assert(len(sdkStat) >= 2, check.Equals, true)
 }
 
-//检测当前添加的错误码不会返回ErrCodeUnknown
+// TestErrorCodeUnknown 检测当前添加的错误码不会返回ErrCodeUnknown
 func (m *MonitorReportSuite) TestErrorCodeUnknown(c *check.C) {
 	log.Printf("Start TestErrorCodeUnknown")
 	code := model.ErrCodeUnknown + 1
@@ -1268,14 +1270,14 @@ func (m *MonitorReportSuite) TestErrorCodeUnknown(c *check.C) {
 		c.Assert(codeStr != "ErrCodeUnknown", check.Equals, true)
 		code++
 	}
-	//确保不会出现panic
+	// 确保不会出现panic
 	for i := 0; i < int(model.ErrCodeCount); i++ {
 		model.ErrCodeFromIndex(i)
 	}
 }
 
-//检测当connectionManager不ready的时候，是否会跳过第一次reportConfig
-//现在通过检测日志可以看出是不是跳过了第一次reportConfig，还无法进行自动判断
+// TestConfigNotReady 检测当connectionManager不ready的时候，是否会跳过第一次reportConfig
+// 现在通过检测日志可以看出是不是跳过了第一次reportConfig，还无法进行自动判断
 func (m *MonitorReportSuite) TestConfigNotReady(c *check.C) {
 	log.Printf("Start TestConfigNotReady")
 	m.mockServer.SetFirstNoReturn(model.ServiceEventKey{

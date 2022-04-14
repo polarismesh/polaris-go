@@ -19,23 +19,26 @@ package ringhash
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
+	murmur32 "github.com/spaolacci/murmur3"
+
 	"github.com/polarismesh/polaris-go/pkg/algorithm/search"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
-	murmur32 "github.com/spaolacci/murmur3"
-	"sort"
-	"strconv"
-	"strings"
 )
 
-//一致性hash环
+// L5ContinuumSelector 一致性hash环
 type L5ContinuumSelector struct {
 	model.SelectorBase
 	svcClusters model.ServiceClusters
 	ring        points
 }
 
+// IPToUInt32 ip转uint32
 func IPToUInt32(ip string) uint32 {
 	bits := strings.Split(ip, ".")
 
@@ -71,7 +74,7 @@ func compare(new, old model.Instance) bool {
 	return false
 }
 
-//创建hash环
+// NewL5Continuum 创建hash环
 func NewL5Continuum(
 	instanceSet *model.InstanceSet, id int32) (*L5ContinuumSelector, error) {
 	var continuum = &L5ContinuumSelector{
@@ -123,7 +126,7 @@ func NewL5Continuum(
 	return continuum, nil
 }
 
-//选择实例下标
+// Select 选择实例下标
 func (c *L5ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNodes, error) {
 	ringLen := len(c.ring)
 	switch ringLen {
@@ -142,7 +145,7 @@ func (c *L5ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNo
 	}
 }
 
-//通过hash值选择具体的节点
+// 通过hash值选择具体的节点
 func (c *L5ContinuumSelector) selectByHashValue(hashValue uint64) (int, *model.ReplicateNodes) {
 	ringIndex := search.BinarySearch(c.ring, hashValue)
 	targetPoint := &c.ring[ringIndex]
