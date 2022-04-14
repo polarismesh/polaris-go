@@ -465,6 +465,10 @@ func createBehavior(supplier plugin.Supplier, behaviorName string) ratelimiter.S
 // matchLabels 校验输入的元数据是否符合规则
 func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	labels map[string]string, ruleCache model.RuleCache) bool {
+	ruleMetaValueStr := ruleMetaValue.GetValue().GetValue()
+	if ruleMetaValueStr == pb.MatchAll {
+		return true
+	}
 	if len(labels) == 0 {
 		return false
 	}
@@ -474,7 +478,6 @@ func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 		// 集成的路由规则不包含这个key，就不匹配
 		return false
 	}
-	ruleMetaValueStr := ruleMetaValue.GetValue().GetValue()
 	switch ruleMetaValue.Type {
 	case namingpb.MatchString_REGEX:
 		regexObj := ruleCache.GetRegexMatcher(ruleMetaValueStr)
