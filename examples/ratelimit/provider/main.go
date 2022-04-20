@@ -27,9 +27,9 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -40,7 +40,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
+	flag.StringVar(&service, "service", "RateLimitEchoServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 }
@@ -48,6 +48,7 @@ func initArgs() {
 // PolarisProvider .
 type PolarisProvider struct {
 	provider  api.ProviderAPI
+	limiter   api.LimitAPI
 	namespace string
 	service   string
 	host      string
@@ -68,8 +69,30 @@ func (svr *PolarisProvider) Run() {
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+		quotaReq := api.NewQuotaRequest().(*model.QuotaRequestImpl)
+		quotaReq.SetLabels(convertHeaders(r.Header))
+		quotaReq.SetNamespace(namespace)
+		quotaReq.SetService(service)
+
+		log.Printf("[info] get quota req : ns=%s, svc=%s, labels=%v", quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetLabels())
+		resp, err := svr.limiter.GetQuota(quotaReq)
+
+		log.Printf("[info] get quota resp : code=%d, info=%s", resp.Get().Code, resp.Get().Info)
+
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
+			return
+		}
+
+		if resp.Get().Code != model.QuotaResultOk {
+			rw.WriteHeader(http.StatusTooManyRequests)
+			_, _ = rw.Write([]byte(http.StatusText(http.StatusTooManyRequests)))
+			return
+		}
+
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm DiscoverEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm RateLimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
 	})
 
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
@@ -94,27 +117,11 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
-	go svr.doHeartbeat()
-}
-
-func (svr *PolarisProvider) doHeartbeat() {
-	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(5 * time.Second))
-	for range ticker.C {
-		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.Namespace = namespace
-		heartbeatRequest.Service = service
-		heartbeatRequest.Host = svr.host
-		heartbeatRequest.Port = svr.port
-		heartbeatRequest.ServiceToken = token
-		svr.provider.Heartbeat(heartbeatRequest)
-	}
 }
 
 func runMainLoop() {
@@ -144,10 +151,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
-	defer provider.Destroy()
+
+	limit := api.NewLimitAPIByContext(provider.SDKContext())
+
+	defer func() {
+		provider.Destroy()
+		limit.Destroy()
+	}()
 
 	svr := &PolarisProvider{
 		provider:  provider,
+		limiter:   limit,
 		namespace: namespace,
 		service:   service,
 	}
@@ -168,4 +182,16 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+func convertHeaders(header map[string][]string) map[string]string {
+	meta := make(map[string]string)
+	for k, v := range header {
+		if strings.ToLower(k) == "user-id" {
+			meta[strings.ToLower(k)] = v[0]
+		}
+	}
+
+	meta["method"] = "/echo"
+	return meta
 }

@@ -23,8 +23,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
-	"time"
+	"syscall"
 
 	"github.com/polarismesh/polaris-go/api"
 )
@@ -33,14 +35,17 @@ var (
 	namespace string
 	service   string
 	host      string
-	port      int
 	token     string
 	metadata  string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
+<<<<<<< HEAD
 	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+=======
+	flag.StringVar(&service, "service", "RouteEchoServer", "service")
+>>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
@@ -81,19 +86,37 @@ func (svr *PolarisProvider) Run() {
 	}
 
 	host = tmpHost
+<<<<<<< HEAD
 	svr.runWebServer()
 	svr.registerService()
+=======
+	svr.host = tmpHost
+	svr.runWebServer()
+	svr.registerService()
+	runMainLoop()
+>>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 }
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("Hello, I'm EchoServerGolang Provider " + metadata))
+		msg := fmt.Sprintf("Hello, I'm RouteEchoServer Provider, My metadata's : %#v, host : %s:%d", metadata, svr.host, svr.port)
+		_, _ = rw.Write([]byte(msg))
 	})
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", svr.port), nil); err != nil {
-		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", svr.port))
+	if err != nil {
+		log.Fatalf("[ERROR]fail to listen tcp, err is %v", err)
 	}
+
+	svr.port = ln.Addr().(*net.TCPAddr).Port
+
+	go func() {
+		if err := http.Serve(ln, nil); err != nil {
+			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+		}
+	}()
+
 }
 
 func (svr *PolarisProvider) registerService() {
@@ -102,19 +125,17 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Service = service
 	registerRequest.Namespace = namespace
 	registerRequest.Host = host
-	registerRequest.Port = port
+	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	registerRequest.SetTTL(10)
 	registerRequest.Metadata = convertMetadatas()
 	resp, err := svr.provider.Register(registerRequest)
 	if nil != err {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
-
-	go svr.doHeartbeat()
 }
 
+<<<<<<< HEAD
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
 	ticker := time.NewTicker(time.Duration(5 * time.Second))
@@ -130,7 +151,19 @@ func (svr *PolarisProvider) doHeartbeat() {
 			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
 		}
 	}
+=======
+func runMainLoop() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, []os.Signal{
+		syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGSEGV, syscall.SIGUSR1,
+	}...)
+>>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 
+	for s := range ch {
+		log.Printf("catch signal(%+v), stop servers", s)
+		return
+	}
 }
 
 func main() {
@@ -151,7 +184,6 @@ func main() {
 		namespace: namespace,
 		service:   service,
 		host:      host,
-		port:      port,
 	}
 
 	svr.Run()

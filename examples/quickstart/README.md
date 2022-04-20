@@ -1,55 +1,46 @@
-# QuickStart
+# Polaris Go
 
 [中文文档](./README-zh.md)
 
-## Catalog description
+## Use service registration discovery function
 
-> provider
+Quickly experience the service registration and service discovery capabilities of Arctic Stars
 
-The Polaris adjusted terminal sample contains the simplest basic operation of the adjusted terminal
+## How to use
 
-> consumer
+### Build an executable
 
-Polaris main tuning terminal sample contains the simplest basic client operation
+Build provider
 
-## How To Build
-
-> provider
-
-- linux/mac build command
 ```
+# linux/mac
 cd ./provider
 go build -o provider
-```
 
-- windows build command
-```
-cd ./consumer
+# windows
+cd ./provider
 go build -o provider.exe
 ```
 
-> consumer
+Build consumer
 
-- linux/mac build command
 ```
+# linux/mac
 cd ./consumer
 go build -o consumer
-```
-- windows build command
-```
+
+# windows
 cd ./consumer
 go build -o consumer.exe
 ```
 
-## How To Use 
+### Enter the console
 
-### Create Service
-
-Create the corresponding service through the Polaris console in advance. If it is installed through a local one-click installation package, open the console directly in the browser through 127.0.0.1:8080
+Create a corresponding service through the Arctic Star Console, if you are installed by a local one-click installation package, open the console directly on the browser through 127.0.0.1:8080
 
 ### Change setting
 
-To specify the Polaris server address, you need to edit the polaris.yaml file and fill in the server address
+Specify the Arctic Star server address, you need to edit the Polaris.yaml file, fill in the server address.
 
 ```
 global:
@@ -58,39 +49,33 @@ global:
     - 127.0.0.1:8091
 ```
 
-### Execute Program
+### Execute program
 
-Directly execute the generated executable program
+Run the built **provider** executable
 
-> provider
-
-- linux/mac run command
 ```
+# linux/mac
 ./provider
-```
 
-- windows run command
-```
+# windows
 ./provider.exe
 ```
 
-> consumer
+Run the built **consumer** executable
 
+```
+# linux/mac
+./provider
 
-- linux/mac run command
-```
-./consumer
+# windows
+./provider.exe
 ```
 
-- windows run command
-```
-./consumer.exe
-```
 
 ### Verify
 
 ```
 curl http://127.0.0.1:18080/echo
 
-Hello, I'm EchoServerGolang Provider
+Hello, I'm DiscoverEchoServer Provider, My host : %s:%d
 ```

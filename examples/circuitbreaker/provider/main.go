@@ -27,7 +27,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/polarismesh/polaris-go/api"
 )
@@ -40,7 +39,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
+	flag.StringVar(&service, "service", "CircuitBreakerEchoServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 }
@@ -69,7 +68,7 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm DiscoverEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm CircuitBreakerEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
 	})
 
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
@@ -94,27 +93,11 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
-	go svr.doHeartbeat()
-}
-
-func (svr *PolarisProvider) doHeartbeat() {
-	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(5 * time.Second))
-	for range ticker.C {
-		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.Namespace = namespace
-		heartbeatRequest.Service = service
-		heartbeatRequest.Host = svr.host
-		heartbeatRequest.Port = svr.port
-		heartbeatRequest.ServiceToken = token
-		svr.provider.Heartbeat(heartbeatRequest)
-	}
 }
 
 func runMainLoop() {
