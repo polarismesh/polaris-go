@@ -35,7 +35,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
 }
 
 type PolarisConsumer struct {
@@ -51,12 +51,16 @@ func (svr *PolarisConsumer) Run() {
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
+		// DiscoverEchoServer
 		getOneRequest := &api.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 		if err != nil {
-			log.Fatalf("fail to getOneInstance, err is %v", err)
+			log.Printf("[error] fail to getOneInstance, err is %v", err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)))
+			return
 		}
 		instance := oneInstResp.GetInstance()
 		if nil != instance {
@@ -65,14 +69,20 @@ func (svr *PolarisConsumer) runWebServer() {
 
 		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 		if err != nil {
-			log.Fatalf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
 		}
 
 		defer resp.Body.Close()
 
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Fatalf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
 		}
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write(data)

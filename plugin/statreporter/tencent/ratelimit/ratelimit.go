@@ -194,6 +194,12 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	return nil
 }
 
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-momitor",
+	}
+}
+
 // 定时上报限流记录
 func (s *Reporter) uploadRateLimitRecord() {
 	t := time.NewTicker(*s.config.ReportInterval)

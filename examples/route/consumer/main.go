@@ -39,7 +39,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 }
@@ -129,9 +129,7 @@ func main() {
 func convertHeaders(header map[string][]string) map[string]string {
 	meta := make(map[string]string)
 	for k, v := range header {
-		if strings.ToLower(k) == "env" {
-			meta[strings.ToLower(k)] = v[0]
-		}
+		meta[strings.ToLower(k)] = v[0]
 	}
 
 	return meta

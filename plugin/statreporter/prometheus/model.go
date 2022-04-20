@@ -23,6 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
+// MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型
 type MetricsType int
 
 const (
@@ -31,8 +32,10 @@ const (
 	TypeForGaugeVec
 	TypeForGauge
 	TypeForHistogramVec
+	TypeForMaxGaugeVec
 )
 
+// metricDesc 指标描述
 type metricDesc struct {
 	Name       string
 	Help       string
@@ -54,15 +57,19 @@ const (
 	CallerLabels    = "caller_labels"
 	MetricNameLabel = "metric_name"
 
+	// 与路由、请求相关的指标信息
 	MetricsNameUpstreamRequestTotal      = "upstream_rq_total"
 	MetricsNameUpstreamRequestSuccess    = "upstream_rq_success"
 	MetricsNameUpstreamRequestTimeout    = "upstream_rq_timeout"
 	MetricsNameUpstreamRequestMaxTimeout = "upstream_rq_max_timeout"
+	MetricsNameUpstreamRequestDelay      = "upstream_rq_delay"
 
+	// 限流相关指标信息
 	MetricsNameRateLimitRequestTotal = "ratelimit_rq_total"
 	MetricsNameRateLimitRequestPass  = "ratelimit_rq_pass"
 	MetricsNameRateLimitRequestLimit = "ratelimit_rq_limit"
 
+	// 熔断相关指标信息
 	MetricsNameCircuitBreakerOpen     = "circuitbreaker_open"
 	MetricsNameCircuitBreakerHalfOpen = "circuitbreaker_halfopen"
 
@@ -96,16 +103,23 @@ var (
 	UpstreamRequestTimeout = metricDesc{
 		Name:       MetricsNameUpstreamRequestTimeout,
 		Help:       "total of request delay per period",
-		MetricType: TypeForHistogramVec,
+		MetricType: TypeForGaugeVec,
 		LabelNames: GetLabels(InstanceGaugeLabelOrder),
 	}
 
-	// UpstreamRequestMaxTimeout = metricDesc{
-	// 	Name:       MetricsNameUpstreamRequestMaxTimeout,
-	// 	Help:       "maximum request delay per period",
-	// 	MetricType: TypeForGauge,
-	// 	LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	// }
+	UpstreamRequestMaxTimeout = metricDesc{
+		Name:       MetricsNameUpstreamRequestMaxTimeout,
+		Help:       "maximum request delay per period",
+		MetricType: TypeForMaxGaugeVec,
+		LabelNames: GetLabels(InstanceGaugeLabelOrder),
+	}
+
+	UpstreamRequestDelay = metricDesc{
+		Name:       MetricsNameUpstreamRequestDelay,
+		Help:       "per request delay per period",
+		MetricType: TypeForHistogramVec,
+		LabelNames: GetLabels(InstanceGaugeLabelOrder),
+	}
 )
 
 // 限流相关指标
@@ -161,10 +175,11 @@ var (
 
 var (
 	metrcisDesces map[string]metricDesc = map[string]metricDesc{
-		MetricsNameUpstreamRequestTotal:   UpstreamRequestTotal,
-		MetricsNameUpstreamRequestSuccess: UpstreamRequestSuccess,
-		MetricsNameUpstreamRequestTimeout: UpstreamRequestTimeout,
-		// MetricsNameUpstreamRequestMaxTimeout: UpstreamRequestMaxTimeout,
+		MetricsNameUpstreamRequestTotal:      UpstreamRequestTotal,
+		MetricsNameUpstreamRequestSuccess:    UpstreamRequestSuccess,
+		MetricsNameUpstreamRequestTimeout:    UpstreamRequestTimeout,
+		MetricsNameUpstreamRequestMaxTimeout: UpstreamRequestMaxTimeout,
+		MetricsNameUpstreamRequestDelay:      UpstreamRequestDelay,
 
 		MetricsNameRateLimitRequestTotal: RateLimitRequestTotal,
 		MetricsNameRateLimitRequestPass:  RateLimitRequestPass,

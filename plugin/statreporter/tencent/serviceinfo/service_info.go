@@ -161,6 +161,12 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	return nil
 }
 
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-momitor",
+	}
+}
+
 // 服务实例信息变更情况
 type instancesChangeData struct {
 	revision string

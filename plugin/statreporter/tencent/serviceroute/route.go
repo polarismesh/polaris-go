@@ -258,6 +258,12 @@ func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 	return nil
 }
 
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-momitor",
+	}
+}
+
 func init() {
 	plugin.RegisterConfigurablePlugin(&Reporter{}, &Config{})
 }

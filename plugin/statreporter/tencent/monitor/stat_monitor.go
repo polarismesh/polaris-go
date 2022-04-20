@@ -211,6 +211,12 @@ func (s *Stat2MonitorReporter) ReportStat(t model.MetricType, info model.Instanc
 	return nil
 }
 
+func (s *Stat2MonitorReporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-momitor",
+	}
+}
+
 // 处理统计数据，校验正确后添加指标到window
 func (s *Stat2MonitorReporter) handleStat(metricType model.MetricType, info model.InstanceGauge) error {
 	var handler *statHandler

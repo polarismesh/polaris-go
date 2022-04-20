@@ -27,7 +27,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/polarismesh/polaris-go/api"
 )
@@ -42,7 +41,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
@@ -83,6 +82,7 @@ func (svr *PolarisProvider) Run() {
 	}
 
 	host = tmpHost
+	svr.host = tmpHost
 	svr.runWebServer()
 	svr.registerService()
 	runMainLoop()
@@ -91,7 +91,8 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("Hello, I'm EchoServerGolang Provider, My metadata's " + metadata))
+		msg := fmt.Sprintf("Hello, I'm RouteEchoServer Provider, My metadata's : %#v, host : %s:%d", metadata, svr.host, svr.port)
+		_, _ = rw.Write([]byte(msg))
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", svr.port))
@@ -117,33 +118,12 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	registerRequest.SetTTL(10)
 	registerRequest.Metadata = convertMetadatas()
 	resp, err := svr.provider.Register(registerRequest)
 	if nil != err {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
-
-	go svr.doHeartbeat()
-}
-
-func (svr *PolarisProvider) doHeartbeat() {
-	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(5 * time.Second))
-	for range ticker.C {
-		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.Namespace = namespace
-		heartbeatRequest.Service = service
-		heartbeatRequest.Host = host
-		heartbeatRequest.Port = svr.port
-		heartbeatRequest.ServiceToken = token
-		err := svr.provider.Heartbeat(heartbeatRequest)
-		if nil != err {
-			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
-		}
-	}
-
 }
 
 func runMainLoop() {

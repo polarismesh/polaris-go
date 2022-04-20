@@ -24,6 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/prometheus/addons"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -86,6 +87,16 @@ func (p *PrometheusHandler) registerMetrics() error {
 				Name: desc.Name,
 				Help: desc.Help,
 			}, desc.LabelNames)
+		case TypeForMaxGaugeVec:
+			collector = addons.NewMaxGaugeVec(prometheus.GaugeOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
+		case TypeForHistogramVec:
+			collector = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
 		}
 
 		err := p.registry.Register(collector)
@@ -145,11 +156,20 @@ func (p *PrometheusHandler) handleRouterGauge(metricsType model.MetricType, val 
 		success.With(labels).Inc()
 	}
 
-	timeout := p.metricVecCaches[MetricsNameUpstreamRequestTimeout].(*prometheus.HistogramVec)
-	if delay := val.GetDelay(); delay != nil {
+	delay := val.GetDelay()
+	if delay != nil {
 		data := float64((*delay).Milliseconds())
-		timeout.With(labels).Observe(data)
+
+		timeout := p.metricVecCaches[MetricsNameUpstreamRequestTimeout].(*prometheus.GaugeVec)
+		timeout.With(labels).Add(data)
+
+		maxTimeout := p.metricVecCaches[MetricsNameUpstreamRequestMaxTimeout].(*addons.MaxGaugeVec)
+		maxTimeout.With(labels).Set(data)
+
+		reqDelay := p.metricVecCaches[MetricsNameUpstreamRequestTimeout].(*prometheus.HistogramVec)
+		reqDelay.With(labels).Observe(data)
 	}
+
 }
 
 func (p *PrometheusHandler) handleRateLimitGauge(metricsType model.MetricType, val *model.RateLimitGauge) {

@@ -30,7 +30,7 @@ const (
 	defaultReportInterval = 1 * time.Minute
 )
 
-// Config
+// Config prometheus 的配置
 type Config struct {
 	IP   string `yaml:"ip"`
 	Port uint32 `yaml:"metricsPort"`
