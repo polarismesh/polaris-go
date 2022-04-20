@@ -2,50 +2,39 @@
 
 [English Document](./README.md)
 
-## 目录说明
+## 使用服务注册发现功能
 
-> provider
+快速体验北极星的服务注册以及服务发现能力
 
-北极星被调端样例包含了最简单的被调端基本操作
+## 如何使用
 
-> consumer
+### 构建可执行文件
 
-北极星主调端样例包含了最简单的客户端基本操作
+构建 provider
 
-
-## 如何构建
-
-> provider
-
-直接依赖go mod进行构建
-
-- linux/mac构建命令
 ```
+# linux/mac
 cd ./provider
 go build -o provider
-```
-- windows构建命令
-```
+
+# windows
 cd ./consumer
 go build -o provider.exe
 ```
 
-> consumer
+构建 consumer
 
-- linux/mac构建命令
 ```
+# linux/mac
 cd ./consumer
 go build -o consumer
-```
-- windows构建命令
-```
+
+# windows
 cd ./consumer
 go build -o consumer.exe
 ```
 
-## 如何使用
-
-### 创建服务
+### 进入控制台
 
 预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8080打开控制台
 
@@ -62,37 +51,31 @@ global:
 
 ### 执行程序
 
-直接执行生成的可执行程序
+运行构建出的**provider**可执行文件
 
-> provider
-
-- linux/mac运行命令
 ```
+# linux/mac运行命令
 ./provider
-```
 
-- windows运行命令
-```
+# windows运行命令
 ./provider.exe
 ```
 
-> consumer
+运行构建出的**consumer**可执行文件
 
+```
+# linux/mac运行命令
+./provider
 
-- linux/mac运行命令
-```
-./consumer
+# windows运行命令
+./provider.exe
 ```
 
-- windows运行命令
-```
-./consumer.exe
-```
 
 ### 验证
 
 ```
 curl http://127.0.0.1:18080/echo
 
-Hello, I'm EchoServerGolang Provider
+Hello, I'm DiscoverEchoServer Provider, My host : %s:%d
 ```
