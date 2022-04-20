@@ -35,7 +35,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
+	flag.StringVar(&service, "service", "RateLimitEchoServer", "service")
 }
 
 type PolarisConsumer struct {
@@ -51,7 +51,6 @@ func (svr *PolarisConsumer) Run() {
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
-		// DiscoverEchoServer
 		getOneRequest := &api.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
@@ -67,7 +66,17 @@ func (svr *PolarisConsumer) runWebServer() {
 			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
 		}
 
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
+		if err != nil {
+			log.Printf("[errot] new request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+
+		req.Header = r.Header
+		log.Printf("[info] req header : %v", req.Header)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
