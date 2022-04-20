@@ -49,6 +49,13 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 	if nil != request.Isolate {
 		pbInstance.Isolate = &wrappers.BoolValue{Value: *request.Isolate}
 	}
+	if nil != request.Location {
+		pbInstance.Location = &namingpb.Location{
+			Region: &wrappers.StringValue{Value: request.Location.Region},
+			Zone:   &wrappers.StringValue{Value: request.Location.Zone},
+			Campus: &wrappers.StringValue{Value: request.Location.Campus},
+		}
+	}
 	// 开启了远程健康检查
 	if nil != request.TTL {
 		pbInstance.HealthCheck = &namingpb.HealthCheck{

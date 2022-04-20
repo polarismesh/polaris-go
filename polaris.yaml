@@ -120,6 +120,9 @@ global:
       serviceCache:
         #描述：上报缓存信息的周期
         reportInterval: 3m
+  # 地址提供插件，用于获取当前SDK所在的地域信息
+  location: 
+    provider: 
 #描述:主调端配置
 consumer:
   #描述:本地缓存相关配置

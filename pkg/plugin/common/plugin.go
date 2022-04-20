@@ -55,21 +55,27 @@ const (
 	TypeRateLimiter Type = 0x1010
 	// TypeSubScribe .
 	TypeSubScribe Type = 0x1011
+	// TypeLocationProvider 实例地理信息获取扩展点
+	TypeLocationProvider Type = 0x1012
+	// TypeReportHandler ReportClient 请求、响应处理器
+	TypeReportHandler Type = 0x1013
 )
 
 var typeToPresent = map[Type]string{
-	TypePluginBase:      "TypePluginBase",
-	TypeServerConnector: "serverConnector",
-	TypeLocalRegistry:   "localRegistry",
-	TypeServiceRouter:   "serviceRouter",
-	TypeLoadBalancer:    "loadBalancer",
-	TypeHealthCheck:     "healthChecker",
-	TypeCircuitBreaker:  "circuitBreaker",
-	TypeWeightAdjuster:  "weightAdjuster",
-	TypeStatReporter:    "statReporter",
-	TypeAlarmReporter:   "alarmReporter",
-	TypeRateLimiter:     "rateLimiter",
-	TypeSubScribe:       "subScribe",
+	TypePluginBase:       "TypePluginBase",
+	TypeServerConnector:  "serverConnector",
+	TypeLocalRegistry:    "localRegistry",
+	TypeServiceRouter:    "serviceRouter",
+	TypeLoadBalancer:     "loadBalancer",
+	TypeHealthCheck:      "healthChecker",
+	TypeCircuitBreaker:   "circuitBreaker",
+	TypeWeightAdjuster:   "weightAdjuster",
+	TypeStatReporter:     "statReporter",
+	TypeAlarmReporter:    "alarmReporter",
+	TypeRateLimiter:      "rateLimiter",
+	TypeSubScribe:        "subScribe",
+	TypeLocationProvider: "locationProvider",
+	TypeReportHandler:    "reportHandler",
 }
 
 // ToString方法
@@ -235,4 +241,6 @@ var LoadedPluginTypes = []Type{
 	TypeLocalRegistry,
 	TypeRateLimiter,
 	TypeSubScribe,
+	TypeLocationProvider,
+	TypeReportHandler,
 }

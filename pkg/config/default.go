@@ -127,6 +127,8 @@ const (
 	DefaultMapKeyValueSeparator = ":"
 	// 默认Map组装str (key:value) 二元组分割符
 	DefaultMapKVTupleSeparator = "|"
+	// 默认实例地理位置提供者插件名称
+	DefaultLocationProvider = ""
 )
 
 // 默认埋点server的端口，与上面的IP一一对应
@@ -394,6 +396,9 @@ func (g *GlobalConfigImpl) Verify() error {
 	if err = g.StatReporter.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = g.Location.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -403,6 +408,7 @@ func (g *GlobalConfigImpl) SetDefault() {
 	g.ServerConnector.SetDefault()
 	g.System.SetDefault()
 	g.StatReporter.SetDefault()
+	g.Location.SetDefault()
 }
 
 // 全局配置初始化
@@ -414,6 +420,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.ServerConnector.Init()
 	g.StatReporter = &StatReporterConfigImpl{}
 	g.StatReporter.Init()
+	g.Location = &LocationConfigImpl{}
+	g.Location.Init()
 }
 
 // 初始化ConsumerConfigImpl
