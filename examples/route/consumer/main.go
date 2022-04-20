@@ -81,12 +81,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		if err != nil {
 			log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusOK)
-<<<<<<< HEAD
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
-				instance.GetHost(), instance.GetPort(), err)))
-=======
 			_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
->>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 			return
 		}
 
@@ -94,16 +89,9 @@ func (svr *PolarisConsumer) runWebServer() {
 
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-<<<<<<< HEAD
-			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusOK)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s",
-				instance.GetHost(), instance.GetPort(), err)))
-=======
 			log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusOK)
 			_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
->>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 			return
 		}
 		rw.WriteHeader(http.StatusOK)

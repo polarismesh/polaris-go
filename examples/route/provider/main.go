@@ -41,11 +41,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-<<<<<<< HEAD
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
-=======
 	flag.StringVar(&service, "service", "RouteEchoServer", "service")
->>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
@@ -86,15 +82,10 @@ func (svr *PolarisProvider) Run() {
 	}
 
 	host = tmpHost
-<<<<<<< HEAD
-	svr.runWebServer()
-	svr.registerService()
-=======
 	svr.host = tmpHost
 	svr.runWebServer()
 	svr.registerService()
 	runMainLoop()
->>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 }
 
 func (svr *PolarisProvider) runWebServer() {
@@ -135,30 +126,12 @@ func (svr *PolarisProvider) registerService() {
 	log.Printf("register response: instanceId %s", resp.InstanceID)
 }
 
-<<<<<<< HEAD
-func (svr *PolarisProvider) doHeartbeat() {
-	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(5 * time.Second))
-	for range ticker.C {
-		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.Namespace = namespace
-		heartbeatRequest.Service = service
-		heartbeatRequest.Host = host
-		heartbeatRequest.Port = port
-		heartbeatRequest.ServiceToken = token
-		err := svr.provider.Heartbeat(heartbeatRequest)
-		if nil != err {
-			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
-		}
-	}
-=======
 func runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
 		syscall.SIGSEGV, syscall.SIGUSR1,
 	}...)
->>>>>>> ddddfe50321846f3d9f05efd708e322267e3767f
 
 	for s := range ch {
 		log.Printf("catch signal(%+v), stop servers", s)
