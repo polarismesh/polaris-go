@@ -95,7 +95,7 @@ func init() {
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
 	// 基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
-	//
+	// ReportClient相关测试用例
 	Suite(&reporthandler.ReporthandlerTestingSuite{})
 
 	// 基础远程限流用例测试

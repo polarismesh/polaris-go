@@ -20,6 +20,7 @@ package env
 import (
 	"os"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -46,13 +47,14 @@ type LocationProvider struct {
 
 // Init 初始化插件
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
+	log.GetBaseLogger().Infof("start use env location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
 }
 
 // Destroy 销毁插件，可用于释放资源
 func (p *LocationProvider) Destroy() error {
-	return nil
+	return p.PluginBase.Destroy()
 }
 
 // Type 插件类型

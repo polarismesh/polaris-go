@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/test/util"
@@ -48,14 +49,21 @@ func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 	envKeyZone := "POLARIS_INSTANCE_ZONE"
 	envKeyCampus := "POLARIS_INSTANCE_CAMPUS"
 
-	os.Setenv(envKeyRegion, envKeyRegion)
-	os.Setenv(envKeyZone, envKeyZone)
-	os.Setenv(envKeyCampus, envKeyCampus)
+	if err := os.Setenv(envKeyRegion, envKeyRegion); err != nil {
+		c.Fatal(err)
+	}
+	if err := os.Setenv(envKeyZone, envKeyZone); err != nil {
+		c.Fatal(err)
+	}
+	if err := os.Setenv(envKeyCampus, envKeyCampus); err != nil {
+		c.Fatal(err)
+	}
 
-	sdkCtx, err := api.InitContextByFile("testdata/consumer.yaml")
+	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
 	c.Assert(err, check.IsNil)
-
-	sdkCtx.GetConfig().GetGlobal().GetLocation().SetProvider("env")
+	cfg.GetGlobal().GetLocation().SetProvider("env")
+	sdkCtx, err := api.InitContextByConfig(cfg)
+	c.Assert(err, check.IsNil)
 
 	reportChain, err := data.GetReportChain(nil, sdkCtx.GetPlugins())
 	c.Assert(err, check.IsNil)
@@ -72,8 +80,8 @@ func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 	}
 
 	c.Assert(resp.Region, check.Equals, envKeyRegion)
-	c.Assert(resp.Region, check.Equals, envKeyZone)
-	c.Assert(resp.Region, check.Equals, envKeyCampus)
+	c.Assert(resp.Zone, check.Equals, envKeyZone)
+	c.Assert(resp.Campus, check.Equals, envKeyCampus)
 }
 
 // TearDownSuite 结束测试套程序
