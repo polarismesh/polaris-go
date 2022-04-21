@@ -45,19 +45,17 @@ func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 	log.Printf("Start TestHandlerClientReport")
 
 	envKeyRegion := "POLARIS_INSTANCE_REGION"
-	envKeyZone   := "POLARIS_INSTANCE_ZONE"
+	envKeyZone := "POLARIS_INSTANCE_ZONE"
 	envKeyCampus := "POLARIS_INSTANCE_CAMPUS"
 
 	os.Setenv(envKeyRegion, envKeyRegion)
 	os.Setenv(envKeyZone, envKeyZone)
 	os.Setenv(envKeyCampus, envKeyCampus)
 
-	cfg := api.NewConfiguration()
-
-	cfg.GetGlobal().GetLocation().SetProvider("env")
-
-	sdkCtx, err := api.InitContextByConfig(cfg)
+	sdkCtx, err := api.InitContextByFile("testdata/consumer.yaml")
 	c.Assert(err, check.IsNil)
+
+	sdkCtx.GetConfig().GetGlobal().GetLocation().SetProvider("env")
 
 	reportChain, err := data.GetReportChain(nil, sdkCtx.GetPlugins())
 	c.Assert(err, check.IsNil)
