@@ -446,6 +446,9 @@ func matchRuleByLabels(
 		}
 		var allLabelsMatched = true
 		for labelKey, labelValue := range rule.Labels {
+			if labelKey == pb.MatchAll {
+				continue
+			}
 			if !matchLabels(labelKey, labelValue, labels, ruleCache) {
 				allLabelsMatched = false
 				break

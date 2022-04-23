@@ -215,6 +215,8 @@ func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 	return nil
 }
 
+const MatchAll = "*"
+
 // buildCacheFromMatcher 通过metadata来构建缓存
 func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache model.RuleCache) error {
 	if len(metadata) == 0 {
@@ -222,6 +224,9 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 	}
 	for _, metaValue := range metadata {
 		valueRawStr := metaValue.GetValue().GetValue()
+		if valueRawStr == MatchAll {
+			continue
+		}
 		// 如果是 variable 类型，但是value 是空的，此时无法通过 value 获取环境变量，报错
 		if metaValue.ValueType == namingpb.MatchString_VARIABLE && valueRawStr == "" {
 			return fmt.Errorf("value of variable type can not be empty")

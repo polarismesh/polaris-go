@@ -1,49 +1,42 @@
-#Polaris Go
+# Polaris Go
 
 [中文文档](./README-zh.md)
 
-## Polaris uses the service routing function
+## Using Service Routing Function
 
-Polaris supports dynamic scheduling of online traffic based on request tags, instance tags, and tag matching rules, which can be applied to various scenarios such as proximity by region, unit isolation, and canary release.
+Polaris support according to the request label, instance tag, and label matching rules, the line traffic is dynamically scheduled, which can be applied to a variety of scenes such as the region, unitized isolation and Canary release.
 
-## How to build
+## How to use
 
-> provider
+### Build an executable
 
-Build directly on go mod
+Build provider
 
-- linux/mac build command
-````
+```
+# linux/mac
 cd ./provider
 go build -o provider
-````
-- windows build command
-````
+
+# windows
 cd ./consumer
 go build -o provider.exe
-````
+```
 
-> consumer
+Build consumer
 
-- linux/mac build command
-````
+```
+# linux/mac
 cd ./consumer
 go build -o consumer
-````
-- windows build command
-````
+
+# windows
 cd ./consumer
 go build -o consumer.exe
-````
+```
 
+### Enter console
 
-## how to use
-
-### Create service
-
-Create the corresponding service through the Polaris console in advance. If it is installed through the local one-click installation package, open the console directly in the browser through 127.0.0.1:8080
-
-![create_service](./image/create_service.png)
+Create a corresponding service through the Arctic Star Console, if you are installed by a local one-click installation package, open the console directly on the browser through 127.0.0.1:8080
 
 ### Create routing rules
 
@@ -51,55 +44,50 @@ Create the corresponding service through the Polaris console in advance. If it i
 
 ### Change setting
 
-To specify the address of the Polaris server, you need to edit the polaris.yaml file and fill in the server address
+Specify the Arctic Star server address, you need to edit the Polaris.yaml file, fill in the server address.
 
-````
+```
 global:
   serverConnector:
     addresses:
     - 127.0.0.1:8091
-````
+```
 ### execute program
 
-Directly execute the generated executable program, for the provider process
+Run the built **provider** executable
 
-> provider
+```
+# linux/mac
+./provider --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider --metadata="env=test" > provider-20001.log 2>&1 &
+./provider --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider --metadata="env=prod" > provider-20003.log 2>&1 &
 
-- linux/mac run command
-````
-./provider --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
-./provider --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
-./provider --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
-./provider --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
-````
+# windows
+./provider.exe --metadata="env=dev" > provider-20000.log
+./provider.exe --metadata="env=test" > provider-20001.log
+./provider.exe --metadata="env=pre" > provider-20002.log
+./provider.exe --metadata="env=prod" > provider-20003.log
+```
 
-- windows run command
-````
-./provider.exe --port=20000 --metadata="env=dev" > provider-20000.log 2>&1 &
-./provider.exe --port=20001 --metadata="env=test" > provider-20001.log 2>&1 &
-./provider.exe --port=20002 --metadata="env=pre" > provider-20002.log 2>&1 &
-./provider.exe --port=20003 --metadata="env=prod" > provider-20003.log 2>&1 &
-````
+Run the built **consumer** executable
 
 > consumer
 
-
-- linux/mac run command
-````
+```
+# linux/mac
 ./consumer --selfNamespace={selfName} --selfService=EchoConsumer
-````
 
-- windows run command
-````
+# windows
 ./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
-````
+```
 
-### verify
+### Verify
 
-Route to different service instances by setting the value of the request header parameter ***env***
+Realize the route to different service instances by setting the value of the request header **env**
 
-````
+```
 curl -H 'env: pre' http://127.0.0.1:18080/echo
 
-Hello, I'm EchoServerGolang Provider env=pre
-```` 
+Hello, I'm RouteEchoServer Provider, My metadata's : env=pre, host : x.x.x.x:x
+```
