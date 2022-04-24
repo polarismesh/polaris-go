@@ -238,11 +238,7 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 		if pattern := ruleCache.GetRegexMatcher(valueRawStr); nil != pattern {
 			continue
 		}
-		regxStr := valueRawStr
-		if valueRawStr == "*" {
-			regxStr = ".*"
-		}
-		regexValue, err := regexp.Compile(regxStr)
+		regexValue, err := regexp.Compile(valueRawStr)
 		if err != nil {
 			return fmt.Errorf("invalid regex expression %s, error is %v", valueRawStr, err)
 		}
