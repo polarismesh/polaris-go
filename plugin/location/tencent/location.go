@@ -48,6 +48,7 @@ type LocationProvider struct {
 
 // Init 初始化插件
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
+	log.GetBaseLogger().Infof("start use tencent location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
 }
@@ -64,7 +65,8 @@ func (p *LocationProvider) Name() string {
 
 // Destroy 销毁插件，可用于释放资源
 func (p *LocationProvider) Destroy() error {
-	return nil
+	
+	return p.PluginBase.Destroy()
 }
 
 // GetLocation 获取地理位置信息
