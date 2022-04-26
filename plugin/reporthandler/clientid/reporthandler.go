@@ -15,21 +15,19 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package statreporter
+package clientid
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/reporthandler"
-	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 )
 
 var (
-	ReportHandlerForStatReporter = "statreporterReport"
+	ReportHandlerForInjectClientID = "clientIdInjectReport"
 
 	_ reporthandler.ReportHandler = (*ReportHandler)(nil)
 )
@@ -40,11 +38,10 @@ func init() {
 }
 
 // ReportHandler 处于ReportClient请求的前后置处理器
+// 该插件主要用于注入 ClientID 信息
 type ReportHandler struct {
-	first bool
+	clientID string
 	*plugin.PluginBase
-	globalCtx     model.ValueContext
-	reporterChain []statreporter.StatReporter
 }
 
 // Type 插件类型
@@ -54,19 +51,13 @@ func (h *ReportHandler) Type() common.Type {
 
 // Name 插件名，一个类型下插件名唯一
 func (h *ReportHandler) Name() string {
-	return ReportHandlerForStatReporter
+	return ReportHandlerForInjectClientID
 }
 
 // Init 初始化插件
 func (h *ReportHandler) Init(ctx *plugin.InitContext) error {
-	h.first = true
 	h.PluginBase = plugin.NewPluginBase(ctx)
-	h.globalCtx = ctx.ValueCtx
-	reporterChain, err := data.GetStatReporterChain(ctx.Config, ctx.Plugins)
-	if err != nil {
-		return err
-	}
-	h.reporterChain = reporterChain
+	h.clientID = uuid.NewString()
 	return nil
 }
 
@@ -81,19 +72,7 @@ func (h *ReportHandler) InitLocal(_ *namingpb.Client) {
 
 // HandleRequest Handling Request body for Report
 func (h *ReportHandler) HandleRequest(req *model.ReportClientRequest) {
-	infos := make([]model.StatInfo, 0, len(h.reporterChain))
-
-	// 收集当前的所有metric插件链的元信息
-	for i := range h.reporterChain {
-		infos = append(infos, h.reporterChain[i].Info())
-	}
-
-	if h.first {
-		log.GetBaseLogger().Infof("[ReportHandler] report statreport metadata info : %+v", infos)
-		h.first = false
-	}
-
-	req.StatInfos = infos
+	req.ID = h.clientID
 }
 
 // HandleResponse Handling Report Responsive Body

@@ -260,7 +260,7 @@ func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 
 func (s *Reporter) Info() model.StatInfo {
 	return model.StatInfo{
-		Target: "polaris-momitor",
+		Target: "polaris-router-momitor",
 	}
 }
 

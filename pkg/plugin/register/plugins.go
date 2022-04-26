@@ -60,14 +60,21 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/ratedelay"
 
 	// 注册可观性 statreporter 插件
+	// prometheus 插件
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/prometheus"
+
+	// tencent 插件
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/monitor"
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/ratelimit"
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceinfo"
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
 
 	// 注册 report 插件
+	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/clientid"
 	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/location"
+	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/statreporter"
 
 	// 注册 location 地址插件
+	_ "github.com/polarismesh/polaris-go/plugin/location/env"
 	_ "github.com/polarismesh/polaris-go/plugin/location/tencent"
 )

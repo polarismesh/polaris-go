@@ -1282,8 +1282,12 @@ type StatInfo struct {
 
 // ReportClientRequest 客户端上报请求信息
 type ReportClientRequest struct {
+	// 客户端进程唯一标识
+	ID string
 	// 客户端IP地址
 	Host string
+	// 客户端类型
+	Type string
 	// 客户端版本信息
 	Version string
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置

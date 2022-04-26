@@ -88,6 +88,8 @@ func (svr *PolarisConsumer) runWebServer() {
 		_, _ = rw.Write(data)
 	})
 
+	log.Println("start run web server")
+
 	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", 18080), nil); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}

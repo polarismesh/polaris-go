@@ -124,6 +124,10 @@ func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (
 
 // GetStatReporterChain 获取统计上报插件
 func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([]statreporter.StatReporter, error) {
+	if !cfg.GetGlobal().GetStatReporter().IsEnable() {
+		return make([]statreporter.StatReporter, 0), nil
+	}
+
 	reporterNames := cfg.GetGlobal().GetStatReporter().GetChain()
 	reporterChain := make([]statreporter.StatReporter, 0, len(reporterNames))
 	if len(reporterNames) > 0 {

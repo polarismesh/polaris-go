@@ -1,4 +1,12 @@
 global:
+  api:
+    reportInterval: 1s
   serverConnector:
     addresses:
       - 172.18.0.1:8091
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+  location:
+    provider: env

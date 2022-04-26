@@ -102,24 +102,19 @@ global:
     #范围：已经注册的统计上报插件的名字
     #默认值：stat2Monitor(将信息上报至monitor服务)
     chain:
-      - stat2Monitor
-      - serviceCache
+      - prometheus
     #描述：统计上报插件配置
     plugin:
-      stat2Monitor:
-        #描述:每次上报多长一段时间的统计信息
+      prometheus:
+        #描述: 设置 prometheus http-server 的监听IP
         #类型:string
-        #格式:^\d+(ms|s|m|h)$
-        #范围:[1m:...]
-        metricsReportWindow: 1m
-        #描述:将一段时间内的统计信息分为多少个基本单元收集
+        #默认使用SDK的绑定IP
+        metricHost: 
+        #描述: 设置 prometheus http-server 的监听端口
         #类型:int
-        #范围:[1:...]
-        #默认值:12
-        metricsNumBuckets: 12
-      serviceCache:
-        #描述：上报缓存信息的周期
-        reportInterval: 3m
+        #默认值: 28080
+        #如果设置为负数，则不会开启默认的http-server
+        metricPort: 28080
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location: 
     provider: 

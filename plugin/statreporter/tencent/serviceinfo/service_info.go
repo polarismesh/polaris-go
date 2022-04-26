@@ -163,7 +163,7 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 
 func (s *Reporter) Info() model.StatInfo {
 	return model.StatInfo{
-		Target: "polaris-momitor",
+		Target: "polaris-service-momitor",
 	}
 }
 

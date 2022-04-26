@@ -28,12 +28,13 @@ func init() {
 
 const (
 	defaultReportInterval = 1 * time.Minute
+	defaultMetricPort = 28080
 )
 
 // Config prometheus 的配置
 type Config struct {
-	IP   string `yaml:"ip"`
-	Port uint32 `yaml:"metricsPort"`
+	IP   string `yaml:"metricHost"`
+	Port uint32 `yaml:"metricPort"`
 }
 
 // Verify verify config
@@ -43,4 +44,7 @@ func (c *Config) Verify() error {
 
 // SetDefault Setting defaults
 func (c *Config) SetDefault() {
+	if c.Port == 0 {
+		c.Port = defaultMetricPort
+	}
 }

@@ -72,8 +72,7 @@ func (s *StatReporterConfigImpl) SetDefault() {
 		s.Enable = &enable
 	}
 	if len(s.Chain) == 0 {
-		s.Chain = []string{DefaultStatReporter, DefaultCacheReporter,
-			DefaultRateLimitReporter, DefaultServiceRouteReporter}
+		s.Chain = []string{}
 	}
 	s.Plugin.SetDefault(common.TypeStatReporter)
 }

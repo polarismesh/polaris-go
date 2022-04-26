@@ -24,10 +24,15 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 )
 
 const (
 	PluginName string = "prometheus"
+)
+
+var (
+	_ statreporter.StatReporter = (*PrometheusReporter)(nil)
 )
 
 //init 注册插件
@@ -76,6 +81,15 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 
 func (s *PrometheusReporter) ReportStat(metricType model.MetricType, metricsVal model.InstanceGauge) error {
 	return s.handler.ReportStat(metricType, metricsVal)
+}
+
+func (s *PrometheusReporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target:   s.Name(),
+		Port:     s.handler.port,
+		Path:     "/metrics",
+		Protocol: "http",
+	}
 }
 
 // Destroy

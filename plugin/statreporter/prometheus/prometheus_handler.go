@@ -63,6 +63,7 @@ func (p *PrometheusHandler) init(ctx *plugin.InitContext) error {
 	if p.bindIP == "" {
 		p.bindIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	}
+	p.port = p.cfg.Port
 
 	p.handler = &metricsHttpHandler{
 		promeHttpHandler: promhttp.HandlerFor(p.registry, promhttp.HandlerOpts{}),
@@ -125,8 +126,9 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 	return nil
 }
 
+// runInnerMetricsWebServer 启动用于 prometheus 主动拉取的 http-server，如果端口设置为负数，则不启用
 func (p *PrometheusHandler) runInnerMetricsWebServer() {
-	if p.port == 0 {
+	if p.port < 0 {
 		return
 	}
 
