@@ -106,6 +106,10 @@ func (h *ReportHandler) HandleResponse(resp *model.ReportClientResponse, err err
 		} else {
 			loc = _loc
 		}
+
+		resp.Region = loc.Region
+		resp.Zone = loc.Zone
+		resp.Campus = loc.Campus
 	}
 	h.updateLocation(loc, nil)
 }
