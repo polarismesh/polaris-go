@@ -18,6 +18,7 @@
 package flow
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -341,6 +342,13 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 
 	// 如果注册请求没有设置 Location 信息，则由内部自动设置
 	if instance.Location == nil {
+		// 这里做一个等待，等待地理位置信息获取成功，如果超过一定时间还没有获取到，则认为是获取不到地理位置信息，自动跳过忽略
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		ready := e.globalCtx.WaitLocationInfo(ctx, model.LocationReady)
+		if !ready {
+			log.GetBaseLogger().Warnf("[Discover][Register] auto inject location fail, location info empty")
+		}
 		instance.Location = e.globalCtx.GetCurrentLocation().GetLocation()
 	}
 
