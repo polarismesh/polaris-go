@@ -133,6 +133,11 @@ func (h *ReportHandler) updateLocation(location *model.Location, lastErr model.S
 
 // 等待地域信息就绪
 func (h *ReportHandler) waitLocationInfo(event *common.PluginEvent) error {
+
+	if h.locationProvider == nil {
+		return nil
+	}
+
 	// 这里做一个等待，等待地理位置信息获取成功，如果超过一定时间还没有获取到，则认为是获取不到地理位置信息，自动跳过忽略
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
