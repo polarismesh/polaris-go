@@ -2,5 +2,3 @@ global:
   serverConnector:
     addresses:
       - 172.18.0.1:8091
-  location: 
-    provider: env
