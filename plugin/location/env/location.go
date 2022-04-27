@@ -49,6 +49,15 @@ type LocationProvider struct {
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
 	log.GetBaseLogger().Infof("start use env location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
+
+	if ctx.Config.GetGlobal().GetLocation().GetProvider() == p.Name() {
+		p.locCache = &model.Location{
+			Region: os.Getenv(envKeyRegion),
+			Zone:   os.Getenv(envKeyZone),
+			Campus: os.Getenv(envKeyCampus),
+		}
+	}
+
 	return nil
 }
 
@@ -69,13 +78,5 @@ func (p *LocationProvider) Name() string {
 
 // GetLocation 获取地理位置信息
 func (p *LocationProvider) GetLocation() (*model.Location, error) {
-	if p.locCache == nil {
-		p.locCache = &model.Location{
-			Region: os.Getenv(envKeyRegion),
-			Zone:   os.Getenv(envKeyZone),
-			Campus: os.Getenv(envKeyCampus),
-		}
-	}
-
 	return p.locCache, nil
 }

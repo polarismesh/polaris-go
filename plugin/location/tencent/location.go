@@ -50,6 +50,14 @@ type LocationProvider struct {
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
 	log.GetBaseLogger().Infof("start use tencent location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
+
+	if ctx.Config.GetGlobal().GetLocation().GetProvider() == p.Name() {
+		loc, err := getQCloudLocatoin()
+		if err != nil {
+			return err
+		}
+		p.locCache = loc
+	}
 	return nil
 }
 
@@ -65,34 +73,44 @@ func (p *LocationProvider) Name() string {
 
 // Destroy 销毁插件，可用于释放资源
 func (p *LocationProvider) Destroy() error {
-	
+
 	return p.PluginBase.Destroy()
 }
 
 // GetLocation 获取地理位置信息
 func (p *LocationProvider) GetLocation() (*model.Location, error) {
 	if p.locCache == nil {
-		log.GetBaseLogger().Infof("start to get location metadata in cloud env")
-
-		p.locCache = &model.Location{
-			Region: "qcloud",
+		loc, err := p.GetLocation()
+		if err != nil {
+			return nil, err
 		}
-
-		if region, err := sendRequest(regionKey); err == nil {
-			p.locCache.Zone = region
-		} else {
-			log.GetBaseLogger().Infof("get region info fail : %s, but not affect", err.Error())
-		}
-		if zone, err := sendRequest(zoneKey); err == nil {
-			p.locCache.Campus = zone
-		} else {
-			log.GetBaseLogger().Infof("get zone info fail : %s, but not affect", err.Error())
-		}
-
-		log.GetBaseLogger().Infof("get location info from cloud env : %s", p.locCache.String())
+		p.locCache = loc
 	}
 
 	return p.locCache, nil
+}
+
+func getQCloudLocatoin() (*model.Location, error) {
+	log.GetBaseLogger().Infof("start to get location metadata in cloud env")
+
+	locCache := new(model.Location)
+	locCache = &model.Location{
+		Region: "qcloud",
+	}
+
+	if region, err := sendRequest(regionKey); err == nil {
+		locCache.Zone = region
+	} else {
+		log.GetBaseLogger().Infof("get region info fail : %s, but not affect", err.Error())
+	}
+	if zone, err := sendRequest(zoneKey); err == nil {
+		locCache.Campus = zone
+	} else {
+		log.GetBaseLogger().Infof("get zone info fail : %s, but not affect", err.Error())
+	}
+
+	log.GetBaseLogger().Infof("get location info from cloud env : %s", locCache.String())
+	return locCache, nil
 }
 
 func sendRequest(typ string) (string, error) {
