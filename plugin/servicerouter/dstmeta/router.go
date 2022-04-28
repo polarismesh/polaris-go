@@ -91,8 +91,7 @@ func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 }
 
 // 元数据匹配不到时处理自定义匹配规则
-func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClusters,
-	withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
+func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClusters, withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 
 	if routeInfo.FailOverDefaultMeta.Type == model.GetOneHealth {
 		return g.getOneHealthHandler(clusters, withinCluster, routeInfo)
@@ -204,10 +203,7 @@ func init() {
 	plugin.RegisterPlugin(&InstancesFilter{})
 }
 
-// 是否需要启动规则路由
+// Enable 是否需要启动规则路由
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
-	if len(routeInfo.DestService.GetMetadata()) == 0 {
-		return false
-	}
-	return true
+	return len(routeInfo.DestService.GetMetadata()) != 0
 }

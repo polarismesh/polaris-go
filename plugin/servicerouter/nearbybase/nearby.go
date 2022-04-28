@@ -146,7 +146,6 @@ func (g *NearbyBasedInstancesFilter) modifyOutClusterLevel(outCluster *model.Clu
 		}
 		outCluster.ClearClusterValue()
 	}
-	return
 }
 
 // 检查某个level的实例数量是否满足要求，实例数量是否大于0

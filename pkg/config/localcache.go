@@ -202,10 +202,10 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 	if nil == l.PersistRetryInterval {
 		l.PersistRetryInterval = model.ToDurationPtr(DefaultPersistRetryInterval)
 	}
-	if 0 == l.PersistMaxReadRetry {
+	if l.PersistMaxReadRetry == 0 {
 		l.PersistMaxReadRetry = DefaultPersistMaxReadRetry
 	}
-	if 0 == l.PersistMaxWriteRetry {
+	if l.PersistMaxWriteRetry == 0 {
 		l.PersistMaxWriteRetry = DefaultPersistMaxWriteRetry
 	}
 	if nil == l.PersistAvailableInterval {

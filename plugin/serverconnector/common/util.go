@@ -121,7 +121,7 @@ func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 	consumeTime := maxConnTimeout
 	msgSendTimeValue := updateTask.msgSendTime.Load()
 	if !reflect2.IsNil(msgSendTimeValue) {
-		consumeTime = time.Now().Sub(msgSendTimeValue.(time.Time))
+		consumeTime = time.Since(msgSendTimeValue.(time.Time))
 	}
 	return consumeTime
 }

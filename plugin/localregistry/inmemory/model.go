@@ -197,13 +197,10 @@ func (s *CacheObject) isValueAvailable() bool {
 		return false
 	}
 	value := s.LoadValue(false)
-	if reflect2.IsNil(value) {
-		return false
-	}
-	return true
+	return !reflect2.IsNil(value)
 }
 
-// 判断缓存值是否可读取
+// LoadValue 判断缓存值是否可读取
 func (s *CacheObject) LoadValue(updateVisitTime bool) interface{} {
 	if updateVisitTime {
 		atomic.StoreInt64(&s.lastVisitTime, clock.GetClock().Now().UnixNano())

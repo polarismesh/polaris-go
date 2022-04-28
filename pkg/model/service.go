@@ -41,11 +41,11 @@ const (
 
 // ServiceMetadata 服务元数据信息
 type ServiceMetadata interface {
-	// 获取服务名
+	// GetService 获取服务名
 	GetService() string
-	// 获取命名空间
+	// GetNamespace 获取命名空间
 	GetNamespace() string
-	// 获取元数据信息
+	// GetMetadata 获取元数据信息
 	GetMetadata() map[string]string
 }
 
@@ -65,17 +65,17 @@ func ToStringService(svc ServiceMetadata, printMeta bool) string {
 type ServiceInstances interface {
 	ServiceMetadata
 	RegistryValue
-	// 获取服务实例列表
+	// GetInstances 获取服务实例列表
 	GetInstances() []Instance
-	// 获取全部实例总权重
+	// GetTotalWeight 获取全部实例总权重
 	GetTotalWeight() int
-	// 获取集群索引
+	// GetServiceClusters 获取集群索引
 	GetServiceClusters() ServiceClusters
-	// 重建缓存索引
+	// ReloadServiceClusters 重建缓存索引
 	ReloadServiceClusters()
-	// 获取单个服务实例
+	// GetInstance 获取单个服务实例
 	GetInstance(string) Instance
-	// 数据是否来自于缓存文件
+	// IsCacheLoaded 数据是否来自于缓存文件
 	IsCacheLoaded() bool
 }
 
@@ -83,11 +83,11 @@ type ServiceInstances interface {
 type Status int
 
 const (
-	// 断路器已打开，代表节点已经被熔断
+	// Open 断路器已打开，代表节点已经被熔断
 	Open Status = 1
-	// 断路器半开，节点处于刚熔断恢复，只允许少量请求通过
+	// HalfOpen 断路器半开，节点处于刚熔断恢复，只允许少量请求通过
 	HalfOpen Status = 2
-	// 断路器关闭，节点处于正常工作状态
+	// Close 断路器关闭，节点处于正常工作状态
 	Close Status = 3
 )
 
@@ -116,27 +116,27 @@ const (
 
 // CircuitBreakerStatus  熔断器状态管理器
 type CircuitBreakerStatus interface {
-	// 标识被哪个熔断器熔断
+	// GetCircuitBreaker 标识被哪个熔断器熔断
 	GetCircuitBreaker() string
-	// 熔断状态
+	// GetStatus 熔断状态
 	GetStatus() Status
-	// 状态转换的时间
+	// GetStartTime 状态转换的时间
 	GetStartTime() time.Time
-	// 是否可以分配请求
+	// IsAvailable 是否可以分配请求
 	IsAvailable() bool
-	// 执行请求分配
+	// Allocate 执行请求分配
 	Allocate() bool
-	// 获取进入半开状态之后分配的请求数
+	// GetRequestsAfterHalfOpen 获取进入半开状态之后分配的请求数
 	GetRequestsAfterHalfOpen() int32
-	// 获取进入半开状态之后的失败请求数
+	// GetFailRequestsAfterHalfOpen 获取进入半开状态之后的失败请求数
 	GetFailRequestsAfterHalfOpen() int32
-	// 添加半开状态下面的请求数
+	// AddRequestCountAfterHalfOpen 添加半开状态下面的请求数
 	AddRequestCountAfterHalfOpen(n int32, success bool) int32
-	// 获取分配了最后配额的时间
+	// GetFinalAllocateTimeInt64 获取分配了最后配额的时间
 	GetFinalAllocateTimeInt64() int64
-	// 获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
+	// AcquireStatusLock 获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
 	AcquireStatusLock() bool
-	// 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
+	// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
 	AllocatedRequestsAfterHalfOpen() int32
 }
 
@@ -150,50 +150,51 @@ type ActiveDetectStatus interface {
 
 // Instance 服务实例信息
 type Instance interface {
-	// 获取实例四元组标识
+	// GetInstanceKey 获取实例四元组标识
 	GetInstanceKey() InstanceKey
-	// 实例所在命名空间
+	// GetNamespace 实例所在命名空间
 	GetNamespace() string
-	// 实例所在服务名
+	// GetService 实例所在服务名
 	GetService() string
-	// 服务实例唯一标识
+	// GetId 服务实例唯一标识
 	GetId() string
-	// 实例的域名/IP信息
+	// GetHost 实例的域名/IP信息
 	GetHost() string
-	// 实例的监听端口
+	// GetPort 实例的监听端口
 	GetPort() uint32
-	// 实例的vpcId
+	// GetVpcId 实例的vpcId
 	GetVpcId() string
-	// 服务实例的协议
+	// GetProtocol 服务实例的协议
 	GetProtocol() string
-	// 实例版本号
+	// GetVersion 实例版本号
 	GetVersion() string
-	// 实例静态权重值
+	// GetWeight 实例静态权重值
 	GetWeight() int
-	// 实例优先级信息
+	// GetPriority 实例优先级信息
 	GetPriority() uint32
-	// 实例元数据信息
+	// GetMetadata 实例元数据信息
 	GetMetadata() map[string]string
-	// 实例逻辑分区
+	// GetLogicSet 实例逻辑分区
 	GetLogicSet() string
-	// 实例的断路器状态，包括：
+	// GetCircuitBreakerStatus 实例的断路器状态，包括：
 	// 打开（被熔断）、半开（探测恢复）、关闭（正常运行）
 	GetCircuitBreakerStatus() CircuitBreakerStatus
-	// 实例是否健康，基于服务端返回的健康数据
+	// IsHealthy 实例是否健康，基于服务端返回的健康数据
 	IsHealthy() bool
-	// 实例是否已经被手动隔离
+	// IsIsolated 实例是否已经被手动隔离
 	IsIsolated() bool
-	// 实例是否启动了健康检查
+	// IsEnableHealthCheck 实例是否启动了健康检查
 	IsEnableHealthCheck() bool
-	// 实例所属的大区信息
+	// GetRegion 实例所属的大区信息
 	GetRegion() string
-	// 实例所属的地方信息
+	// GetZone 实例所属的地方信息
 	GetZone() string
+	// GetIDC .
 	// Deprecated，建议使用GetCampus方法
 	GetIDC() string
-	// 实例所属的园区信息
+	// GetCampus 实例所属的园区信息
 	GetCampus() string
-	// 获取实例的修订版本信息
+	// GetRevision .获取实例的修订版本信息
 	// 与上一次比较，用于确认服务实例是否发生变更
 	GetRevision() string
 }
@@ -210,14 +211,15 @@ type InstanceWeight struct {
 type FailOverHandler int
 
 const (
-	// 通配所有可用ip实例，等于关闭meta路由
+	// GetOneHealth 通配所有可用ip实例，等于关闭meta路由
 	GetOneHealth FailOverHandler = 1
-	// 匹配不带 metaData key路由
+	// NotContainMetaKey 匹配不带 metaData key路由
 	NotContainMetaKey FailOverHandler = 2
-	// 匹配自定义meta
+	// CustomMeta 匹配自定义meta
 	CustomMeta FailOverHandler = 3
 )
 
+// FailOverDefaultMetaConfig .
 type FailOverDefaultMetaConfig struct {
 	// 元数据路由兜底策略类型
 	Type FailOverHandler
@@ -302,10 +304,12 @@ func (g *GetOneInstanceRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
+// GetCanary .
 func (g *GetOneInstanceRequest) GetCanary() string {
 	return g.Canary
 }
 
+// SetCanary .
 func (g *GetOneInstanceRequest) SetCanary(canary string) {
 	g.Canary = canary
 }
@@ -462,10 +466,12 @@ func (g *GetInstancesRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
 }
 
+// GetCanary .
 func (g *GetInstancesRequest) GetCanary() string {
 	return g.Canary
 }
 
+// SetCanary .
 func (g *GetInstancesRequest) SetCanary(canary string) {
 	g.Canary = canary
 }
@@ -482,6 +488,7 @@ func (g *GetInstancesRequest) Validate() error {
 	return nil
 }
 
+// GetServicesRequest 获取服务请求
 type GetServicesRequest struct {
 	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
@@ -524,22 +531,24 @@ func (g *GetServicesRequest) GetRetryCountPtr() *int {
 func (g *GetServicesRequest) Validate() error {
 	var errs error
 	if g.EnableBusiness && len(g.Business) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("enablebusiness but none!"))
+		errs = multierror.Append(errs, fmt.Errorf("enablebusiness but none"))
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
 	}
 	if !g.EnableBusiness && len(g.Metadata) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("metadata empty!"))
+		errs = multierror.Append(errs, fmt.Errorf("metadata empty"))
 		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
 	}
 	return nil
 }
 
+// InitCalleeServiceRequest .
 type InitCalleeServiceRequest struct {
 	Namespace string
 	Service   string
 	Timeout   *time.Duration
 }
 
+// Validate .验证请求参数
 func (g *InitCalleeServiceRequest) Validate() error {
 	var errs error
 	if g.Service == "" || g.Namespace == "" {
@@ -639,6 +648,7 @@ func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
 }
 
+// OneInstanceResponse 单个服务实例
 type OneInstanceResponse struct {
 	InstancesResponse
 }
@@ -678,9 +688,9 @@ func (i *InstancesResponse) GetInstances() []Instance {
 }
 
 // GetInstance 获取单个服务实例
-func (i *InstancesResponse) GetInstance(instanceId string) Instance {
+func (i *InstancesResponse) GetInstance(instanceID string) Instance {
 	for _, v := range i.Instances {
-		if v.GetId() == instanceId {
+		if v.GetId() == instanceID {
 			return v
 		}
 	}
@@ -727,9 +737,9 @@ func (i *InstancesResponse) ReloadServiceClusters() {
 type RetStatus int
 
 const (
-	// 调用成功
+	// RetSuccess 调用成功
 	RetSuccess RetStatus = 1
-	// 调用失败
+	// RetFail 调用失败
 	RetFail RetStatus = 2
 )
 
@@ -967,27 +977,27 @@ func (g *InstanceHeartbeatRequest) GetRetryCountPtr() *int {
 }
 
 // Validate 校验InstanceDeRegisterRequest
-func (i *InstanceHeartbeatRequest) Validate() error {
-	if nil == i {
+func (g *InstanceHeartbeatRequest) Validate() error {
+	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceHeartbeatRequest can not be nil")
 	}
 	var errs error
-	if len(i.InstanceID) > 0 {
+	if len(g.InstanceID) > 0 {
 		return errs
 	}
-	if len(i.Service) == 0 {
+	if len(g.Service) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" serviceName should not be empty when instanceId is empty"))
 	}
-	if len(i.Namespace) == 0 {
+	if len(g.Namespace) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" namespace should not be empty when instanceId is empty"))
 	}
-	if len(i.Host) == 0 {
+	if len(g.Host) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" host should not be empty when instanceId is empty"))
 	}
-	if i.Port <= 0 || i.Port >= 65536 {
+	if g.Port <= 0 || g.Port >= 65536 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: port should be in range (0, 65536)"))
 	}
 	if errs != nil {
@@ -1044,27 +1054,27 @@ func (g *InstanceDeRegisterRequest) GetRetryCountPtr() *int {
 }
 
 // Validate 校验InstanceDeRegisterRequest
-func (i *InstanceDeRegisterRequest) Validate() error {
-	if nil == i {
+func (g *InstanceDeRegisterRequest) Validate() error {
+	if nil == g {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "InstanceDeRegisterRequest can not be nil")
 	}
 	var errs error
-	if len(i.InstanceID) > 0 {
+	if len(g.InstanceID) > 0 {
 		return errs
 	}
-	if len(i.Service) == 0 {
+	if len(g.Service) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" serviceName should not be empty when instanceId is empty"))
 	}
-	if len(i.Namespace) == 0 {
+	if len(g.Namespace) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" namespace should not be empty when instanceId is empty"))
 	}
-	if len(i.Host) == 0 {
+	if len(g.Host) == 0 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceHeartbeatRequest:"+
 			" host should not be empty when instanceId is empty"))
 	}
-	if i.Port <= 0 || i.Port >= 65536 {
+	if g.Port <= 0 || g.Port >= 65536 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: port should be in range (0, 65536)"))
 	}
 	if errs != nil {
@@ -1074,18 +1084,18 @@ func (i *InstanceDeRegisterRequest) Validate() error {
 }
 
 const (
-	// 最小权重值
+	// MinWeight 最小权重值
 	MinWeight int = 0
-	// 最大权重值
+	// MaxWeight 最大权重值
 	MaxWeight int = 10000
-	// 最小优先级
+	// MinPriority 最小优先级
 	MinPriority = 0
-	// 最大优先级
+	// MaxPriority 最大优先级
 	MaxPriority = 9
 )
 
 const (
-	// 健康检查类型：心跳
+	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
 )
 

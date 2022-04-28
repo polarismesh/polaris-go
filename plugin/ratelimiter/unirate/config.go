@@ -46,7 +46,7 @@ func (c *Config) Verify() error {
 		return fmt.Errorf("MaxQueuingTime not configured")
 	}
 	if *c.MaxQueuingTime < 0 {
-		return fmt.Errorf("Invalid maxQueuingTime: %v, it must greater than 0", *c.MaxQueuingTime)
+		return fmt.Errorf("invalid maxQueuingTime: %v, it must greater than 0", *c.MaxQueuingTime)
 	}
 	return nil
 }

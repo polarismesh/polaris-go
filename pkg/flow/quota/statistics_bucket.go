@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-// 用于metric report 统计
+// StatisticsBucket 用于metric report 统计
 type StatisticsBucket struct {
 	periodStartTimeSecond int64
 	// bucketStartTimeSecond int64
@@ -40,38 +40,37 @@ func (b *StatisticsBucket) add(isLimit bool) {
 	if isLimit {
 		atomic.AddInt64(&b.limitCount, 1)
 	}
-	return
 }
 
-// AddCount，外面使用该接口
+// AddCount 外面使用该接口
 func (b *StatisticsBucket) AddCount(isLimit bool, now time.Time) {
 	unixTime := now.Unix()
 	b.AddCountByUnixTime(isLimit, unixTime)
 }
 
+// AddCountByUnixTime .
 func (b *StatisticsBucket) AddCountByUnixTime(isLimit bool, now int64) {
 	perStart := atomic.LoadInt64(&b.periodStartTimeSecond)
 	if perStart == now {
 		b.add(isLimit)
 		return
+	}
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	if atomic.LoadInt64(&b.periodStartTimeSecond) == now {
+		b.add(isLimit)
+		return
+	}
+	atomic.StoreInt64(&b.periodStartTimeSecond, now)
+	atomic.SwapInt64(&b.totalCount, 1)
+	if isLimit {
+		atomic.SwapInt64(&b.limitCount, 1)
 	} else {
-		b.mutex.Lock()
-		defer b.mutex.Unlock()
-		if atomic.LoadInt64(&b.periodStartTimeSecond) == now {
-			b.add(isLimit)
-			return
-		}
-		atomic.StoreInt64(&b.periodStartTimeSecond, now)
-		atomic.SwapInt64(&b.totalCount, 1)
-		if isLimit {
-			atomic.SwapInt64(&b.limitCount, 1)
-		} else {
-			atomic.StoreInt64(&b.limitCount, 0)
-		}
+		atomic.StoreInt64(&b.limitCount, 0)
 	}
 }
 
-// GetReportData
+// GetReportData .
 func (b *StatisticsBucket) GetReportData(periodTime int64) *ReportElements {
 	data := new(ReportElements)
 	data.TotalCount = 0

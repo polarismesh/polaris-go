@@ -26,7 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
-// msg buffer 用于合并包
+// MsgBuffer msg buffer 用于合并包
 type MsgBuffer struct {
 	ID          uint16
 	ExpectedNum uint16
@@ -36,7 +36,7 @@ type MsgBuffer struct {
 	BeginTime int64
 }
 
-// 异步Conn
+// AsyncConn 异步Conn
 type AsyncConn struct {
 	ConnBase
 
@@ -50,12 +50,12 @@ type AsyncConn struct {
 	readStop chan int
 }
 
-// init
+// Init 初始化
 func (co *AsyncConn) Init() error {
 	var err error
-	localIp := []byte{uint8(127), 0, 0, uint8(1)}
+	localIP := []byte{uint8(127), 0, 0, uint8(1)}
 	srcAddr := &net.UDPAddr{IP: net.IPv4zero, Port: 0}
-	dstAddr := &net.UDPAddr{IP: localIp, Port: 12345}
+	dstAddr := &net.UDPAddr{IP: localIP, Port: 12345}
 
 	co.UdpConn, err = net.DialUDP("udp", srcAddr, dstAddr)
 	if err != nil {
@@ -70,7 +70,7 @@ func (co *AsyncConn) Init() error {
 	return nil
 }
 
-// 清理资源
+// Close 清理资源
 func (co *AsyncConn) Close() {
 	co.writStop <- 1
 	co.readStop <- 1
@@ -78,9 +78,9 @@ func (co *AsyncConn) Close() {
 }
 
 // 发送消息给chan
-func (c *AsyncConn) pushToWriteChan(msg *dns.Msg) error {
+func (co *AsyncConn) pushToWriteChan(msg *dns.Msg) error {
 	select {
-	case c.WriteChan <- msg:
+	case co.WriteChan <- msg:
 		return nil
 	default:
 		return errors.New("channel full")
@@ -88,10 +88,10 @@ func (c *AsyncConn) pushToWriteChan(msg *dns.Msg) error {
 }
 
 // 发送消息接口
-func (c *AsyncConn) pushToWriteChanWrapper(msg *dns.Msg) error {
+func (co *AsyncConn) pushToWriteChanWrapper(msg *dns.Msg) error {
 	maxTryTimes := 10
 	for i := 0; i < maxTryTimes; i++ {
-		err := c.pushToWriteChan(msg)
+		err := co.pushToWriteChan(msg)
 		if err != nil {
 			time.Sleep(time.Millisecond * 10)
 		} else {
@@ -102,11 +102,11 @@ func (c *AsyncConn) pushToWriteChanWrapper(msg *dns.Msg) error {
 }
 
 // 发送UDP包
-func (c *AsyncConn) sendUdpPack() {
+func (co *AsyncConn) sendUdpPack() {
 	for {
 		select {
-		case msg := <-c.WriteChan:
-			c.WriteMsg(msg)
+		case msg := <-co.WriteChan:
+			_ = co.WriteMsg(msg)
 		default:
 			time.Sleep(time.Millisecond * 10)
 		}
@@ -114,9 +114,9 @@ func (c *AsyncConn) sendUdpPack() {
 }
 
 // push read channel
-func (c *AsyncConn) pushToReadChan(msg *RspData) error {
+func (co *AsyncConn) pushToReadChan(msg *RspData) error {
 	select {
-	case c.ReadChan <- msg:
+	case co.ReadChan <- msg:
 		return nil
 	default:
 		return errors.New("channel full")
@@ -124,10 +124,10 @@ func (c *AsyncConn) pushToReadChan(msg *RspData) error {
 }
 
 // pushToReadChanWrapper
-func (c *AsyncConn) pushToReadChanWrapper(rspData *RspData) error {
+func (co *AsyncConn) pushToReadChanWrapper(rspData *RspData) error {
 	maxTryTimes := 10
 	for i := 0; i < maxTryTimes; i++ {
-		err := c.pushToReadChan(rspData)
+		err := co.pushToReadChan(rspData)
 		if err != nil {
 			time.Sleep(time.Millisecond * 10)
 		} else {
@@ -137,10 +137,10 @@ func (c *AsyncConn) pushToReadChanWrapper(rspData *RspData) error {
 	return errors.New("channel full try 10 times")
 }
 
-// 异步收包
-func (c *AsyncConn) ReceiveUdpPack() {
+// ReceiveUdpPack 异步收包
+func (co *AsyncConn) ReceiveUdpPack() {
 	for {
-		msg, err := c.ReadMsg()
+		msg, err := co.ReadMsg()
 		if err != nil {
 			continue
 		}
@@ -148,11 +148,11 @@ func (c *AsyncConn) ReceiveUdpPack() {
 		ctrlRR := msg.GetPackControlRR()
 		if ctrlRR == nil {
 			rspData := AssembleLogicRspData([]*dns.Msg{msg})
-			_ = c.pushToReadChanWrapper(rspData)
+			_ = co.pushToReadChanWrapper(rspData)
 			continue
 		}
 
-		v, ok := c.MsgBufMap.Load(msg.Id)
+		v, ok := co.MsgBufMap.Load(msg.Id)
 		msgBuf := v.(*MsgBuffer)
 		if ok {
 			msgBuf.MsgArr = append(msgBuf.MsgArr, msg)
@@ -160,10 +160,10 @@ func (c *AsyncConn) ReceiveUdpPack() {
 			if msgBuf.ExpectedNum == msgBuf.ReceiveNum {
 				msgBuf.MsgArr = append(msgBuf.MsgArr, msg)
 				rspData := AssembleLogicRspData(msgBuf.MsgArr)
-				_ = c.pushToReadChanWrapper(rspData)
-				c.MsgBufMap.Delete(msg.Id)
+				_ = co.pushToReadChanWrapper(rspData)
+				co.MsgBufMap.Delete(msg.Id)
 			} else {
-				c.MsgBufMap.Store(msg.Id, &msgBuf)
+				co.MsgBufMap.Store(msg.Id, &msgBuf)
 			}
 		} else {
 			msgBuf := MsgBuffer{
@@ -175,12 +175,12 @@ func (c *AsyncConn) ReceiveUdpPack() {
 			msgBuf.MsgArr = make([]*dns.Msg, ctrlRR.TotalCount)
 			msgBuf.MsgArr[ctrlRR.PackageIndex] = msg
 			msgBuf.ReceiveNum++
-			c.MsgBufMap.Store(msg.Id, &msgBuf)
+			co.MsgBufMap.Store(msg.Id, &msgBuf)
 		}
 	}
 }
 
-// 组包逻辑
+// AssembleLogicRspData 组包逻辑
 func AssembleLogicRspData(msgArr []*dns.Msg) *RspData {
 	if len(msgArr) == 0 {
 		return nil

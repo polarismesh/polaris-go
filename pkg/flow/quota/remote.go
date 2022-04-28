@@ -242,8 +242,8 @@ func (s *StreamCounterSet) preInitCheck(
 
 func createHeaderContext(headers map[string]string) context.Context {
 	md := metadata.New(headers)
-	var ctx context.Context
-	ctx = context.Background()
+
+	ctx := context.Background()
 	return metadata.NewOutgoingContext(ctx, md)
 }
 

@@ -322,12 +322,13 @@ func (s *SliceWindow) AddGaugeByValue(value int64, curTime time.Time) int64 {
 	return bucket.AddMetric(0, value)
 }
 
+// AddGaugeByValueByMillTime 添加统计数据
 func (s *SliceWindow) AddGaugeByValueByMillTime(value int64, curTime int64) int64 {
-	var bucket *Bucket
-	bucket = s.lookupAndCreateBucketByMillTime(curTime)
+	bucket := s.lookupAndCreateBucketByMillTime(curTime)
 	return bucket.AddMetric(0, value)
 }
 
+// SetPeriodStart 根据当前时间设置周期开始时间
 func (s *SliceWindow) SetPeriodStart(now int64) {
 	s.PeriodStartTime = s.CalcStartTime(now)
 }

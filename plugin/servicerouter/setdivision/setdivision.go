@@ -88,7 +88,6 @@ func (g *SetEnableFilter) getallArea(setNameList []string, clusters model.Servic
 						targetCluster.AddMetadata(setNameKey, setName)
 						flag = true
 					}
-
 				}
 			}
 		}
@@ -115,7 +114,6 @@ func (g *SetEnableFilter) calleeEnableSet(set string, withinCluster *model.Clust
 		}
 	}
 	return false
-
 }
 
 // destinationSet 指定set进行调用

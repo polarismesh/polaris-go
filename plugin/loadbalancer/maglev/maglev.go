@@ -101,12 +101,12 @@ func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	if nil != replicateNodes {
 		criteria.ReplicateInfo.Nodes = replicateNodes.GetInstances()
 	}
-	var instance model.Instance
-	instance = svcInstances.GetInstances()[index]
+
+	instance := svcInstances.GetInstances()[index]
 	return instance, nil
 }
 
-// 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (m *MaglevLoadBalancer) Destroy() error {
 	return nil
 }

@@ -239,7 +239,7 @@ func newServiceCallResult(ctx SDKContext, request InstanceRequest) (*ServiceCall
 		return nil, err
 	}
 	instances := registry.GetInstances(&serviceKey, true, false)
-	if instances.IsInitialized() == false {
+	if !instances.IsInitialized() {
 		return nil, model.NewSDKError(model.ErrCodeServiceNotFound, nil,
 			fmt.Sprintf("not found instances in Registry service_key:%s", serviceKey))
 	}
