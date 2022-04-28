@@ -65,7 +65,7 @@ func (p *LocationProvider) Name() string {
 
 // Destroy 销毁插件，可用于释放资源
 func (p *LocationProvider) Destroy() error {
-	
+
 	return p.PluginBase.Destroy()
 }
 

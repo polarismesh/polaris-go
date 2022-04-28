@@ -77,7 +77,7 @@ func (svr *PolarisConsumer) runWebServer() {
 			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
 			return
 		}
-		delay := time.Now().Add(time.Duration(10*time.Second)).Sub(start)
+		delay := time.Now().Add(time.Duration(10 * time.Second)).Sub(start)
 
 		ret, err := api.NewServiceCallResult(svr.consumer.SDKContext(), api.InstanceRequest{
 			ServiceKey: model.ServiceKey{

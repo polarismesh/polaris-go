@@ -22,6 +22,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/spaolacci/murmur3 v1.1.0
+	github.com/stretchr/testify v1.7.0
 	go.uber.org/zap v1.19.1
 	golang.org/x/net v0.0.0-20210917221730-978cfadd31cf
 	google.golang.org/grpc v1.42.0
