@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	locationProviderTencent string = "tencent"
+	locationProviderTencent string = "qcloud"
 	regionKey               string = "region"
 	zoneKey                 string = "zone"
 	qCloudApi               string = "http://metadata.tencentyun.com/latest/meta-data/placement/%s"
@@ -48,7 +48,7 @@ type LocationProvider struct {
 
 // Init 初始化插件
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
-	log.GetBaseLogger().Infof("start use tencent location provider")
+	log.GetBaseLogger().Infof("start use qcloud location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
 
 	if ctx.Config.GetGlobal().GetLocation().GetProvider() == p.Name() {
@@ -91,10 +91,9 @@ func (p *LocationProvider) GetLocation() (*model.Location, error) {
 }
 
 func getQCloudLocatoin() (*model.Location, error) {
-	log.GetBaseLogger().Infof("start to get location metadata in cloud env")
+	log.GetBaseLogger().Infof("start to get location metadata in qcloud")
 
-	locCache := new(model.Location)
-	locCache = &model.Location{
+	locCache := &model.Location{
 		Region: "qcloud",
 	}
 

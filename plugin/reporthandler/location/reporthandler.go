@@ -25,8 +25,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/cmdb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/polarismesh/polaris-go/pkg/plugin/location"
 )
 
 var (
@@ -41,7 +41,7 @@ func init() {
 type ReportHandler struct {
 	*plugin.PluginBase
 	globalCtx        model.ValueContext
-	locationProvider location.LocationProvider
+	locationProvider cmdb.LocationProvider
 }
 
 // Type 插件类型
@@ -65,7 +65,7 @@ func (h *ReportHandler) Init(ctx *plugin.InitContext) error {
 		if err != nil {
 			return err
 		}
-		h.locationProvider = locProvider.(location.LocationProvider)
+		h.locationProvider = locProvider.(cmdb.LocationProvider)
 	}
 
 	ctx.Plugins.RegisterEventSubscriber(common.OnContextStarted,
