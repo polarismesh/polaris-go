@@ -84,9 +84,12 @@ func (s *PrometheusReporter) ReportStat(metricType model.MetricType, metricsVal 
 }
 
 func (s *PrometheusReporter) Info() model.StatInfo {
+	if !s.handler.exportSuccess() {
+		return model.StatInfo{}
+	}
 	return model.StatInfo{
 		Target:   s.Name(),
-		Port:     s.handler.port,
+		Port:     uint32(s.handler.port),
 		Path:     "/metrics",
 		Protocol: "http",
 	}

@@ -204,7 +204,6 @@ func GetLabels(m map[string]LabelValueSupplier) []string {
 
 var (
 	InstanceGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
-
 		// 被调方相关信息
 		CalleeNamespace: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
@@ -250,11 +249,11 @@ var (
 	RateLimitGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
 		CalleeNamespace: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return val.GetCalledInstance().GetNamespace()
+			return val.GetNamespace()
 		},
 		CalleeService: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return val.GetCalledInstance().GetService()
+			return val.GetService()
 		},
 		CalleeMethod: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
@@ -306,7 +305,7 @@ func formatLabelsToStr(labels map[string]string) string {
 	s := make([]string, 0, len(labels))
 
 	for k, v := range labels {
-		s = append(s, fmt.Sprintf("%s:%d", k, v))
+		s = append(s, fmt.Sprintf("%s:%s", k, v))
 	}
 
 	return strings.Join(s, "|")

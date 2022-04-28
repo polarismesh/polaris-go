@@ -6,5 +6,6 @@ global:
     enable: true
     chain:
       - prometheus
-  location:
-    provider:
+    plugin:
+      prometheus:
+        metricPort: 0

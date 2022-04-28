@@ -18,6 +18,7 @@ package prometheus
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 
@@ -39,7 +40,7 @@ type PrometheusHandler struct {
 	//
 	metricVecCaches map[string]prometheus.Collector
 	bindIP          string
-	port            uint32
+	port            int
 }
 
 func newHandler(ctx *plugin.InitContext) (*PrometheusHandler, error) {
@@ -117,7 +118,7 @@ func (p *PrometheusHandler) registerMetrics() error {
 func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal model.InstanceGauge) error {
 	switch metricsType {
 	case model.ServiceStat:
-		p.handleRouterGauge(metricsType, metricsVal.(*model.ServiceCallResult))
+		p.handleServiceGauge(metricsType, metricsVal.(*model.ServiceCallResult))
 	case model.RateLimitStat:
 		p.handleRateLimitGauge(metricsType, metricsVal.(*model.RateLimitGauge))
 	case model.CircuitBreakStat:
@@ -132,14 +133,26 @@ func (p *PrometheusHandler) runInnerMetricsWebServer() {
 		return
 	}
 
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.bindIP, p.cfg.Port))
+	if err != nil {
+		log.GetBaseLogger().Errorf("start metrics http-server fail: %v", err)
+		p.port = -1
+		return
+	}
+
+	p.port = ln.Addr().(*net.TCPAddr).Port
+
 	go func() {
-		address := fmt.Sprintf("%s:%d", p.bindIP, p.cfg.Port)
-		log.GetBaseLogger().Infof("start metrics http-server address : %s", address)
-		if err := http.ListenAndServe(address, p.GetHttpHandler()); err != nil {
+		log.GetBaseLogger().Infof("start metrics http-server address : %s", fmt.Sprintf("%s:%d", p.bindIP, p.port))
+		if err := http.Serve(ln, p.GetHttpHandler()); err != nil {
 			log.GetBaseLogger().Errorf("start metrics http-server fail : %s", err)
 			return
 		}
 	}()
+}
+
+func (p *PrometheusHandler) exportSuccess() bool {
+	return p.port > 0
 }
 
 // GetHttpHandler 获取 handler
@@ -147,7 +160,7 @@ func (p *PrometheusHandler) GetHttpHandler() http.Handler {
 	return p.handler
 }
 
-func (p *PrometheusHandler) handleRouterGauge(metricsType model.MetricType, val *model.ServiceCallResult) {
+func (p *PrometheusHandler) handleServiceGauge(metricsType model.MetricType, val *model.ServiceCallResult) {
 	labels := p.convertInsGaugeToLabels(val)
 
 	total := p.metricVecCaches[MetricsNameUpstreamRequestTotal].(*prometheus.CounterVec)
@@ -168,10 +181,9 @@ func (p *PrometheusHandler) handleRouterGauge(metricsType model.MetricType, val 
 		maxTimeout := p.metricVecCaches[MetricsNameUpstreamRequestMaxTimeout].(*addons.MaxGaugeVec)
 		maxTimeout.With(labels).Set(data)
 
-		reqDelay := p.metricVecCaches[MetricsNameUpstreamRequestTimeout].(*prometheus.HistogramVec)
+		reqDelay := p.metricVecCaches[MetricsNameUpstreamRequestDelay].(*prometheus.HistogramVec)
 		reqDelay.With(labels).Observe(data)
 	}
-
 }
 
 func (p *PrometheusHandler) handleRateLimitGauge(metricsType model.MetricType, val *model.RateLimitGauge) {
@@ -229,8 +241,6 @@ func (p *PrometheusHandler) convertRateLimitGaugeToLabels(val *model.RateLimitGa
 	for label, supplier := range RateLimitGaugeLabelOrder {
 		labels[label] = supplier(val)
 	}
-
-	labels[CallerIP] = p.bindIP
 	return labels
 }
 
@@ -240,7 +250,5 @@ func (p *PrometheusHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitB
 	for label, supplier := range CircuitBreakerGaugeLabelOrder {
 		labels[label] = supplier(val)
 	}
-
-	labels[CallerIP] = p.bindIP
 	return labels
 }

@@ -114,6 +114,7 @@ global:
         #类型:int
         #默认值: 28080
         #如果设置为负数，则不会开启默认的http-server
+        #如果设置为0，则随机选择一个可用端口进行启动 http-server
         metricPort: 28080
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location: 

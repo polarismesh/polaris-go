@@ -17,6 +17,7 @@
 package prometheus
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -28,13 +29,14 @@ func init() {
 
 const (
 	defaultReportInterval = 1 * time.Minute
-	defaultMetricPort = 28080
+	defaultMetricPort     = 28080
 )
 
 // Config prometheus 的配置
 type Config struct {
-	IP   string `yaml:"metricHost"`
-	Port uint32 `yaml:"metricPort"`
+	IP      string `yaml:"metricHost"`
+	PortStr string `yaml:"metricPort"`
+	Port    int    `yaml:"-"`
 }
 
 // Verify verify config
@@ -44,7 +46,10 @@ func (c *Config) Verify() error {
 
 // SetDefault Setting defaults
 func (c *Config) SetDefault() {
-	if c.Port == 0 {
+	if c.PortStr == "" {
 		c.Port = defaultMetricPort
 	}
+
+	port, _ := strconv.ParseInt(c.PortStr, 10, 64)
+	c.Port = int(port)
 }

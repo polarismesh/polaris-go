@@ -85,7 +85,11 @@ func (h *ReportHandler) HandleRequest(req *model.ReportClientRequest) {
 
 	// 收集当前的所有metric插件链的元信息
 	for i := range h.reporterChain {
-		infos = append(infos, h.reporterChain[i].Info())
+		stat := h.reporterChain[i].Info()
+		if stat.Empty() {
+			continue
+		}
+		infos = append(infos, stat)
 	}
 
 	if h.first {

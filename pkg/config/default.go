@@ -85,8 +85,8 @@ const (
 	MinHealthCheckInterval = 500 * time.Millisecond
 	// DefaultHealthCheckTimeout 默认健康探测超时时间
 	DefaultHealthCheckTimeout = 100 * time.Millisecond
-	// 客户端信息上报周期，默认10分钟
-	DefaultReportClientIntervalDuration = 10 * time.Minute
+	// 客户端信息上报周期，默认2分钟
+	DefaultReportClientIntervalDuration = 2 * time.Minute
 	// 最大重定向次数，默认1
 	MaxRedirectTimes = 1
 	// sdk配置上报周期

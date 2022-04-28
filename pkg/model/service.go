@@ -1280,6 +1280,10 @@ type StatInfo struct {
 	Protocol string
 }
 
+func (s StatInfo) Empty() bool {
+	return s.Target == ""
+}
+
 // ReportClientRequest 客户端上报请求信息
 type ReportClientRequest struct {
 	// 客户端进程唯一标识
