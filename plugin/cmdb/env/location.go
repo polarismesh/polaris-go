@@ -15,12 +15,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package tencent
+package env
 
 import (
-	"fmt"
-	"io/ioutil"
-	"net/http"
+	"os"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -29,10 +27,11 @@ import (
 )
 
 const (
-	locationProviderTencent string = "tencent"
-	regionKey               string = "region"
-	zoneKey                 string = "zone"
-	qCloudApi               string = "http://metadata.tencentyun.com/latest/meta-data/placement/%s"
+	locationProviderEnv string = "env"
+
+	envKeyRegion string = "POLARIS_INSTANCE_REGION"
+	envKeyZone   string = "POLARIS_INSTANCE_ZONE"
+	envKeyCampus string = "POLARIS_INSTANCE_CAMPUS"
 )
 
 // init 注册插件
@@ -40,7 +39,7 @@ func init() {
 	plugin.RegisterPlugin(&LocationProvider{})
 }
 
-// LocationProvider 腾讯云
+// LocationProvider 从环境变量获取地域信息
 type LocationProvider struct {
 	*plugin.PluginBase
 	locCache *model.Location
@@ -48,9 +47,23 @@ type LocationProvider struct {
 
 // Init 初始化插件
 func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
-	log.GetBaseLogger().Infof("start use tencent location provider")
+	log.GetBaseLogger().Infof("start use env location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
+
+	if ctx.Config.GetGlobal().GetLocation().GetProvider() == p.Name() {
+		p.locCache = &model.Location{
+			Region: os.Getenv(envKeyRegion),
+			Zone:   os.Getenv(envKeyZone),
+			Campus: os.Getenv(envKeyCampus),
+		}
+	}
+
 	return nil
+}
+
+// Destroy 销毁插件，可用于释放资源
+func (p *LocationProvider) Destroy() error {
+	return p.PluginBase.Destroy()
 }
 
 // Type 插件类型
@@ -60,58 +73,10 @@ func (p *LocationProvider) Type() common.Type {
 
 // Name 插件名称
 func (p *LocationProvider) Name() string {
-	return locationProviderTencent
-}
-
-// Destroy 销毁插件，可用于释放资源
-func (p *LocationProvider) Destroy() error {
-	return p.PluginBase.Destroy()
+	return locationProviderEnv
 }
 
 // GetLocation 获取地理位置信息
 func (p *LocationProvider) GetLocation() (*model.Location, error) {
-	if p.locCache == nil {
-		log.GetBaseLogger().Infof("start to get location metadata in cloud env")
-
-		p.locCache = &model.Location{
-			Region: "qcloud",
-		}
-
-		if region, err := sendRequest(regionKey); err == nil {
-			p.locCache.Zone = region
-		} else {
-			log.GetBaseLogger().Infof("get region info fail : %s, but not affect", err.Error())
-		}
-		if zone, err := sendRequest(zoneKey); err == nil {
-			p.locCache.Campus = zone
-		} else {
-			log.GetBaseLogger().Infof("get zone info fail : %s, but not affect", err.Error())
-		}
-
-		log.GetBaseLogger().Infof("get location info from cloud env : %s", p.locCache.String())
-	}
-
 	return p.locCache, nil
-}
-
-func sendRequest(typ string) (string, error) {
-	reqApi := fmt.Sprintf(qCloudApi, typ)
-	resp, err := http.Get(reqApi)
-	if err != nil {
-		return "", err
-	}
-
-	defer resp.Body.Close()
-
-	val, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("curl %s failed", reqApi)
-	}
-
-	return string(val), nil
 }

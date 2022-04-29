@@ -18,12 +18,15 @@
 package location
 
 import (
+	"context"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/cmdb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/polarismesh/polaris-go/pkg/plugin/location"
 )
 
 var (
@@ -38,7 +41,7 @@ func init() {
 type ReportHandler struct {
 	*plugin.PluginBase
 	globalCtx        model.ValueContext
-	locationProvider location.LocationProvider
+	locationProvider cmdb.LocationProvider
 }
 
 // Type 插件类型
@@ -62,9 +65,11 @@ func (h *ReportHandler) Init(ctx *plugin.InitContext) error {
 		if err != nil {
 			return err
 		}
-		h.locationProvider = locProvider.(location.LocationProvider)
+		h.locationProvider = locProvider.(cmdb.LocationProvider)
 	}
 
+	ctx.Plugins.RegisterEventSubscriber(common.OnContextStarted,
+		common.PluginEventHandler{Callback: h.waitLocationInfo})
 	return nil
 }
 
@@ -124,4 +129,23 @@ func (h *ReportHandler) updateLocation(location *model.Location, lastErr model.S
 	if h.globalCtx.SetCurrentLocation(location, lastErr) {
 		log.GetBaseLogger().Infof("client area info is ready")
 	}
+}
+
+// 等待地域信息就绪
+func (h *ReportHandler) waitLocationInfo(event *common.PluginEvent) error {
+
+	if h.locationProvider == nil {
+		return nil
+	}
+
+	// 这里做一个等待，等待地理位置信息获取成功，如果超过一定时间还没有获取到，则认为是获取不到地理位置信息，自动跳过忽略
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ready := h.globalCtx.WaitLocationInfo(ctx, model.LocationReady)
+	loc := h.globalCtx.GetCurrentLocation().GetLocation()
+	if !ready || loc.IsEmpty() {
+		log.GetBaseLogger().Warnf("[ReportHandler][Location] auto inject location info not ready")
+	}
+
+	return nil
 }
