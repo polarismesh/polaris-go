@@ -273,6 +273,7 @@ func (c *Cluster) GetInstances() ([]Instance, int) {
 	return instanceSet.GetRealInstances(), instanceSet.TotalWeight()
 }
 
+// GetInstancesWhenSkipRouteFilter 通过服务实例全量列表获取集群服务实例，但是不进行路由过滤
 func (c *Cluster) GetInstancesWhenSkipRouteFilter() ([]Instance, int) {
 	instanceSet := c.GetClusterValue().GetInstancesSetWhenSkipRouteFilter(c.HasLimitedInstances, true)
 	return instanceSet.GetRealInstances(), instanceSet.TotalWeight()

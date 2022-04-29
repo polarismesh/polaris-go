@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/go-multierror"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 对接注册中心相关配置
+// ServerConnectorConfigImpl 对接注册中心相关配置
 type ServerConnectorConfigImpl struct {
 	Addresses []string `yaml:"addresses" json:"addresses"`
 
@@ -95,7 +95,7 @@ func (s *ServerConnectorConfigImpl) SetMessageTimeout(timeout time.Duration) {
 	s.MessageTimeout = &timeout
 }
 
-// GetConnectionExpireInterval global.serverConnector.connectionIdleTimeout
+// GetConnectionIdleTimeout global.serverConnector.connectionIdleTimeout
 // 连接空闲后超时时间
 func (s *ServerConnectorConfigImpl) GetConnectionIdleTimeout() time.Duration {
 	return *s.ConnectionIdleTimeout
