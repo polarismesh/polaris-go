@@ -108,7 +108,6 @@ func (g *SetEnableFilter) calleeEnableSet(set string, withinCluster *model.Clust
 					if set == setNameSplit[0] {
 						return true
 					}
-
 				}
 			}
 		}
@@ -126,7 +125,6 @@ func (g *SetEnableFilter) destinationSet(dstSetName string,
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
 	return result, nil
-
 }
 
 // sourceSet 按照主调设置的set进行调用
@@ -177,7 +175,6 @@ func (g *SetEnableFilter) sourceSet(routeInfo *servicerouter.RouteInfo, setName 
 		"source set name is %s, not instances found in this set group,please check", setName)
 	log.GetBaseLogger().Errorf(errorText)
 	return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil, errorText)
-
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
@@ -193,7 +190,6 @@ func (g *SetEnableFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 					return g.destinationSet(dstSetName, clusters, withinCluster)
 				}
 			}
-
 		}
 	}
 	// 判断是否启用set，如果启用了set，则过滤对应的set实例
@@ -206,7 +202,6 @@ func (g *SetEnableFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 					// 先匹配本set内的服务
 					return g.sourceSet(routeInfo, setName, clusters, withinCluster)
 				}
-
 			}
 		}
 	}
@@ -215,5 +210,4 @@ func (g *SetEnableFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
 	return result, nil
-
 }

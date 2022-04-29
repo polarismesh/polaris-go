@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
-// 基于匀速排队策略的限流控制器
+// RateLimiterUniformRate 基于匀速排队策略的限流控制器
 type RateLimiterUniformRate struct {
 	*plugin.PluginBase
 	cfg *Config
@@ -64,16 +64,15 @@ func (g *RateLimiterUniformRate) Destroy() error {
 	return nil
 }
 
-// enable ?
+// IsEnable enable ?
 func (g *RateLimiterUniformRate) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
-// uniforme ratelimiter的窗口实现
+// quotaWindow uniforme ratelimiter的窗口实现
 type quotaWindow struct {
 	// 限流规则
 	rule *namingpb.Rule
@@ -93,13 +92,13 @@ type quotaWindow struct {
 	rejectAll bool
 }
 
-// 服务实例发生变更时，改变effectiveRate
+// OnInstancesChanged 服务实例发生变更时，改变effectiveRate
 func (q *quotaWindow) OnInstancesChanged(instCount int) {
 	newEffectiveRate := q.totalRate * float64(instCount)
 	atomic.StoreInt64(&q.effectiveRate, int64(math.Round(newEffectiveRate)))
 }
 
-// 分配配额
+// GetQuota 分配配额
 func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 	if q.rejectAll {
 		return &ratelimiter.QuotaResult{
@@ -152,18 +151,18 @@ func (q *quotaWindow) GetQuota() (*ratelimiter.QuotaResult, error) {
 	}, nil
 }
 
-// 返还token，这个限流器不用实现
+// Release 返还token，这个限流器不用实现
 func (q *quotaWindow) Release() {
 
 }
 
-// 初始化并创建限流窗口
+// InitQuota 初始化并创建限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) (ratelimiter.QuotaBucket, error) {
 	res := &quotaWindow{}
 	res.rule = criteria.DstRule
-	var instCount int
-	instCount = 1
+
+	instCount := 1
 	effective := false
 	effectiveRate := 0.0
 	res.maxQueuingDuration = g.cfg.MaxQueuingTime.Nanoseconds()

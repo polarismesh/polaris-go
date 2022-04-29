@@ -42,6 +42,7 @@ import (
 )
 
 const (
+	// trafficShapingListName is the name of the list that stores traffic shaping rules
 	trafficShapingListName = "trafficShapingAlgorithm"
 )
 
@@ -78,15 +79,14 @@ func (s *Reporter) Name() string {
 	return "rateLimitRecord"
 }
 
-// IsEnable
+// IsEnable 是否启用
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
-			if name == s.Name() {
-				return true
-			}
+	}
+	for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
+		if name == s.Name() {
+			return true
 		}
 	}
 	return false
@@ -187,7 +187,6 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 		atomic.AddInt64(&sd.amountStats[key].passNum, 1)
 		// atomic.AddInt64(&sd.passNum, 1)
 	}
-
 	return nil
 }
 
@@ -256,9 +255,9 @@ func (s *Reporter) iterateRateLimitRecord() {
 	// 将那些已经被删除的限流窗口的记录上传
 	windows := make([]*quota.RateLimitWindow, 0)
 	s.deletedWindow.Range(func(key, value interface{}) bool {
-		quotaId := key.(string)
+		quotaID := key.(string)
 		windows = append(windows, value.(*quota.RateLimitWindow))
-		s.deletedWindow.Delete(quotaId)
+		s.deletedWindow.Delete(quotaID)
 		return true
 	})
 	s.iterateWindowMap(windows)
