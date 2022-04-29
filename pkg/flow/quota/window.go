@@ -262,13 +262,13 @@ func NewWindowContainer() *WindowContainer {
 }
 
 const (
-	// 刚创建， 无需进行后台调度
+	// Created 刚创建， 无需进行后台调度
 	Created int64 = iota
-	// 已获取调度权，准备开始调度
+	// Initializing 已获取调度权，准备开始调度
 	Initializing
-	// 已经在远程初始化结束
+	// Initialized 已经在远程初始化结束
 	Initialized
-	// 已经删除
+	// Deleted 已经删除
 	Deleted
 )
 
@@ -539,9 +539,9 @@ func (r *RateLimitWindow) AsyncRateLimitConnector() AsyncRateLimitConnector {
 
 // InitializeRequest 转换成限流PB初始化消息
 func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
-	clientId := r.Engine().GetContext().GetClientId()
+	clientID := r.Engine().GetContext().GetClientId()
 	initReq := &rlimitV2.RateLimitInitRequest{}
-	initReq.ClientId = clientId
+	initReq.ClientId = clientID
 	initReq.Target = &rlimitV2.LimitTarget{}
 	initReq.Target.Namespace = r.SvcKey.Namespace
 	initReq.Target.Service = r.SvcKey.Service
@@ -636,7 +636,7 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 			Type:               TrafficShapingLimited,
 			LimitModeType:      limitType,
 		}
-		r.Engine().SyncReportStat(model.RateLimitStat, gauge)
+		_ = r.Engine().SyncReportStat(model.RateLimitStat, gauge)
 
 		resp := &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
