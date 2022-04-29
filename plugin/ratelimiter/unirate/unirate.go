@@ -66,10 +66,7 @@ func (g *RateLimiterUniformRate) Destroy() error {
 
 // IsEnable enable ?
 func (g *RateLimiterUniformRate) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	}
-	return true
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // quotaWindow uniforme ratelimiter的窗口实现

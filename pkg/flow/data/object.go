@@ -127,7 +127,6 @@ func (br *BaseRequest) clearValues() {
 // GetDstService 获取DstService
 func (br *BaseRequest) GetDstService() *model.ServiceKey {
 	return &br.DstService
-
 }
 
 // GetSrcService 获取SrcService
@@ -783,10 +782,12 @@ func (cl *CommonRateLimitRequest) FormatLabelToStr(rule *namingpb.Rule) string {
 	return s
 }
 
+// CommonServiceCallResultRequest 公共服务调用结果请求
 type CommonServiceCallResultRequest struct {
 	CallResult model.APICallResult
 }
 
+// InitByServiceCallResult 初始化服务调用结果请求
 func (c *CommonServiceCallResultRequest) InitByServiceCallResult(request *model.ServiceCallResult,
 	cfg config.Configuration) {
 	c.CallResult.APIName = model.ApiUpdateServiceCallResult
@@ -794,10 +795,12 @@ func (c *CommonServiceCallResultRequest) InitByServiceCallResult(request *model.
 	c.CallResult.RetCode = model.ErrCodeSuccess
 }
 
+// ConsumerInitCallServiceResultRequest 初始化消费者调用服务结果请求
 type ConsumerInitCallServiceResultRequest struct {
 	CallResult model.APICallResult
 }
 
+// InitByServiceCallResult 初始化服务调用结果请求
 func (c *ConsumerInitCallServiceResultRequest) InitByServiceCallResult(req *model.InitCalleeServiceRequest,
 	cfg config.Configuration) {
 	if req.Timeout == nil {
