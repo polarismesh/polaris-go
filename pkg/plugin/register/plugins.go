@@ -75,6 +75,6 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/statreporter"
 
 	// 注册 location 地址插件
-	_ "github.com/polarismesh/polaris-go/plugin/location/env"
-	_ "github.com/polarismesh/polaris-go/plugin/location/tencent"
+	_ "github.com/polarismesh/polaris-go/plugin/cmdb/env"
+	_ "github.com/polarismesh/polaris-go/plugin/cmdb/tencent"
 )
