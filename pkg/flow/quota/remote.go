@@ -397,7 +397,6 @@ func code2CommonCode(code uint32) int {
 		return 0
 	}
 	return (value / 100) * 100
-
 }
 
 // IsSuccess 是否成功错误码

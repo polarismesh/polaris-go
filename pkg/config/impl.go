@@ -79,6 +79,7 @@ func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 	return g.StatReporter
 }
 
+// GetLocation cl5.global.location前缀开头的所有配置项
 func (g *GlobalConfigImpl) GetLocation() LocationConfig {
 	return g.Location
 }

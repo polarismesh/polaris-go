@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package client
 
 import (
@@ -29,7 +30,7 @@ func (c *Connector) RegisterServiceHandler(svcEventHandler *serverconnector.Serv
 	return c.discoverConnector.RegisterServiceHandler(svcEventHandler)
 }
 
-// DeRegisterEventHandler 反注册事件监听器
+// DeRegisterServiceHandler 反注册事件监听器
 func (c *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 	return c.discoverConnector.DeRegisterServiceHandler(key)
 }
@@ -79,7 +80,7 @@ func (c *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest
 	return nil
 }
 
-// 心跳上报
+// Heartbeat 心跳上报
 func (c *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
 	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisHeartbeat
@@ -101,7 +102,7 @@ func (c *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
 	return nil
 }
 
-// 报客户端信息
+// ReportClient 报客户端信息
 func (c *Connector) ReportClient(request *model.ReportClientRequest) (*model.ReportClientResponse, error) {
 	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisReportClient
@@ -124,14 +125,14 @@ func (c *Connector) ReportClient(request *model.ReportClientRequest) (*model.Rep
 	return reportClientRsp, nil
 }
 
-// 更新服务端地址 sideCar模式目前无需实现
+// UpdateServers 更新服务端地址 sideCar模式目前无需实现
 func (c *Connector) UpdateServers(key *model.ServiceEventKey) error {
 	return nil
 }
 
 // SyncGetResourceReq 同步获取资源
 func (c *Connector) SyncGetResourceReq(request *namingpb.DiscoverRequest) (*namingpb.DiscoverResponse, error) {
-	dnsMsg, err := convertDiscoverRequestToDnsMsg(request, c.getDnsMsgId())
+	var dnsMsg, err = convertDiscoverRequestToDnsMsg(request, c.getDnsMsgId())
 	rsp, _, err := c.SyncExchange(dnsMsg)
 	if err != nil {
 		return nil, err

@@ -57,6 +57,7 @@ type LocalCacheConfigImpl struct {
 }
 
 var (
+	// DefaultUseFileCacheFlag 默认启动后，首次名字服务是否可以使用缓存文件
 	DefaultUseFileCacheFlag = true
 )
 
@@ -93,42 +94,42 @@ func (l *LocalCacheConfigImpl) SetPersistDir(dir string) {
 	l.PersistDir = dir
 }
 
-// GetPersistMaxWriteRetry
+// GetPersistMaxWriteRetry consumer.localCache.persist.maxWriteRetry
 func (l *LocalCacheConfigImpl) GetPersistMaxWriteRetry() int {
 	return l.PersistMaxWriteRetry
 }
 
-// SetPersistMaxWriteRetry
+// SetPersistMaxWriteRetry 设置本地缓存持久化写入失败重试次数
 func (l *LocalCacheConfigImpl) SetPersistMaxWriteRetry(maxWriteRetry int) {
 	l.PersistMaxWriteRetry = maxWriteRetry
 }
 
-// GetPersistMaxReadRetry
+// GetPersistMaxReadRetry consumer.localCache.persist.maxReadRetry
 func (l *LocalCacheConfigImpl) GetPersistMaxReadRetry() int {
 	return l.PersistMaxReadRetry
 }
 
-// SetPersistMaxReadRetry
+// SetPersistMaxReadRetry 设置本地缓存持久化读取失败重试次数
 func (l *LocalCacheConfigImpl) SetPersistMaxReadRetry(maxReadRetry int) {
 	l.PersistMaxReadRetry = maxReadRetry
 }
 
-// GetPersistRetryInterval
+// GetPersistRetryInterval consumer.localCache.persist.retryInterval
 func (l *LocalCacheConfigImpl) GetPersistRetryInterval() time.Duration {
 	return *l.PersistRetryInterval
 }
 
-// SetPersistRetryInterval
+// SetPersistRetryInterval 设置本地缓存持久化重试间隔
 func (l *LocalCacheConfigImpl) SetPersistRetryInterval(interval time.Duration) {
 	l.PersistRetryInterval = &interval
 }
 
-// GetPersistAvailableInterval
+// GetPersistAvailableInterval consumer.localCache.persist.availableInterval
 func (l *LocalCacheConfigImpl) GetPersistAvailableInterval() time.Duration {
 	return *l.PersistAvailableInterval
 }
 
-// SetPersistAvailableInterval
+// SetPersistAvailableInterval 设置本地缓存持久化文件有效时间差值
 func (l *LocalCacheConfigImpl) SetPersistAvailableInterval(interval time.Duration) {
 	l.PersistAvailableInterval = &interval
 }

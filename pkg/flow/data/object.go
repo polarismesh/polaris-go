@@ -571,7 +571,6 @@ func (cr *MeshConfigRequest) BuildMeshConfigResponse(mesh model.MeshConfig) *mod
 // GetDstService 获取DstService
 func (cr *MeshConfigRequest) GetDstService() *model.ServiceKey {
 	return &cr.DstService
-
 }
 
 // GetSrcService 获取SrcService

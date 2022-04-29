@@ -73,7 +73,6 @@ func NewMeshConfigInProto(resp *namingpb.DiscoverResponse) *MeshConfigProto {
 	value.revision = resp.GetMeshconfig().GetRevision().GetValue()
 	value.ruleCache = model.NewRuleCache()
 	return value
-
 }
 
 // GetType 获取规则类型

@@ -28,7 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// 基于目标服务元数据的服务路由插件
+// InstancesFilter 基于目标服务元数据的服务路由插件
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -62,9 +62,7 @@ func (g *InstancesFilter) Destroy() error {
 }
 
 // GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
-func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
-	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
-
+func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	dstMetadata := routeInfo.DestService.GetMetadata()
 	targetCluster := g.getTargetCluster(clusters, withinCluster, dstMetadata)
 
@@ -92,7 +90,6 @@ func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 
 // 元数据匹配不到时处理自定义匹配规则
 func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClusters, withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
-
 	if routeInfo.FailOverDefaultMeta.Type == model.GetOneHealth {
 		return g.getOneHealthHandler(clusters, withinCluster, routeInfo)
 	} else if routeInfo.FailOverDefaultMeta.Type == model.NotContainMetaKey {
@@ -101,15 +98,11 @@ func (g *InstancesFilter) failOverDefaultMetaHandler(clusters model.ServiceClust
 		return g.customMetaHandler(clusters, withinCluster, routeInfo)
 	}
 
-	return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument,
-		fmt.Errorf("failOverDefaultMeta Type not match"),
-		"fail to enable failOverDefaultMeta")
+	return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, fmt.Errorf("failOverDefaultMeta Type not match"), "fail to enable failOverDefaultMeta")
 }
 
 // 通配所有可用ip实例，等于关闭meta路由
-func (g *InstancesFilter) getOneHealthHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
-	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
-
+func (g *InstancesFilter) getOneHealthHandler(clusters model.ServiceClusters, withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 	targetCluster := g.getTargetCluster(clusters, withinCluster, nil)
 	clusterValue := targetCluster.GetClusterValue()
 	instSet := g.getInstSet(clusterValue)
@@ -117,9 +110,7 @@ func (g *InstancesFilter) getOneHealthHandler(clusters model.ServiceClusters, wi
 }
 
 // 匹配不带 metaData key路由
-func (g *InstancesFilter) notContainMetaKeyHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
-	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
-
+func (g *InstancesFilter) notContainMetaKeyHandler(clusters model.ServiceClusters, withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 	targetCluster := g.getTargetCluster(clusters, withinCluster, routeInfo.DestService.GetMetadata())
 	clusterValue := targetCluster.GetNotContainMetaKeyClusterValue()
 	instSet := g.getInstSet(clusterValue)
@@ -127,9 +118,7 @@ func (g *InstancesFilter) notContainMetaKeyHandler(clusters model.ServiceCluster
 }
 
 // 匹配自定义meta
-func (g *InstancesFilter) customMetaHandler(clusters model.ServiceClusters, withinCluster *model.Cluster,
-	routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
-
+func (g *InstancesFilter) customMetaHandler(clusters model.ServiceClusters, withinCluster *model.Cluster, routeInfo *servicerouter.RouteInfo) (*model.Cluster, error) {
 	if err := validateEmptyKey(routeInfo.FailOverDefaultMeta.Meta); err != nil {
 		return nil, err
 	}
@@ -139,9 +128,7 @@ func (g *InstancesFilter) customMetaHandler(clusters model.ServiceClusters, with
 	return targetCluster, g.validateInstSet(instSet, routeInfo)
 }
 
-func (g *InstancesFilter) getTargetCluster(clusters model.ServiceClusters, withinCluster *model.Cluster,
-	dstMetadata map[string]string) *model.Cluster {
-
+func (g *InstancesFilter) getTargetCluster(clusters model.ServiceClusters, withinCluster *model.Cluster, dstMetadata map[string]string) *model.Cluster {
 	targetCluster := model.NewCluster(clusters, withinCluster)
 	if len(dstMetadata) > 0 {
 		for metaKey, metaValue := range dstMetadata {

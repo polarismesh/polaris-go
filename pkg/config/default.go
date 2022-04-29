@@ -213,19 +213,30 @@ const (
 )
 
 const (
-	DefaultStatReporter         string = "stat2Monitor"
-	DefaultCacheReporter        string = "serviceCache"
-	DefaultPluginReporter       string = "pluginInfo"
-	DefaultLoadBalanceReporter  string = "lbInfo"
-	DefaultRateLimitReporter    string = "rateLimitRecord"
+	// DefaultStatReporter .
+	DefaultStatReporter string = "stat2Monitor"
+	// DefaultCacheReporter .
+	DefaultCacheReporter string = "serviceCache"
+	// DefaultPluginReporter .
+	DefaultPluginReporter string = "pluginInfo"
+	// DefaultLoadBalanceReporter .
+	DefaultLoadBalanceReporter string = "lbInfo"
+	// DefaultRateLimitReporter .
+	DefaultRateLimitReporter string = "rateLimitRecord"
+	// DefaultServiceRouteReporter .
 	DefaultServiceRouteReporter string = "serviceRoute"
-	DefaultStatReportEnabled    bool   = false
+	// DefaultStatReportEnabled .
+	DefaultStatReportEnabled bool = false
 )
 
 const (
-	DefaultMinServiceExpireTime         = 5 * time.Second
-	DefaultMaxServiceExpireCheckTime    = 1 * time.Hour
-	DefaultMinTimingInterval            = 100 * time.Millisecond
+	// DefaultMinServiceExpireTime .
+	DefaultMinServiceExpireTime = 5 * time.Second
+	// DefaultMaxServiceExpireCheckTime .
+	DefaultMaxServiceExpireCheckTime = 1 * time.Hour
+	// DefaultMinTimingInterval .
+	DefaultMinTimingInterval = 100 * time.Millisecond
+	// DefaultServerServiceRefreshInterval .
 	DefaultServerServiceRefreshInterval = 1 * time.Minute
 )
 

@@ -95,13 +95,13 @@ func (h *HealthCheckConfigImpl) SetPluginConfig(pluginName string, value BaseCon
 	return h.Plugin.SetPluginConfig(common.TypeHealthCheck, pluginName, value)
 }
 
-// Verify verify the healthCheckConfig
+// Verify the healthCheckConfig
 func (h *HealthCheckConfigImpl) Verify() error {
 	if nil == h {
 		return errors.New("HealthCheckConfig is nil")
 	}
 	if h.When != HealthCheckNever && h.When != HealthCheckAlways && h.When != HealthCheckOnRecover {
-		return errors.New(fmt.Sprintf("healthcheck.when %v is invalid", h.When))
+		return fmt.Errorf("healthcheck.when %v is invalid", h.When)
 	}
 	if h.When == HealthCheckNever {
 		return nil
@@ -110,8 +110,8 @@ func (h *HealthCheckConfigImpl) Verify() error {
 		return errors.New("at least one health check chain must config")
 	}
 	if h.Interval < MinHealthCheckInterval {
-		return errors.New(fmt.Sprintf("consumer.healthCheck.checkPeriod should greater than %v",
-			MinHealthCheckInterval))
+		return fmt.Errorf("consumer.healthCheck.checkPeriod should greater than %v",
+			MinHealthCheckInterval)
 	}
 	if len(h.Plugin) == 0 {
 		return errors.New("at least one health check plugin must config")

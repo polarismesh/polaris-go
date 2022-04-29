@@ -70,9 +70,9 @@ type Supplier interface {
 	GetPluginById(id int32) (Plugin, error)
 	// GetPluginsByType 获取一个类型的加载了的插件名字
 	GetPluginsByType(typ common.Type) []string
-	// 获取插件事件监听器
+	// GetEventSubscribers 获取插件事件监听器
 	GetEventSubscribers(event common.PluginEventType) []common.PluginEventHandler
-	// 注册插件事件监听器，必须在Plugin.Init方法中进行，否则会出现并发读写问题
+	// RegisterEventSubscriber 注册插件事件监听器，必须在Plugin.Init方法中进行，否则会出现并发读写问题
 	RegisterEventSubscriber(event common.PluginEventType, handler common.PluginEventHandler)
 }
 
@@ -403,21 +403,21 @@ type InitContext struct {
 
 // Plugin 所有插件的基础接口
 type Plugin interface {
-	// 插件类型
+	// Type 插件类型
 	Type() common.Type
-	// 插件id
+	// ID 插件id
 	ID() int32
-	// 返回插件所属的sdkContext的uuid
+	// GetSDKContextID 返回插件所属的sdkContext的uuid
 	GetSDKContextID() string
-	// 插件名，一个类型下插件名唯一
+	// Name 插件名，一个类型下插件名唯一
 	Name() string
-	// 初始化插件
+	// Init 初始化插件
 	Init(ctx *InitContext) error
-	// 启动插件，对于需要依赖外部资源，以及启动协程的操作，在Start方法里面做
+	// Start 启动插件，对于需要依赖外部资源，以及启动协程的操作，在Start方法里面做
 	Start() error
-	// 销毁插件，可用于释放资源
+	// Destroy 销毁插件，可用于释放资源
 	Destroy() error
-	// 插件是否启用
+	// IsEnable 插件是否启用
 	IsEnable(cfg config.Configuration) bool
 }
 
@@ -427,12 +427,12 @@ type PluginBase struct {
 	sdkID       string
 }
 
-// Type
+// Type 插件类型
 func (b *PluginBase) Type() common.Type {
 	return common.TypePluginBase
 }
 
-// Name
+// Name 返回插件名
 func (b *PluginBase) Name() string {
 	return common.TypePluginBase.String()
 }

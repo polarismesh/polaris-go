@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package client
 
 import (
@@ -25,7 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
-// 同步发送收取包
+// SyncExchange 同步发送收取包
 func (c *Connector) SyncExchange(m *dns.Msg) (*RspData, time.Duration, error) {
 	var err error
 	co := c.GetSyncConnFunc()
@@ -51,9 +52,9 @@ func (c *Connector) SyncExchange(m *dns.Msg) (*RspData, time.Duration, error) {
 }
 
 // 同步读取包
-func (c *Connector) syncReadLogicMsg(msgId uint16, co Conn) (*RspData, error) {
+func (c *Connector) syncReadLogicMsg(msgID uint16, co Conn) (*RspData, error) {
 	packBuff := MsgBuffer{}
-	packBuff.ID = msgId
+	packBuff.ID = msgID
 	packBuff.ReceiveNum = 0
 	init := false
 
@@ -61,7 +62,7 @@ func (c *Connector) syncReadLogicMsg(msgId uint16, co Conn) (*RspData, error) {
 	maxLoopTime := time.Millisecond * 1000
 	for {
 		m, err := co.ReadMsg()
-		if err != nil || m.Id != msgId {
+		if err != nil || m.Id != msgID {
 			err = errors.New("invalid id")
 			return nil, err
 		}
