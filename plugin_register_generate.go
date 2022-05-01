@@ -52,7 +52,7 @@ func main() {
 			// ignore empty lines
 			continue
 		}
-		name, repo := items[0], items[1]
+		name, repo := strings.TrimSpace(items[0]), strings.TrimSpace(items[1])
 
 		if _, ok := mi[name]; ok {
 			log.Fatalf("Duplicate entry %q", name)

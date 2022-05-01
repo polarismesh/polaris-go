@@ -1120,6 +1120,8 @@ type InstanceRegisterRequest struct {
 	// ttl超时时间，如果节点要调用heartbeat上报，则必须填写，否则会400141错误码，单位：秒
 	TTL *int
 
+	Location *Location
+
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置
 	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
@@ -1157,6 +1159,11 @@ func (g *InstanceRegisterRequest) SetTTL(ttl int) {
 	g.TTL = &ttl
 }
 
+// SetLocation 设置服务实例的地理信息
+func (g *InstanceRegisterRequest) SetLocation(loc *Location) {
+	g.Location = loc
+}
+
 // GetTimeoutPtr 获取超时值指针
 func (g *InstanceRegisterRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
@@ -1165,6 +1172,11 @@ func (g *InstanceRegisterRequest) GetTimeoutPtr() *time.Duration {
 // GetRetryCountPtr 获取重试次数指针
 func (g *InstanceRegisterRequest) GetRetryCountPtr() *int {
 	return g.RetryCount
+}
+
+// GetLocation 获取实例的地址信息
+func (g *InstanceRegisterRequest) GetLocation() *Location {
+	return g.Location
 }
 
 // validateMetadata 校验元数据的key是否为空

@@ -23,7 +23,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go/api"
@@ -32,26 +35,24 @@ import (
 var (
 	namespace string
 	service   string
-	host      string
-	port      int
 	token     string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
-	flag.IntVar(&port, "port", 7879, "port")
+	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 }
 
 // PolarisProvider .
 type PolarisProvider struct {
-	provider  api.ProviderAPI
-	namespace string
-	service   string
-	host      string
-	port      int
+	provider   api.ProviderAPI
+	namespace  string
+	service    string
+	host       string
+	port       int
+	isShutdown bool
 }
 
 // Run . execute
@@ -61,20 +62,30 @@ func (svr *PolarisProvider) Run() {
 		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
 	}
 
-	host = tmpHost
-	svr.registerService()
+	svr.host = tmpHost
 	svr.runWebServer()
+	svr.registerService()
 }
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte("Hello, I'm EchoServerGolang Provider"))
+		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm DiscoverEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
 	})
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", svr.port), nil); err != nil {
-		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		log.Fatalf("[ERROR]fail to listen tcp, err is %v", err)
 	}
+
+	svr.port = ln.Addr().(*net.TCPAddr).Port
+
+	go func() {
+		if err := http.Serve(ln, nil); err != nil {
+			svr.isShutdown = false
+			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+		}
+	}()
 }
 
 func (svr *PolarisProvider) registerService() {
@@ -82,8 +93,8 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest := &api.InstanceRegisterRequest{}
 	registerRequest.Service = service
 	registerRequest.Namespace = namespace
-	registerRequest.Host = host
-	registerRequest.Port = port
+	registerRequest.Host = svr.host
+	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
 	resp, err := svr.provider.Register(registerRequest)
@@ -91,28 +102,53 @@ func (svr *PolarisProvider) registerService() {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
+	go svr.doHeartbeat()
+}
 
+func (svr *PolarisProvider) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	deregisterRequest := &api.InstanceDeRegisterRequest{}
+	deregisterRequest.Service = service
+	deregisterRequest.Namespace = namespace
+	deregisterRequest.Host = svr.host
+	deregisterRequest.Port = svr.port
+	deregisterRequest.ServiceToken = token
+	if err := svr.provider.Deregister(deregisterRequest); err != nil {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister successfully.")
 	go svr.doHeartbeat()
 }
 
 func (svr *PolarisProvider) doHeartbeat() {
 	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(10 * time.Second))
-	defer ticker.Stop()
+	ticker := time.NewTicker(time.Duration(5 * time.Second))
 	for range ticker.C {
-		heartbeatRequest := &api.InstanceHeartbeatRequest{}
-		heartbeatRequest.Namespace = namespace
-		heartbeatRequest.Service = service
-		heartbeatRequest.Host = host
-		heartbeatRequest.Port = port
-		heartbeatRequest.ServiceToken = token
-		err := svr.provider.Heartbeat(heartbeatRequest)
-		if err != nil {
-			log.Printf("[ERROR] fail to heartbeat instance, err is %v", err)
+		if !svr.isShutdown {
+			heartbeatRequest := &api.InstanceHeartbeatRequest{}
+			heartbeatRequest.Namespace = namespace
+			heartbeatRequest.Service = service
+			heartbeatRequest.Host = svr.host
+			heartbeatRequest.Port = svr.port
+			heartbeatRequest.ServiceToken = token
+			svr.provider.Heartbeat(heartbeatRequest)
 		}
-		time.Sleep(2 * time.Second)
 	}
+}
 
+func (svr *PolarisProvider) runMainLoop() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, []os.Signal{
+		syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGSEGV, syscall.SIGUSR1,
+	}...)
+
+	for s := range ch {
+		log.Printf("catch signal(%+v), stop servers", s)
+		svr.isShutdown = true
+		svr.deregisterService()
+		return
+	}
 }
 
 func main() {
@@ -135,11 +171,11 @@ func main() {
 		provider:  provider,
 		namespace: namespace,
 		service:   service,
-		host:      host,
-		port:      port,
 	}
 
 	svr.Run()
+
+	svr.runMainLoop()
 }
 
 func getLocalHost(serverAddr string) (string, error) {

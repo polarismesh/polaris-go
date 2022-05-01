@@ -18,6 +18,11 @@
 package test
 
 import (
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"testing"
+
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
@@ -26,10 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
 	"github.com/polarismesh/polaris-go/test/subscribe"
-	"log"
-	"net/http"
-	_ "net/http/pprof"
-	"testing"
 
 	"github.com/polarismesh/polaris-go/api"
 	. "gopkg.in/check.v1"
@@ -93,6 +94,8 @@ func init() {
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
 	// 基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
+	// ReportClient相关测试用例
+	//Suite(&reporthandler.ReporthandlerTestingSuite{})
 
 	// 基础远程限流用例测试
 	// Suite(&ratelimit.RemoteNormalTestingSuite{})

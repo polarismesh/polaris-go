@@ -39,7 +39,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "EchoServerGolang", "service")
+	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 }
@@ -67,7 +67,10 @@ func (svr *PolarisConsumer) runWebServer() {
 		}
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 		if nil != err {
-			log.Fatalf("fail to getOneInstance, err is %v", err)
+			log.Printf("[error] fail to getOneInstance, err is %v", err)
+			rw.WriteHeader(http.StatusOK)
+			_, _ = rw.Write([]byte(fmt.Sprintf("fail to getOneInstance, err is %v", err)))
+			return
 		}
 		instance := oneInstResp.GetInstance()
 		if nil != instance {
@@ -76,14 +79,20 @@ func (svr *PolarisConsumer) runWebServer() {
 
 		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 		if err != nil {
-			log.Fatalf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusOK)
+			_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
 		}
 
 		defer resp.Body.Close()
 
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Fatalf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusOK)
+			_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
 		}
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write(data)
@@ -120,9 +129,7 @@ func main() {
 func convertHeaders(header map[string][]string) map[string]string {
 	meta := make(map[string]string)
 	for k, v := range header {
-		if strings.ToLower(k) == "env" {
-			meta[strings.ToLower(k)] = v[0]
-		}
+		meta[strings.ToLower(k)] = v[0]
 	}
 
 	return meta
