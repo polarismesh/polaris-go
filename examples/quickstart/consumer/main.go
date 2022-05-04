@@ -24,7 +24,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 )
 
 var (
@@ -39,7 +39,7 @@ func initArgs() {
 }
 
 type PolarisConsumer struct {
-	consumer  api.ConsumerAPI
+	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
 }
@@ -52,7 +52,7 @@ func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
 		// DiscoverEchoServer
-		getOneRequest := &api.GetOneInstanceRequest{}
+		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
@@ -100,7 +100,7 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := api.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件
 	//consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
 

@@ -29,7 +29,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 )
 
 var (
@@ -47,7 +47,7 @@ func initArgs() {
 
 // PolarisProvider .
 type PolarisProvider struct {
-	provider   api.ProviderAPI
+	provider   polaris.ProviderAPI
 	namespace  string
 	service    string
 	host       string
@@ -90,7 +90,7 @@ func (svr *PolarisProvider) runWebServer() {
 
 func (svr *PolarisProvider) registerService() {
 	log.Printf("start to invoke register operation")
-	registerRequest := &api.InstanceRegisterRequest{}
+	registerRequest := &polaris.InstanceRegisterRequest{}
 	registerRequest.Service = service
 	registerRequest.Namespace = namespace
 	registerRequest.Host = svr.host
@@ -107,7 +107,7 @@ func (svr *PolarisProvider) registerService() {
 
 func (svr *PolarisProvider) deregisterService() {
 	log.Printf("start to invoke deregister operation")
-	deregisterRequest := &api.InstanceDeRegisterRequest{}
+	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
 	deregisterRequest.Service = service
 	deregisterRequest.Namespace = namespace
 	deregisterRequest.Host = svr.host
@@ -125,7 +125,7 @@ func (svr *PolarisProvider) doHeartbeat() {
 	ticker := time.NewTicker(time.Duration(5 * time.Second))
 	for range ticker.C {
 		if !svr.isShutdown {
-			heartbeatRequest := &api.InstanceHeartbeatRequest{}
+			heartbeatRequest := &polaris.InstanceHeartbeatRequest{}
 			heartbeatRequest.Namespace = namespace
 			heartbeatRequest.Service = service
 			heartbeatRequest.Host = svr.host
@@ -140,7 +140,7 @@ func (svr *PolarisProvider) runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGSEGV, syscall.SIGUSR1,
+		syscall.SIGSEGV,
 	}...)
 
 	for s := range ch {
@@ -158,12 +158,12 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	provider, err := api.NewProviderAPI()
+	provider, err := polaris.NewProviderAPI()
 	// 或者使用以下方法,则不需要创建配置文件
 	//provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
-		log.Fatalf("fail to create consumerAPI, err is %v", err)
+		log.Fatalf("fail to create providerAPI, err is %v", err)
 	}
 	defer provider.Destroy()
 
