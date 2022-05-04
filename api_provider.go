@@ -91,7 +91,7 @@ func NewProviderAPIByContext(context api.SDKContext) ProviderAPI {
 	return &providerAPI{rawAPI: p}
 }
 
-// newProviderAPIByAddress 通过address创建ProviderAPI
+// NewProviderAPIByAddress 通过address创建ProviderAPI
 func NewProviderAPIByAddress(address ...string) (ProviderAPI, error) {
 	p, err := api.NewProviderAPIByAddress(address...)
 	if err != nil {

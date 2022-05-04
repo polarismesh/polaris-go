@@ -41,7 +41,7 @@ func (c *limitAPI) Destroy() {
 	c.rawAPI.Destroy()
 }
 
-// newLimitAPI 通过以默认域名为埋点server的默认配置创建LimitAPI
+// NewLimitAPI 通过以默认域名为埋点server的默认配置创建LimitAPI
 func NewLimitAPI() (LimitAPI, error) {
 	l, err := api.NewLimitAPI()
 	if err != nil {
@@ -50,7 +50,7 @@ func NewLimitAPI() (LimitAPI, error) {
 	return &limitAPI{rawAPI: l}, nil
 }
 
-// newLimitAPIByConfig 通过配置对象创建SDK LimitAPI对象
+// NewLimitAPIByConfig 通过配置对象创建SDK LimitAPI对象
 func NewLimitAPIByConfig(cfg config.Configuration) (LimitAPI, error) {
 	l, err := api.NewLimitAPIByConfig(cfg)
 	if err != nil {
@@ -59,13 +59,13 @@ func NewLimitAPIByConfig(cfg config.Configuration) (LimitAPI, error) {
 	return &limitAPI{rawAPI: l}, nil
 }
 
-// newLimitAPIByContext 通过上下文创建SDK LimitAPI对象
+// NewLimitAPIByContext 通过上下文创建SDK LimitAPI对象
 func NewLimitAPIByContext(context api.SDKContext) LimitAPI {
 	l := api.NewLimitAPIByContext(context)
 	return &limitAPI{rawAPI: l}
 }
 
-// newLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
+// NewLimitAPIByFile 通过配置文件创建SDK LimitAPI对象
 func NewLimitAPIByFile(path string) (LimitAPI, error) {
 	l, err := api.NewLimitAPIByFile(path)
 	if err != nil {
