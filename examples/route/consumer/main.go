@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -45,7 +45,7 @@ func initArgs() {
 }
 
 type PolarisConsumer struct {
-	consumer  api.ConsumerAPI
+	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
 }
@@ -57,7 +57,7 @@ func (svr *PolarisConsumer) Run() {
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
-		getOneRequest := &api.GetOneInstanceRequest{}
+		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		getOneRequest.SourceService = &model.ServiceInfo{
@@ -110,7 +110,7 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := api.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPI()
 	if nil != err {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}

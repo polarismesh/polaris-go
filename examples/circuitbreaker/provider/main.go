@@ -4,7 +4,6 @@
  * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
  *
  * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  * https://opensource.org/licenses/BSD-3-Clause
@@ -28,7 +27,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 )
 
 var (
@@ -46,7 +45,7 @@ func initArgs() {
 
 // PolarisProvider .
 type PolarisProvider struct {
-	provider  api.ProviderAPI
+	provider  polaris.ProviderAPI
 	namespace string
 	service   string
 	host      string
@@ -87,7 +86,7 @@ func (svr *PolarisProvider) runWebServer() {
 
 func (svr *PolarisProvider) registerService() {
 	log.Printf("start to invoke register operation")
-	registerRequest := &api.InstanceRegisterRequest{}
+	registerRequest := &polaris.InstanceRegisterRequest{}
 	registerRequest.Service = service
 	registerRequest.Namespace = namespace
 	registerRequest.Host = svr.host
@@ -120,9 +119,9 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	provider, err := api.NewProviderAPI()
+	provider, err := polaris.NewProviderAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	//provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
+	//provider, err = polaris.NewProviderAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)

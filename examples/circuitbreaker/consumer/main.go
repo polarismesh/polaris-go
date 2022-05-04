@@ -25,8 +25,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -41,7 +41,7 @@ func initArgs() {
 }
 
 type PolarisConsumer struct {
-	consumer  api.ConsumerAPI
+	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
 }
@@ -54,7 +54,7 @@ func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 10; i++ {
 			log.Printf("start to invoke getOneInstance operation")
-			getOneRequest := &api.GetOneInstanceRequest{}
+			getOneRequest := &polaris.GetOneInstanceRequest{}
 			getOneRequest.Namespace = namespace
 			getOneRequest.Service = service
 			oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
@@ -74,26 +74,11 @@ func (svr *PolarisConsumer) runWebServer() {
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 			if err != nil {
 				delay := time.Now().Sub(start)
-				callRet, err := api.NewServiceCallResult(svr.consumer.SDKContext(), api.InstanceRequest{
-					ServiceKey: model.ServiceKey{
-						Namespace: namespace,
-						Service:   service,
-					},
-					InstanceID: instance.GetId(),
-					IP:         instance.GetHost(),
-					Port:       uint16(instance.GetPort()),
-				})
-				if err != nil {
-					log.Printf("[error] fail to NewServiceCallResult, err is %v", err)
-					rw.WriteHeader(http.StatusInternalServerError)
-					_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to NewServiceCallResult, err is %v", err)))
-					_, _ = rw.Write([]byte("\n"))
-					continue
-				}
-				errCode := int32(http.StatusInternalServerError)
-				callRet.RetCode = &errCode
-				callRet.Delay = &delay
-				callRet.RetStatus = api.RetFail
+				callRet := &polaris.ServiceCallResult{}
+				callRet.CalledInstance = instance
+				callRet.SetRetCode(int32(http.StatusInternalServerError))
+				callRet.SetDelay(delay)
+				callRet.SetRetStatus(api.RetFail)
 
 				if err := svr.consumer.UpdateServiceCallResult(callRet); err != nil {
 					log.Printf("[errot] fail to UpdateServiceCallResult, err is %v", err)
@@ -137,9 +122,9 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := api.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	//consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
+	//consumer, err = polaris.NewConsumerAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)

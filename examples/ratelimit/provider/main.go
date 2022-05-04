@@ -28,7 +28,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -47,8 +47,8 @@ func initArgs() {
 
 // PolarisProvider .
 type PolarisProvider struct {
-	provider  api.ProviderAPI
-	limiter   api.LimitAPI
+	provider  polaris.ProviderAPI
+	limiter   polaris.LimitAPI
 	namespace string
 	service   string
 	host      string
@@ -69,7 +69,7 @@ func (svr *PolarisProvider) Run() {
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		quotaReq := api.NewQuotaRequest().(*model.QuotaRequestImpl)
+		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
 		quotaReq.SetLabels(convertHeaders(r.Header))
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)
@@ -111,7 +111,7 @@ func (svr *PolarisProvider) runWebServer() {
 
 func (svr *PolarisProvider) registerService() {
 	log.Printf("start to invoke register operation")
-	registerRequest := &api.InstanceRegisterRequest{}
+	registerRequest := &polaris.InstanceRegisterRequest{}
 	registerRequest.Service = service
 	registerRequest.Namespace = namespace
 	registerRequest.Host = svr.host
@@ -128,7 +128,7 @@ func runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGSEGV, syscall.SIGUSR1,
+		syscall.SIGSEGV,
 	}...)
 
 	for s := range ch {
@@ -144,15 +144,15 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	provider, err := api.NewProviderAPI()
+	provider, err := polaris.NewProviderAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	//provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
+	//provider, err = polaris.NewProviderAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
 
-	limit := api.NewLimitAPIByContext(provider.SDKContext())
+	limit := polaris.NewLimitAPIByContext(provider.SDKContext())
 
 	defer func() {
 		provider.Destroy()
