@@ -63,6 +63,16 @@ func (c *consumerAPI) WatchService(req *WatchServiceRequest) (*model.WatchServic
 	return c.rawAPI.WatchService((*api.WatchServiceRequest)(req))
 }
 
+// GetServicesByBusiness 根据业务同步获取批量服务
+func (c *consumerAPI) GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error) {
+	return c.rawAPI.GetServicesByBusiness((*api.GetServicesRequest)(req))
+}
+
+// InitCalleeService 初始化服务运行中需要的被调服务
+func (c *consumerAPI) InitCalleeService(req *InitCalleeServiceRequest) error {
+	return c.rawAPI.InitCalleeService((*api.InitCalleeServiceRequest)(req))
+}
+
 // Destroy 销毁API，销毁后无法再进行调用
 func (c *consumerAPI) Destroy() {
 	c.rawAPI.Destroy()

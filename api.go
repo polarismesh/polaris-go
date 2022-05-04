@@ -35,6 +35,10 @@ type ServiceCallResult api.ServiceCallResult
 
 type WatchServiceRequest api.WatchServiceRequest
 
+type GetServicesRequest api.GetServicesRequest
+
+type InitCalleeServiceRequest api.InitCalleeServiceRequest
+
 // ConsumerAPI 主调端API方法
 type ConsumerAPI interface {
 	api.SDKOwner
@@ -50,6 +54,10 @@ type ConsumerAPI interface {
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// WatchService 订阅服务消息
 	WatchService(req *WatchServiceRequest) (*model.WatchServiceResponse, error)
+	// GetServicesByBusiness 根据业务同步获取批量服务
+	GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error)
+	// InitCalleeService 初始化服务运行中需要的被调服务
+	InitCalleeService(req *InitCalleeServiceRequest) error
 	// Destroy 销毁API，销毁后无法再进行调用
 	Destroy()
 }
