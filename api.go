@@ -23,7 +23,6 @@ import (
 )
 
 // consumer API
-
 type GetOneInstanceRequest api.GetOneInstanceRequest
 
 type GetInstancesRequest api.GetInstancesRequest

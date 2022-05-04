@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (
@@ -74,26 +74,11 @@ func (svr *PolarisConsumer) runWebServer() {
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 			if err != nil {
 				delay := time.Now().Sub(start)
-				callRet, err := polaris.NewServiceCallResult(svr.consumer.SDKContext(), polaris.InstanceRequest{
-					ServiceKey: model.ServiceKey{
-						Namespace: namespace,
-						Service:   service,
-					},
-					InstanceID: instance.GetId(),
-					IP:         instance.GetHost(),
-					Port:       uint16(instance.GetPort()),
-				})
-				if err != nil {
-					log.Printf("[error] fail to NewServiceCallResult, err is %v", err)
-					rw.WriteHeader(http.StatusInternalServerError)
-					_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to NewServiceCallResult, err is %v", err)))
-					_, _ = rw.Write([]byte("\n"))
-					continue
-				}
-				errCode := int32(http.StatusInternalServerError)
-				callRet.RetCode = &errCode
-				callRet.Delay = &delay
-				callRet.RetStatus = polaris.RetFail
+				callRet := &polaris.ServiceCallResult{}
+				callRet.CalledInstance = instance
+				callRet.SetRetCode(int32(http.StatusInternalServerError))
+				callRet.SetDelay(delay)
+				callRet.SetRetStatus(api.RetFail)
 
 				if err := svr.consumer.UpdateServiceCallResult(callRet); err != nil {
 					log.Printf("[errot] fail to UpdateServiceCallResult, err is %v", err)
