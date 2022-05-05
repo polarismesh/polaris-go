@@ -226,11 +226,11 @@ func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	window.SetStatus(Deleted)
 	rs.flowAssistant.DelWindowCount()
 	// 旧有的窗口被删除了，那么进行一次上报
-	// rs.flowAssistant.engine.SyncReportStat(model.RateLimitStat, &RateLimitGauge{
-	// 	EmptyInstanceGauge: model.EmptyInstanceGauge{},
-	// 	Window:             window,
-	// 	Type:               WindowDeleted,
-	// })
+	rs.flowAssistant.engine.SyncReportStat(model.RateLimitStat, &RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Window:             window,
+		Type:               WindowDeleted,
+	})
 }
 
 // WindowContainer 窗口容器
@@ -623,21 +623,21 @@ func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitReque
 	if shapingResult.Code == model.QuotaResultLimited {
 		// 如果结果是拒绝了分配，那么进行一次上报
 		// TODO：检查是否上报了充足信息
-		// mode := r.Rule.GetType()
-		// var limitType LimitMode
-		// if mode == namingpb.Rule_GLOBAL {
-		// 	limitType = LimitGlobalMode
-		// } else {
-		// 	limitType = LimitLocalMode
-		// }
+		mode := r.Rule.GetType()
+		var limitType LimitMode
+		if mode == namingpb.Rule_GLOBAL {
+			limitType = LimitGlobalMode
+		} else {
+			limitType = LimitLocalMode
+		}
 
-		// gauge := &RateLimitGauge{
-		// 	EmptyInstanceGauge: model.EmptyInstanceGauge{},
-		// 	Window:             r,
-		// 	Type:               TrafficShapingLimited,
-		// 	LimitModeType:      limitType,
-		// }
-		// r.Engine().SyncReportStat(model.RateLimitStat, gauge)
+		gauge := &RateLimitGauge{
+			EmptyInstanceGauge: model.EmptyInstanceGauge{},
+			Window:             r,
+			Type:               TrafficShapingLimited,
+			LimitModeType:      limitType,
+		}
+		r.Engine().SyncReportStat(model.RateLimitStat, gauge)
 
 		resp := &model.QuotaResponse{
 			Code: model.QuotaResultLimited,

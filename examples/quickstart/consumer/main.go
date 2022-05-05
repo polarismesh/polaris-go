@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -41,7 +41,7 @@ func initArgs() {
 }
 
 type PolarisConsumer struct {
-	consumer  api.ConsumerAPI
+	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
 }
@@ -54,7 +54,7 @@ func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
 		// DiscoverEchoServer
-		getOneRequest := &api.GetOneInstanceRequest{}
+		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
@@ -79,22 +79,18 @@ func (svr *PolarisConsumer) runWebServer() {
 		}
 		delay := time.Now().Add(time.Duration(10 * time.Second)).Sub(start)
 
-		ret, err := api.NewServiceCallResult(svr.consumer.SDKContext(), api.InstanceRequest{
-			ServiceKey: model.ServiceKey{
-				Namespace: namespace,
-				Service:   service,
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             "/echo",
+				RetStatus:          model.RetSuccess,
 			},
-			InstanceID: instance.GetId(),
-			IP:         instance.GetHost(),
-			Port:       uint16(instance.GetPort()),
-		})
-		if err == nil {
-			ret.RetStatus = model.RetSuccess
-			ret.SetRetCode(int32(resp.StatusCode))
-			ret.Delay = &delay
-			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
-				log.Printf("do report service call result : %+v", err)
-			}
+		}
+		ret.SetDelay(delay)
+		ret.SetRetCode(int32(resp.StatusCode))
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
 		}
 
 		defer resp.Body.Close()
@@ -124,7 +120,7 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := api.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件
 	//consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
 

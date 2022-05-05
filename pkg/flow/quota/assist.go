@@ -318,15 +318,15 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 			Code: model.QuotaResultOk,
 			Info: RuleNotExists,
 		}
-		// gauge := &RateLimitGauge{
-		// 	EmptyInstanceGauge: model.EmptyInstanceGauge{},
-		// 	Window:             nil,
-		// 	Labels:             commonRequest.Labels,
-		// 	Namespace:          commonRequest.DstService.Namespace,
-		// 	Service:            commonRequest.DstService.Service,
-		// 	Type:               QuotaGranted,
-		// }
-		// f.engine.SyncReportStat(model.RateLimitStat, gauge)
+		gauge := &RateLimitGauge{
+			EmptyInstanceGauge: model.EmptyInstanceGauge{},
+			Window:             nil,
+			Labels:             commonRequest.Labels,
+			Namespace:          commonRequest.DstService.Namespace,
+			Service:            commonRequest.DstService.Service,
+			Type:               QuotaGranted,
+		}
+		f.engine.SyncReportStat(model.RateLimitStat, gauge)
 		return model.NewQuotaFuture(
 			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
 			model.WithQuotaFutureResp(resp),

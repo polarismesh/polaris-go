@@ -162,25 +162,25 @@ func getLimitMode(ruleType namingpb.Rule_Type, usedRemoteQuota bool) LimitMode {
 }
 
 func (r *RemoteAwareQpsBucket) monitorReportPass(duration uint32, usedRemoteQuota bool) {
-	// gauge := &RateLimitGauge{
-	// 	EmptyInstanceGauge: model.EmptyInstanceGauge{},
-	// 	Window:             r.window,
-	// 	Type:               QuotaGranted,
-	// 	Duration:           duration,
-	// 	LimitModeType:      getLimitMode(r.window.Rule.Type, usedRemoteQuota),
-	// }
-	// r.window.Engine().SyncReportStat(model.RateLimitStat, gauge)
+	gauge := &RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Window:             r.window,
+		Type:               QuotaGranted,
+		Duration:           duration,
+		LimitModeType:      getLimitMode(r.window.Rule.Type, usedRemoteQuota),
+	}
+	r.window.Engine().SyncReportStat(model.RateLimitStat, gauge)
 }
 
 func (r *RemoteAwareQpsBucket) monitorReportLimit(duration uint32, usedRemoteQuota bool) {
-	// gauge := &RateLimitGauge{
-	// 	EmptyInstanceGauge: model.EmptyInstanceGauge{},
-	// 	Window:             r.window,
-	// 	Type:               QuotaLimited,
-	// 	Duration:           duration,
-	// 	LimitModeType:      getLimitMode(r.window.Rule.Type, usedRemoteQuota),
-	// }
-	// r.window.Engine().SyncReportStat(model.RateLimitStat, gauge)
+	gauge := &RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Window:             r.window,
+		Type:               QuotaLimited,
+		Duration:           duration,
+		LimitModeType:      getLimitMode(r.window.Rule.Type, usedRemoteQuota),
+	}
+	r.window.Engine().SyncReportStat(model.RateLimitStat, gauge)
 }
 
 // Release 执行配额回收操作

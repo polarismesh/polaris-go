@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 )
 
 var (
@@ -52,18 +52,18 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := api.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPI()
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
 	defer consumer.Destroy()
 
 	// share one context with the consumerAPI
-	provider := api.NewProviderAPIByContext(consumer.SDKContext())
+	provider := polaris.NewProviderAPIByContext(consumer.SDKContext())
 
 	log.Printf("start to register instances, count %d", instanceCount)
 	for i := 0; i < instanceCount; i++ {
-		registerRequest := &api.InstanceRegisterRequest{}
+		registerRequest := &polaris.InstanceRegisterRequest{}
 		registerRequest.Service = service
 		registerRequest.Namespace = namespace
 		registerRequest.Host = host
@@ -89,7 +89,7 @@ func main() {
 	}()
 
 	log.Printf("start first time get all instance")
-	getAllRequest := &api.GetAllInstancesRequest{}
+	getAllRequest := &polaris.GetAllInstancesRequest{}
 	getAllRequest.Namespace = namespace
 	getAllRequest.Service = service
 	allInstResp, err := consumer.GetAllInstances(getAllRequest)

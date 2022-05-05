@@ -115,14 +115,24 @@ func (p *PrometheusHandler) registerMetrics() error {
 	return nil
 }
 
+// ReportStat 上报采集指标到 prometheus，这里只针对部分 model.InstanceGauge 的实现做处理
 func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal model.InstanceGauge) error {
 	switch metricsType {
 	case model.ServiceStat:
-		p.handleServiceGauge(metricsType, metricsVal.(*model.ServiceCallResult))
+		val, ok := metricsVal.(*model.ServiceCallResult)
+		if ok {
+			p.handleServiceGauge(metricsType, val)
+		}
 	case model.RateLimitStat:
-		p.handleRateLimitGauge(metricsType, metricsVal.(*model.RateLimitGauge))
+		val, ok := metricsVal.(*model.RateLimitGauge)
+		if ok {
+			p.handleRateLimitGauge(metricsType, val)
+		}
 	case model.CircuitBreakStat:
-		p.handleCircuitBreakGauge(metricsType, metricsVal.(*model.CircuitBreakGauge))
+		val, ok := metricsVal.(*model.CircuitBreakGauge)
+		if ok {
+			p.handleCircuitBreakGauge(metricsType, val)
+		}
 	}
 	return nil
 }
