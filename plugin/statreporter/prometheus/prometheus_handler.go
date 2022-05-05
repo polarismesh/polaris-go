@@ -39,6 +39,7 @@ type PrometheusHandler struct {
 	cfg     *Config
 	//
 	metricVecCaches map[string]prometheus.Collector
+	ln              net.Listener
 	bindIP          string
 	port            int
 }
@@ -70,7 +71,10 @@ func (p *PrometheusHandler) init(ctx *plugin.InitContext) error {
 		promeHttpHandler: promhttp.HandlerFor(p.registry, promhttp.HandlerOpts{}),
 		lock:             &sync.RWMutex{},
 	}
-	p.runInnerMetricsWebServer()
+
+	if ctx.Config.GetGlobal().GetStatReporter().IsEnable() {
+		p.runInnerMetricsWebServer()
+	}
 
 	return nil
 }
@@ -139,6 +143,7 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 
 // runInnerMetricsWebServer 启动用于 prometheus 主动拉取的 http-server，如果端口设置为负数，则不启用
 func (p *PrometheusHandler) runInnerMetricsWebServer() {
+
 	if p.port < 0 {
 		return
 	}
@@ -150,6 +155,7 @@ func (p *PrometheusHandler) runInnerMetricsWebServer() {
 		return
 	}
 
+	p.ln = ln
 	p.port = ln.Addr().(*net.TCPAddr).Port
 
 	go func() {
@@ -261,4 +267,13 @@ func (p *PrometheusHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitB
 		labels[label] = supplier(val)
 	}
 	return labels
+}
+
+func (p *PrometheusHandler) Close() error {
+	if p.ln != nil {
+		if err := p.ln.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

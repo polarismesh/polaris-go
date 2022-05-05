@@ -15,6 +15,36 @@ global:
     # 连接超时时间
     connectTimeout: 1s
     connectionIdleTimeout: 10s
+  statReporter:
+    #描述：是否将统计信息上报至monitor
+    #类型：bool
+    #默认值：true
+    enable: false
+    #描述：启用的统计上报插件类型
+    #类型：list
+    #范围：已经注册的统计上报插件的名字
+    #默认值：stat2Monitor(将信息上报至monitor服务)
+    chain:
+      - stat2Monitor
+      - serviceCache
+      - rateLimitRecord
+      - serviceRoute
+    #描述：统计上报插件配置
+    plugin:
+      stat2Monitor:
+        #描述:每次上报多长一段时间的统计信息
+        #类型:string
+        #格式:^\d+(ms|s|m|h)$
+        #范围:[1m:...]
+        metricsReportWindow: 1m
+        #描述:将一段时间内的统计信息分为多少个基本单元收集
+        #类型:int
+        #范围:[1:...]
+        #默认值:12
+        metricsNumBuckets: 12
+      serviceCache:
+        #描述：上报缓存信息的周期
+        reportInterval: 3m
 consumer:
   localCache:
     # 缓存类型

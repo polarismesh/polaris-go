@@ -105,6 +105,13 @@ func (g *PrometheusReporter) Destroy() error {
 	if err != nil {
 		return err
 	}
+
+	if g.handler != nil {
+		if err := g.handler.Close(); err != nil {
+			return err
+		}
+	}
+	
 	return nil
 }
 

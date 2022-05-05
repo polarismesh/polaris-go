@@ -20,6 +20,17 @@ global:
     connectTimeout: 10ms
   statReporter:
     enable: true
+    chain:
+      - stat2Monitor
+      - serviceCache
+      - rateLimitRecord
+      - serviceRoute
+    plugin:
+      stat2Monitor:
+        metricsReportWindow: 30s
+        metricsNumBuckets: 6
+      serviceCache:
+        reportInterval: 10s
 consumer:
   localCache:
     # 缓存类型
@@ -50,10 +61,10 @@ consumer:
     successCountAfterHalfOpen: 2
     # 熔断插件配置
     chain:
-    # 按照错误率进行熔断
-    - errorRate
-    # 按照连续请求错误进行熔断
-    - errorCount
+      # 按照错误率进行熔断
+      - errorRate
+      # 按照连续请求错误进行熔断
+      - errorCount
     plugin:
       errorRate:
         # 只有请求数达到某个阈值才执行熔断计算，默认10
