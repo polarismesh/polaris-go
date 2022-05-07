@@ -30,9 +30,10 @@ import (
 
 // ConfigurationImpl cl5全局配置
 type ConfigurationImpl struct {
-	Global   *GlobalConfigImpl   `yaml:"global" json:"global"`
-	Consumer *ConsumerConfigImpl `yaml:"consumer" json:"consumer"`
-	Provider *ProviderConfigImpl `yaml:"provider" json:"provider"`
+	Global   *GlobalConfigImpl     `yaml:"global" json:"global"`
+	Consumer *ConsumerConfigImpl   `yaml:"consumer" json:"consumer"`
+	Provider *ProviderConfigImpl   `yaml:"provider" json:"provider"`
+	Config   *ConfigFileConfigImpl `yaml:"config" json:"config"`
 }
 
 // GetGlobal cl5.global前缀开头的所有配置项
@@ -48,6 +49,11 @@ func (c *ConfigurationImpl) GetConsumer() ConsumerConfig {
 // GetProvider consumer前缀开头的所有配置项
 func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 	return c.Provider
+}
+
+// GetConfig config前缀开头的所有配置项
+func (c *ConfigurationImpl) GetConfigFile() ConfigFileConfig {
+	return c.Config
 }
 
 // GlobalConfigImpl 全局配置

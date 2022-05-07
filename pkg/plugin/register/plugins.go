@@ -21,6 +21,7 @@ import (
 	// 注册插件类型
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/alarmreporter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -36,6 +37,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcheck"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcount"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorrate"
+	_ "github.com/polarismesh/polaris-go/plugin/configconnector/polaris"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/http"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/tcp"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/hash"

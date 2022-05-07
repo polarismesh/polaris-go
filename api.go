@@ -105,3 +105,14 @@ type LimitAPI interface {
 func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
+
+//config
+
+type ConfigFile model.ConfigFile
+
+// ConfigAPI 配置文件的 API
+type ConfigAPI interface {
+	api.SDKOwner
+	// GetConfigFile 获取配置文件
+	GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+}

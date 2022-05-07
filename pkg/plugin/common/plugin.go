@@ -59,6 +59,8 @@ const (
 	TypeLocationProvider Type = 0x1012
 	// TypeReportHandler ReportClient 请求、响应处理器
 	TypeReportHandler Type = 0x1013
+	// TypeConfigConnector extend point of config file connector
+	TypeConfigConnector Type = 0x1014
 )
 
 var typeToPresent = map[Type]string{
@@ -76,6 +78,7 @@ var typeToPresent = map[Type]string{
 	TypeSubScribe:        "subScribe",
 	TypeLocationProvider: "locationProvider",
 	TypeReportHandler:    "reportHandler",
+	TypeConfigConnector:  "configConnector",
 }
 
 // ToString方法
@@ -243,4 +246,5 @@ var LoadedPluginTypes = []Type{
 	TypeSubScribe,
 	TypeLocationProvider,
 	TypeReportHandler,
+	TypeConfigConnector,
 }

@@ -84,7 +84,7 @@ func (s *ServerAddressList) getAndConnectServer(
 func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Instance, error) {
 	var targetAddress string
 	var instance model.Instance
-	if s.service.ClusterType == config.BuiltinCluster {
+	if s.service.ClusterType == config.BuiltinCluster || s.service.ClusterType == config.ConfigCluster {
 		serverCount := len(s.addresses)
 		targetAddress = s.addresses[s.curIndex%serverCount]
 		if s.curIndex == math.MaxInt32 {
@@ -243,6 +243,8 @@ type connectionManager struct {
 	cancel         context.CancelFunc
 	// 发现服务
 	discoverService model.ServiceKey
+	// 配置中心服务
+	configService model.ServiceKey
 	// 发现服务的事件集合，相同事件不去更新
 	discoverEventSet map[model.EventType]bool
 	// 并发更新锁
@@ -301,10 +303,44 @@ func NewConnectionManager(
 		manager.discoverService = builtInAddrList.service.ServiceKey
 		manager.ready = serviceReadyStatus
 	}
-
 	manager.ctx, manager.cancel = context.WithCancel(context.Background())
 	go manager.doSwitchRoutine()
 	return manager, nil
+}
+
+// NewConfigConnectionManager 创建配置中心连接管理器
+func NewConfigConnectionManager(cfg config.Configuration, valueCtx model.ValueContext) (ConnectionManager, error) {
+	configSwitchInterval := cfg.GetConfigFile().GetConfigConnectorConfig().GetServerSwitchInterval()
+	configConnectTimeout := cfg.GetConfigFile().GetConfigConnectorConfig().GetConnectTimeout()
+	configProtocol := cfg.GetConfigFile().GetConfigConnectorConfig().GetProtocol()
+	configManager := &connectionManager{
+		connectTimeout: configConnectTimeout,
+		switchInterval: configSwitchInterval,
+		serverServices: make(map[config.ClusterType]*ServerAddressList),
+		valueCtx:       valueCtx,
+		protocol:       configProtocol,
+	}
+
+	configAddresses := cfg.GetConfigFile().GetConfigConnectorConfig().GetAddresses()
+	configAddrList := &ServerAddressList{
+		service: config.ClusterService{
+			ServiceKey:  model.ServiceKey{Namespace: config.ServerNamespace, Service: defaultService},
+			ClusterType: config.ConfigCluster,
+		},
+		useDefault: false,
+		manager:    configManager,
+		addresses:  configAddresses,
+		curIndex:   rand.Intn(len(configAddresses)),
+	}
+	configManager.serverServices[config.ConfigCluster] = configAddrList
+
+	if len(configManager.configService.Service) == 0 {
+		configManager.configService = configAddrList.service.ServiceKey
+		configManager.ready = serviceReadyStatus
+	}
+
+	configManager.ctx, configManager.cancel = context.WithCancel(context.Background())
+	return configManager, nil
 }
 
 // SetConnCreator 设置当前协议的连接创建器
