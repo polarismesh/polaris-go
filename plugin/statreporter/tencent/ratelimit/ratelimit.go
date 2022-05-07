@@ -37,8 +37,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/util"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 const (
@@ -141,7 +141,10 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	if t != model.RateLimitStat {
 		return nil
 	}
-	gauge := info.(*quota.RateLimitGauge)
+	gauge, ok := info.(*quota.RateLimitGauge)
+	if !ok {
+		return nil
+	}
 
 	window := gauge.Window
 
@@ -189,6 +192,12 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	}
 
 	return nil
+}
+
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-ratelimit-momitor",
+	}
 }
 
 // 定时上报限流记录

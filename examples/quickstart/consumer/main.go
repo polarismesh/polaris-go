@@ -23,8 +23,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -36,6 +38,7 @@ var (
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
+	flag.Int64Var(&port, "port", 18080, "port")
 }
 
 type PolarisConsumer struct {
@@ -67,12 +70,28 @@ func (svr *PolarisConsumer) runWebServer() {
 			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
 		}
 
+		start := time.Now()
 		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 		if err != nil {
 			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
 			return
+		}
+		delay := time.Now().Add(time.Duration(10 * time.Second)).Sub(start)
+
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             "/echo",
+				RetStatus:          model.RetSuccess,
+			},
+		}
+		ret.SetDelay(delay)
+		ret.SetRetCode(int32(resp.StatusCode))
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
 		}
 
 		defer resp.Body.Close()
@@ -88,7 +107,9 @@ func (svr *PolarisConsumer) runWebServer() {
 		_, _ = rw.Write(data)
 	})
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", 18080), nil); err != nil {
+	log.Printf("start run web server, port : %d", port)
+
+	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}
 }

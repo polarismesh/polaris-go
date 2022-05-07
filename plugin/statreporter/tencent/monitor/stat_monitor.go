@@ -44,8 +44,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/version"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/util"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 const (
@@ -209,6 +209,12 @@ func (s *Stat2MonitorReporter) ReportStat(t model.MetricType, info model.Instanc
 		return err
 	}
 	return nil
+}
+
+func (s *Stat2MonitorReporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-momitor",
+	}
 }
 
 // 处理统计数据，校验正确后添加指标到window

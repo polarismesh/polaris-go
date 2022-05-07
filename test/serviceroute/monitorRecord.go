@@ -26,8 +26,8 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
 )
 
 // 路由调用记录的key

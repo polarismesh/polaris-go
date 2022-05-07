@@ -29,8 +29,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/util"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 const (

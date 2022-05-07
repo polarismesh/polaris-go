@@ -15,41 +15,41 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package serviceinfo
+package serviceroute
 
 import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/basereporter"
 )
+
+// Config 插件配置
+type Config struct {
+	ReportInterval *time.Duration `yaml:"reportInterval" json:"reportInterval"`
+}
 
 const (
-	defaultReportInterval = 3 * time.Minute
+	defaultReportInterval = 5 * time.Minute
 )
-
-// Config 上报缓存信息插件的配置
-type Config struct {
-	ReportInterval *time.Duration `yaml:"reportInterval"`
-}
 
 // Verify 校验配置
 func (c *Config) Verify() error {
 	if c.ReportInterval == nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, nil,
-			"reportInterval of statReporter serviceCache not configured")
+			"reportInterval of statReporter serviceRoute not configured")
 	}
 	if *c.ReportInterval < basereporter.MinReportInterval {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, nil,
-			"invalid reportInterval %v for statReporter serviceCache, which must be greater than or equal to %v",
+			"invalid reportInterval %v for statReporter serviceRoute, which must be greater than or equal to %v",
 			*c.ReportInterval, basereporter.MinReportInterval)
 	}
 	return nil
 }
 
-// SetDefault 设置默认配置值
+// SetDefault 设置默认值
 func (c *Config) SetDefault() {
-	if nil == c.ReportInterval {
+	if c.ReportInterval == nil {
 		c.ReportInterval = model.ToDurationPtr(defaultReportInterval)
 	}
 }

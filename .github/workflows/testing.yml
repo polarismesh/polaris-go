@@ -35,6 +35,6 @@ jobs:
       - name: run tests
         run: |
           cd ./test
-          go test -timeout=50m
+          go test -timeout=120m
 
       # TODO: Examine coverage

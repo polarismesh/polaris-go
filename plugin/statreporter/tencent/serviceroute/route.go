@@ -33,9 +33,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/basereporter"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/util"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 // Reporter .
@@ -256,6 +256,12 @@ func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 	stat.init()
 	lv.SetServiceDataByPluginId(s.ID(), stat)
 	return nil
+}
+
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-router-momitor",
+	}
 }
 
 func init() {

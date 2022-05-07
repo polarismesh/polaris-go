@@ -38,8 +38,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/pb/util"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/util"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 const (
@@ -147,6 +147,7 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	if t != model.CircuitBreakStat {
 		return nil
 	}
+
 	err := info.Validate()
 	if err != nil {
 		return err
@@ -158,6 +159,12 @@ func (s *Reporter) ReportStat(t model.MetricType, info model.InstanceGauge) erro
 	}
 	s.addCircuitBreakNode(cbNode, inst.GetInstanceLocalValue())
 	return nil
+}
+
+func (s *Reporter) Info() model.StatInfo {
+	return model.StatInfo{
+		Target: "polaris-service-momitor",
+	}
 }
 
 // 服务实例信息变更情况

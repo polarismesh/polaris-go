@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/basereporter"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/basereporter"
 )
 
 const (

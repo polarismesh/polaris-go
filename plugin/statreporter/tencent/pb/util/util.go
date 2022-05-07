@@ -19,7 +19,7 @@ package util
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/model"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 )
 
 // GetPBSDkToken 将model sdktoken 转化为 pb形式的
