@@ -68,7 +68,9 @@ func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 	reportChain, err := data.GetReportChain(nil, sdkCtx.GetPlugins())
 	c.Assert(err, check.IsNil)
 	c.Assert(reportChain, check.NotNil)
-	c.Assert(len(reportChain.Chain), check.Equals, 1)
+
+	// 总共有3个 ReportHandler 拦截器
+	c.Assert(len(reportChain.Chain), check.Equals, 3)
 
 	req := &model.ReportClientRequest{}
 	resp := &model.ReportClientResponse{}

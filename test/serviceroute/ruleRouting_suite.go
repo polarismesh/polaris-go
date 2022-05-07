@@ -30,7 +30,7 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 

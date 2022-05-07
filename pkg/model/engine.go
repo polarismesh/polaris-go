@@ -117,4 +117,6 @@ type Engine interface {
 	GetContext() ValueContext
 	// 所需的被调初始化
 	InitCalleeService(req *InitCalleeServiceRequest) error
+	// SyncGetConfigFile 同步获取配置文件
+	SyncGetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
 }

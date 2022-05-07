@@ -85,8 +85,8 @@ const (
 	MinHealthCheckInterval = 500 * time.Millisecond
 	// DefaultHealthCheckTimeout 默认健康探测超时时间
 	DefaultHealthCheckTimeout = 100 * time.Millisecond
-	// 客户端信息上报周期，默认10分钟
-	DefaultReportClientIntervalDuration = 10 * time.Minute
+	// 客户端信息上报周期，默认2分钟
+	DefaultReportClientIntervalDuration = 2 * time.Minute
 	// 最大重定向次数，默认1
 	MaxRedirectTimes = 1
 	// sdk配置上报周期
@@ -129,6 +129,14 @@ const (
 	DefaultMapKVTupleSeparator = "|"
 	// 默认实例地理位置提供者插件名称
 	DefaultLocationProvider = ""
+	// 默认类型转化缓存的key数量
+	DefaultPropertiesValueCacheSize = 100
+	// 默认类型转化缓存的过期时间，1分钟
+	DefaultPropertiesValueExpireTime = 60000
+	// 默认连接器类型
+	DefaultConnectorType = "polaris"
+	// 默认连接器类型
+	DefaultConfigConnectorAddresses = "127.0.0.1:8093"
 )
 
 // 默认埋点server的端口，与上面的IP一一对应
@@ -201,6 +209,8 @@ const (
 	MaxRateLimitWindowSize = 20000
 	// 默认超时清理时延
 	DefaultRateLimitPurgeInterval = 1 * time.Minute
+	// 默认的注册中心连接器插件
+	DefaultConfigConnector string = "polaris"
 )
 
 // 默认的就近路由配置
@@ -236,6 +246,7 @@ type ClusterType string
 const (
 	BuiltinCluster     ClusterType = "builtin"
 	DiscoverCluster    ClusterType = "discover"
+	ConfigCluster      ClusterType = "config"
 	HealthCheckCluster ClusterType = "healthCheck"
 	MonitorCluster     ClusterType = "monitor"
 )
@@ -246,6 +257,7 @@ const (
 	ServerDiscoverService  = "polaris.discover"
 	ServerHeartBeatService = "polaris.healthcheck"
 	ServerMonitorService   = "polaris.monitor"
+	ServerConfigService    = "polaris.config"
 )
 
 // server集群服务信息
@@ -310,6 +322,7 @@ var (
 	DefaultPolarisServicesRouterChain  = []string{DefaultServiceRouterDstMeta}
 	DefaultServerServiceToLoadBalancer = map[ClusterType]string{
 		DiscoverCluster:    DefaultLoadBalancerWR,
+		ConfigCluster:      DefaultLoadBalancerWR,
 		HealthCheckCluster: DefaultLoadBalancerMaglev,
 		MonitorCluster:     DefaultLoadBalancerMaglev,
 	}
@@ -483,6 +496,8 @@ func (c *ConfigurationImpl) Init() {
 	c.Consumer.Init()
 	c.Provider = &ProviderConfigImpl{}
 	c.Provider.Init()
+	c.Config = &ConfigFileConfigImpl{}
+	c.Config.Init()
 }
 
 // 检验configuration配置
@@ -501,6 +516,9 @@ func (c *ConfigurationImpl) Verify() error {
 	if err = c.Provider.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = c.Config.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -509,6 +527,7 @@ func (c *ConfigurationImpl) SetDefault() {
 	c.Global.SetDefault()
 	c.Consumer.SetDefault()
 	c.Provider.SetDefault()
+	c.Config.SetDefault()
 }
 
 // systemConfig init

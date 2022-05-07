@@ -32,9 +32,9 @@ import (
 var (
 	namespace     string
 	service       string
-	port          int64
 	selfNamespace string
 	selfService   string
+	port          int64
 )
 
 func initArgs() {
@@ -42,6 +42,7 @@ func initArgs() {
 	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
+	flag.Int64Var(&port, "port", 18080, "port")
 }
 
 type PolarisConsumer struct {
@@ -98,7 +99,9 @@ func (svr *PolarisConsumer) runWebServer() {
 		_, _ = rw.Write(data)
 	})
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", 18080), nil); err != nil {
+	log.Printf("start run web server, port : %d", port)
+
+	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}
 }

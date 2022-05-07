@@ -86,7 +86,9 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	configuration.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	var routinesCount int
 	var preCreateRoutinesNum int
-	routinesCount, _ = parseRoutines(getAllStack())
+	curStack := getAllStack()
+	c.Log("preCreateRoutinesNum\n", curStack)
+	routinesCount, _ = parseRoutines(curStack)
 	preCreateRoutinesNum = routinesCount
 	log.Printf("preCreateRoutinesNum %v", preCreateRoutinesNum)
 	consumer, err := api.NewConsumerAPIByConfig(configuration)
@@ -95,6 +97,8 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	consumer.Destroy()
 	time.Sleep(5 * time.Second)
 	var lumberjackCount int
+	curStack = getAllStack()
+	c.Log("afterDestroyRoutinesNum\n", curStack)
 	routinesCount, lumberjackCount = parseRoutines(getAllStack())
 	afterDestroyRoutinesNum := routinesCount
 	log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)

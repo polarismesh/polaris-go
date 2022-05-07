@@ -116,6 +116,12 @@ func (r *ReportClientCallBack) Process(
 		log.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
 		return model.TERMINATE
 	}
+
+	for i := range r.reportChain.Chain {
+		handler := r.reportChain.Chain[i]
+		handler.HandleRequest(reportClientReq)
+	}
+
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)

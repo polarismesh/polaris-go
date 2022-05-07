@@ -72,6 +72,19 @@ type ProviderConfig interface {
 	GetRateLimit() RateLimitConfig
 }
 
+// ConfigFileConfig 配置中心的配置
+type ConfigFileConfig interface {
+	BaseConfig
+	// IsEnable 是否启用配置中心
+	IsEnable() bool
+	// GetConfigConnectorConfig 配置文件连接器
+	GetConfigConnectorConfig() ConfigConnectorConfig
+	// GetPropertiesValueCacheSize 值缓存的最大数量
+	GetPropertiesValueCacheSize() int32
+	// GetPropertiesValueExpireTime 缓存的过期时间，默认为 60s
+	GetPropertiesValueExpireTime() int64
+}
+
 // RateLimitConfig 限流相关配置
 type RateLimitConfig interface {
 	BaseConfig
@@ -407,6 +420,8 @@ type Configuration interface {
 	GetConsumer() ConsumerConfig
 	// GetProvider provider前缀开头的所有配置项
 	GetProvider() ProviderConfig
+	// GetConfigFile config前缀开头的所有配置项
+	GetConfigFile() ConfigFileConfig
 }
 
 // When when to active health check
@@ -464,4 +479,12 @@ type ServiceSpecificConfig interface {
 	GetServiceCircuitBreaker() CircuitBreakerConfig
 
 	GetServiceRouter() ServiceRouterConfig
+}
+
+// ConfigConnectorConfig 配置中心连接相关的配置
+type ConfigConnectorConfig interface {
+	ServerConnectorConfig
+
+	// GetConnectorType 后端服务器类型，默认是 polaris
+	GetConnectorType() string
 }

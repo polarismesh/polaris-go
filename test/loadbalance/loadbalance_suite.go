@@ -37,7 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/pb/v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )

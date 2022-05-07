@@ -28,6 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/test/loadbalance"
 	"github.com/polarismesh/polaris-go/test/observability"
 	"github.com/polarismesh/polaris-go/test/ratelimit"
+	"github.com/polarismesh/polaris-go/test/reporthandler"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
 	"github.com/polarismesh/polaris-go/test/subscribe"
@@ -95,7 +96,7 @@ func init() {
 	// 基础本地限流用例测试
 	Suite(&ratelimit.LocalNormalTestingSuite{})
 	// ReportClient相关测试用例
-	//Suite(&reporthandler.ReporthandlerTestingSuite{})
+	Suite(&reporthandler.ReporthandlerTestingSuite{})
 
 	// 基础远程限流用例测试
 	// Suite(&ratelimit.RemoteNormalTestingSuite{})

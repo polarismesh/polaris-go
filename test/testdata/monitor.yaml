@@ -16,6 +16,11 @@ global:
     plugin: {}
   statReporter:
     enable: true
+    chain:
+      - stat2Monitor
+      - serviceCache
+      - rateLimitRecord
+      - serviceRoute
     plugin:
       stat2Monitor:
         metricsReportWindow: 30s

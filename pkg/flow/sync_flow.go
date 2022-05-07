@@ -632,3 +632,8 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 	reportReq.CallResult.SetSuccess(costTime)
 	return nil
 }
+
+// SyncGetConfigFile 同步获取配置文件
+func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+	return e.configFileService.GetConfigFile(namespace, fileGroup, fileName)
+}
