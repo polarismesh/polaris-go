@@ -38,6 +38,14 @@ func newConfigFileAPIByConfig(cfg config.Configuration) (ConfigFileAPI, error) {
 	return &configFileAPI{context}, nil
 }
 
+func newConfigFileAPIByFile(path string) (ConfigFileAPI, error) {
+	context, err := InitContextByFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &configFileAPI{context}, nil
+}
+
 func newConfigFileAPIBySDKContext(context SDKContext) ConfigFileAPI {
 	return &configFileAPI{
 		context: context,

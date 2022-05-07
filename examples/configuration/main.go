@@ -19,12 +19,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 func main() {
-	configFileAPI, err := api.NewConfigFileAPI()
+	configAPI, err := polaris.NewConfigAPI()
 
 	if err != nil {
 		fmt.Println("fail to start example.", err)
@@ -36,7 +36,7 @@ func main() {
 	fileGroup := "polaris-config-example"
 	fileName := "example.yaml"
 
-	configFile, err := configFileAPI.GetConfigFile(namespace, fileGroup, fileName)
+	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
 	if err != nil {
 		fmt.Println("fail to get config.", err)
 		return

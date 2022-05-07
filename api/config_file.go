@@ -30,7 +30,9 @@ var (
 	// NewConfigFileAPIBySDKContext 通过 SDKContext 创建 ConfigFileAPI
 	NewConfigFileAPIBySDKContext = newConfigFileAPIBySDKContext
 	// NewConfigFileAPI 通过 polaris.yaml 创建 ConfigFileAPI
-	NewConfigFileAPI         = newConfigFileAPI
+	NewConfigFileAPI = newConfigFileAPI
 	// NewConfigFileAPIByConfig 通过 Configuration 创建 ConfigFileAPI
 	NewConfigFileAPIByConfig = newConfigFileAPIByConfig
+	// NewConfigFileAPIByFile 通过配置文件创建 ConfigFileAPI
+	NewConfigFileAPIByFile = newConfigFileAPIByFile
 )
