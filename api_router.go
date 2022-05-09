@@ -24,7 +24,7 @@ import (
 )
 
 type routerAPI struct {
-	context api.SDKContext
+	sdkCtx api.SDKContext
 }
 
 // process routers to filter instances
@@ -35,7 +35,7 @@ func (r *routerAPI) ProcessRouters(request *ProcessRoutersRequest) (*model.Insta
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	return r.context.GetEngine().ProcessRouters(&request.ProcessRoutersRequest)
+	return r.sdkCtx.GetEngine().ProcessRouters(&request.ProcessRoutersRequest)
 }
 
 // process load balancer to get the target instances
@@ -46,12 +46,12 @@ func (r *routerAPI) ProcessLoadBalance(request *ProcessLoadBalanceRequest) (*mod
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	return r.context.GetEngine().ProcessLoadBalance(&request.ProcessLoadBalanceRequest)
+	return r.sdkCtx.GetEngine().ProcessLoadBalance(&request.ProcessLoadBalanceRequest)
 }
 
 // SDKContext 获取SDK上下文
 func (r *routerAPI) SDKContext() api.SDKContext {
-	return r.context
+	return r.sdkCtx
 }
 
 // NewRouterAPI 通过以默认域名为埋点server的默认配置创建RouterAPI
