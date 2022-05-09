@@ -24,35 +24,28 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
-
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/polarismesh/polaris-go/pkg/model/pb"
-
-	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-
 	"github.com/polarismesh/polaris-go/pkg/clock"
-
-	configpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-
 	"github.com/polarismesh/polaris-go/pkg/config"
-
 	"github.com/polarismesh/polaris-go/pkg/log"
-
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
+	configpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 )
 
 const (
-	// 接收线程获取连接的间隔
+	// 接收线程获取连接的间隔.
 	receiveConnInterval = 1 * time.Second
 )
 
-// Connector 使用GRPC协议对接
+// Connector 使用GRPC协议对接.
 type Connector struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -65,17 +58,17 @@ type Connector struct {
 	hasPrintedReady uint32
 }
 
-// Type 插件类型
+// Type 插件类型.
 func (c *Connector) Type() common.Type {
 	return common.TypeConfigConnector
 }
 
-// Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一.
 func (c *Connector) Name() string {
 	return "polaris"
 }
 
-// Init 初始化插件
+// Init 初始化插件.
 func (c *Connector) Init(ctx *plugin.InitContext) error {
 	c.RunContext = common.NewRunContext()
 	c.PluginBase = plugin.NewPluginBase(ctx)
@@ -86,9 +79,8 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 	connManager, err := network.NewConfigConnectionManager(ctx.Config, ctx.ValueCtx)
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create config connectionManager")
-	} else {
-		c.connManager = connManager
 	}
+	c.connManager = connManager
 	c.connectionIdleTimeout = ctx.Config.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	c.valueCtx = ctx.ValueCtx
 	protocol := ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetProtocol()
@@ -99,14 +91,14 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// Destroy 销毁插件，可用于释放资源
-func (g *Connector) Destroy() error {
-	g.RunContext.Destroy()
-	g.connManager.Destroy()
+// Destroy 销毁插件，可用于释放资源.
+func (c *Connector) Destroy() error {
+	c.RunContext.Destroy()
+	c.connManager.Destroy()
 	return nil
 }
 
-// GetConfigFile Get config file
+// GetConfigFile Get config file.
 func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
 	var err error
 	if err = c.waitDiscoverReady(); err != nil {
@@ -138,7 +130,7 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	return c.handleResponse(info.String(), reqID, opKey, pbResp, err, conn, startTime)
 }
 
-// WatchConfigFiles Watch config files
+// WatchConfigFiles Watch config files.
 func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
 	var err error
 	if err = c.waitDiscoverReady(); err != nil {
@@ -175,7 +167,7 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 	return c.handleResponse(request.String(), reqID, opKey, pbResp, err, conn, startTime)
 }
 
-// IsEnable .插件开关
+// IsEnable .插件开关.
 func (c *Connector) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -183,7 +175,7 @@ func (c *Connector) IsEnable(cfg config.Configuration) bool {
 	return true
 }
 
-// 等待discover就绪
+// 等待discover就绪.
 func (c *Connector) waitDiscoverReady() error {
 	ctx, cancel := context.WithTimeout(context.Background(), receiveConnInterval/2)
 	defer cancel()
@@ -207,7 +199,8 @@ func (c *Connector) waitDiscoverReady() error {
 }
 
 func (c *Connector) handleResponse(request string, reqID string, opKey string, response *configpb.ConfigClientResponse,
-	err error, conn *network.Connection, startTime time.Time) (*configconnector.ConfigFileResponse, error) {
+	err error, conn *network.Connection, startTime time.Time,
+) (*configconnector.ConfigFileResponse, error) {
 	endTime := clock.GetClock().Now()
 	if err != nil {
 		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
@@ -221,7 +214,7 @@ func (c *Connector) handleResponse(request string, reqID string, opKey string, r
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(response.GetCode().GetValue())
 	code := response.GetCode().GetValue()
-	//预期code，正常响应
+	// 预期code，正常响应
 	if code == configpb.ExecuteSuccess || code == configpb.NotFoundResource || code == configpb.DataNoChange {
 		c.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 		return &configconnector.ConfigFileResponse{
@@ -229,14 +222,13 @@ func (c *Connector) handleResponse(request string, reqID string, opKey string, r
 			Message:    response.GetInfo().GetValue(),
 			ConfigFile: transferFromClientConfigFileInfo(response.GetConfigFile()),
 		}, nil
-	} else {
-		// 当server发生了内部错误时，上报调用服务失败
-		errMsg := fmt.Sprintf(
-			"fail to %s, request %s, server code %d, reason %s, server %s", opKey,
-			request, response.GetCode().GetValue(), response.GetInfo().GetValue(), conn.ConnID)
-		c.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
-		return nil, model.NewSDKError(model.ErrCodeServerException, nil, errMsg)
 	}
+	// 当server发生了内部错误时，上报调用服务失败
+	errMsg := fmt.Sprintf(
+		"fail to %s, request %s, server code %d, reason %s, server %s", opKey,
+		request, response.GetCode().GetValue(), response.GetInfo().GetValue(), conn.ConnID)
+	c.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
+	return nil, model.NewSDKError(model.ErrCodeServerException, nil, errMsg)
 }
 
 func transferToClientConfigFileInfo(configFile *configconnector.ConfigFile) *configpb.ClientConfigFileInfo {
@@ -259,7 +251,7 @@ func transferFromClientConfigFileInfo(configFileInfo *configpb.ClientConfigFileI
 	}
 }
 
-// init 注册插件信息
+// init 注册插件信息.
 func init() {
 	plugin.RegisterConfigurablePlugin(&Connector{}, &networkConfig{})
 }

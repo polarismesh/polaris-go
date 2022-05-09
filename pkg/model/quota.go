@@ -26,7 +26,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-// QuotaRequestImpl 配额获取的请求
+// QuotaRequestImpl 配额获取的请求.
 type QuotaRequestImpl struct {
 	// 必选，命名空间
 	namespace string
@@ -43,67 +43,67 @@ type QuotaRequestImpl struct {
 	RetryCount *int
 }
 
-// GetService 获取服务名
+// GetService 获取服务名.
 func (q *QuotaRequestImpl) GetService() string {
 	return q.service
 }
 
-// SetService 设置服务名称
+// SetService 设置服务名称.
 func (q *QuotaRequestImpl) SetService(svc string) {
 	q.service = svc
 }
 
-// GetNamespace 获取命名空间
+// GetNamespace 获取命名空间.
 func (q *QuotaRequestImpl) GetNamespace() string {
 	return q.namespace
 }
 
-// SetNamespace 设置命名空间
+// SetNamespace 设置命名空间.
 func (q *QuotaRequestImpl) SetNamespace(namespace string) {
 	q.namespace = namespace
 }
 
-// GetCluster 获取集群
+// GetCluster 获取集群.
 func (q *QuotaRequestImpl) GetCluster() string {
 	return q.cluster
 }
 
-// SetCluster 设置集群
+// SetCluster 设置集群.
 func (q *QuotaRequestImpl) SetCluster(cluster string) {
 	q.cluster = cluster
 }
 
-// SetLabels 设置业务标签
+// SetLabels 设置业务标签.
 func (q *QuotaRequestImpl) SetLabels(labels map[string]string) {
 	q.labels = labels
 }
 
-// GetLabels 获取业务标签
+// GetLabels 获取业务标签.
 func (q *QuotaRequestImpl) GetLabels() map[string]string {
 	return q.labels
 }
 
-// SetTimeout 设置单次查询超时时间
+// SetTimeout 设置单次查询超时时间.
 func (q *QuotaRequestImpl) SetTimeout(timeout time.Duration) {
 	q.Timeout = &timeout
 }
 
-// SetRetryCount 设置重试次数
+// SetRetryCount 设置重试次数.
 func (q *QuotaRequestImpl) SetRetryCount(retryCount int) {
 	q.RetryCount = &retryCount
 }
 
-// GetTimeoutPtr 获取超时值指针
+// GetTimeoutPtr 获取超时值指针.
 func (q *QuotaRequestImpl) GetTimeoutPtr() *time.Duration {
 	return q.Timeout
 }
 
-// GetRetryCountPtr 获取重试次数指针
+// GetRetryCountPtr 获取重试次数指针.
 func (q *QuotaRequestImpl) GetRetryCountPtr() *int {
 	return q.RetryCount
 }
 
-// Validate 校验
+// Validate 校验.
 func (q *QuotaRequestImpl) Validate() error {
 	if nil == q {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "QuotaRequestImpl can not be nil")
@@ -118,15 +118,17 @@ func (q *QuotaRequestImpl) Validate() error {
 	return errs
 }
 
-// QuotaResultCode 应答码
+// QuotaResultCode 应答码.
 type QuotaResultCode int
 
 const (
-	QuotaResultOk      QuotaResultCode = 0
+	// QuotaResultOk 应答码：成功.
+	QuotaResultOk QuotaResultCode = 0
+	// QuotaResultLimited 应答码：限制.
 	QuotaResultLimited QuotaResultCode = -1
 )
 
-// QuotaResponse 配额查询应答
+// QuotaResponse 配额查询应答.
 type QuotaResponse struct {
 	// 配额分配的返回码
 	Code QuotaResultCode
@@ -134,28 +136,31 @@ type QuotaResponse struct {
 	Info string
 }
 
-// QuotaAllocator 配额分配器，执行配额分配及回收
+// QuotaAllocator 配额分配器，执行配额分配及回收.
 type QuotaAllocator interface {
-	// 执行配额分配操作
+	// Allocate 执行配额分配操作
 	Allocate() *QuotaResponse
-	// 执行配额回收操作
+	// Release 执行配额回收操作
 	Release()
 }
 
 type quotaFutureOption func(f *QuotaFutureImpl)
 
+// WithQuotaFutureReq .
 func WithQuotaFutureReq(req *QuotaRequestImpl) quotaFutureOption {
 	return func(f *QuotaFutureImpl) {
 		f.req = req
 	}
 }
 
+// WithQuotaFutureResp .Response.
 func WithQuotaFutureResp(resp *QuotaResponse) quotaFutureOption {
 	return func(f *QuotaFutureImpl) {
 		f.resp = resp
 	}
 }
 
+// WithQuotaFutureDeadline .deadline.
 func WithQuotaFutureDeadline(deadline time.Time) quotaFutureOption {
 	return func(f *QuotaFutureImpl) {
 		var cancel context.CancelFunc
@@ -164,19 +169,21 @@ func WithQuotaFutureDeadline(deadline time.Time) quotaFutureOption {
 	}
 }
 
+// WithQuotaFutureQuotaAllocator .quotaAllocator.
 func WithQuotaFutureQuotaAllocator(allocator QuotaAllocator) quotaFutureOption {
 	return func(f *QuotaFutureImpl) {
 		f.allocator = allocator
 	}
 }
 
+// WithQuotaFutureHooks .hooks.
 func WithQuotaFutureHooks(hooks ...finishHook) quotaFutureOption {
 	return func(f *QuotaFutureImpl) {
 		f.hooks = hooks
 	}
 }
 
-// NewQuotaFuture 创建分配future 可以直接传入
+// NewQuotaFuture 创建分配future 可以直接传入.
 func NewQuotaFuture(options ...quotaFutureOption) *QuotaFutureImpl {
 	future := &QuotaFutureImpl{}
 
@@ -197,7 +204,7 @@ func NewQuotaFuture(options ...quotaFutureOption) *QuotaFutureImpl {
 
 type finishHook func(req *QuotaRequestImpl, res *QuotaResponse)
 
-// QuotaFutureImpl 异步获取配额的future
+// QuotaFutureImpl 异步获取配额的future.
 type QuotaFutureImpl struct {
 	mutex       sync.Mutex
 	req         *QuotaRequestImpl
@@ -209,12 +216,12 @@ type QuotaFutureImpl struct {
 	hooks       []finishHook
 }
 
-// Done 分配是否结束
+// Done 分配是否结束.
 func (q *QuotaFutureImpl) Done() <-chan struct{} {
 	return q.deadlineCtx.Done()
 }
 
-// Get 获取分配结果
+// Get 获取分配结果.
 func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	if nil == q {
 		return nil
@@ -242,7 +249,7 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	return q.resp
 }
 
-// Release 释放资源，仅用于并发数限流的场景
+// Release 释放资源，仅用于并发数限流的场景.
 func (q *QuotaFutureImpl) Release() {
 	if q.released {
 		return
@@ -257,13 +264,18 @@ func (q *QuotaFutureImpl) Release() {
 }
 
 const (
-	RateLimitLocal  = "local"
+	// RateLimitLocal 在本地限流.
+	RateLimitLocal = "local"
+	// RateLimitGlobal 在全局限流.
 	RateLimitGlobal = "global"
 )
 
+// ConfigMode 配置模式.
 type ConfigMode int
 
 const (
-	ConfigQuotaLocalMode  ConfigMode = 0
+	// ConfigQuotaLocalMode 在本地配置.
+	ConfigQuotaLocalMode ConfigMode = 0
+	// ConfigQuotaGlobalMode 在全局配置.
 	ConfigQuotaGlobalMode ConfigMode = 1
 )

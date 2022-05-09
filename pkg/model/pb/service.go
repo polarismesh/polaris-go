@@ -33,13 +33,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// SvcPluginValues 服务级插件值
+// SvcPluginValues 服务级插件值.
 type SvcPluginValues struct {
 	Routers      *servicerouter.RouterChain
 	Loadbalancer loadbalancer.LoadBalancer
 }
 
-// ServiceInstancesInProto 通用的应答
+// ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
 	service         *namingpb.Service
 	instances       []model.Instance
@@ -54,27 +54,28 @@ type ServiceInstancesInProto struct {
 	CacheLoaded     int32
 }
 
-// InstSlice instSlice，[]*namingpb.Instance的别名
+// InstSlice instSlice，[]*namingpb.Instance的别名.
 type InstSlice []*namingpb.Instance
 
-// Len instSlice的长度
+// Len instSlice的长度.
 func (is InstSlice) Len() int {
 	return len(is)
 }
 
-// Swap instSlice交换元素方法
+// Swap instSlice交换元素方法.
 func (is InstSlice) Swap(i, j int) {
 	is[i], is[j] = is[j], is[i]
 }
 
-// Less instSlice元素比较方法
+// Less instSlice元素比较方法.
 func (is InstSlice) Less(i, j int) bool {
 	return is[i].Id.GetValue() < is[j].Id.GetValue()
 }
 
-// NewServiceInstancesInProto ServiceInstancesResponse的构造函数
+// NewServiceInstancesInProto ServiceInstancesResponse的构造函数.
 func NewServiceInstancesInProto(resp *namingpb.DiscoverResponse, createLocalValue func(string) local.InstanceLocalValue,
-	pluginValues *SvcPluginValues, svcLocalValue local.ServiceLocalValue) *ServiceInstancesInProto {
+	pluginValues *SvcPluginValues, svcLocalValue local.ServiceLocalValue,
+) *ServiceInstancesInProto {
 	// 未初始化
 	if nil == resp {
 		return &ServiceInstancesInProto{}
@@ -115,12 +116,12 @@ func NewServiceInstancesInProto(resp *namingpb.DiscoverResponse, createLocalValu
 	return instancesInProto
 }
 
-// IsCacheLoaded pb值是否为从缓存文件中加载的
+// IsCacheLoaded pb值是否为从缓存文件中加载的.
 func (s *ServiceInstancesInProto) IsCacheLoaded() bool {
 	return atomic.LoadInt32(&s.CacheLoaded) > 0
 }
 
-// ReloadServiceClusters 重建缓存索引
+// ReloadServiceClusters 重建缓存索引.
 func (s *ServiceInstancesInProto) ReloadServiceClusters() {
 	clusterCache := model.NewServiceClusters(s)
 	if len(s.instances) > 0 {
@@ -131,22 +132,22 @@ func (s *ServiceInstancesInProto) ReloadServiceClusters() {
 	s.clusterCache.Store(clusterCache)
 }
 
-// GetServiceClusters 获取缓存索引
+// GetServiceClusters 获取缓存索引.
 func (s *ServiceInstancesInProto) GetServiceClusters() model.ServiceClusters {
 	return s.clusterCache.Load().(model.ServiceClusters)
 }
 
-// GetSvcIDSet 返回实例的id集合
+// GetSvcIDSet 返回实例的id集合.
 func (s *ServiceInstancesInProto) GetSvcIDSet() model.HashSet {
 	return s.svcIDSet
 }
 
-// GetType 获取配置类型
+// GetType 获取配置类型.
 func (s *ServiceInstancesInProto) GetType() model.EventType {
 	return model.EventInstances
 }
 
-// GetService 获取服务名
+// GetService 获取服务名.
 func (s *ServiceInstancesInProto) GetService() string {
 	if nil == s.service {
 		return ""
@@ -154,7 +155,7 @@ func (s *ServiceInstancesInProto) GetService() string {
 	return s.service.GetName().GetValue()
 }
 
-// GetNamespace 获取名字空间
+// GetNamespace 获取名字空间.
 func (s *ServiceInstancesInProto) GetNamespace() string {
 	if nil == s.service {
 		return ""
@@ -162,7 +163,7 @@ func (s *ServiceInstancesInProto) GetNamespace() string {
 	return s.service.GetNamespace().GetValue()
 }
 
-// GetMetadata 获取元数据信息
+// GetMetadata 获取元数据信息.
 func (s *ServiceInstancesInProto) GetMetadata() map[string]string {
 	if nil == s.service {
 		return map[string]string{}
@@ -170,47 +171,47 @@ func (s *ServiceInstancesInProto) GetMetadata() map[string]string {
 	return s.service.GetMetadata()
 }
 
-// GetGetTotalWeight 总权重
+// GetGetTotalWeight 总权重.
 func (s *ServiceInstancesInProto) GetGetTotalWeight() int {
 	return 0
 }
 
-// GetInstances 获取服务实例列表
+// GetInstances 获取服务实例列表.
 func (s *ServiceInstancesInProto) GetInstances() []model.Instance {
 	return s.instances
 }
 
-// IsInitialized 服务实例列表是否已经加载
+// IsInitialized 服务实例列表是否已经加载.
 func (s *ServiceInstancesInProto) IsInitialized() bool {
 	return s.initialized
 }
 
-// SetInitialized .设置服务实例列表是否已经加载
+// SetInitialized .设置服务实例列表是否已经加载.
 func (s *ServiceInstancesInProto) SetInitialized(isInitialized bool) {
 	s.initialized = isInitialized
 }
 
-// GetRevision 获取服务的修订版本信息
+// GetRevision 获取服务的修订版本信息.
 func (s *ServiceInstancesInProto) GetRevision() string {
 	return s.revision
 }
 
-// GetTotalWeight 获取所有实例总权重
+// GetTotalWeight 获取所有实例总权重.
 func (s *ServiceInstancesInProto) GetTotalWeight() int {
 	return s.totalWeight
 }
 
-// GetServiceRouterChain 获取服务级的路由链
+// GetServiceRouterChain 获取服务级的路由链.
 func (s *ServiceInstancesInProto) GetServiceRouterChain() *servicerouter.RouterChain {
 	return s.svcPluginValues.Routers
 }
 
-// GetServiceLoadbalancer 获取服务级的负载均衡
+// GetServiceLoadbalancer 获取服务级的负载均衡.
 func (s *ServiceInstancesInProto) GetServiceLoadbalancer() loadbalancer.LoadBalancer {
 	return s.svcPluginValues.Loadbalancer
 }
 
-// GetInstanceLocalValue 按实例获取本地可变状态值
+// GetInstanceLocalValue 按实例获取本地可变状态值.
 func (s *ServiceInstancesInProto) GetInstanceLocalValue(instId string) local.InstanceLocalValue {
 	if inst, ok := s.instancesMap[instId]; ok {
 		return inst.(*InstanceInProto).GetInstanceLocalValue()
@@ -218,17 +219,17 @@ func (s *ServiceInstancesInProto) GetInstanceLocalValue(instId string) local.Ins
 	return nil
 }
 
-// GetInstance 通过实例ID获取实例
+// GetInstance 通过实例ID获取实例.
 func (s *ServiceInstancesInProto) GetInstance(instId string) model.Instance {
 	return s.instancesMap[instId]
 }
 
-// GetServiceLocalValue 获取服务的localvalue
+// GetServiceLocalValue 获取服务的localvalue.
 func (s *ServiceInstancesInProto) GetServiceLocalValue() local.ServiceLocalValue {
 	return s.svcLocalValue
 }
 
-// InstanceInProto 通过proto定义来构造实例
+// InstanceInProto 通过proto定义来构造实例.
 type InstanceInProto struct {
 	*namingpb.Instance
 	instanceKey *model.InstanceKey
@@ -238,9 +239,10 @@ type InstanceInProto struct {
 	singleInstances []model.Instance
 }
 
-// NewInstanceInProto InstanceInProto的构造函数
+// NewInstanceInProto InstanceInProto的构造函数.
 func NewInstanceInProto(
-	instance *namingpb.Instance, svcKey *model.ServiceKey, localValue local.InstanceLocalValue) *InstanceInProto {
+	instance *namingpb.Instance, svcKey *model.ServiceKey, localValue local.InstanceLocalValue,
+) *InstanceInProto {
 	instInProto := &InstanceInProto{
 		Instance:   instance,
 		localValue: localValue,
@@ -257,142 +259,142 @@ func NewInstanceInProto(
 	return instInProto
 }
 
-// GetNamespace 命名空间
+// GetNamespace 命名空间.
 func (i *InstanceInProto) GetNamespace() string {
 	return i.instanceKey.Namespace
 }
 
-// GetService 服务名
+// GetService 服务名.
 func (i *InstanceInProto) GetService() string {
 	return i.instanceKey.Service
 }
 
-// GetId 获取实例ID，因为pb3的GetId返回wrappers.StringValue，所以改写
+// GetId 获取实例ID，因为pb3的GetId返回wrappers.StringValue，所以改写.
 func (i *InstanceInProto) GetId() string {
 	return i.Id.GetValue()
 }
 
-// GetHost 获取实例Host，，因为pb3的GetId返回wrappers.StringValue，所以改写
+// GetHost 获取实例Host，，因为pb3的GetId返回wrappers.StringValue，所以改写.
 func (i *InstanceInProto) GetHost() string {
 	return i.Host.GetValue()
 }
 
-// GetVpcId 获取实例的vpcId
+// GetVpcId 获取实例的vpcId.
 func (i *InstanceInProto) GetVpcId() string {
 	return i.VpcId.GetValue()
 }
 
-// GetRevision 获取实例Revision，，因为pb3的GetRevision返回wrappers.StringValue，所以改写
+// GetRevision 获取实例Revision，，因为pb3的GetRevision返回wrappers.StringValue，所以改写.
 func (i *InstanceInProto) GetRevision() string {
 	return i.Revision.GetValue()
 }
 
-// GetWeight 获取实例权重，，因为pb3的GetWeight返回wrappers.UInt32Value，所以改写
+// GetWeight 获取实例权重，，因为pb3的GetWeight返回wrappers.UInt32Value，所以改写.
 func (i *InstanceInProto) GetWeight() int {
 	return int(i.Weight.GetValue())
 }
 
-// GetVersion 获取实例版本，因为pb3的GetVersion返回wrappers.StringValue，所以改写
+// GetVersion 获取实例版本，因为pb3的GetVersion返回wrappers.StringValue，所以改写.
 func (i *InstanceInProto) GetVersion() string {
 	return i.Version.GetValue()
 }
 
-// GetProtocol 获取实例协议，因为pb3的GetProtocol返回wrappers.UInt32Value，所以改写
+// GetProtocol 获取实例协议，因为pb3的GetProtocol返回wrappers.UInt32Value，所以改写.
 func (i *InstanceInProto) GetProtocol() string {
 	return i.Protocol.GetValue()
 }
 
-// GetPort 获取实例端口，因为pb3的GetPort返回wrappers.UInt32Value，所以改写
+// GetPort 获取实例端口，因为pb3的GetPort返回wrappers.UInt32Value，所以改写.
 func (i *InstanceInProto) GetPort() uint32 {
 	return i.Port.GetValue()
 }
 
-// GetPriority 获取实例优先级，因为pb3的GetPriority返回wrappers.UInt32Value，所以改写
+// GetPriority 获取实例优先级，因为pb3的GetPriority返回wrappers.UInt32Value，所以改写.
 func (i *InstanceInProto) GetPriority() uint32 {
 	return i.Priority.GetValue()
 }
 
-// GetLogicSet 获取逻辑分区
+// GetLogicSet 获取逻辑分区.
 func (i *InstanceInProto) GetLogicSet() string {
 	return i.LogicSet.GetValue()
 }
 
-// GetExtendedData 获取插件数据
+// GetExtendedData 获取插件数据.
 func (i *InstanceInProto) GetExtendedData(pluginIndex int32) interface{} {
 	return i.localValue.GetExtendedData(pluginIndex)
 }
 
-// SetExtendedData 设置插件数据
+// SetExtendedData 设置插件数据.
 func (i *InstanceInProto) SetExtendedData(pluginIndex int32, data interface{}) {
 	i.localValue.SetExtendedData(pluginIndex, data)
 }
 
-// GetCircuitBreakerStatus instance dynamic weight
+// GetCircuitBreakerStatus instance dynamic weight.
 func (i *InstanceInProto) GetCircuitBreakerStatus() model.CircuitBreakerStatus {
 	return i.localValue.GetCircuitBreakerStatus()
 }
 
-// GetActiveDetectStatus instance dynamic weight
+// GetActiveDetectStatus instance dynamic weight.
 func (i *InstanceInProto) GetActiveDetectStatus() model.ActiveDetectStatus {
 	return i.localValue.GetActiveDetectStatus()
 }
 
-// IsHealthy instance health status
+// IsHealthy instance health status.
 func (i *InstanceInProto) IsHealthy() bool {
 	return i.GetHealthy().GetValue()
 }
 
-// IsIsolated instance is isolated
+// IsIsolated instance is isolated.
 func (i *InstanceInProto) IsIsolated() bool {
 	return i.GetIsolate().GetValue()
 }
 
-// IsEnableHealthCheck whether the health check enabled
+// IsEnableHealthCheck whether the health check enabled.
 func (i *InstanceInProto) IsEnableHealthCheck() bool {
 	return nil != i.HealthCheck
 }
 
-// GetRegion instance region
+// GetRegion instance region.
 func (i *InstanceInProto) GetRegion() string {
 	return i.GetLocation().GetRegion().GetValue()
 }
 
-// GetZone instance zone
+// GetZone instance zone.
 func (i *InstanceInProto) GetZone() string {
 	return i.GetLocation().GetZone().GetValue()
 }
 
-// GetIDC instance idc
+// GetIDC instance idc.
 func (i *InstanceInProto) GetIDC() string {
 	return i.GetLocation().GetCampus().GetValue()
 }
 
-// GetCampus instance campus
+// GetCampus instance campus.
 func (i *InstanceInProto) GetCampus() string {
 	return i.GetLocation().GetCampus().GetValue()
 }
 
-// GetInstanceKey 获取实例的四元组标识
+// GetInstanceKey 获取实例的四元组标识.
 func (i *InstanceInProto) GetInstanceKey() model.InstanceKey {
 	return *i.instanceKey
 }
 
-// GetInstanceLocalValue 获取本地可变状态值
+// GetInstanceLocalValue 获取本地可变状态值.
 func (i *InstanceInProto) GetInstanceLocalValue() local.InstanceLocalValue {
 	return i.localValue
 }
 
-// GetSliceWindows 获取统计窗口
+// GetSliceWindows 获取统计窗口.
 func (i *InstanceInProto) GetSliceWindows(pluginIndex int32) []*metric.SliceWindow {
 	return i.localValue.GetSliceWindows(pluginIndex)
 }
 
-// SingleInstances 获取单个实例数组
+// SingleInstances 获取单个实例数组.
 func (i *InstanceInProto) SingleInstances() []model.Instance {
 	return i.singleInstances
 }
 
-// GenServicesRevision 修正服务
+// GenServicesRevision 修正服务.
 func GenServicesRevision(services []*namingpb.Service) string {
 	h := md5.New()
 	for _, svc := range services {
@@ -402,7 +404,7 @@ func GenServicesRevision(services []*namingpb.Service) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// ServicesProto 批量服务
+// ServicesProto 批量服务.
 type ServicesProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -413,7 +415,7 @@ type ServicesProto struct {
 	CacheLoaded int32
 }
 
-// NewServicesProto 新建服务proto
+// NewServicesProto 新建服务proto.
 func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
 	value := &ServicesProto{}
 	if nil == resp {
@@ -431,32 +433,32 @@ func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
 	return value
 }
 
-// GetType 获取事件类型
+// GetType 获取事件类型.
 func (s *ServicesProto) GetType() model.EventType {
 	return s.eventType
 }
 
-// IsInitialized 缓存是否已经初始化
+// IsInitialized 缓存是否已经初始化.
 func (s *ServicesProto) IsInitialized() bool {
 	return s.initialized
 }
 
-// GetRevision 缓存版本号，标识缓存是否更新
+// GetRevision 缓存版本号，标识缓存是否更新.
 func (s *ServicesProto) GetRevision() string {
 	return s.revision
 }
 
-// GetValue 获取值
+// GetValue 获取值.
 func (s *ServicesProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-// GetNamespace 获取Namespace
+// GetNamespace 获取Namespace.
 func (s *ServicesProto) GetNamespace() string {
 	return s.Namespace
 }
 
-// GetService 获取Service
+// GetService 获取Service.
 func (s *ServicesProto) GetService() string {
 	return s.Service
 }

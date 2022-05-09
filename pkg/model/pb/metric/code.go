@@ -21,6 +21,7 @@ import (
 	"github.com/golang/protobuf/ptypes/wrappers"
 )
 
+// Code is the code of the metric.
 type Code uint32
 
 const (
@@ -37,7 +38,7 @@ const (
 	AcquireQuotaError        = 500002
 )
 
-// code -> apiCode
+// WrapperCode code -> apiCode
 var WrapperCode = map[Code]*wrappers.UInt32Value{
 	ExecuteSuccess:      {Value: uint32(ExecuteSuccess)},
 	ParseException:      {Value: uint32(ParseException)},
@@ -52,7 +53,7 @@ var WrapperCode = map[Code]*wrappers.UInt32Value{
 	AcquireQuotaError:   {Value: uint32(AcquireQuotaError)},
 }
 
-// code -> info
+// Code2Info code -> info
 var Code2Info = map[Code]*wrappers.StringValue{
 	ExecuteSuccess:      {Value: "execute success"},
 	ParseException:      {Value: "parse request body exception"},

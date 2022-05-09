@@ -23,11 +23,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型
+// MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型.
 type MetricsType int
 
 const (
-	// metric type
+	// metric type.
 	TypeForCounterVec MetricsType = iota
 	TypeForGaugeVec
 	TypeForGauge
@@ -35,7 +35,7 @@ const (
 	TypeForMaxGaugeVec
 )
 
-// metricDesc 指标描述
+// metricDesc 指标描述.
 type metricDesc struct {
 	Name       string
 	Help       string
@@ -44,7 +44,7 @@ type metricDesc struct {
 }
 
 const (
-	// SystemMetricName
+	// SystemMetricName.
 	CalleeNamespace = "callee_namespace"
 	CalleeService   = "callee_service"
 	CalleeSubset    = "callee_subset"
@@ -57,27 +57,27 @@ const (
 	CallerLabels    = "caller_labels"
 	MetricNameLabel = "metric_name"
 
-	// 与路由、请求相关的指标信息
+	// 与路由、请求相关的指标信息.
 	MetricsNameUpstreamRequestTotal      = "upstream_rq_total"
 	MetricsNameUpstreamRequestSuccess    = "upstream_rq_success"
 	MetricsNameUpstreamRequestTimeout    = "upstream_rq_timeout"
 	MetricsNameUpstreamRequestMaxTimeout = "upstream_rq_max_timeout"
 	MetricsNameUpstreamRequestDelay      = "upstream_rq_delay"
 
-	// 限流相关指标信息
+	// 限流相关指标信息.
 	MetricsNameRateLimitRequestTotal = "ratelimit_rq_total"
 	MetricsNameRateLimitRequestPass  = "ratelimit_rq_pass"
 	MetricsNameRateLimitRequestLimit = "ratelimit_rq_limit"
 
-	// 熔断相关指标信息
+	// 熔断相关指标信息.
 	MetricsNameCircuitBreakerOpen     = "circuitbreaker_open"
 	MetricsNameCircuitBreakerHalfOpen = "circuitbreaker_halfopen"
 
-	// SystemMetricValue
+	// SystemMetricValue.
 	NilValue = "__NULL__"
 )
 
-// 服务路由相关指标
+// 服务路由相关指标.
 var (
 	RouterGaugeNames []string = []string{
 		MetricsNameUpstreamRequestTotal,
@@ -122,7 +122,7 @@ var (
 	}
 )
 
-// 限流相关指标
+// 限流相关指标.
 var (
 	RateLimitGaugeNames []string = []string{
 		MetricsNameRateLimitRequestTotal,
@@ -173,22 +173,20 @@ var (
 	}
 )
 
-var (
-	metrcisDesces map[string]metricDesc = map[string]metricDesc{
-		MetricsNameUpstreamRequestTotal:      UpstreamRequestTotal,
-		MetricsNameUpstreamRequestSuccess:    UpstreamRequestSuccess,
-		MetricsNameUpstreamRequestTimeout:    UpstreamRequestTimeout,
-		MetricsNameUpstreamRequestMaxTimeout: UpstreamRequestMaxTimeout,
-		MetricsNameUpstreamRequestDelay:      UpstreamRequestDelay,
+var metrcisDesces map[string]metricDesc = map[string]metricDesc{
+	MetricsNameUpstreamRequestTotal:      UpstreamRequestTotal,
+	MetricsNameUpstreamRequestSuccess:    UpstreamRequestSuccess,
+	MetricsNameUpstreamRequestTimeout:    UpstreamRequestTimeout,
+	MetricsNameUpstreamRequestMaxTimeout: UpstreamRequestMaxTimeout,
+	MetricsNameUpstreamRequestDelay:      UpstreamRequestDelay,
 
-		MetricsNameRateLimitRequestTotal: RateLimitRequestTotal,
-		MetricsNameRateLimitRequestPass:  RateLimitRequestPass,
-		MetricsNameRateLimitRequestLimit: RateLimitRequestLimit,
+	MetricsNameRateLimitRequestTotal: RateLimitRequestTotal,
+	MetricsNameRateLimitRequestPass:  RateLimitRequestPass,
+	MetricsNameRateLimitRequestLimit: RateLimitRequestLimit,
 
-		MetricsNameCircuitBreakerOpen:     CircuitBreakerOpen,
-		MetricsNameCircuitBreakerHalfOpen: CircuitBreakerHalfOpen,
-	}
-)
+	MetricsNameCircuitBreakerOpen:     CircuitBreakerOpen,
+	MetricsNameCircuitBreakerHalfOpen: CircuitBreakerHalfOpen,
+}
 
 type LabelValueSupplier func(val interface{}) string
 

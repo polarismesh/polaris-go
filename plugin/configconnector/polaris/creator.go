@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -30,18 +31,19 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 )
 
-// 创建连接
-func (g *Connector) CreateConnection(
-	address string, timeout time.Duration, clientInfo *network.ClientInfo) (network.ClosableConn, error) {
+// CreateConnection 创建连接.
+func (c *Connector) CreateConnection(
+	address string, timeout time.Duration, clientInfo *network.ClientInfo,
+) (network.ClosableConn, error) {
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	opts = append(opts, grpc.WithBlock())
 	localIPValue := clientInfo.GetIPString()
 	if len(localIPValue) == 0 {
 		opts = append(opts, grpc.WithStatsHandler(&statHandler{clientInfo: clientInfo}))
 	}
-	log.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", g.cfg.MaxCallRecvMsgSize)
-	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(g.cfg.MaxCallRecvMsgSize)))
+	log.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", c.cfg.MaxCallRecvMsgSize)
+	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(c.cfg.MaxCallRecvMsgSize)))
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, opts...)
@@ -66,7 +68,6 @@ func (s *statHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) contex
 
 // HandleRPC processes the RPC stats.
 func (s *statHandler) HandleRPC(context.Context, stats.RPCStats) {
-
 }
 
 // TagConn can attach some information to the given context.
@@ -90,5 +91,4 @@ func (s *statHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) cont
 
 // HandleConn processes the Conn stats.
 func (s *statHandler) HandleConn(context.Context, stats.ConnStats) {
-
 }

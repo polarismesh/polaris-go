@@ -23,7 +23,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-// 默认打开限流能力
+// DefaultRateLimitEnable 默认打开限流能力
 var DefaultRateLimitEnable = true
 
 // ProviderConfigImpl 服务提供者配置.
