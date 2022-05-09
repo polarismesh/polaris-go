@@ -169,10 +169,7 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 
 // IsEnable .插件开关.
 func (c *Connector) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	}
-	return true
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // 等待discover就绪.
