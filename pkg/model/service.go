@@ -639,6 +639,22 @@ func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
 }
 
+// IsEmpty 服务数据内容是否为空
+func (i *ServiceInfo) IsEmpty() bool {
+	if i == nil {
+		return true
+	}
+	return len(i.Namespace) == 0 && len(i.Service) == 0 && len(i.Metadata) == 0
+}
+
+// HasService 是否存在服务名
+func (i *ServiceInfo) HasService() bool {
+	if i == nil {
+		return false
+	}
+	return len(i.Namespace) > 0 && len(i.Service) > 0
+}
+
 type OneInstanceResponse struct {
 	InstancesResponse
 }
@@ -721,6 +737,11 @@ func (i *InstancesResponse) ReloadServiceClusters() {
 		return
 	}
 	i.Cluster.clusters.GetServiceInstances().ReloadServiceClusters()
+}
+
+// InstancesResponse get the cluster
+func (i *InstancesResponse) GetCluster() *Cluster {
+	return i.Cluster
 }
 
 // RetStatus 调用结果状态

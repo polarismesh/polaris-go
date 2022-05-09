@@ -93,6 +93,12 @@ type MetaComposedValue struct {
 // 存放集群对象池
 var clusterPool = &sync.Pool{}
 
+// ClusterOwner 保存了cluster指针的对象
+type ClusterOwner interface {
+	// GetCluster get the retained cluster
+	GetCluster() *Cluster
+}
+
 // Cluster 路由后的集群信息，包含的是标签以及地域信息
 type Cluster struct {
 	ClusterKey

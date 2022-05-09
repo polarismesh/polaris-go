@@ -91,6 +91,11 @@ type SDKOwner interface {
 	SDKContext() SDKContext
 }
 
+// CheckAvailable 判断API是否可用
+func CheckAvailable(owner SDKOwner) error {
+	return checkAvailable(owner)
+}
+
 // checkAvailable 判断API是否可用
 func checkAvailable(owner SDKOwner) error {
 	if reflect2.IsNil(owner) {

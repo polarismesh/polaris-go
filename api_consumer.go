@@ -114,3 +114,15 @@ func NewConsumerAPIByConfig(cfg config.Configuration) (ConsumerAPI, error) {
 	}
 	return &consumerAPI{rawAPI: c}, nil
 }
+
+func NewSDKContext() (api.SDKContext, error) {
+	return api.InitContextByConfig(config.NewDefaultConfigurationWithDomain())
+}
+
+func NewSDKContextByAddress(address ...string) (api.SDKContext, error) {
+	return api.InitContextByConfig(config.NewDefaultConfiguration(address))
+}
+
+func NewSDKContextByConfig(cfg config.Configuration) (api.SDKContext, error) {
+	return api.InitContextByConfig(cfg)
+}

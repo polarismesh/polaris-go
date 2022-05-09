@@ -157,6 +157,8 @@ const (
 	ApiMeshConfig
 	ApiInitCalleeServices
 	ApiMesh
+	ApiProcessRouters
+	ApiProcessLoadBalance
 	// ApiOperationMax这个必须在最下面
 	ApiOperationMax
 )
@@ -176,6 +178,8 @@ var (
 		ApiMeshConfig:              "Consumer::GetMeshConfig",
 		ApiInitCalleeServices:      "Consumer::InitCalleeServices",
 		ApiMesh:                    "Consumer::GetMesh",
+		ApiProcessRouters:          "Router::ProcessRouters",
+		ApiProcessLoadBalance:      "Router::ProcessLoadBalance",
 	}
 )
 

@@ -95,11 +95,11 @@ type InitCalleeServiceRequest struct {
 // ConsumerAPI 主调端API方法
 type ConsumerAPI interface {
 	SDKOwner
-	// GetOneInstance 同步获取单个服务
+	// GetOneInstance 获取单个服务（会执行路由链与负载均衡，获取负载均衡后的服务实例）
 	GetOneInstance(req *GetOneInstanceRequest) (*model.OneInstanceResponse, error)
-	// GetInstances 同步获取可用的服务列表
+	// GetInstances 获取可用的服务列表（会执行路由链，默认去掉隔离以及不健康的服务实例）
 	GetInstances(req *GetInstancesRequest) (*model.InstancesResponse, error)
-	// GetAllInstances 同步获取完整的服务列表
+	// GetAllInstances 获取完整的服务列表（包括隔离及不健康的服务实例）
 	GetAllInstances(req *GetAllInstancesRequest) (*model.InstancesResponse, error)
 	// GetRouteRule 同步获取服务路由规则
 	GetRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
