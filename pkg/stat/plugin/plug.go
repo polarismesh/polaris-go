@@ -101,6 +101,7 @@ func GetPluginAPIName(p PluginAPI) string {
 	return methodMap[p]
 }
 
+// PluginAPIDelayRange 定义插件api的延迟范围
 type PluginAPIDelayRange int
 
 // API延时范围常量
