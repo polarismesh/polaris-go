@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package polaris api defines the interfaces for the external APIs.
 package polaris
 
 import (
@@ -22,24 +23,31 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// consumer API
+// GetOneInstanceRequest is the request struct for GetOneInstance.
 type GetOneInstanceRequest api.GetOneInstanceRequest
 
+// GetInstancesRequest is the request struct for GetInstances.
 type GetInstancesRequest api.GetInstancesRequest
 
+// GetAllInstancesRequest is the request struct for GetAllInstances.
 type GetAllInstancesRequest api.GetAllInstancesRequest
 
+// GetServiceRuleRequest is the request struct for GetServiceRule.
 type GetServiceRuleRequest api.GetServiceRuleRequest
 
+// ServiceCallResult is the response struct for ServiceCall.
 type ServiceCallResult api.ServiceCallResult
 
+// WatchServiceRequest is the request struct for WatchService.
 type WatchServiceRequest api.WatchServiceRequest
 
+// GetServicesRequest is the request struct for GetServices.
 type GetServicesRequest api.GetServicesRequest
 
+// InitCalleeServiceRequest is the request struct for InitCalleeService.
 type InitCalleeServiceRequest api.InitCalleeServiceRequest
 
-// ConsumerAPI 主调端API方法
+// ConsumerAPI 主调端API方法.
 type ConsumerAPI interface {
 	api.SDKOwner
 	// GetOneInstance 同步获取单个服务
@@ -62,14 +70,16 @@ type ConsumerAPI interface {
 	Destroy()
 }
 
-// provider
+// InstanceRegisterRequest 实例注册请求.
 type InstanceRegisterRequest api.InstanceRegisterRequest
 
+// InstanceDeRegisterRequest 实例注销请求.
 type InstanceDeRegisterRequest api.InstanceDeRegisterRequest
 
+// InstanceHeartbeatRequest 实例心跳请求.
 type InstanceHeartbeatRequest api.InstanceHeartbeatRequest
 
-// ProviderAPI CL5服务端API的主接口
+// ProviderAPI CL5服务端API的主接口.
 type ProviderAPI interface {
 	api.SDKOwner
 	// Register
@@ -87,12 +97,13 @@ type ProviderAPI interface {
 	Destroy()
 }
 
-// rate limiter
+// QuotaRequest rate limiter.
 type QuotaRequest api.QuotaRequest
 
+// QuotaFuture rate limiter.
 type QuotaFuture api.QuotaFuture
 
-// LimitAPI 限流相关的API相关接口
+// LimitAPI 限流相关的API相关接口.
 type LimitAPI interface {
 	api.SDKOwner
 	// GetQuota 获取限流配额，一次接口只获取一个配额
@@ -101,16 +112,15 @@ type LimitAPI interface {
 	Destroy()
 }
 
-// NewQuotaRequest 创建配额查询请求
+// NewQuotaRequest 创建配额查询请求.
 func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
 
-//config
-
+// ConfigFile config
 type ConfigFile model.ConfigFile
 
-// ConfigAPI 配置文件的 API
+// ConfigAPI 配置文件的 API.
 type ConfigAPI interface {
 	api.SDKOwner
 	// GetConfigFile 获取配置文件
