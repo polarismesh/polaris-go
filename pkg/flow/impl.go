@@ -19,11 +19,10 @@ package flow
 
 import (
 	"github.com/modern-go/reflect2"
-	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
-	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
@@ -33,6 +32,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
@@ -161,7 +161,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	initContext.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
 	globalCtx.SetValue(model.ContextKeyEngine, flowEngine)
 
-	//初始化配置中心服务
+	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
 		flowEngine.configFileService = configuration.NewConfigFileService(flowEngine.configConnector, flowEngine.configuration)
 	}
@@ -231,11 +231,11 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 		}
 		watchResp.GetAllInstancesResp = allInsRsp
 		return watchResp, nil
-	} else {
-		return nil, model.NewSDKError(model.ErrCodeInternalError, nil, "engine subscribe is nil")
 	}
+	return nil, model.NewSDKError(model.ErrCodeInternalError, nil, "engine subscribe is nil")
 }
 
+// GetContext 获取上下文
 func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
 }
@@ -301,9 +301,8 @@ func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgo
 	if reflect2.IsNil(svcLoadbalancer) {
 		if chooseAlgorithm == "" {
 			return e.loadbalancer, nil
-		} else {
-			return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 		}
+		return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 	}
 	return svcLoadbalancer, nil
 }

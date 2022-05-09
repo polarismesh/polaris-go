@@ -26,18 +26,15 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
-
-	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-
-	// namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -61,7 +58,7 @@ const (
 	allInstances       = normalInstances + isolatedInstances + unhealthyInstances
 )
 
-// 限流相关的用例集
+// EventSubscribeSuit 限流相关的用例集
 type EventSubscribeSuit struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -74,7 +71,7 @@ func (t *EventSubscribeSuit) addInstance() []*namingpb.Instance {
 	return t.mockServer.GenTestInstancesWithHostPort(t.testService, 1, consumerIPAddress, 2000)
 }
 
-// 初始化测试套件
+// SetUpSuite 初始化测试套件
 func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -116,7 +113,7 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	}()
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite 结束测试套程序
 func (t *EventSubscribeSuit) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
@@ -124,6 +121,7 @@ func (t *EventSubscribeSuit) TearDownSuite(c *check.C) {
 	}
 }
 
+// GetInstanceEvent 获取实例事件
 func (t *EventSubscribeSuit) GetInstanceEvent(ch <-chan model.SubScribeEvent) (model.SubScribeEvent, error) {
 	select {
 	case e := <-ch:
@@ -133,6 +131,7 @@ func (t *EventSubscribeSuit) GetInstanceEvent(ch <-chan model.SubScribeEvent) (m
 	}
 }
 
+// TestInstanceEvent 测试实例事件
 func (t *EventSubscribeSuit) TestInstanceEvent(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start to TestAddInstanceEvent")
@@ -209,6 +208,7 @@ func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service
 	return mockServer.RegisterRouteRule(svc, route)
 }
 
+// TestWatchExpired 测试订阅过期
 func (t *EventSubscribeSuit) TestWatchExpired(c *check.C) {
 	fmt.Println("-----------------TestWatchExpired")
 	defer util.DeleteDir(util.BackupDir)

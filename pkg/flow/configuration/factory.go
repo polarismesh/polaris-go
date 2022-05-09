@@ -18,11 +18,11 @@
 package configuration
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/flow/configuration/remote"
-	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration/remote"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )

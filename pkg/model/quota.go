@@ -144,6 +144,7 @@ type QuotaAllocator interface {
 	Release()
 }
 
+// quotaFutureOption 配额分配器的配置选项.
 type quotaFutureOption func(f *QuotaFutureImpl)
 
 // WithQuotaFutureReq .

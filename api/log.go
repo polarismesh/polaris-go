@@ -173,7 +173,7 @@ func SetLoggersLevel(loglevel int) error {
 	}
 	logErr = log.GetNetworkLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set network logLevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set network logLevel"))
 	}
 	return err
 }

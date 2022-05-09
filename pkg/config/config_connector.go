@@ -23,11 +23,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/hashicorp/go-multierror"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/hashicorp/go-multierror"
-
+	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 

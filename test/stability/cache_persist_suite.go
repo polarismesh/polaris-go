@@ -60,7 +60,7 @@ var (
 	backupFileCp = backupFile + ".cp"
 )
 
-// 缓存持久化测试套件
+// CacheTestingSuite 缓存持久化测试套件
 type CacheTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -69,7 +69,7 @@ type CacheTestingSuite struct {
 	mockServer   mock.NamingServer
 }
 
-// 初始化测试套件
+// SetUpSuite 初始化测试套件
 func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
@@ -107,12 +107,12 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	}()
 }
 
-// 测试套件名字
+// GetName 测试套件名字
 func (t *CacheTestingSuite) GetName() string {
 	return "Cache"
 }
 
-// 销毁套件
+// TearDownSuite 销毁套件
 func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	for i := 0; i < 5; i++ {
@@ -194,7 +194,7 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	c.Assert(t.checkPersist(refreshSvcInstances.Instances), check.Equals, true)
 }
 
-// 测试过程
+// TestCacheExpireAndPersist 测试过程
 func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestCacheExpireAndPersist")
@@ -208,7 +208,7 @@ func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
 	t.testCacheCompareForward(origSvcInstances, cfg, false, c)
 }
 
-// 测试当一些埋点server down掉时的情景
+// TestCacheWithSomeDefaultServerDown 测试当一些埋点server down掉时的情景
 func (t *CacheTestingSuite) TestCacheWithSomeDefaultServerDown(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestCacheRefreshWithSomeDefaultServerDown")
@@ -222,7 +222,7 @@ func (t *CacheTestingSuite) TestCacheWithSomeDefaultServerDown(c *check.C) {
 	t.testCacheCompareForward(origSvcInstances, cfg, true, c)
 }
 
-// 测试服务端的服务被删除后，内存和文件缓存是否被删除
+// TestServiceDelete 测试服务端的服务被删除后，内存和文件缓存是否被删除
 func (t *CacheTestingSuite) TestServiceDelete(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	fmt.Println("Cache Persist Suite: TestServiceDelete")
@@ -338,7 +338,7 @@ func copy(src, dst string) (int64, error) {
 	return nBytes, err
 }
 
-// 不开启缓存生效 -- 获取最新实例
+// TestFirstGetUseCacheFile 不开启缓存生效 -- 获取最新实例
 // 开启缓存生效 -- 获取到缓存实例
 // sleep , 获取到最新的实例，并且路由也生效
 func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
@@ -348,7 +348,7 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 	c.Assert(err1, check.IsNil)
 	defer util.DeleteDir("./testdata/test_log/backup")
 	testService := &namingpb.Service{
-		Name:      &wrappers.StringValue{Value: fmt.Sprintf("TestCacheFile")},
+		Name:      &wrappers.StringValue{Value: "TestCacheFile"},
 		Namespace: &wrappers.StringValue{Value: "Test"},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
 	}
@@ -443,17 +443,18 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 	time.Sleep(time.Second * 1)
 }
 
-// 测试埋点不同缓存文件的路径不同
+// TestFileCachePwd 测试埋点不同缓存文件的路径不同
 func (t *CacheTestingSuite) TestFileCachePwd(c *check.C) {
 	t.FileCachePwdFunc(c)
 }
 
+// FileCachePwdFunc 测试埋点不同缓存文件的路径不同
 func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
-	user, err := user.Current()
+	current, err := user.Current()
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	homeDir := user.HomeDir
+	homeDir := current.HomeDir
 	fmt.Printf("Home Directory: %s\n", homeDir)
 	defer util.DeleteDir(fmt.Sprintf("%s/polaris/backup", homeDir))
 
@@ -473,14 +474,13 @@ func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
 	time.Sleep(time.Second * 3)
 	// fmt.Println(runtime.GOOS)
 
-	var filePath string
-	filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
+	var filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
 	_, err = os.Open(filePath)
 	fmt.Println(err)
 	c.Assert(err, check.IsNil)
 }
 
-// 测试缓存文件有效时间
+// TestFileCacheAvailableTime 测试缓存文件有效时间
 func (t *CacheTestingSuite) TestFileCacheAvailableTime(c *check.C) {
 	util.DeleteDir("./testdata/test_log/backup1")
 	err1 := os.Mkdir("./testdata/test_log/backup1", 644)

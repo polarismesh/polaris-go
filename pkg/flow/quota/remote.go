@@ -30,6 +30,7 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -177,7 +178,7 @@ func (s *StreamCounterSet) HasInitialized(svcKey model.ServiceKey, labels string
 // createConnection 创建连接
 func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	opts = append(opts, grpc.WithBlock())
 	ctx, cancel := context.WithTimeout(context.Background(), s.asyncConnector.connTimeout)
 	defer cancel()
@@ -609,7 +610,7 @@ type asyncRateLimitConnector struct {
 	protocol string
 }
 
-// NewAsyncRateLimitConnector
+// NewAsyncRateLimitConnector .
 func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
 	connTimeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
 	msgTimeout := cfg.GetGlobal().GetServerConnector().GetMessageTimeout()

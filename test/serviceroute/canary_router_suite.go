@@ -53,7 +53,7 @@ const (
 	canaryMonitorPort = 8119
 )
 
-// 元数据过滤路由插件测试用例
+// CanaryTestingSuite 元数据过滤路由插件测试用例
 type CanaryTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
@@ -64,7 +64,7 @@ type CanaryTestingSuite struct {
 	testService  *namingpb.Service
 }
 
-// 套件名字
+// GetName 套件名字
 func (t *CanaryTestingSuite) GetName() string {
 	return "CanaryTestingSuite"
 }
@@ -125,14 +125,14 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-// SetUpSuite 结束测试套程序
+// TearDownSuite 结束测试套程序
 func (t *CanaryTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
 	t.grpcMonitor.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
-// 正常逻辑测试
+// TestCanaryNormal01 正常逻辑测试
 func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 	DeleteBackUpDir()
 	fmt.Println("-----------TestCanaryNormal01")
@@ -220,15 +220,16 @@ func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 			Namespace: canaryNamespace,
 			Service:   canaryService,
 			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 102},
+		}: {
+			recordKey{
+				RouteStatus: "Normal",
+				RetCode:     "Success",
+			}: 102},
 	}, c)
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 正常逻辑不带金丝雀标签
+// TestCanaryNormal02 正常逻辑不带金丝雀标签
 func (t *CanaryTestingSuite) TestCanaryNormal02(c *check.C) {
 	DeleteBackUpDir()
 	t.mockServer.GenTestInstancesWithMeta(t.testService, 1, map[string]string{model.CanaryMetaKey: "useV1"})
@@ -298,7 +299,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal02(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 服务不启用金丝雀
+// TestCanaryNormal03 服务不启用金丝雀
 func (t *CanaryTestingSuite) TestCanaryNormal03(c *check.C) {
 	DeleteBackUpDir()
 	t.mockServer.GenTestInstancesWithMeta(t.testService, 2, map[string]string{model.CanaryMetaKey: "useV1"})
@@ -344,6 +345,7 @@ func (t *CanaryTestingSuite) TestCanaryNormal03(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
+// CircuitBreakerInstance Circuit Breaker Instance
 func CircuitBreakerInstance(instance model.Instance, consumer api.ConsumerAPI, c *check.C) {
 	var errCode int32
 	errCode = 1
@@ -358,6 +360,7 @@ func CircuitBreakerInstance(instance model.Instance, consumer api.ConsumerAPI, c
 	}
 }
 
+// CloseCbInstance 关闭circuit breaker
 func CloseCbInstance(instance model.Instance, consumer api.ConsumerAPI, c *check.C) {
 	var errCode int32
 	errCode = 1
@@ -374,6 +377,7 @@ func CloseCbInstance(instance model.Instance, consumer api.ConsumerAPI, c *check
 	}
 }
 
+// CloseCbInstances is used to close the circuit breaker instance
 func CloseCbInstances(namespace, service string, consumer api.ConsumerAPI, c *check.C, maxTimes int) {
 	request := &api.GetOneInstanceRequest{}
 	request.FlowID = 1111
@@ -396,6 +400,7 @@ func CloseCbInstances(namespace, service string, consumer api.ConsumerAPI, c *ch
 	}
 }
 
+// CheckInstanceHasCanaryMeta is used to check the instance has canary metadata
 func CheckInstanceHasCanaryMeta(instance model.Instance, canaryValue string) int {
 	metaData := instance.GetMetadata()
 	if metaData == nil {
@@ -405,20 +410,23 @@ func CheckInstanceHasCanaryMeta(instance model.Instance, canaryValue string) int
 		if k == model.CanaryMetaKey {
 			if v == canaryValue {
 				return CanaryInstance
-			} else {
-				return OtherCanaryInstance
 			}
+			return OtherCanaryInstance
 		}
 	}
 	return NormalInstance
 }
 
 const (
-	NormalInstance      = 1
-	CanaryInstance      = 2
+	// NormalInstance is the normal instance
+	NormalInstance = 1
+	// CanaryInstance is the canary instance
+	CanaryInstance = 2
+	// OtherCanaryInstance is the other canary instance
 	OtherCanaryInstance = 3
 )
 
+// SplitInstances is used to split the instances into two groups
 func SplitInstances(consumer api.ConsumerAPI, canaryVal string) map[int][]model.Instance {
 	getAllReq := &api.GetAllInstancesRequest{}
 	getAllReq.Namespace = canaryNamespace
@@ -450,7 +458,7 @@ func checkGetInstancesByCanaryType(consumer api.ConsumerAPI, instSize int, CType
 	}
 }
 
-// 异常测试， 服务启用金丝雀路由，有两个目标金丝雀实例， 1个正常实例， 1个其他版本金丝实例
+// TestCanaryException01 异常测试， 服务启用金丝雀路由，有两个目标金丝雀实例， 1个正常实例， 1个其他版本金丝实例
 // 先一个目标金丝雀实例熔断   -- 只能获取到可用的一个金丝雀实例
 // 两个目标金丝雀实例熔断     -- 获取正常实例
 // 正常实例熔断             -- 获取到 其他版本金丝实例
@@ -636,7 +644,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 异常测试， 服务启用金丝雀路由，测试不带金丝雀标签, 有1个目标金丝雀实例， 2个正常实例， 1个其他版本金丝实例
+// TestCanaryException02 异常测试， 服务启用金丝雀路由，测试不带金丝雀标签, 有1个目标金丝雀实例， 2个正常实例， 1个其他版本金丝实例
 // 先一个目标正常实例熔断   -- 只能获取到可用的一个正常实例
 // 两个目标正常实例熔断     -- 获取正常带金丝雀标签实例（共2个）
 // 带金丝雀标签实例熔断             -- 获取到正常实例
@@ -772,7 +780,7 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 异常测试， 服务启用金丝雀路由，测试带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
+// TestCanaryException03 异常测试， 服务启用金丝雀路由，测试带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
 // 获取到金丝雀实例
 // 金丝雀实例熔断， 获取到正常实例
 // 金丝雀实例恢复， 获取到金丝雀实例
@@ -881,7 +889,7 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 异常测试， 服务启用金丝雀路由，测试不带带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
+// TestCanaryException04 异常测试， 服务启用金丝雀路由，测试不带带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
 // 获取到正常实例
 // 正常实例熔断， 获取到金丝雀实例
 // 正常实例恢复， 获取到正常实例
@@ -988,6 +996,7 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
+// TestCanaryNormal04 测试canary切换到normal
 // 和SetDivision一起使用
 // set路由过滤后有金丝雀实例
 func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
@@ -1137,7 +1146,7 @@ func (t *CanaryTestingSuite) addInstance(region, zone, campus string, health boo
 	t.mockServer.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
 }
 
-// 和nearbyRouter一起使用
+// TestCanaryNormal05 和nearbyRouter一起使用
 func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 	DeleteBackUpDir()
 	inst1MetaMap := make(map[string]string)
@@ -1224,14 +1233,14 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
+// DeleteBackUpDir 删除备份目录
 func DeleteBackUpDir() {
-	user, err := user.Current()
+	current, err := user.Current()
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	homeDir := user.HomeDir
+	homeDir := current.HomeDir
 	fmt.Printf("Home Directory: %s\n", homeDir)
-	var filePath string
-	filePath = fmt.Sprintf("%s/polaris/backup", homeDir)
+	var filePath = fmt.Sprintf("%s/polaris/backup", homeDir)
 	util.DeleteDir(filePath)
 }

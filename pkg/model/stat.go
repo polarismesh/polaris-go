@@ -134,7 +134,7 @@ func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 	return ApiDelayMax
 }
 
-// 命名类型，标识具体的API类型.
+// ApiOperation 命名类型，标识具体的API类型.
 type ApiOperation int
 
 // String ToString方法.
@@ -156,7 +156,7 @@ const (
 	ApiMeshConfig
 	ApiInitCalleeServices
 	ApiMesh
-	// ApiOperationMax这个必须在最下面.
+	// ApiOperationMax 这个必须在最下面.
 	ApiOperationMax
 )
 

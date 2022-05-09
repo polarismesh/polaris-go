@@ -21,14 +21,16 @@ import (
 	"log"
 	"os"
 
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/test/util"
-	"gopkg.in/check.v1"
 )
 
+// ReporthandlerTestingSuite is a test suite for testing the reporthandler
 type ReporthandlerTestingSuite struct {
 }
 
@@ -42,6 +44,7 @@ func (t *ReporthandlerTestingSuite) SetUpSuite(c *check.C) {
 
 }
 
+// TestHandlerClientReport 测试HandlerClientReport
 func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 	log.Printf("Start TestHandlerClientReport")
 

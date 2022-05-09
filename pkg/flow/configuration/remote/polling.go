@@ -18,13 +18,14 @@
 package remote
 
 import (
+	"sync"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
-	"sync"
-	"time"
 )
 
 var (
@@ -64,6 +65,7 @@ func addConfigFileToLongPollingPool(remoteConfigFileRepo *ConfigFileRepo) {
 	})
 }
 
+// StopLongPollingTask 停止长轮询任务
 func StopLongPollingTask() {
 	stopPolling = true
 }
@@ -80,13 +82,13 @@ func doLongPolling() {
 			return
 		}
 
-		//1. 生成订阅配置列表
+		// 1. 生成订阅配置列表
 		watchConfigFiles := assembleWatchConfigFiles()
 
 		log.GetBaseLogger().Infof("[Config] do long polling. config file size = %d, delay time = %d",
 			len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
 
-		//2. 调用 connector watch接口
+		// 2. 调用 connector watch接口
 		response, err := configConnector.WatchConfigFiles(watchConfigFiles)
 		if err != nil {
 			log.GetBaseLogger().Errorf("[Config] long polling failed.", err)
@@ -97,7 +99,7 @@ func doLongPolling() {
 
 		responseCode := response.GetCode()
 
-		//3.1 接口调用成功，判断版本号是否有更新，如果有更新则通知 remoteRepo 拉取最新，并触发回调事件
+		// 3.1 接口调用成功，判断版本号是否有更新，如果有更新则通知 remoteRepo 拉取最新，并触发回调事件
 		if responseCode == v1.ExecuteSuccess && response.GetConfigFile() != nil {
 			pollingRetryPolicy.success()
 
@@ -118,27 +120,27 @@ func doLongPolling() {
 				maxVersion = newNotifiedVersion
 			}
 
-			//更新版本号
+			// 更新版本号
 			notifiedVersion.Store(cacheKey, maxVersion)
 
 			log.GetBaseLogger().Infof("[Config] received change event by long polling. file = %+v, new version = %d, old version = %d",
 				changedConfigFile, newNotifiedVersion, oldNotifiedVersion)
 
-			//通知 remoteConfigFileRepo 拉取最新配置
+			// 通知 remoteConfigFileRepo 拉取最新配置
 			remoteConfigFileRepo := getRemoteConfigFileRepo(cacheKey)
 			remoteConfigFileRepo.onLongPollingNotified(maxVersion)
 
 			continue
 		}
 
-		//3.2 如果没有变更，打印日志
+		// 3.2 如果没有变更，打印日志
 		if responseCode == v1.DataNoChange {
 			pollingRetryPolicy.success()
 			log.GetBaseLogger().Infof("[Config] long polling result: data no change")
 			continue
 		}
 
-		//3.3 预期之外的状态，退避重试
+		// 3.3 预期之外的状态，退避重试
 		log.GetBaseLogger().Errorf("[Config] long polling result with unexpect code. code = {}", responseCode)
 		pollingRetryPolicy.fail()
 		pollingRetryPolicy.delay()

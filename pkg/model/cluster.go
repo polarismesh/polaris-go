@@ -1056,11 +1056,7 @@ func (c *Cluster) containNotMatchMetadata(instance Instance) bool {
 		if instValue, ok := instMetadata[compareKey]; ok {
 			if _, ok := compareValue[instValue]; !ok {
 				return true
-			} else {
-				return false
 			}
-		} else {
-			return false
 		}
 	}
 	return false

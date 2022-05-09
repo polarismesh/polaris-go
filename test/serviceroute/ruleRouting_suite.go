@@ -86,7 +86,7 @@ const (
 	metaVersion2 = "v2"
 )
 
-// RuleSRTestingSuite 规则路由API测试套
+// RuleRoutingTestingSuite 规则路由API测试套
 type RuleRoutingTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
@@ -353,7 +353,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 		onlyInboundSvcKey.Namespace, "testdata/route_rule/only_inbound.json", destInstances)
 }
 
-// 设置模拟桩服务器
+// SetUpSuite 设置模拟桩服务器
 func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	var err error
 	grpcOptions := make([]grpc.ServerOption, 0)
@@ -400,7 +400,7 @@ func (t *RuleRoutingTestingSuite) TearDownSuite(c *check.C) {
 	util.InsertLog(t, c.GetTestLog())
 }
 
-// inbound rules
+// TestInboundRules inbound rules
 func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -474,12 +474,12 @@ func (t *RuleRoutingTestingSuite) callDstService(consumer api.ConsumerAPI, c *ch
 		meta := instance.GetMetadata()
 		version, _ := meta["version"]
 		c.Assert(version, check.Equals, "v2")
-		log_set, _ := meta["logic_set"]
-		c.Assert(log_set, check.Equals, "")
+		logSet, _ := meta["logic_set"]
+		c.Assert(logSet, check.Equals, "")
 	}
 }
 
-// test has no rules
+// TestHasNoRules test has no rules
 func (t *RuleRoutingTestingSuite) TestHasNoRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -501,7 +501,7 @@ func (t *RuleRoutingTestingSuite) TestHasNoRules(c *check.C) {
 	c.Assert(len(resp.Instances), check.Equals, 3)
 }
 
-// test has invalid rules
+// TestHasInvalidRules test has invalid rules
 func (t *RuleRoutingTestingSuite) TestHasInvalidRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -523,7 +523,7 @@ func (t *RuleRoutingTestingSuite) TestHasInvalidRules(c *check.C) {
 	c.Assert(len(resp.Instances), check.Equals, 3)
 }
 
-// return default(兜底)
+// TestReturnDefault return default(兜底)
 func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -548,8 +548,8 @@ func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 		c.Assert(len(resp.Instances), check.Equals, 1)
 		for _, instance := range resp.Instances {
 			meta := instance.GetMetadata()
-			log_set, _ := meta["logic_set"]
-			c.Assert(log_set, check.Equals, "")
+			logSet, _ := meta["logic_set"]
+			c.Assert(logSet, check.Equals, "")
 			version, _ := meta["version"]
 			c.Assert(version, check.Equals, metaVersion2)
 		}
@@ -570,7 +570,7 @@ func (t *RuleRoutingTestingSuite) TestReturnDefault(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// match inbound & outbound rules
+// TestMatchInboundAndOutboundRules match inbound & outbound rules
 func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -600,8 +600,8 @@ func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 	for _, instance := range resp.Instances {
 		meta := instance.GetMetadata()
 		version, _ := meta["version"]
-		log_set, _ := meta["logic_set"]
-		ok := version == metaVersion2 || log_set == metaSet2
+		logSet, _ := meta["logic_set"]
+		ok := version == metaVersion2 || logSet == metaSet2
 		c.Assert(ok, check.Equals, true)
 	}
 	time.Sleep(2 * time.Second)
@@ -622,7 +622,7 @@ func (t *RuleRoutingTestingSuite) TestMatchInboundAndOutboundRules(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// 测试匹配残缺的路由规则
+// TestMatchMissingRouteRule 测试匹配残缺的路由规则
 func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -743,7 +743,7 @@ func (t *RuleRoutingTestingSuite) TestMatchMissingRouteRule(c *check.C) {
 	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
-// inbound rules
+// TestOutboundRules inbound rules
 func (t *RuleRoutingTestingSuite) TestOutboundRules(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	cfg, err := config.LoadConfigurationByFile("testdata/sr_rule.yaml")
@@ -796,7 +796,7 @@ func (t *RuleRoutingTestingSuite) TestOutboundRules(c *check.C) {
 	}
 }
 
-// 测试正则匹配inbound rules
+// TestInboundRuleRegex 测试正则匹配inbound rules
 func (t *RuleRoutingTestingSuite) TestInboundRuleRegex(c *check.C) {
 	fmt.Println("-------TestInboundRuleRegex")
 	defer util.DeleteDir(util.BackupDir)
@@ -832,7 +832,7 @@ func (t *RuleRoutingTestingSuite) TestInboundRuleRegex(c *check.C) {
 
 }
 
-// 测试目标规则的优先级
+// TestDestPriority 测试目标规则的优先级
 func (t *RuleRoutingTestingSuite) TestDestPriority(c *check.C) {
 	fmt.Println("-------TestDestPriority")
 	defer util.DeleteDir(util.BackupDir)
@@ -867,7 +867,7 @@ func (t *RuleRoutingTestingSuite) TestDestPriority(c *check.C) {
 	}
 }
 
-// 测试目标规则的weight(包括0权重)
+// TestDestWeight 测试目标规则的weight(包括0权重)
 func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 	fmt.Println("-------TestDestWeight")
 	defer util.DeleteDir(util.BackupDir)
@@ -908,7 +908,7 @@ func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 	c.Assert(math.Abs(600-float64(set1Num)) < 50, check.Equals, true)
 }
 
-// 测试inbound no sources
+// TestInboundNoSources 测试inbound no sources
 func (t *RuleRoutingTestingSuite) TestInboundNoSources(c *check.C) {
 	fmt.Println("-------TestInboundNoSources")
 	defer util.DeleteDir(util.BackupDir)
@@ -937,6 +937,7 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSources(c *check.C) {
 	}
 }
 
+// TestInboundAddAndDelete 测试inbound add and delete
 func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 	serviceName := "InboundAddAndDelete"
 	Instances := make([]*namingpb.Instance, 0, 2)
@@ -999,7 +1000,7 @@ func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 
 }
 
-// 测试只有入流量规则的前提下，不传入sourceService能否成功路由
+// TestInboundNoSourceService 测试只有入流量规则的前提下，不传入sourceService能否成功路由
 func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	serviceName := "InboundNoSource"
 	service := &namingpb.Service{
@@ -1068,7 +1069,7 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	}
 }
 
-// 使用parameter路由，进行基线特性环境匹配
+// TestOneBaseEnvWithParameter 使用parameter路由，进行基线特性环境匹配
 func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	serviceName := "OneBaseTwoFeatureCaller"
 	service := &namingpb.Service{
@@ -1132,7 +1133,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	t.mockServer.DeregisterService(testNamespace, "OneBaseTwoFeatureCallee")
 }
 
-// 服务实例：2个基线环境b，2个特性环境f
+// TestMultiBaseEnvWithVariable 服务实例：2个基线环境b，2个特性环境f
 // case1：metadata带上特性环境名f，variable设置为基线环境名b，访问到特性环境f
 // case2: metadata不带上环境名，variable设置为基线环境名b，访问到基线环境b
 // case3：metadata不带上环境名，variable设置为不存在的基线环境名b1，返回错误
@@ -1200,6 +1201,7 @@ func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	}
 }
 
+// TestMultipleParameters 服务实例：2个基线环境b，2个特性环境f
 func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	log.Printf("start to TestMultipleParameters")
 	serviceName := "MultiParameters"
@@ -1265,6 +1267,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	}
 }
 
+// TestMultiVariables 服务实例：2个基线环境b，2个特性环境f
 func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	log.Printf("start to TestMultiVariables")
 	serviceName := "MultiVariables"
@@ -1337,6 +1340,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	}
 }
 
+// TestBadVariable test bad variable
 func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	log.Printf("start to TestBadVariable")
 	serviceName := "BadVariable"
@@ -1378,6 +1382,7 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	c.Assert(err, check.NotNil)
 }
 
+// TestParameterRegex test parameter regex
 func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	log.Printf("start to TestParameterRegex")
 	serviceName := "RegexParameter"
@@ -1471,6 +1476,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	c.Assert(err, check.NotNil)
 }
 
+// TestVariableRegex test variable regex
 func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	log.Printf("start to TestVariableRegex")
 	serviceName := "RegexVariable"
@@ -1586,11 +1592,13 @@ func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	log.Printf("invalid variable destination regex, err is: %v", err)
 }
 
+// InstanceMetadataAndNum 测试实例的 metadata 和 num
 type InstanceMetadataAndNum struct {
 	metadata map[string]string
 	num      int
 }
 
+// RegisterInstancesWithMetadataAndNum 测试实例的 metadata 和 num
 func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namingpb.Service, metadatas []*InstanceMetadataAndNum) {
 	for idx, m := range metadatas {
 		var instances []*namingpb.Instance
@@ -1609,7 +1617,7 @@ func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namin
 	}
 }
 
-// 套件名字
+// GetName 套件名字
 func (t *RuleRoutingTestingSuite) GetName() string {
 	return "RuleRouting"
 }

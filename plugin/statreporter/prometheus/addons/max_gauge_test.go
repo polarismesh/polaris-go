@@ -23,9 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 )
 
 func Test_maxGauge_Set(t *testing.T) {

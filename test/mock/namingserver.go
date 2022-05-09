@@ -947,7 +947,7 @@ func (n *namingServer) RegisterServerInstance(
 	instanceDiscover.ServiceToken = &wrappers.StringValue{Value: token}
 	instanceDiscover.Healthy = &wrappers.BoolValue{Value: health}
 	log.GetBaseLogger().Debugf("register server instance %v\n", instanceDiscover)
-	n.RegisterInstance(nil, instanceDiscover)
+	n.RegisterInstance(context.TODO(), instanceDiscover)
 	return instanceDiscover
 }
 
@@ -969,7 +969,7 @@ func (n *namingServer) RegisterServerInstanceReturnId(host string, port int, nam
 	instanceDiscover.ServiceToken = &wrappers.StringValue{Value: token}
 	instanceDiscover.Healthy = &wrappers.BoolValue{Value: health}
 	log.GetBaseLogger().Debugf("register server instance %v\n", instanceDiscover)
-	n.RegisterInstance(nil, instanceDiscover)
+	n.RegisterInstance(context.TODO(), instanceDiscover)
 	return instId
 }
 

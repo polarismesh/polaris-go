@@ -18,10 +18,11 @@
 package configuration
 
 import (
+	"sync"
+
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration/remote"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"sync"
 )
 
 type defaultConfigFile struct {
