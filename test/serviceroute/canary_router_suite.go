@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )

@@ -19,6 +19,8 @@ package flow
 
 import (
 	"github.com/modern-go/reflect2"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
@@ -43,6 +45,8 @@ import (
 type Engine struct {
 	// 服务端连接器
 	connector serverconnector.ServerConnector
+	// 服务端连接器
+	configConnector configconnector.ConfigConnector
 	// 服务本地缓存
 	registry localregistry.LocalRegistry
 	// 全局配置
@@ -73,6 +77,8 @@ type Engine struct {
 	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
 	// 修改消息订阅插件链
 	subscribe subscribe.Subscribe
+	// 配置中心门面类
+	configFileService *configuration.ConfigFileService
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -100,6 +106,15 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
+
+	// 加载配置中心连接器
+	if len(cfg.GetConfigFile().GetConfigConnectorConfig().GetAddresses()) > 0 {
+		flowEngine.configConnector, err = data.GetConfigConnector(cfg, plugins)
+		if err != nil {
+			return err
+		}
+	}
+
 	// 加载服务路由链插件
 	err = flowEngine.LoadFlowRouteChain()
 	if err != nil {
@@ -145,6 +160,12 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 	initContext.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
 	globalCtx.SetValue(model.ContextKeyEngine, flowEngine)
+
+	//初始化配置中心服务
+	if cfg.GetConfigFile().IsEnable() {
+		flowEngine.configFileService = configuration.NewConfigFileService(flowEngine.configConnector, flowEngine.configuration)
+	}
+
 	return nil
 }
 
@@ -296,6 +317,9 @@ func (e *Engine) Destroy() error {
 	}
 	if e.flowQuotaAssistant != nil {
 		e.flowQuotaAssistant.Destroy()
+	}
+	if e.configFileService != nil {
+		e.configFileService.Destroy()
 	}
 	return nil
 }

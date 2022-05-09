@@ -310,7 +310,11 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 			Code: model.QuotaResultOk,
 			Info: Disabled,
 		}
-		return model.NewQuotaFuture(resp, clock.GetClock().Now(), nil), nil
+		return model.NewQuotaFuture(
+			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
+			model.WithQuotaFutureResp(resp),
+			model.WithQuotaFutureDeadline(clock.GetClock().Now()),
+			model.WithQuotaFutureHooks(f.reportRateLimitGauga)), nil
 	}
 	window, err := f.lookupRateLimitWindow(commonRequest)
 	if err != nil {
@@ -325,15 +329,20 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		gauge := &RateLimitGauge{
 			EmptyInstanceGauge: model.EmptyInstanceGauge{},
 			Window:             nil,
+			Labels:             commonRequest.Labels,
 			Namespace:          commonRequest.DstService.Namespace,
 			Service:            commonRequest.DstService.Service,
 			Type:               QuotaGranted,
 		}
 		f.engine.SyncReportStat(model.RateLimitStat, gauge)
-		return model.NewQuotaFuture(resp, clock.GetClock().Now(), nil), nil
+		return model.NewQuotaFuture(
+			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
+			model.WithQuotaFutureResp(resp),
+			model.WithQuotaFutureDeadline(clock.GetClock().Now()),
+			model.WithQuotaFutureHooks(f.reportRateLimitGauga)), nil
 	}
 	window.Init()
-	return window.AllocateQuota()
+	return window.AllocateQuota(commonRequest)
 }
 
 // lookupRateLimitWindow 计算限流窗口
@@ -393,6 +402,18 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	}
 	// 3.创建限流窗口
 	return windowSet.AddRateLimitWindow(commonRequest, rule, labelStr)
+}
+
+func (f *FlowQuotaAssistant) reportRateLimitGauga(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
+	stat := &model.RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Namespace:          req.GetNamespace(),
+		Service:            req.GetService(),
+		Result:             resp.Code,
+		Labels:             req.GetLabels(),
+	}
+
+	f.engine.SyncReportStat(model.RateLimitStat, stat)
 }
 
 // lookupRule 寻址规则

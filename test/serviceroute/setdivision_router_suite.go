@@ -23,7 +23,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
+	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 

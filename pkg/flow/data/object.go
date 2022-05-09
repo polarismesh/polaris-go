@@ -686,6 +686,18 @@ func (cl *CommonRateLimitRequest) clearValues() {
 	cl.Labels = nil
 }
 
+func ConvertToQuotaRequest(cl *CommonRateLimitRequest) *model.QuotaRequestImpl {
+
+	ret := &model.QuotaRequestImpl{}
+
+	ret.SetNamespace(cl.DstService.Namespace)
+	ret.SetService(cl.DstService.Service)
+	ret.SetLabels(cl.Labels)
+	ret.SetCluster(cl.Cluster)
+
+	return ret
+}
+
 // InitByGetQuotaRequest 初始化配额获取请求
 func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequestImpl, cfg config.Configuration) {
 	cl.clearValues()

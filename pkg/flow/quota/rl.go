@@ -52,6 +52,7 @@ type RateLimitGauge struct {
 	Namespace string
 	Service   string
 	Type      RateLimitType
+	Labels    map[string]string
 	// 限流周期， 单位秒
 	Duration uint32
 	// 限流发生时的mode, 和plugin的pb要保持一致

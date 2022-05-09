@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// PluginConfig 插件配置对象
+// PluginConfig 插件配置对象.
 type PluginConfig interface {
 	// GetPluginConfig 获取plugin.<name>下的插件配置，将map[string]interface形式的配置marshal进value中
 	GetPluginConfig(pluginName string) BaseConfig
@@ -31,7 +31,7 @@ type PluginConfig interface {
 	SetPluginConfig(plugName string, value BaseConfig) error
 }
 
-// GlobalConfig 全局配置对象
+// GlobalConfig 全局配置对象.
 type GlobalConfig interface {
 	BaseConfig
 	// GetSystem .
@@ -46,7 +46,7 @@ type GlobalConfig interface {
 	GetLocation() LocationConfig
 }
 
-// ConsumerConfig consumer config object
+// ConsumerConfig consumer config object.
 type ConsumerConfig interface {
 	BaseConfig
 	// GetLocalCache get local cache config
@@ -65,14 +65,27 @@ type ConsumerConfig interface {
 	GetServiceSpecific(namespace string, service string) ServiceSpecificConfig
 }
 
-// ProviderConfig 被调端配置对象
+// ProviderConfig 被调端配置对象.
 type ProviderConfig interface {
 	BaseConfig
 	// GetRateLimit 获取限流配置
 	GetRateLimit() RateLimitConfig
 }
 
-// RateLimitConfig 限流相关配置
+// ConfigFileConfig 配置中心的配置.
+type ConfigFileConfig interface {
+	BaseConfig
+	// IsEnable 是否启用配置中心
+	IsEnable() bool
+	// GetConfigConnectorConfig 配置文件连接器
+	GetConfigConnectorConfig() ConfigConnectorConfig
+	// GetPropertiesValueCacheSize 值缓存的最大数量
+	GetPropertiesValueCacheSize() int32
+	// GetPropertiesValueExpireTime 缓存的过期时间，默认为 60s
+	GetPropertiesValueExpireTime() int64
+}
+
+// RateLimitConfig 限流相关配置.
 type RateLimitConfig interface {
 	BaseConfig
 	PluginConfig
@@ -94,7 +107,7 @@ type RateLimitConfig interface {
 	SetRules([]RateLimitRule)
 }
 
-// SystemConfig 系统配置信息
+// SystemConfig 系统配置信息.
 type SystemConfig interface {
 	BaseConfig
 	// GetMode global.systemConfig.mode
@@ -121,7 +134,7 @@ type SystemConfig interface {
 	UnsetVariable(key string)
 }
 
-// ServerClusterConfig 单个系统服务集群
+// ServerClusterConfig 单个系统服务集群.
 type ServerClusterConfig interface {
 	BaseConfig
 	// GetNamespace 获取命名空间
@@ -138,7 +151,7 @@ type ServerClusterConfig interface {
 	SetRefreshInterval(time.Duration)
 }
 
-// APIConfig api相关的配置对象
+// APIConfig api相关的配置对象.
 type APIConfig interface {
 	BaseConfig
 	// GetTimeout global.api.timeout
@@ -173,7 +186,7 @@ type APIConfig interface {
 	SetRetryInterval(time.Duration)
 }
 
-// StatReporterConfig 统计上报配置
+// StatReporterConfig 统计上报配置.
 type StatReporterConfig interface {
 	BaseConfig
 	PluginConfig
@@ -187,7 +200,7 @@ type StatReporterConfig interface {
 	SetChain([]string)
 }
 
-// LocationConfig SDK获取自身当前地理位置配置
+// LocationConfig SDK获取自身当前地理位置配置.
 type LocationConfig interface {
 	BaseConfig
 	PluginConfig
@@ -197,7 +210,7 @@ type LocationConfig interface {
 	SetProvider(string)
 }
 
-// ServerConnectorConfig 与名字服务服务端的连接配置
+// ServerConnectorConfig 与名字服务服务端的连接配置.
 type ServerConnectorConfig interface {
 	BaseConfig
 	PluginConfig
@@ -242,7 +255,7 @@ type ServerConnectorConfig interface {
 	SetConnectionIdleTimeout(time.Duration)
 }
 
-// LocalCacheConfig 本地缓存相关配置项
+// LocalCacheConfig 本地缓存相关配置项.
 type LocalCacheConfig interface {
 	BaseConfig
 	PluginConfig
@@ -291,7 +304,7 @@ type LocalCacheConfig interface {
 	SetStartUseFileCache(useCacheFile bool)
 }
 
-// NearbyConfig 就近路由配置
+// NearbyConfig 就近路由配置.
 type NearbyConfig interface {
 	BaseConfig
 	// SetMatchLevel 设置匹配级别，consumer.serviceRouter.plugin.nearbyBasedRouter.matchLevel
@@ -325,7 +338,7 @@ type NearbyConfig interface {
 	SetUnhealthyPercentToDegrade(u int)
 }
 
-// ServiceRouterConfig 服务路由相关配置项
+// ServiceRouterConfig 服务路由相关配置项.
 type ServiceRouterConfig interface {
 	BaseConfig
 	PluginConfig
@@ -346,7 +359,7 @@ type ServiceRouterConfig interface {
 	GetNearbyConfig() NearbyConfig
 }
 
-// LoadbalancerConfig 负载均衡相关配置项
+// LoadbalancerConfig 负载均衡相关配置项.
 type LoadbalancerConfig interface {
 	BaseConfig
 	PluginConfig
@@ -356,7 +369,7 @@ type LoadbalancerConfig interface {
 	SetType(string)
 }
 
-// CircuitBreakerConfig 熔断相关的配置项
+// CircuitBreakerConfig 熔断相关的配置项.
 type CircuitBreakerConfig interface {
 	BaseConfig
 	PluginConfig
@@ -398,7 +411,7 @@ type CircuitBreakerConfig interface {
 	GetErrorRateConfig() ErrorRateConfig
 }
 
-// Configuration 全量配置对象
+// Configuration 全量配置对象.
 type Configuration interface {
 	BaseConfig
 	// GetGlobal global前缀开头的所有配置项
@@ -407,21 +420,23 @@ type Configuration interface {
 	GetConsumer() ConsumerConfig
 	// GetProvider provider前缀开头的所有配置项
 	GetProvider() ProviderConfig
+	// GetConfigFile config前缀开头的所有配置项
+	GetConfigFile() ConfigFileConfig
 }
 
-// When when to active health check
+// When when to active health check.
 type When string
 
 const (
-	// HealthCheckNever never active health check
+	// HealthCheckNever never active health check.
 	HealthCheckNever When = "never"
-	// HealthCheckAlways always active health check
+	// HealthCheckAlways always active health check.
 	HealthCheckAlways = "always"
-	// HealthCheckOnRecover active health check when instance has fail
+	// HealthCheckOnRecover active health check when instance has fail.
 	HealthCheckOnRecover = "on_recover"
 )
 
-// HealthCheckConfig active health check config
+// HealthCheckConfig active health check config.
 type HealthCheckConfig interface {
 	BaseConfig
 	PluginConfig
@@ -447,7 +462,7 @@ type HealthCheckConfig interface {
 	SetChain([]string)
 }
 
-// SubscribeConfig .订阅配置
+// SubscribeConfig .订阅配置.
 type SubscribeConfig interface {
 	BaseConfig
 	PluginConfig
@@ -457,11 +472,19 @@ type SubscribeConfig interface {
 	SetType(string)
 }
 
-// ServiceSpecificConfig 配置
+// ServiceSpecificConfig 配置.
 type ServiceSpecificConfig interface {
 	BaseConfig
 
 	GetServiceCircuitBreaker() CircuitBreakerConfig
 
 	GetServiceRouter() ServiceRouterConfig
+}
+
+// ConfigConnectorConfig 配置中心连接相关的配置.
+type ConfigConnectorConfig interface {
+	ServerConnectorConfig
+
+	// GetConnectorType 后端服务器类型，默认是 polaris
+	GetConnectorType() string
 }

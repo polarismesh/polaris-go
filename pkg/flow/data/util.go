@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -47,6 +49,18 @@ func GetServerConnector(
 		return nil, err
 	}
 	return targetPlugin.(serverconnector.ServerConnector), nil
+}
+
+// GetConfigConnector 加载配置中心连接器插件
+func GetConfigConnector(
+	cfg config.Configuration, supplier plugin.Supplier) (configconnector.ConfigConnector, error) {
+	// 加载配置中心连接器
+	protocol := cfg.GetConfigFile().GetConfigConnectorConfig().GetProtocol()
+	targetPlugin, err := supplier.GetPlugin(common.TypeConfigConnector, protocol)
+	if err != nil {
+		return nil, err
+	}
+	return targetPlugin.(configconnector.ConfigConnector), nil
 }
 
 // GetRegistry 加载本地缓存插件
@@ -124,6 +138,10 @@ func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (
 
 // GetStatReporterChain 获取统计上报插件
 func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([]statreporter.StatReporter, error) {
+	if !cfg.GetGlobal().GetStatReporter().IsEnable() {
+		return make([]statreporter.StatReporter, 0), nil
+	}
+
 	reporterNames := cfg.GetGlobal().GetStatReporter().GetChain()
 	reporterChain := make([]statreporter.StatReporter, 0, len(reporterNames))
 	if len(reporterNames) > 0 {

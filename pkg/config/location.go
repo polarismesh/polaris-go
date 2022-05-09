@@ -25,23 +25,23 @@ type LocationConfigImpl struct {
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-// GetProvider 获取地理位置的提供者插件名称
+// GetProvider 获取地理位置的提供者插件名称.
 func (a *LocationConfigImpl) GetProvider() string {
 	return a.Provider
 }
 
-// SetProvider 设置地理位置的提供者插件名称
+// SetProvider 设置地理位置的提供者插件名称.
 func (a *LocationConfigImpl) SetProvider(provider string) {
 	a.Provider = provider
 }
 
-// Init 配置初始化
+// Init 配置初始化.
 func (a *LocationConfigImpl) Init() {
 	a.Plugin = PluginConfigs{}
 	a.Plugin.Init(common.TypeLocationProvider)
 }
 
-// GetPluginConfig consumer.loadbalancer.plugin
+// GetPluginConfig consumer.loadbalancer.plugin.
 func (a *LocationConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := a.Plugin[pluginName]
 	if !ok {
@@ -50,17 +50,17 @@ func (a *LocationConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-// SetPluginConfig 输出插件具体配置
+// SetPluginConfig 输出插件具体配置.
 func (a *LocationConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return a.Plugin.SetPluginConfig(common.TypeLocationProvider, pluginName, value)
 }
 
-// Verify 检验LocalCacheConfig配置
+// Verify 检验LocalCacheConfig配置.
 func (a *LocationConfigImpl) Verify() error {
 	return nil
 }
 
-// SetDefault 设置LocalCacheConfig配置的默认值
+// SetDefault 设置LocalCacheConfig配置的默认值.
 func (a *LocationConfigImpl) SetDefault() {
 	if len(a.Provider) == 0 {
 		a.Provider = DefaultLocationProvider

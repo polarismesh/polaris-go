@@ -47,6 +47,8 @@ const (
 	reqIDPrefixReportClient
 	reqIDPrefixRateLimitInit
 	reqIDPrefixRateLimitAcquire
+	reqIDPrefixGetConfigFile
+	reqIDPrefixWatchConfigFiles
 )
 
 const (
@@ -59,6 +61,8 @@ const (
 	OpKeyRateLimitAcquire      = "RateLimitAcquire"
 	OpKeyRateLimitMetricInit   = "RateLimitMetricInit"
 	OpKeyRateLimitMetricReport = "RateLimitMetricReport"
+	OpKeyGetConfigFile         = "GetConfigFile"
+	OpKeyWatchConfigFiles      = "WatchConfigFiles"
 )
 
 // 生成GetInstances调用的请求Id
@@ -94,6 +98,16 @@ func NextRateLimitInitReqID() string {
 // 生成RateLimit配额获取调用的请求Id
 func NextRateLimitAcquireReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRateLimitAcquire, uuid.New().ID())
+}
+
+// 生成GetConfigFile调用的请求Id
+func NextGetConfigFileReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixGetConfigFile, uuid.New().ID())
+}
+
+// 生成WatchConfigFiles调用的请求Id
+func NextWatchConfigFilesReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixWatchConfigFiles, uuid.New().ID())
 }
 
 // 获取连接错误码

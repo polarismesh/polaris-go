@@ -21,6 +21,7 @@ import (
 	// 注册插件类型
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/alarmreporter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -36,6 +37,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcheck"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcount"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorrate"
+	_ "github.com/polarismesh/polaris-go/plugin/configconnector/polaris"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/http"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/tcp"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/hash"
@@ -48,6 +50,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/unirate"
 	_ "github.com/polarismesh/polaris-go/plugin/serverconnector/grpc"
 
+	// 注册服务路由 servicerouter 插件
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/canary"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/dstmeta"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/filteronly"
@@ -55,15 +58,23 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/rulebase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/setdivision"
 
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/monitor"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/ratelimit"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/serviceinfo"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/serviceroute"
 	_ "github.com/polarismesh/polaris-go/plugin/subscribe/localchannel"
 	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/ratedelay"
 
+	// 注册可观性 statreporter 插件
+	// prometheus 插件
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/prometheus"
+
+	// tencent 插件
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/monitor"
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/ratelimit"
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceinfo"
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
+
 	// 注册 report 插件
+	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/clientid"
 	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/location"
+	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/statreporter"
 
 	// 注册 location 地址插件
 	_ "github.com/polarismesh/polaris-go/plugin/cmdb/env"

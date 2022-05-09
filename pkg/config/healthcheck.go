@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// HealthCheckConfigImpl health check config implementation
+// HealthCheckConfigImpl health check config implementation.
 type HealthCheckConfigImpl struct {
 	When        When          `yaml:"when" json:"when"`
 	Interval    time.Duration `yaml:"interval" json:"interval"`
@@ -35,67 +35,67 @@ type HealthCheckConfigImpl struct {
 	Plugin      PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-// GetWhen get when to active health check
+// GetWhen get when to active health check.
 func (h *HealthCheckConfigImpl) GetWhen() When {
 	return h.When
 }
 
-// SetWhen set when to active health check
+// SetWhen set when to active health check.
 func (h *HealthCheckConfigImpl) SetWhen(when When) {
 	h.When = when
 }
 
-// GetInterval get health check interval
+// GetInterval get health check interval.
 func (h *HealthCheckConfigImpl) GetInterval() time.Duration {
 	return h.Interval
 }
 
-// SetInterval set health check interval
+// SetInterval set health check interval.
 func (h *HealthCheckConfigImpl) SetInterval(duration time.Duration) {
 	h.Interval = duration
 }
 
-// GetChain get health checking chain
+// GetChain get health checking chain.
 func (h *HealthCheckConfigImpl) GetChain() []string {
 	return h.Chain
 }
 
-// SetChain set health checking chain
+// SetChain set health checking chain.
 func (h *HealthCheckConfigImpl) SetChain(chain []string) {
 	h.Chain = chain
 }
 
-// GetTimeout get health check max timeout
+// GetTimeout get health check max timeout.
 func (h *HealthCheckConfigImpl) GetTimeout() time.Duration {
 	return h.Timeout
 }
 
-// SetTimeout set health check max timeout
+// SetTimeout set health check max timeout.
 func (h *HealthCheckConfigImpl) SetTimeout(duration time.Duration) {
 	h.Timeout = duration
 }
 
-// GetConcurrency get concurrency to execute the health check jobs
+// GetConcurrency get concurrency to execute the health check jobs.
 func (h *HealthCheckConfigImpl) GetConcurrency() int {
 	return h.Concurrency
 }
 
-// SetConcurrency set concurrency to execute the health check jobs
+// SetConcurrency set concurrency to execute the health check jobs.
 func (h *HealthCheckConfigImpl) SetConcurrency(value int) {
 	h.Concurrency = value
 }
 
-// GetPluginConfig get plugin config by name
+// GetPluginConfig get plugin config by name.
 func (h *HealthCheckConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return h.Plugin.GetPluginConfig(pluginName)
 }
 
-// SetPluginConfig set plugin config by name
+// SetPluginConfig set plugin config by name.
 func (h *HealthCheckConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return h.Plugin.SetPluginConfig(common.TypeHealthCheck, pluginName, value)
 }
 
-// Verify the healthCheckConfig
+// Verify the healthCheckConfig.
 func (h *HealthCheckConfigImpl) Verify() error {
 	if nil == h {
 		return errors.New("HealthCheckConfig is nil")
@@ -119,7 +119,7 @@ func (h *HealthCheckConfigImpl) Verify() error {
 	return h.Plugin.Verify()
 }
 
-// SetDefault set default values to healthCheckConfig
+// SetDefault set default values to healthCheckConfig.
 func (h *HealthCheckConfigImpl) SetDefault() {
 	if len(h.When) == 0 {
 		h.When = HealthCheckNever
@@ -140,7 +140,7 @@ func (h *HealthCheckConfigImpl) SetDefault() {
 	h.Plugin.SetDefault(common.TypeHealthCheck)
 }
 
-// Init 初始化CircuitBreakerConfigImpl配置
+// Init 初始化CircuitBreakerConfigImpl配置.
 func (h *HealthCheckConfigImpl) Init() {
 	h.Plugin = PluginConfigs{}
 	h.Plugin.Init(common.TypeHealthCheck)

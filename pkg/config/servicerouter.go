@@ -26,7 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// ServiceRouterConfigImpl 服务路由配置
+// ServiceRouterConfigImpl 服务路由配置.
 type ServiceRouterConfigImpl struct {
 	// 服务路由责任链
 	Chain []string `yaml:"chain" json:"chain"`
@@ -38,7 +38,7 @@ type ServiceRouterConfigImpl struct {
 	EnableRecoverAll *bool `yaml:"enableRecoverAll" json:"enableRecoverAll"`
 }
 
-// GetNearbyConfig 获取就近路由配置
+// GetNearbyConfig 获取就近路由配置.
 func (s *ServiceRouterConfigImpl) GetNearbyConfig() NearbyConfig {
 	s.SetDefault()
 	cfgValue, ok := s.Plugin[DefaultServiceRouterNearbyBased]
@@ -49,17 +49,17 @@ func (s *ServiceRouterConfigImpl) GetNearbyConfig() NearbyConfig {
 }
 
 // GetChain consumer.serviceRouter.filterChain
-// 路由责任链配置
+// 路由责任链配置.
 func (s *ServiceRouterConfigImpl) GetChain() []string {
 	return s.Chain
 }
 
-// SetChain 设置路由责任链配置
+// SetChain 设置路由责任链配置.
 func (s *ServiceRouterConfigImpl) SetChain(chain []string) {
 	s.Chain = chain
 }
 
-// GetPluginConfig consumer.serviceRouter.plugin
+// GetPluginConfig consumer.serviceRouter.plugin.
 func (s *ServiceRouterConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := s.Plugin[pluginName]
 	if !ok {
@@ -68,32 +68,32 @@ func (s *ServiceRouterConfigImpl) GetPluginConfig(pluginName string) BaseConfig 
 	return cfgValue.(BaseConfig)
 }
 
-// SetPluginConfig 输出插件具体配置
+// SetPluginConfig 输出插件具体配置.
 func (s *ServiceRouterConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeServiceRouter, pluginName, value)
 }
 
-// GetPercentOfMinInstances 获取PercentOfMinInstances参数
+// GetPercentOfMinInstances 获取PercentOfMinInstances参数.
 func (s *ServiceRouterConfigImpl) GetPercentOfMinInstances() float64 {
 	return *(s.PercentOfMinInstances)
 }
 
-// SetPercentOfMinInstances 设置PercentOfMinInstances参数
+// SetPercentOfMinInstances 设置PercentOfMinInstances参数.
 func (s *ServiceRouterConfigImpl) SetPercentOfMinInstances(percent float64) {
 	s.PercentOfMinInstances = &percent
 }
 
-// IsEnableRecoverAll 是否启用全死全活机制
+// IsEnableRecoverAll 是否启用全死全活机制.
 func (s *ServiceRouterConfigImpl) IsEnableRecoverAll() bool {
 	return *(s.EnableRecoverAll)
 }
 
-// SetEnableRecoverAll 设置启用全死全活机制
+// SetEnableRecoverAll 设置启用全死全活机制.
 func (s *ServiceRouterConfigImpl) SetEnableRecoverAll(recoverAll bool) {
 	s.EnableRecoverAll = &recoverAll
 }
 
-// Verify 检验ServiceRouterConfig配置
+// Verify 检验ServiceRouterConfig配置.
 func (s *ServiceRouterConfigImpl) Verify() error {
 	if s == nil {
 		return errors.New("ServiceRouterConfig is nil")
@@ -109,7 +109,7 @@ func (s *ServiceRouterConfigImpl) Verify() error {
 	return errs
 }
 
-// SetDefault 设置ServiceRouterConfig配置的默认值
+// SetDefault 设置ServiceRouterConfig配置的默认值.
 func (s *ServiceRouterConfigImpl) SetDefault() {
 	if len(s.Chain) == 0 {
 		s.Chain = append(s.Chain, DefaultServiceRouterRuleBased)
@@ -126,7 +126,7 @@ func (s *ServiceRouterConfigImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeServiceRouter)
 }
 
-// Init 配置初始化
+// Init 配置初始化.
 func (s *ServiceRouterConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeServiceRouter)

@@ -573,7 +573,7 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 					cbStatusUpdated = false
 				}
 				err := g.engine.SyncReportStat(model.CircuitBreakStat,
-					&circuitBreakGauge{changeInstance: updateInstance, previousCBStatus: preCBStatus})
+					&model.CircuitBreakGauge{ChangeInstance: updateInstance, CBStatus: preCBStatus})
 				if err != nil {
 					log.GetBaseLogger().Errorf("fail to report circuitbreak change, error %v", err)
 				}

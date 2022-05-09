@@ -612,7 +612,7 @@ func (r *RateLimitWindow) CasStatus(oldStatus int64, status int64) bool {
 }
 
 // AllocateQuota 分配配额
-func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
+func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitRequest) (*model.QuotaFutureImpl, error) {
 	nowMilli := model.CurrentMillisecond()
 	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
 	shapingResult, err := r.trafficShapingBucket.GetQuota()
@@ -630,6 +630,7 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 		} else {
 			limitType = LimitLocalMode
 		}
+
 		gauge := &RateLimitGauge{
 			EmptyInstanceGauge: model.EmptyInstanceGauge{},
 			Window:             r,
@@ -642,13 +643,22 @@ func (r *RateLimitWindow) AllocateQuota() (*model.QuotaFutureImpl, error) {
 			Code: model.QuotaResultLimited,
 			Info: shapingResult.Info,
 		}
-		return model.NewQuotaFuture(resp, deadline, nil), nil
+
+		return model.NewQuotaFuture(
+			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
+			model.WithQuotaFutureResp(resp),
+			model.WithQuotaFutureDeadline(deadline),
+			model.WithQuotaFutureHooks(r.reportRateLimitGauga)), nil
 	}
 	if shapingResult.QueueTime > 0 {
 		deadlineMilli := nowMilli + model.ToMilliSeconds(shapingResult.QueueTime)
 		deadline = time.Unix(0, deadlineMilli*1e6)
 	}
-	return model.NewQuotaFuture(nil, deadline, r.allocatingBucket), nil
+	return model.NewQuotaFuture(
+		model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
+		model.WithQuotaFutureDeadline(deadline),
+		model.WithQuotaFutureQuotaAllocator(r.allocatingBucket),
+		model.WithQuotaFutureHooks(r.reportRateLimitGauga)), nil
 }
 
 // GetLastAccessTimeMilli 获取最近访问时间
@@ -659,4 +669,16 @@ func (r *RateLimitWindow) GetLastAccessTimeMilli() int64 {
 // Expired 是否已经过期
 func (r *RateLimitWindow) Expired(nowMilli int64) bool {
 	return nowMilli-r.GetLastAccessTimeMilli() > model.ToMilliSeconds(r.expireDuration)
+}
+
+func (r *RateLimitWindow) reportRateLimitGauga(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
+	stat := &model.RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Namespace:          req.GetNamespace(),
+		Service:            req.GetService(),
+		Result:             resp.Code,
+		Labels:             req.GetLabels(),
+	}
+
+	r.Engine().SyncReportStat(model.RateLimitStat, stat)
 }
