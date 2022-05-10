@@ -26,10 +26,10 @@ type ProcessRoutersRequest struct {
 	Routers []string
 	// SourceService indicate the source service to match the route rule, optional.
 	SourceService ServiceInfo
-	// DstInstances indicate the destination instances resolve from discovery, required.
+	// DstInstances indicate the destination instances resolved from discovery, required.
 	// Two implementations to ServiceInstances:
-	// 1. InstancesResponse, return from ConsumerAPI.GetAllInstances.
-	// 2. DefaultServiceInstances, for use to construct manually.
+	// 1. InstancesResponse, returned from ConsumerAPI.GetAllInstances.
+	// 2. DefaultServiceInstances, for user to construct manually.
 	DstInstances ServiceInstances
 	// Method indicate the invoke method to match the route rule, optional.
 	Method string
@@ -81,10 +81,10 @@ func (p *ProcessRoutersRequest) SetRetryCount(v int) {
 
 // ProcessLoadBalanceRequest the input request parameters for RouterAPI.ProcessLoadBalance
 type ProcessLoadBalanceRequest struct {
-	// DstInstances indicate the destination instances resolve from discovery, required.
+	// DstInstances indicate the destination instances resolved from discovery, required.
 	// Two implementations to ServiceInstances:
-	// 1. InstancesResponse, return from ConsumerAPI.GetAllInstances.
-	// 2. DefaultServiceInstances, for use to construct manually.
+	// 1. InstancesResponse, returned from ConsumerAPI.GetAllInstances.
+	// 2. DefaultServiceInstances, for user to construct manually.
 	DstInstances ServiceInstances
 	// LbPolicy indicate the load balancer plugin, optional.
 	// If empty, it will use the default load balancer config by console or sdk.
