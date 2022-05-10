@@ -19,30 +19,35 @@ package model
 
 import "time"
 
+// ProcessRoutersRequest the input request parameters for RouterAPI.ProcessRouters
 type ProcessRoutersRequest struct {
-	// router plugins
+	// Routers indicate the router plugins, optional.
+	// If empty, it will use the default routers config by console or sdk.
 	Routers []string
-	// source service
+	// SourceService indicate the source service to match the route rule, optional.
 	SourceService ServiceInfo
-	// destination instances
+	// DstInstances indicate the destination instances resolve from discovery, required.
+	// Two implementations to ServiceInstances:
+	// 1. InstancesResponse, return from ConsumerAPI.GetAllInstances.
+	// 2. DefaultServiceInstances, for use to construct manually.
 	DstInstances ServiceInstances
-	// invoke method
+	// Method indicate the invoke method to match the route rule, optional.
 	Method string
-	// 可选，单次查询超时时间，默认直接获取全局的超时配置
-	// 用户总最大超时时间为(1+RetryCount) * Timeout
+	// Timeout indicate the max timeout for single remote request, optional.
+	// Total request timeout is (1+RetryCount) * Timeout, default is 1s
 	Timeout *time.Duration
-	// 可选，重试次数，默认直接获取全局的超时配置
+	// RetryCount indicate the request retry count, default is 0
 	RetryCount *int
-	// 应答，无需用户填充，由主流程进行填充
+	// response, internal data, not for user to set.
 	response InstancesResponse
 }
 
-// GetResponse 获取应答对象
+// GetResponse get the response object
 func (p *ProcessRoutersRequest) GetResponse() *InstancesResponse {
 	return &p.response
 }
 
-// Validate 校验获取单个服务实例请求对象
+// Validate validate the request object
 func (p *ProcessRoutersRequest) Validate() error {
 	if nil == p {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "ProcessRoutersRequest can not be nil")
@@ -54,41 +59,45 @@ func (p *ProcessRoutersRequest) Validate() error {
 	return nil
 }
 
-// 获取超时值指针
+// GetTimeoutPtr get the timeout pointer
 func (p *ProcessRoutersRequest) GetTimeoutPtr() *time.Duration {
 	return p.Timeout
 }
 
-// 设置超时时间间隔
+// SetTimeout set the timeout value to request
 func (p *ProcessRoutersRequest) SetTimeout(duration time.Duration) {
 	p.Timeout = &duration
 }
 
-// 获取重试次数指针
+// GetRetryCountPtr get the retry count pointer
 func (p *ProcessRoutersRequest) GetRetryCountPtr() *int {
 	return p.RetryCount
 }
 
-// 设置重试次数
+// SetRetryCount set the retry count to request
 func (p *ProcessRoutersRequest) SetRetryCount(v int) {
 	p.RetryCount = &v
 }
 
+// ProcessLoadBalanceRequest the input request parameters for RouterAPI.ProcessLoadBalance
 type ProcessLoadBalanceRequest struct {
-	// destination instances
+	// DstInstances indicate the destination instances resolve from discovery, required.
+	// Two implementations to ServiceInstances:
+	// 1. InstancesResponse, return from ConsumerAPI.GetAllInstances.
+	// 2. DefaultServiceInstances, for use to construct manually.
 	DstInstances ServiceInstances
-	// load balance method
+	// LbPolicy indicate the load balancer plugin, optional.
+	// If empty, it will use the default load balancer config by console or sdk.
 	LbPolicy string
-	// hash key
+	// HashKey indicate the hash key to do load balance, optional.
 	HashKey []byte
-	// 可选，备份节点数
-	// 对于一致性hash等有状态的负载均衡方式
+	// ReplicateCount indicate the sibling count in consist hash ring, optional.
 	ReplicateCount int
-	// 应答，无需用户填充，由主流程进行填充
+	// response, internal data, not for user to set.
 	response InstancesResponse
 }
 
-// Validate 校验获取单个服务实例请求对象
+// Validate validate the request object
 func (p *ProcessLoadBalanceRequest) Validate() error {
 	if nil == p {
 		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "ProcessLoadBalanceRequest can not be nil")
@@ -100,7 +109,7 @@ func (p *ProcessLoadBalanceRequest) Validate() error {
 	return nil
 }
 
-// GetResponse 获取应答对象
+// GetResponse get the response object
 func (p *ProcessLoadBalanceRequest) GetResponse() *InstancesResponse {
 	return &p.response
 }
