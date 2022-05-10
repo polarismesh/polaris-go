@@ -122,7 +122,7 @@ func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
 		c.Assert(allocatedPerSecond >= 195 && allocatedPerSecond <= 205, check.Equals, true)
 	}
 	fmt.Printf("allocatedTotal is %d\n", allocatedTotal)
-	c.Assert(allocatedTotal >= 800 && allocatedTotal <= 1600, check.Equals, true)
+	c.Assert(allocatedTotal >= 700 && allocatedTotal <= 1700, check.Equals, true)
 }
 
 // 应用ID到限流结果

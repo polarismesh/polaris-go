@@ -119,4 +119,8 @@ type Engine interface {
 	InitCalleeService(req *InitCalleeServiceRequest) error
 	// SyncGetConfigFile 同步获取配置文件
 	SyncGetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+	// 执行路由链过滤，返回经过路由后的实例列表
+	ProcessRouters(req *ProcessRoutersRequest) (*InstancesResponse, error)
+	// 执行负载均衡策略，返回负载均衡后的实例
+	ProcessLoadBalance(req *ProcessLoadBalanceRequest) (*OneInstanceResponse, error)
 }

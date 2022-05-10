@@ -192,6 +192,8 @@ type CommonInstancesRequest struct {
 	response        *model.InstancesResponse
 	// 负载均衡算法
 	LbPolicy string
+	// 路由插件列表
+	Routers []servicerouter.ServiceRouter
 }
 
 // clearValues 清理请求体
@@ -211,6 +213,7 @@ func (c *CommonInstancesRequest) clearValues(cfg config.Configuration) {
 	c.FetchAll = false
 	c.response = nil
 	c.LbPolicy = ""
+	c.Routers = nil
 }
 
 // InitByGetOneRequest 通过获取单个请求初始化通用请求对象
@@ -247,6 +250,58 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	BuildControlParam(request, cfg, &c.ControlParam)
 }
 
+func (c *CommonInstancesRequest) InitByProcessLoadBalanceRequest(
+	request *model.ProcessLoadBalanceRequest, cfg config.Configuration) {
+	c.clearValues(cfg)
+	c.DstInstances = request.DstInstances
+	c.DstService.Service = request.DstInstances.GetService()
+	c.DstService.Namespace = request.DstInstances.GetNamespace()
+	c.RouteInfo.DestService = request.DstInstances
+	c.response = request.GetResponse()
+	c.DoLoadBalance = true
+	c.Criteria.HashKey = request.HashKey
+	c.Criteria.ReplicateInfo.Count = request.ReplicateCount
+	c.LbPolicy = request.LbPolicy
+	if len(c.LbPolicy) == 0 {
+		c.LbPolicy = cfg.GetConsumer().GetLoadbalancer().GetType()
+	}
+	if clsOwner, ok := request.DstInstances.(model.ClusterOwner); ok {
+		c.Criteria.Cluster = clsOwner.GetCluster()
+	} else {
+		c.Criteria.Cluster = model.NewCluster(request.DstInstances.GetServiceClusters(), nil)
+	}
+	c.CallResult.APIName = model.ApiProcessLoadBalance
+	c.CallResult.RetStatus = model.RetSuccess
+	c.CallResult.RetCode = model.ErrCodeSuccess
+}
+
+func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
+	request *model.ProcessRoutersRequest, cfg config.Configuration, routers []servicerouter.ServiceRouter) {
+	c.clearValues(cfg)
+	c.DstInstances = request.DstInstances
+	c.DstService.Service = request.DstInstances.GetService()
+	c.DstService.Namespace = request.DstInstances.GetNamespace()
+	c.RouteInfo.DestService = request.DstInstances
+	c.Routers = routers
+	c.response = request.GetResponse()
+	srcService := request.SourceService
+	c.Trigger.EnableDstInstances = false
+	c.Trigger.EnableDstRoute = true
+	if !srcService.IsEmpty() {
+		c.HasSrcService = true
+		c.SrcService.Namespace = srcService.Namespace
+		c.SrcService.Service = srcService.Service
+		c.RouteInfo.SourceService = &srcService
+		if srcService.HasService() {
+			c.Trigger.EnableSrcRoute = true
+		}
+	}
+	c.CallResult.APIName = model.ApiProcessRouters
+	c.CallResult.RetStatus = model.RetSuccess
+	c.CallResult.RetCode = model.ErrCodeSuccess
+	BuildControlParam(request, cfg, &c.ControlParam)
+}
+
 // InitByGetMultiRequest 通过获取多个请求初始化通用请求对象
 func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstancesRequest, cfg config.Configuration) {
 	c.clearValues(cfg)
@@ -260,12 +315,12 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
-	if nil != srcService {
+	if !srcService.IsEmpty() {
 		c.HasSrcService = true
 		c.SrcService.Namespace = srcService.Namespace
 		c.SrcService.Service = srcService.Service
 		c.RouteInfo.SourceService = srcService
-		if len(srcService.Namespace) > 0 && len(srcService.Service) > 0 {
+		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
 		}
 	}
