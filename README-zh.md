@@ -1,6 +1,9 @@
 # polaris-go
 
+[![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
+[![goproxy](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/polarismesh/polaris-go?style=flat-square)](https://github.com/polarismesh/polaris-go)
 
 [English](./README.md) | 简体中文
 
@@ -33,8 +36,9 @@ polaris-go提供以下功能特性：
 
 polaris-go通过go mod进行管理，用户可以在go.mod文件中引入polaris-go的依赖
 
+
 ```go
-github.com/polarismesh/polaris-go v1.0.0
+go get -u github.com/polarismesh/polaris-go
 ```
 
 ### 使用API

@@ -1,6 +1,10 @@
 # polaris-go
 
+[![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
+[![goproxy](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/polarismesh/polaris-go?style=flat-square)](https://github.com/polarismesh/polaris-go)
+
 
 English | [简体中文](./README-zh.md) 
 
@@ -40,7 +44,7 @@ Polaris-go provide features listed as below:
 polaris-go can be referenced by go mod, user can add dependency to go.mod file
 
 ```go
-github.com/polarismesh/polaris-go v1.0.0
+go get -u github.com/polarismesh/polaris-go
 ```
 
 ### Using API
