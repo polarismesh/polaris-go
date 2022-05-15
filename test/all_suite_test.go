@@ -23,9 +23,6 @@ import (
 	_ "net/http/pprof"
 	"testing"
 
-	. "gopkg.in/check.v1"
-
-	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
@@ -35,6 +32,10 @@ import (
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
 	"github.com/polarismesh/polaris-go/test/subscribe"
+
+	"github.com/polarismesh/polaris-go/api"
+
+	. "gopkg.in/check.v1"
 )
 
 // Test 测试用例主入口
@@ -51,7 +52,7 @@ func init() {
 	if err := api.ConfigLoggers(logDir, api.DebugLog); err != nil {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
-	// sdkcontext 销毁测试
+	// Suite sdkcontext 销毁测试
 	Suite(&stability.SDKContextDestroySuite{})
 	// consumer api测试
 	Suite(&discover.ConsumerTestingSuite{})

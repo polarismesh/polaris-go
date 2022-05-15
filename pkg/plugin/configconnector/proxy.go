@@ -30,6 +30,7 @@ type Proxy struct {
 	engine model.Engine
 }
 
+// SetRealPlugin set real plugin
 func (p *Proxy) SetRealPlugin(plugin plugin.Plugin, engine model.Engine) {
 	p.ConfigConnector = plugin.(ConfigConnector)
 	p.engine = engine
