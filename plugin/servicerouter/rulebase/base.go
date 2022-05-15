@@ -93,17 +93,17 @@ type prioritySubsets struct {
 	totalWeight uint32
 }
 
-// 获取节点累积的权重
+// GetValue 获取节点累积的权重
 func (p *prioritySubsets) GetValue(index int) uint64 {
 	return uint64(p.subsets[index].weight)
 }
 
-// 获取总权重值
+// TotalWeight 获取总权重值
 func (p *prioritySubsets) TotalWeight() int {
 	return int(p.totalWeight)
 }
 
-// 获取数组成员数
+// Count 获取数组成员数
 func (p *prioritySubsets) Count() int {
 	return len(p.subsets)
 }

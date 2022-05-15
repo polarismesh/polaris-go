@@ -21,7 +21,7 @@ package tcp
 type Config struct {
 }
 
-// verify 检验健康探测配置
+// Verify 检验健康探测配置
 func (r *Config) Verify() error {
 	return nil
 }

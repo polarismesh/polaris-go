@@ -29,25 +29,25 @@ import (
 
 // 定义错误率熔断配置的默认值
 const (
-	// 只有请求数达到某个阈值才执行熔断计算，默认10
+	// DefaultRequestVolumeThreshold 只有请求数达到某个阈值才执行熔断计算，默认10
 	DefaultRequestVolumeThreshold = 10
-	// 触发熔断的错误率阈值，默认0.5
+	// DefaultErrorRateThreshold 触发熔断的错误率阈值，默认0.5
 	DefaultErrorRateThreshold float64 = 0.5
-	// 默认错误率百分比
+	// DefaultErrorRatePercent 默认错误率百分比
 	DefaultErrorRatePercent int = 50
-	// 最大错误率百分比
+	// MaxErrorRatePercent 最大错误率百分比
 	MaxErrorRatePercent int = 100
-	// 错误率统计时间窗口，默认1分钟
+	// DefaultMetricStatTimeWindow 错误率统计时间窗口，默认1分钟
 	DefaultMetricStatTimeWindow = 60 * time.Second
-	// 最小错误率统计时间窗口，1s
+	// MinMetricStatTimeWindow 最小错误率统计时间窗口，1s
 	MinMetricStatTimeWindow = 1 * time.Second
-	// 统计窗口细分的桶数量，默认10
+	// DefaultMetricNumBuckets 统计窗口细分的桶数量，默认10
 	DefaultMetricNumBuckets = 5
-	// 最小的滑窗时间片，1ms
+	// MinMetricStatBucketSize 最小的滑窗时间片，1ms
 	MinMetricStatBucketSize = 1 * time.Millisecond
 )
 
-// 基于错误率熔断器的配置结构
+// Config 基于错误率熔断器的配置结构
 type Config struct {
 	RequestVolumeThreshold int `yaml:"requestVolumeThreshold" json:"requestVolumeThreshold"`
 	ErrorRatePercent       int `yaml:"errorRatePercent" json:"errorRatePercent"`
@@ -57,7 +57,7 @@ type Config struct {
 	MetricNumBuckets     int            `yaml:"metricNumBuckets" json:"metricNumBuckets"`
 }
 
-// 检验错误率熔断配置
+// Verify 检验错误率熔断配置
 func (r *Config) Verify() error {
 	var errs error
 	if r.RequestVolumeThreshold <= 0 {
@@ -82,13 +82,13 @@ func (r *Config) Verify() error {
 	return errs
 }
 
-// 获取滑桶时间间隔
+// GetBucketInterval 获取滑桶时间间隔
 func (r *Config) GetBucketInterval() time.Duration {
 	bucketSize := math.Ceil(float64(*r.MetricStatTimeWindow) / float64(r.MetricNumBuckets))
 	return time.Duration(bucketSize)
 }
 
-// 设置错误率熔断配置的默认值
+// SetDefault 设置错误率熔断配置的默认值
 func (r *Config) SetDefault() {
 	if r.RequestVolumeThreshold == 0 {
 		r.RequestVolumeThreshold = DefaultRequestVolumeThreshold
@@ -108,42 +108,42 @@ func (r *Config) SetDefault() {
 	}
 }
 
-// 触发错误率熔断的请求量阈值
+// GetRequestVolumeThreshold 触发错误率熔断的请求量阈值
 func (r *Config) GetRequestVolumeThreshold() int {
 	return r.RequestVolumeThreshold
 }
 
-// 设置触发错误率熔断的请求量阈值
+// SetRequestVolumeThreshold 设置触发错误率熔断的请求量阈值
 func (r *Config) SetRequestVolumeThreshold(value int) {
 	r.RequestVolumeThreshold = value
 }
 
-// 触发熔断的错误率阈值，取值范围(0, 100]
+// GetErrorRatePercent 触发熔断的错误率阈值，取值范围(0, 100]
 func (r *Config) GetErrorRatePercent() int {
 	return r.ErrorRatePercent
 }
 
-// 设置错误率阈值
+// SetErrorRatePercent 设置错误率阈值
 func (r *Config) SetErrorRatePercent(value int) {
 	r.ErrorRatePercent = value
 }
 
-// 错误率统计时间窗口
+// GetMetricStatTimeWindow 错误率统计时间窗口
 func (r *Config) GetMetricStatTimeWindow() time.Duration {
 	return *r.MetricStatTimeWindow
 }
 
-// 设置错误率统计时间窗口
+// SetMetricStatTimeWindow 设置错误率统计时间窗口
 func (r *Config) SetMetricStatTimeWindow(value time.Duration) {
 	r.MetricStatTimeWindow = &value
 }
 
-// 统计窗口细分的桶数量
+// GetMetricNumBuckets 统计窗口细分的桶数量
 func (r *Config) GetMetricNumBuckets() int {
 	return r.MetricNumBuckets
 }
 
-// 设置统计窗口细分的桶数量
+// SetMetricNumBuckets 设置统计窗口细分的桶数量
 func (r *Config) SetMetricNumBuckets(value int) {
 	r.MetricNumBuckets = value
 }

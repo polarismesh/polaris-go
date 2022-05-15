@@ -14,11 +14,12 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import "net"
 
-// 创建一个A RR
+// NewARR 创建一个A RR
 func NewARR(name string, ip net.IP, ttl uint32) RR {
 	rr := A{
 		Hdr: RR_Header{
@@ -33,7 +34,7 @@ func NewARR(name string, ip net.IP, ttl uint32) RR {
 	return &rr
 }
 
-// 创建一个AAAA RR
+// NewAAAARR 创建一个AAAA RR
 func NewAAAARR(name string, ip net.IP, ttl uint32) RR {
 	rr := AAAA{
 		Hdr: RR_Header{

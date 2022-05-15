@@ -24,7 +24,7 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-// 将用户的API注册请求结构转换成为server端需要的proto结构
+// RegisterRequestToProto 将用户的API注册请求结构转换成为server端需要的proto结构
 func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, "")
@@ -83,21 +83,21 @@ func assembleNamingPbInstance(namespace string, service string, host string,
 	return &pbInstance
 }
 
-// 将用户心跳请转化为服务端需要的proto
+// HeartbeatRequestToProto 将用户心跳请转化为服务端需要的proto
 func HeartbeatRequestToProto(request *model.InstanceHeartbeatRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
-// 将用户反注册请求转化为服务端需要的proto
+// DeregisterRequestToProto 将用户反注册请求转化为服务端需要的proto
 func DeregisterRequestToProto(request *model.InstanceDeRegisterRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
-// 将客户端上报请转化为服务端需要的proto
+// ReportClientRequestToProto 将客户端上报请转化为服务端需要的proto
 func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance *namingpb.Client) {
 	pbInstance = &namingpb.Client{
 		Id: &wrappers.StringValue{Value: request.ID},

@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
+// InstancesFilter RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
@@ -64,7 +64,7 @@ func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInf
 	return GetFilteredInstances(g.valueCtx, routeInfo, clusters, g.percentOfMinInstances, withinCluster, g.recoverAll)
 }
 
-// 是否需要启动规则路由
+// Enable 是否需要启动规则路由
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	return true
 }

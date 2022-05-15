@@ -63,11 +63,9 @@ type LocalCache struct {
 	*plugin.PluginBase
 	*common.RunContext
 	// 这个锁的只有在服务新增或者删除时候触发，频率较小
-	servicesMutex *sync.RWMutex
-	services      model.HashSet
-
-	serviceMap *sync.Map
-
+	servicesMutex          *sync.RWMutex
+	services               model.HashSet
+	serviceMap             *sync.Map
 	connector              serverconnector.ServerConnector
 	serviceRefreshInterval time.Duration
 	serviceExpireTime      time.Duration

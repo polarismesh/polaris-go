@@ -67,6 +67,7 @@ func (h *ReportHandler) Destroy() error {
 	return nil
 }
 
+// InitLocal 初始化本地插件
 func (h *ReportHandler) InitLocal(_ *namingpb.Client) {
 
 }

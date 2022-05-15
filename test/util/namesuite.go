@@ -17,7 +17,7 @@
 
 package util
 
-// 测试套件接口
+// NamingTestSuite test suite interface
 type NamingTestSuite interface {
 	GetName() string
 }

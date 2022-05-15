@@ -73,7 +73,7 @@ var (
 	}
 )
 
-// 缓存状态ToString
+// String 缓存状态ToString
 func (c CachedStatus) String() string {
 	return CachedStatusToPresent[c]
 }

@@ -23,6 +23,8 @@ import (
 	_ "net/http/pprof"
 	"testing"
 
+	. "gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
@@ -32,8 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/test/reporthandler"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
-
-	. "gopkg.in/check.v1"
+	"github.com/polarismesh/polaris-go/test/subscribe"
 )
 
 // Test 测试用例主入口
@@ -87,7 +88,7 @@ func init() {
 	// server异常调用测试
 	Suite(&stability.ServerFailOverSuite{})
 	// 消息订阅 测试
-	// Suite(&subscribe.EventSubscribeSuit{})
+	Suite(&subscribe.EventSubscribeSuit{})
 	// //金丝雀路由测试
 	// Suite(&serviceroute.CanaryTestingSuite{})
 	// 内部服务结构测试

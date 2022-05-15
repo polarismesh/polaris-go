@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
@@ -37,7 +38,7 @@ var TypeToQuestion = map[int]func() Question{
 	OpCodePolarisReportClient:       func() Question { return new(PolarisReportClientQuestion) },
 }
 
-// dns Question interface定义
+// Question dns Question interface定义
 type Question interface {
 	String() string
 	pack(buffer *bytes.Buffer) (int, error)
@@ -45,7 +46,7 @@ type Question interface {
 	unPackPolarisReq() error
 }
 
-// 标准的dns question
+// DNSQuestion 标准的dns question
 type DNSQuestion struct {
 	Name   string `dns:"cdomain-name"` // "cdomain-name" specifies encoding (and may be compressed)
 	Qtype  uint16
@@ -71,7 +72,7 @@ func (q *DNSQuestion) pack(buffer *bytes.Buffer) (int, error) {
 	return length, nil
 }
 
-// 打印，便于调式等
+// String 打印，便于调式等
 func (q *DNSQuestion) String() (s string) {
 	// prefix with ; (as in dig)
 	s = ";" + q.Name + "\t"
@@ -159,7 +160,7 @@ func UnpackDomainName(msg []byte, off int) (string, int, error) {
 	return string(s), off1, nil
 }
 
-// base Polaris question
+// BasePolarisQuestion base Polaris question
 type BasePolarisQuestion struct {
 	Name   string `dns:"cdomain-name"` // "cdomain-name" specifies encoding (and may be compressed)
 	Qtype  uint16
@@ -226,7 +227,7 @@ func (q *BasePolarisQuestion) unPackPolarisReq() error {
 	return nil
 }
 
-// Polaris 获取Resource的question
+// PolarisGetResourceQuestion Polaris 获取Resource的question
 type PolarisGetResourceQuestion struct {
 	BasePolarisQuestion
 	Req *v1.DiscoverRequest
@@ -252,7 +253,7 @@ func (q *PolarisGetResourceQuestion) unPackPolarisReq() error {
 	return nil
 }
 
-// Polaris 客户端上报（获取SideCar地理位置）
+// PolarisReportClientQuestion Polaris 客户端上报（获取SideCar地理位置）
 type PolarisReportClientQuestion struct {
 	BasePolarisQuestion
 	Req *v1.Client
@@ -278,7 +279,7 @@ func (q *PolarisReportClientQuestion) unPackPolarisReq() error {
 	return nil
 }
 
-// Polaris 注册、反注册、心跳 Question
+// PolarisInstanceQuestion Polaris 注册、反注册、心跳 Question
 type PolarisInstanceQuestion struct {
 	BasePolarisQuestion
 	Req *v1.Instance

@@ -27,17 +27,17 @@ import (
 )
 
 const (
-	// 默认初始化表向量区间
+	// DefaultTableSize 默认初始化表向量区间
 	DefaultTableSize = 65537
 )
 
-// 一致性hash配置对象
+// Config 一致性hash配置对象
 type Config struct {
 	HashFunction string `yaml:"hashFunction" json:"hashFunction"`
 	TableSize    int    `yaml:"tableSize" json:"tableSize"`
 }
 
-// 检验一致性hash配置
+// Verify 检验一致性hash配置
 func (c *Config) Verify() error {
 	var errs error
 	if !isPrime(c.TableSize) {
@@ -60,7 +60,7 @@ func isPrime(n int) bool {
 	return true
 }
 
-// 设置一致性hash默认值
+// SetDefault 设置一致性hash默认值
 func (c *Config) SetDefault() {
 	if c.TableSize == 0 {
 		c.TableSize = DefaultTableSize

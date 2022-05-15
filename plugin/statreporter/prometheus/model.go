@@ -27,7 +27,7 @@ import (
 type MetricsType int
 
 const (
-	// metric type.
+	// TypeForCounterVec metric type.
 	TypeForCounterVec MetricsType = iota
 	TypeForGaugeVec
 	TypeForGauge
@@ -44,7 +44,7 @@ type metricDesc struct {
 }
 
 const (
-	// SystemMetricName.
+	// CalleeNamespace SystemMetricName.
 	CalleeNamespace = "callee_namespace"
 	CalleeService   = "callee_service"
 	CalleeSubset    = "callee_subset"
@@ -57,7 +57,7 @@ const (
 	CallerLabels    = "caller_labels"
 	MetricNameLabel = "metric_name"
 
-	// 与路由、请求相关的指标信息.
+	// MetricsNameUpstreamRequestTotal 与路由、请求相关的指标信息.
 	MetricsNameUpstreamRequestTotal      = "upstream_rq_total"
 	MetricsNameUpstreamRequestSuccess    = "upstream_rq_success"
 	MetricsNameUpstreamRequestTimeout    = "upstream_rq_timeout"
@@ -201,6 +201,7 @@ func GetLabels(m map[string]LabelValueSupplier) []string {
 }
 
 var (
+	// InstanceGaugeLabelOrder 实例监控指标的label顺序
 	InstanceGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
 		// 被调方相关信息
 		CalleeNamespace: func(args interface{}) string {

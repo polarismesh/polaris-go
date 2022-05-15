@@ -30,7 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
-// ReporthandlerTestingSuite is a test suite for testing the reporthandler
+// ReporthandlerTestingSuite is a test suite for testing the report handler
 type ReporthandlerTestingSuite struct {
 }
 

@@ -28,7 +28,7 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// hash负载均衡插件
+// LoadBalancer hash负载均衡插件
 type LoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config

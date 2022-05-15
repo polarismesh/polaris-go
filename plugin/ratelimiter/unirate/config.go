@@ -28,19 +28,19 @@ const (
 	defaultMaxQueuingTime = 1 * time.Second
 )
 
-// 匀速排队限流器配置
+// Config 匀速排队限流器配置
 type Config struct {
 	MaxQueuingTime *time.Duration `yaml:"maxQueuingTime" json:"maxQueuingTime"`
 }
 
-// 设置默认值
+// SetDefault 设置默认值
 func (c *Config) SetDefault() {
 	if nil == c.MaxQueuingTime {
 		c.MaxQueuingTime = model.ToDurationPtr(defaultMaxQueuingTime)
 	}
 }
 
-// 校验配置值
+// Verify 校验配置值
 func (c *Config) Verify() error {
 	if nil == c.MaxQueuingTime {
 		return fmt.Errorf("MaxQueuingTime not configured")

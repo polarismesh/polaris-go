@@ -304,13 +304,11 @@ func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgo
 		if !reflect2.IsNil(svcLoadbalancer) {
 			return svcLoadbalancer, nil
 		}
-		return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 	}
 	if chooseAlgorithm == "" {
 		return e.loadbalancer, nil
-	} else {
-		return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 	}
+	return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 }
 
 // Destroy 销毁流程引擎

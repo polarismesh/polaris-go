@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
