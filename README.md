@@ -1,5 +1,7 @@
 # polaris-go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
+
 English | [简体中文](./README-zh.md) 
 
 ---

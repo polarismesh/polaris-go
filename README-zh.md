@@ -1,5 +1,10 @@
 # polaris-go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
+
+[English](./README.md) | 简体中文
+
+---
 北极星polaris是一个支持多种开发语言、兼容主流开发框架的服务治理中心。polaris-go是北极星的Go语言嵌入式服务治理SDK
 
 ## 概述
