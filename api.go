@@ -136,10 +136,12 @@ type RouterAPI interface {
 	ProcessLoadBalance(*ProcessLoadBalanceRequest) (*model.OneInstanceResponse, error)
 }
 
+// ProcessRoutersRequest process routers to filter instances
 type ProcessRoutersRequest struct {
 	model.ProcessRoutersRequest
 }
 
+// ProcessLoadBalanceRequest process load balancer to get the target instances
 type ProcessLoadBalanceRequest struct {
 	model.ProcessLoadBalanceRequest
 }

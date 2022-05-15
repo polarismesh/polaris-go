@@ -120,14 +120,17 @@ func NewConsumerAPIByConfig(cfg config.Configuration) (ConsumerAPI, error) {
 	return &consumerAPI{rawAPI: c}, nil
 }
 
+// NewSDKContext 创建SDK上下文
 func NewSDKContext() (api.SDKContext, error) {
 	return api.InitContextByConfig(config.NewDefaultConfigurationWithDomain())
 }
 
+// NewSDKContextByAddress 根据address创建SDK上下文
 func NewSDKContextByAddress(address ...string) (api.SDKContext, error) {
 	return api.InitContextByConfig(config.NewDefaultConfiguration(address))
 }
 
+// NewSDKContextByConfig 根据配置创建SDK上下文
 func NewSDKContextByConfig(cfg config.Configuration) (api.SDKContext, error) {
 	return api.InitContextByConfig(cfg)
 }
