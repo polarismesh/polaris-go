@@ -98,12 +98,17 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
 	}
+	return e.doLoadBalanceToOneInstance(startTime, commonRequest)
+}
+
+func (e *Engine) doLoadBalanceToOneInstance(
+	startTime time.Time, commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
 	balancer, err := e.getLoadBalancer(commonRequest.DstInstances, commonRequest.LbPolicy)
 	if err != nil {
 		return nil, err
 	}
 	inst, err := loadbalancer.ChooseInstance(e.globalCtx, balancer, &commonRequest.Criteria, commonRequest.DstInstances)
-	consumeTime = e.globalCtx.Since(startTime)
+	consumeTime := e.globalCtx.Since(startTime)
 	if err != nil {
 		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
 		return nil, err
@@ -211,9 +216,17 @@ func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime ti
 // getServiceRoutedInstances 过滤经过规则路由后的服务实例
 func (e *Engine) getServiceRoutedInstances(
 	req *data.CommonInstancesRequest) (routeResult *servicerouter.RouteResult, err model.SDKError) {
-	var routerChain = e.getRouterChain(req.DstInstances)
+	var routerChain = e.resolveRouterChain(req)
 	return servicerouter.GetFilterCluster(e.globalCtx, routerChain.Chain, &req.RouteInfo,
 		req.DstInstances.GetServiceClusters())
+}
+
+func (e *Engine) resolveRouterChain(req *data.CommonInstancesRequest) *servicerouter.RouterChain {
+	if len(req.Routers) > 0 {
+		// build chain by router plugins
+		return &servicerouter.RouterChain{Chain: req.Routers}
+	}
+	return e.getRouterChain(req.DstInstances)
 }
 
 // syncGetWrapInstances 同步获取封装的服务实例应答
@@ -274,7 +287,7 @@ func (e *Engine) SyncGetInstances(req *model.GetInstancesRequest) (*model.Instan
 	return resp, err
 }
 
-// SyncGetInstances 同步获取服务实例
+// SyncGetAllInstances 同步获取服务实例
 func (e *Engine) SyncGetAllInstances(req *model.GetAllInstancesRequest) (*model.InstancesResponse, error) {
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetAllRequest(req, e.configuration)
@@ -468,7 +481,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	return nil
 }
 
-// SyncGetServices
+// SyncGetServices 获取服务列表
 func (e *Engine) SyncGetServices(eventType model.EventType,
 	req *model.GetServicesRequest) (*model.ServicesResponse, error) {
 	commonRequest := data.PoolGetServicesRequest()
@@ -487,7 +500,7 @@ func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.
 	return commonRequest.BuildServicesResponse(commonRequest.GetServices()), nil
 }
 
-// SyncGetMeshConfig
+// SyncGetMeshConfig 获取mesh配置
 func (e *Engine) SyncGetMeshConfig(eventType model.EventType,
 	req *model.GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
 	// 方法开始时间

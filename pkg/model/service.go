@@ -648,6 +648,22 @@ func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
 }
 
+// IsEmpty 服务数据内容是否为空
+func (i *ServiceInfo) IsEmpty() bool {
+	if i == nil {
+		return true
+	}
+	return len(i.Namespace) == 0 && len(i.Service) == 0 && len(i.Metadata) == 0
+}
+
+// HasService 是否存在服务名
+func (i *ServiceInfo) HasService() bool {
+	if i == nil {
+		return false
+	}
+	return len(i.Namespace) > 0 && len(i.Service) > 0
+}
+
 // OneInstanceResponse 单个服务实例
 type OneInstanceResponse struct {
 	InstancesResponse
@@ -733,6 +749,11 @@ func (i *InstancesResponse) ReloadServiceClusters() {
 	i.Cluster.clusters.GetServiceInstances().ReloadServiceClusters()
 }
 
+// GetCluster InstancesResponse get the cluster
+func (i *InstancesResponse) GetCluster() *Cluster {
+	return i.Cluster
+}
+
 // RetStatus 调用结果状态
 type RetStatus int
 
@@ -741,7 +762,7 @@ const (
 	RetSuccess RetStatus = 1
 	// RetFail 调用失败
 	RetFail RetStatus = 2
-	// 调用超时
+	// RetTimeout 调用超时
 	RetTimeout RetStatus = 3
 )
 
@@ -760,6 +781,7 @@ type ServiceCallResult struct {
 	Delay *time.Duration
 }
 
+// RateLimitGauge Rate Limit Gauge
 type RateLimitGauge struct {
 	EmptyInstanceGauge
 	Namespace string
@@ -768,6 +790,7 @@ type RateLimitGauge struct {
 	Labels    map[string]string
 }
 
+// CircuitBreakGauge Circuit Break Gauge
 type CircuitBreakGauge struct {
 	EmptyInstanceGauge
 	ChangeInstance Instance
@@ -775,12 +798,12 @@ type CircuitBreakGauge struct {
 	CBStatus       CircuitBreakerStatus
 }
 
-// 获取变化前的熔断状态
+// GetCircuitBreakerStatus 获取变化前的熔断状态
 func (cbg *CircuitBreakGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return cbg.CBStatus
 }
 
-// 获取状态发生改变的实例
+// GetCalledInstance 获取状态发生改变的实例
 func (cbg *CircuitBreakGauge) GetCalledInstance() Instance {
 	return cbg.ChangeInstance
 }

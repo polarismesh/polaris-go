@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -31,7 +32,7 @@ func main() {
 		return
 	}
 
-	//获取远程的配置文件
+	// 获取远程的配置文件
 	namespace := "default"
 	fileGroup := "polaris-config-example"
 	fileName := "example.yaml"
@@ -48,7 +49,7 @@ func main() {
 	// 方式一：添加监听器
 	configFile.AddChangeListener(changeListener)
 
-	//方式二：添加监听器
+	// 方式二：添加监听器
 	changeChan := make(chan model.ConfigFileChangeEvent)
 	configFile.AddChangeListenerWithChannel(changeChan)
 

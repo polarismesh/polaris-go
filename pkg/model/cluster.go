@@ -93,6 +93,12 @@ type MetaComposedValue struct {
 // 存放集群对象池
 var clusterPool = &sync.Pool{}
 
+// ClusterOwner 保存了cluster指针的对象
+type ClusterOwner interface {
+	// GetCluster get the retained cluster
+	GetCluster() *Cluster
+}
+
 // Cluster 路由后的集群信息，包含的是标签以及地域信息
 type Cluster struct {
 	ClusterKey
@@ -466,7 +472,7 @@ type ExtendedSelector interface {
 
 	Select(criteria interface{}) (int, *ReplicateNodes, error)
 
-	// 对应负载均衡插件的名字
+	// ID 对应负载均衡插件的名字
 	ID() int32
 }
 
@@ -693,39 +699,39 @@ type ClusterEventHandler struct {
 
 // ServiceClusters 集群缓存接口
 type ServiceClusters interface {
-	// 获取就近集群
+	// GetNearbyCluster 获取就近集群
 	GetNearbyCluster(location Location) (*Cluster, int)
-	// 设置就近集群
+	// SetNearbyCluster 设置就近集群
 	SetNearbyCluster(location Location, cluster *Cluster, matchLevel int)
-	// 获取缓存值
+	// GetClusterInstances 获取缓存值
 	GetClusterInstances(cacheKey ClusterKey) *ClusterValue
-	// 获取 包含指定key但是不匹配value 的ClusterValue
+	// GetContainNotMatchMetaKeyClusterInstances 获取 包含指定key但是不匹配value 的ClusterValue
 	GetContainNotMatchMetaKeyClusterInstances(cacheKey ClusterKey) *ClusterValue
-	// 获取不包含指定meta的ClusterValue
+	// GetNotContainMetaKeyClusterInstances 获取不包含指定meta的ClusterValue
 	GetNotContainMetaKeyClusterInstances(cacheKey ClusterKey) *ClusterValue
-	// 获取包含指定meta key的ClusterValue
+	// GetContainMetaKeyClusterInstances 获取包含指定meta key的ClusterValue
 	GetContainMetaKeyClusterInstances(cacheKey ClusterKey) *ClusterValue
-	// 构建缓存实例
+	// AddInstance 构建缓存实例
 	AddInstance(instance Instance)
-	// 服务存在该大区
+	// HasRegion 服务存在该大区
 	HasRegion(region string) bool
-	// 服务存在该园区
+	// HasZone 服务存在该园区
 	HasZone(zone string) bool
-	// 服务存在该机房
+	// HasCampus 服务存在该机房
 	HasCampus(campus string) bool
-	// 是否开启了就近路由
+	// IsNearbyEnabled 是否开启了就近路由
 	IsNearbyEnabled() bool
-	// 是否开启了金丝雀路由
+	// IsCanaryEnabled 是否开启了金丝雀路由
 	IsCanaryEnabled() bool
-	// 获取实例的标签集合
+	// GetInstanceMetaValues 获取实例的标签集合
 	GetInstanceMetaValues(location Location, metaKey string) map[string]string
-	// 获取服务二元组信息
+	// GetServiceKey 获取服务二元组信息
 	GetServiceKey() ServiceKey
-	// 获取所属服务
+	// GetServiceInstances 获取所属服务
 	GetServiceInstances() ServiceInstances
-	// 获取扩展的缓存值
+	// GetExtendedCacheValue 获取扩展的缓存值
 	GetExtendedCacheValue(pluginIndex int) interface{}
-	// 设置扩展的缓存值，需要预初始化好，否则会有并发修改的问题
+	// SetExtendedCacheValue 设置扩展的缓存值，需要预初始化好，否则会有并发修改的问题
 	SetExtendedCacheValue(pluginIndex int, value interface{})
 }
 

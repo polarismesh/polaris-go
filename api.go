@@ -126,3 +126,20 @@ type ConfigAPI interface {
 	// GetConfigFile 获取配置文件
 	GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
 }
+
+// RouterAPI 路由API方法
+type RouterAPI interface {
+	api.SDKOwner
+	// ProcessRouters process routers to filter instances
+	ProcessRouters(*ProcessRoutersRequest) (*model.InstancesResponse, error)
+	// ProcessLoadBalance process load balancer to get the target instances
+	ProcessLoadBalance(*ProcessLoadBalanceRequest) (*model.OneInstanceResponse, error)
+}
+
+type ProcessRoutersRequest struct {
+	model.ProcessRoutersRequest
+}
+
+type ProcessLoadBalanceRequest struct {
+	model.ProcessLoadBalanceRequest
+}

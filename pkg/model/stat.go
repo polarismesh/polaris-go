@@ -23,29 +23,29 @@ import (
 
 // InstanceGauge 针对单个实例的单次评估指标.
 type InstanceGauge interface {
-	// 获取服务的命名空间
+	// GetNamespace 获取服务的命名空间
 	GetNamespace() string
-	// 获取服务名
+	// GetService 获取服务名
 	GetService() string
-	// 获取调用api
+	// GetAPI 获取调用api
 	GetAPI() ApiOperation
-	// 实例的节点信息
+	// GetHost 实例的节点信息
 	GetHost() string
-	// 实例的端口信息
+	// GetPort 实例的端口信息
 	GetPort() int
-	// 实例的调用返回状态
+	// GetRetStatus 实例的调用返回状态
 	GetRetStatus() RetStatus
-	// 实例的熔断状态
+	// GetCircuitBreakerStatus 实例的熔断状态
 	GetCircuitBreakerStatus() CircuitBreakerStatus
-	// 实例的返回码
+	// GetRetCodeValue 实例的返回码
 	GetRetCodeValue() int32
-	// 调用时延
+	// GetDelay 调用时延
 	GetDelay() *time.Duration
-	// 调用时延
+	// GetDelayRange 调用时延
 	GetDelayRange() ApiDelayRange
-	// 获取被调节点
+	// GetCalledInstance 获取被调节点
 	GetCalledInstance() Instance
-	// 检测指标是否合法
+	// Validate 检测指标是否合法
 	Validate() error
 }
 
@@ -74,42 +74,42 @@ func ValidMetircType(t MetricType) bool {
 // EmptyInstanceGauge instangeGauge的空实现.
 type EmptyInstanceGauge struct{}
 
-// GetNamespace.
+// GetNamespace 获取服务的命名空间
 func (e EmptyInstanceGauge) GetNamespace() string {
 	return ""
 }
 
-// GetService.
+// GetService 获取服务名
 func (e EmptyInstanceGauge) GetService() string {
 	return ""
 }
 
-// GetHost.
+// GetHost 实例的节点信息
 func (e EmptyInstanceGauge) GetHost() string {
 	return ""
 }
 
-// GetPort.
+// GetPort 实例的端口信息
 func (e EmptyInstanceGauge) GetPort() int {
 	return -1
 }
 
-// GetRetStatus.
+// GetRetStatus 实例的调用返回状态
 func (e EmptyInstanceGauge) GetRetStatus() RetStatus {
 	return RetFail
 }
 
-// GetCircuitBreakerStatus.
+// GetCircuitBreakerStatus 实例的熔断状态
 func (e EmptyInstanceGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return nil
 }
 
-// GetRetCodeValue retcode.
+// GetRetCodeValue 实例的返回码 ret code.
 func (e EmptyInstanceGauge) GetRetCodeValue() int32 {
 	return 0
 }
 
-// GetDelay delay.
+// GetDelay 调用时延 delay.
 func (e EmptyInstanceGauge) GetDelay() *time.Duration {
 	return nil
 }
@@ -156,7 +156,9 @@ const (
 	ApiMeshConfig
 	ApiInitCalleeServices
 	ApiMesh
-	// ApiOperationMax 这个必须在最下面.
+	ApiProcessRouters
+	ApiProcessLoadBalance
+	// ApiOperationMax 这个必须在最下面
 	ApiOperationMax
 )
 
@@ -175,6 +177,8 @@ var (
 		ApiMeshConfig:              "Consumer::GetMeshConfig",
 		ApiInitCalleeServices:      "Consumer::InitCalleeServices",
 		ApiMesh:                    "Consumer::GetMesh",
+		ApiProcessRouters:          "Router::ProcessRouters",
+		ApiProcessLoadBalance:      "Router::ProcessLoadBalance",
 	}
 )
 

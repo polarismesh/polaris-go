@@ -284,27 +284,33 @@ func (e *Engine) Start() error {
 
 // getRouterChain 根据服务获取路由链
 func (e *Engine) getRouterChain(svcInstances model.ServiceInstances) *servicerouter.RouterChain {
-	svcInstancesProto := svcInstances.(*pb.ServiceInstancesInProto)
-	routerChain := svcInstancesProto.GetServiceRouterChain()
-	if nil == routerChain {
-		return e.routerChain
+	svcInstancesProto, ok := svcInstances.(*pb.ServiceInstancesInProto)
+	if ok {
+		routerChain := svcInstancesProto.GetServiceRouterChain()
+		if nil != routerChain {
+			return routerChain
+		}
 	}
-	return routerChain
+	return e.routerChain
 }
 
 // getLoadBalancer 根据服务获取负载均衡器
 // 优先使用被调配置的负载均衡算法，其次选择用户选择的算法
 func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgorithm string) (
 	loadbalancer.LoadBalancer, error) {
-	svcInstancesProto := svcInstances.(*pb.ServiceInstancesInProto)
-	svcLoadbalancer := svcInstancesProto.GetServiceLoadbalancer()
-	if reflect2.IsNil(svcLoadbalancer) {
-		if chooseAlgorithm == "" {
-			return e.loadbalancer, nil
+	svcInstancesProto, ok := svcInstances.(*pb.ServiceInstancesInProto)
+	if ok {
+		svcLoadbalancer := svcInstancesProto.GetServiceLoadbalancer()
+		if !reflect2.IsNil(svcLoadbalancer) {
+			return svcLoadbalancer, nil
 		}
 		return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
 	}
-	return svcLoadbalancer, nil
+	if chooseAlgorithm == "" {
+		return e.loadbalancer, nil
+	} else {
+		return data.GetLoadBalancerByLbType(chooseAlgorithm, e.plugins)
+	}
 }
 
 // Destroy 销毁流程引擎

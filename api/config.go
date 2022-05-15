@@ -37,9 +37,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/polarismesh/polaris-go/pkg/version"
-
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
+	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
 const (
@@ -89,6 +88,11 @@ type SDKContext interface {
 type SDKOwner interface {
 	// SDKContext 获取SDK上下文
 	SDKContext() SDKContext
+}
+
+// CheckAvailable 判断API是否可用
+func CheckAvailable(owner SDKOwner) error {
+	return checkAvailable(owner)
 }
 
 // checkAvailable 判断API是否可用
