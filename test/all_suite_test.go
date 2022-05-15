@@ -23,6 +23,7 @@ import (
 	_ "net/http/pprof"
 	"testing"
 
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
@@ -31,9 +32,6 @@ import (
 	"github.com/polarismesh/polaris-go/test/reporthandler"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
-	"github.com/polarismesh/polaris-go/test/subscribe"
-
-	"github.com/polarismesh/polaris-go/api"
 
 	. "gopkg.in/check.v1"
 )
@@ -52,7 +50,7 @@ func init() {
 	if err := api.ConfigLoggers(logDir, api.DebugLog); err != nil {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
-	// Suite sdkcontext 销毁测试
+	// sdkcontext 销毁测试
 	Suite(&stability.SDKContextDestroySuite{})
 	// consumer api测试
 	Suite(&discover.ConsumerTestingSuite{})
@@ -89,7 +87,7 @@ func init() {
 	// server异常调用测试
 	Suite(&stability.ServerFailOverSuite{})
 	// 消息订阅 测试
-	Suite(&subscribe.EventSubscribeSuit{})
+	// Suite(&subscribe.EventSubscribeSuit{})
 	// //金丝雀路由测试
 	// Suite(&serviceroute.CanaryTestingSuite{})
 	// 内部服务结构测试
