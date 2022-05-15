@@ -29,6 +29,15 @@ jobs:
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: latest
+    name: Run Revive Action
+    steps:
+      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v3
+      - name: Run Revive Action
+        uses: morphy2k/revive-action@v2
+        with:
+          # Path to your Revive config within the repo (optional)
+          config: revive.toml
 
   build:
     runs-on: ubuntu-latest

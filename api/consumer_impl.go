@@ -26,7 +26,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
-
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
@@ -46,7 +45,7 @@ func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInst
 	return c.context.GetEngine().SyncGetOneInstance(&req.GetOneInstanceRequest)
 }
 
-// GetInstances sync get one instances after route
+// GetInstances syncs get one instance after route
 func (c *consumerAPI) GetInstances(req *GetInstancesRequest) (*model.InstancesResponse, error) {
 	if err := checkAvailable(c); err != nil {
 		return nil, err
@@ -215,9 +214,8 @@ func (g InstanceRequest) Validate() error {
 	}
 	if errs != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceRequest")
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // 创建上报结果对象

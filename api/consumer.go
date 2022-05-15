@@ -21,21 +21,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// GetOneInstanceRequest 获取单个服务的请求对象
-type GetOneInstanceRequest struct {
-	model.GetOneInstanceRequest
-}
-
-// GetInstancesRequest 获取多个服务的请求对象
-type GetInstancesRequest struct {
-	model.GetInstancesRequest
-}
-
-// GetAllInstancesRequest 获取服务下所有实例的请求对象
-type GetAllInstancesRequest struct {
-	model.GetAllInstancesRequest
-}
-
 const (
 	// RetSuccess 调用成功
 	RetSuccess = model.RetSuccess
@@ -56,6 +41,21 @@ const (
 	MeshEnvoyFilter     = model.MeshEnvoyFilter
 	MeshGateway         = model.MeshGateway
 )
+
+// GetOneInstanceRequest 获取单个服务的请求对象
+type GetOneInstanceRequest struct {
+	model.GetOneInstanceRequest
+}
+
+// GetInstancesRequest 获取多个服务的请求对象
+type GetInstancesRequest struct {
+	model.GetInstancesRequest
+}
+
+// GetAllInstancesRequest 获取服务下所有实例的请求对象
+type GetAllInstancesRequest struct {
+	model.GetAllInstancesRequest
+}
 
 // ServiceCallResult 服务调用结果
 type ServiceCallResult struct {

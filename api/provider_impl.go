@@ -20,7 +20,6 @@ package api
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 

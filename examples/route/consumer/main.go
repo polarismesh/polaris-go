@@ -20,12 +20,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"go.uber.org/zap/buffer"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"go.uber.org/zap/buffer"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -47,6 +48,7 @@ func initArgs() {
 	flag.Int64Var(&port, "port", 18080, "port")
 }
 
+// PolarisConsumer .
 type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
 	router    polaris.RouterAPI
@@ -54,6 +56,7 @@ type PolarisConsumer struct {
 	service   string
 }
 
+// Run .
 func (svr *PolarisConsumer) Run() {
 	svr.runWebServer()
 }
