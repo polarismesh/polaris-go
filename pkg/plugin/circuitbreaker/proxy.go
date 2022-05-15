@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy . proxy of InstanceCircuitBreaker
+// Proxy .proxy of InstanceCircuitBreaker
 type Proxy struct {
 	InstanceCircuitBreaker
 	engine model.Engine

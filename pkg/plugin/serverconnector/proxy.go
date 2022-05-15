@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of ServerConnector
+// Proxy is a plugin that proxy requests to a remote server.
 type Proxy struct {
 	ServerConnector
 	engine model.Engine

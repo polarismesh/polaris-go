@@ -24,16 +24,18 @@ import (
 )
 
 var (
+	// SubScribedServices is a map of subscribed services
 	SubScribedServices []model.ServiceKey
 )
 
+// Subscribe is a plugin for subscribe
 type Subscribe interface {
 	plugin.Plugin
 
-	// 执行消息处理逻辑
+	// DoSubScribe 执行消息处理逻辑
 	DoSubScribe(event *common.PluginEvent) error
 
-	// 订阅service消息
+	// WatchService 订阅service消息
 	WatchService(key model.ServiceKey) (interface{}, error)
 }
 

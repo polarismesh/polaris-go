@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Location 实例地址位置获取插件
+// LocationProvider Location 实例地址位置获取插件
 type LocationProvider interface {
 	plugin.Plugin
 

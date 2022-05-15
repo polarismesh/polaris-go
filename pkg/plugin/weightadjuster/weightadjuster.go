@@ -26,9 +26,9 @@ import (
 // WeightAdjuster 【扩展点接口】动态权重调整接口
 type WeightAdjuster interface {
 	plugin.Plugin
-	// 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
+	// RealTimeAdjustDynamicWeight 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
 	RealTimeAdjustDynamicWeight(model.InstanceGauge) (bool, error)
-	// 进行动态权重调整，返回调整后的动态权重
+	// TimingAdjustDynamicWeight 进行动态权重调整，返回调整后的动态权重
 	TimingAdjustDynamicWeight(service model.ServiceInstances) ([]*model.InstanceWeight, error)
 }
 

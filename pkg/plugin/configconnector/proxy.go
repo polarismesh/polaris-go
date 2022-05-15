@@ -24,6 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// Proxy is a config connector proxy
 type Proxy struct {
 	ConfigConnector
 	engine model.Engine

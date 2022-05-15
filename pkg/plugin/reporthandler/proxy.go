@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of ReportHandler
+// Proxy is a proxy plugin for report-handler
 type Proxy struct {
 	ReportHandler
 	engine model.Engine

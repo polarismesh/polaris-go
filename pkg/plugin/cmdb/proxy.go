@@ -35,8 +35,8 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 }
 
 // GetLocation 获取实例地理位置信息
-func (proxy *Proxy) GetLocation() (*model.Location, error) {
-	return proxy.LocationProvider.GetLocation()
+func (p *Proxy) GetLocation() (*model.Location, error) {
+	return p.LocationProvider.GetLocation()
 }
 
 // init 注册proxy

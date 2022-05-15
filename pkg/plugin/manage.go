@@ -454,7 +454,7 @@ func (b *PluginBase) GetSDKContextID() string {
 	return b.sdkID
 }
 
-// Destroy destroy
+// Destroy 销毁插件
 func (b *PluginBase) Destroy() error {
 	return nil
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of ServiceRateLimiter
+// Proxy is a proxy plugin for rate-limiter
 type Proxy struct {
 	ServiceRateLimiter
 	engine model.Engine

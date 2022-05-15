@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// proxy of WeightAdjuster
+// Proxy is a proxy for weight adjuster plugin
 type Proxy struct {
 	WeightAdjuster
 	engine model.Engine

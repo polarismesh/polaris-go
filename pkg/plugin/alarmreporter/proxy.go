@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy  of AlarmReporter
+// Proxy of AlarmReporter
 type Proxy struct {
 	AlarmReporter
 	engine model.Engine
