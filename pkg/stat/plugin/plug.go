@@ -25,6 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// PluginAPI is the interface for plugin
 type PluginAPI int
 
 const (
@@ -106,12 +107,19 @@ type PluginAPIDelayRange int
 
 // API延时范围常量
 const (
+	// PluginApiDelayBelow10 用于插件api延迟小于10ms
 	PluginApiDelayBelow10 PluginAPIDelayRange = iota
+	// PluginApiDelayBelow20 用于插件api延迟小于20ms
 	PluginApiDelayBelow20
+	// PluginApiDelayBelow30 用于插件api延迟小于30ms
 	PluginApiDelayBelow30
+	// PluginApiDelayBelow40 用于插件api延迟小于40ms
 	PluginApiDelayBelow40
+	// PluginApiDelayBelow50 用于插件api延迟小于50ms
 	PluginApiDelayBelow50
+	// PluginApiDelayOver50 用于插件api延迟大于50ms
 	PluginApiDelayOver50
+	// PluginApiDelayMax 最大值
 	PluginApiDelayMax
 )
 

@@ -240,6 +240,7 @@ func (s *SliceWindow) AddHistoryMetric(now time.Time, operation BucketOperation)
 	return operation(bucket), true
 }
 
+// AddHistoryMetricByMillTime 添加历史数据
 func (s *SliceWindow) AddHistoryMetricByMillTime(now int64, operation BucketOperation) (int64, bool) {
 	bucket := s.lookupBucketByMillTime(now)
 	if nil == bucket {
