@@ -227,7 +227,7 @@ func (s *SliceWindow) lookupAndCreateBucketByMillTime(curTime int64) *Bucket {
 	return bucket
 }
 
-// 限流桶操作函数
+// BucketOperation 限流桶操作函数
 type BucketOperation func(bucket *Bucket) int64
 
 // AddHistoryMetric 添加历史数据
