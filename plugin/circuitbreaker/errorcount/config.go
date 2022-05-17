@@ -29,13 +29,13 @@ import (
 
 // 定义连续错误熔断配置的默认值
 const (
-	// 默认可触发熔断的连续错误数，默认10
+	// DefaultContinuousErrorThreshold 默认可触发熔断的连续错误数，默认10
 	DefaultContinuousErrorThreshold = 10
-	// 连续错误数统计时间窗口，默认1分钟
+	// DefaultMetricStatTimeWindow 连续错误数统计时间窗口，默认1分钟
 	DefaultMetricStatTimeWindow = 1 * time.Minute
-	// 最小连续错误数统计时间窗口
+	// MinMetricStatTimeWindow 最小连续错误数统计时间窗口
 	MinMetricStatTimeWindow = 1 * time.Second
-	// 连续错误数统计滑桶数量
+	// DefaultErrCountMetricBucketCount 连续错误数统计滑桶数量
 	DefaultErrCountMetricBucketCount = 10
 )
 
@@ -101,7 +101,7 @@ func (r *Config) SetMetricStatTimeWindow(value time.Duration) {
 	r.MetricStatTimeWindow = &value
 }
 
-// GetMetricNumBuckets连续错误数统计滑桶数量
+// GetMetricNumBuckets 连续错误数统计滑桶数量
 func (r *Config) GetMetricNumBuckets() int {
 	return r.MetricNumBuckets
 }

@@ -28,7 +28,7 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
-// ServiceRuleAssistant 助手接口
+// ServiceRuleAssistant 助手接口.
 type ServiceRuleAssistant interface {
 	// ParseRuleValue 解析出具体的规则值
 	ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string)
@@ -38,14 +38,12 @@ type ServiceRuleAssistant interface {
 	Validate(message proto.Message, cache model.RuleCache) error
 }
 
-var (
-	eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
-		model.EventRouting:      &RoutingAssistant{},
-		model.EventRateLimiting: &RateLimitingAssistant{},
-	}
-)
+var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
+	model.EventRouting:      &RoutingAssistant{},
+	model.EventRateLimiting: &RateLimitingAssistant{},
+}
 
-// MeshConfigProto 网格规则
+// MeshConfigProto 网格规则.
 type MeshConfigProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -56,7 +54,7 @@ type MeshConfigProto struct {
 	CacheLoaded int32
 }
 
-// NewMeshConfigInProto 新建网格规则
+// NewMeshConfigInProto 新建网格规则.
 func NewMeshConfigInProto(resp *namingpb.DiscoverResponse) *MeshConfigProto {
 	value := &MeshConfigProto{}
 	if nil == resp {
@@ -73,40 +71,39 @@ func NewMeshConfigInProto(resp *namingpb.DiscoverResponse) *MeshConfigProto {
 	value.revision = resp.GetMeshconfig().GetRevision().GetValue()
 	value.ruleCache = model.NewRuleCache()
 	return value
-
 }
 
-// GetType 获取规则类型
+// GetType 获取规则类型.
 func (s *MeshConfigProto) GetType() model.EventType {
 	return s.eventType
 }
 
-// IsInitialized 缓存是否已经初始化
+// IsInitialized 缓存是否已经初始化.
 func (s *MeshConfigProto) IsInitialized() bool {
 	return s.initialized
 }
 
-// GetRevision 缓存版本号，标识缓存是否更新
+// GetRevision 缓存版本号，标识缓存是否更新.
 func (s *MeshConfigProto) GetRevision() string {
 	return s.revision
 }
 
-// GetValue 获取值
+// GetValue 获取值.
 func (s *MeshConfigProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-// GetNamespace 获取Namespace
+// GetNamespace 获取Namespace.
 func (s *MeshConfigProto) GetNamespace() string {
 	return s.Namespace
 }
 
-// GetService 获取Service
+// GetService 获取Service.
 func (s *MeshConfigProto) GetService() string {
 	return s.Service
 }
 
-// MeshProto 网格
+// MeshProto 网格.
 type MeshProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -117,7 +114,7 @@ type MeshProto struct {
 	CacheLoaded int32
 }
 
-// NewMeshInProto 新建网格
+// NewMeshInProto 新建网格.
 func NewMeshInProto(resp *namingpb.DiscoverResponse) *MeshProto {
 	value := &MeshProto{}
 	if nil == resp {
@@ -136,37 +133,37 @@ func NewMeshInProto(resp *namingpb.DiscoverResponse) *MeshProto {
 	return value
 }
 
-// GetType 获取类型
+// GetType 获取类型.
 func (s *MeshProto) GetType() model.EventType {
 	return s.eventType
 }
 
-// IsInitialized 缓存是否已经初始化
+// IsInitialized 缓存是否已经初始化.
 func (s *MeshProto) IsInitialized() bool {
 	return s.initialized
 }
 
-// GetRevision 缓存版本号，标识缓存是否更新
+// GetRevision 缓存版本号，标识缓存是否更新.
 func (s *MeshProto) GetRevision() string {
 	return s.revision
 }
 
-// GetValue 获取值
+// GetValue 获取值.
 func (s *MeshProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-// GetNamespace 获取Namespace
+// GetNamespace 获取Namespace.
 func (s *MeshProto) GetNamespace() string {
 	return s.Namespace
 }
 
-// GetService 获取Service
+// GetService 获取Service.
 func (s *MeshProto) GetService() string {
 	return s.Service
 }
 
-// ServiceRuleInProto 路由规则配置对象
+// ServiceRuleInProto 路由规则配置对象.
 type ServiceRuleInProto struct {
 	*model.ServiceKey
 	initialized bool
@@ -180,7 +177,7 @@ type ServiceRuleInProto struct {
 	validateError error
 }
 
-// NewServiceRuleInProto 创建路由规则配置对象
+// NewServiceRuleInProto 创建路由规则配置对象.
 func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto {
 	value := &ServiceRuleInProto{}
 	if nil == resp {
@@ -199,12 +196,12 @@ func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto 
 	return value
 }
 
-// IsCacheLoaded pb的值是否从缓存文件中加载
+// IsCacheLoaded pb的值是否从缓存文件中加载.
 func (s *ServiceRuleInProto) IsCacheLoaded() bool {
 	return atomic.LoadInt32(&s.CacheLoaded) > 0
 }
 
-// ValidateAndBuildCache 校验路由规则，以及构建正则表达式缓存
+// ValidateAndBuildCache 校验路由规则，以及构建正则表达式缓存.
 func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 	s.assistant.SetDefault(s.ruleValue)
 	if err := s.assistant.Validate(s.ruleValue, s.ruleCache); err != nil {
@@ -217,7 +214,7 @@ func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 
 const MatchAll = "*"
 
-// buildCacheFromMatcher 通过metadata来构建缓存
+// buildCacheFromMatcher 通过metadata来构建缓存.
 func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache model.RuleCache) error {
 	if len(metadata) == 0 {
 		return nil
@@ -247,7 +244,7 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 	return nil
 }
 
-// GetNamespace 获取命名空间
+// GetNamespace 获取命名空间.
 func (s *ServiceRuleInProto) GetNamespace() string {
 	if s.initialized {
 		return s.Namespace
@@ -255,7 +252,7 @@ func (s *ServiceRuleInProto) GetNamespace() string {
 	return ""
 }
 
-// GetService 获取服务名
+// GetService 获取服务名.
 func (s *ServiceRuleInProto) GetService() string {
 	if s.initialized {
 		return s.Service
@@ -263,32 +260,32 @@ func (s *ServiceRuleInProto) GetService() string {
 	return ""
 }
 
-// GetValue 获取通用规则值
+// GetValue 获取通用规则值.
 func (s *ServiceRuleInProto) GetValue() interface{} {
 	return s.ruleValue
 }
 
-// GetType 获取规则类型
+// GetType 获取规则类型.
 func (s *ServiceRuleInProto) GetType() model.EventType {
 	return s.eventType
 }
 
-// IsInitialized 缓存是否已经初始化
+// IsInitialized 缓存是否已经初始化.
 func (s *ServiceRuleInProto) IsInitialized() bool {
 	return s.initialized
 }
 
-// GetRevision 缓存版本号，标识缓存是否更新
+// GetRevision 缓存版本号，标识缓存是否更新.
 func (s *ServiceRuleInProto) GetRevision() string {
 	return s.revision
 }
 
-// GetRuleCache 获取规则缓存信息
+// GetRuleCache 获取规则缓存信息.
 func (s *ServiceRuleInProto) GetRuleCache() model.RuleCache {
 	return s.ruleCache
 }
 
-// GetValidateError 获取规则校验错误
+// GetValidateError 获取规则校验错误.
 func (s *ServiceRuleInProto) GetValidateError() error {
 	return s.validateError
 }

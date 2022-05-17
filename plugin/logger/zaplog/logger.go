@@ -152,43 +152,43 @@ func formatDate(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(string(buf))
 }
 
-// 打印trace级别的日志
+// Tracef 打印trace级别的日志
 func (z *zapLogger) Tracef(format string, args ...interface{}) {
 	z.printf(z.logger.Debug, plog.TraceLog, format, args...)
 }
 
-// 打印debug级别的日志
+// Debugf 打印debug级别的日志
 func (z *zapLogger) Debugf(format string, args ...interface{}) {
 	z.printf(z.logger.Debug, plog.DebugLog, format, args...)
 }
 
-// 打印info级别的日志
+// Infof 打印info级别的日志
 func (z *zapLogger) Infof(format string, args ...interface{}) {
 	z.printf(z.logger.Info, plog.InfoLog, format, args...)
 }
 
-// 打印warn级别的日志
+// Warnf 打印warn级别的日志
 func (z *zapLogger) Warnf(format string, args ...interface{}) {
 	z.printf(z.logger.Warn, plog.WarnLog, format, args...)
 }
 
-// 打印error级别的日志
+// Errorf 打印error级别的日志
 func (z *zapLogger) Errorf(format string, args ...interface{}) {
 	z.printf(z.logger.Error, plog.ErrorLog, format, args...)
 }
 
-// 打印fatalf级别的日志
+// Fatalf 打印fatalf级别的日志
 func (z *zapLogger) Fatalf(format string, args ...interface{}) {
 	z.printf(z.logger.Fatal, plog.FatalLog, format, args...)
 }
 
-// 判断当前级别是否满足日志打印的最低级别
+// IsLevelEnabled 判断当前级别是否满足日志打印的最低级别
 func (z *zapLogger) IsLevelEnabled(l int) bool {
 	outputLevel := atomic.LoadInt32(&z.outputLevel)
 	return int32(l) >= outputLevel
 }
 
-// 动态设置日志级别
+// SetLogLevel 动态设置日志级别
 func (z *zapLogger) SetLogLevel(l int) error {
 	if err := plog.VerifyLogLevel(l); err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify log level")
@@ -197,7 +197,7 @@ func (z *zapLogger) SetLogLevel(l int) error {
 	return nil
 }
 
-// 返回日志的目录
+// GetLogDir 返回日志的目录
 func (z *zapLogger) GetLogDir() string {
 	return z.logDir
 }

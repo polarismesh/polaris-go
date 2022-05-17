@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
@@ -130,14 +131,14 @@ const (
 	TypeTKEY uint16 = 249
 	TypeTSIG uint16 = 250
 
-	// valid Question.Qtype only
+	// TypeIXFR valid Question.Qtype only
 	TypeIXFR  uint16 = 251
 	TypeAXFR  uint16 = 252
 	TypeMAILB uint16 = 253
 	TypeMAILA uint16 = 254
 	TypeANY   uint16 = 255
 
-	// polaris
+	// TypePackCtrl polaris
 	TypePackCtrl             uint16 = 10000
 	TypePolarisDetailErrInfo uint16 = 10001
 	TypePolarsHead           uint16 = 10002
@@ -153,7 +154,7 @@ const (
 	TypeDLV      uint16 = 32769
 	TypeReserved uint16 = 65535
 
-	// valid Question.Qclass
+	// ClassINET valid Question.Qclass
 	ClassINET   = 1
 	ClassCSNET  = 2
 	ClassCHAOS  = 3
@@ -161,7 +162,7 @@ const (
 	ClassNONE   = 254
 	ClassANY    = 255
 
-	// Message Response Codes, see https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
+	// RcodeSuccess Message Response Codes, see https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
 	RcodeSuccess        = 0  // NoError   - No Error                          [DNS]
 	RcodeFormatError    = 1  // FormErr   - Format Error                      [DNS]
 	RcodeServerFailure  = 2  // ServFail  - Server Failure                    [DNS]
@@ -183,7 +184,7 @@ const (
 	RcodeBadTrunc       = 22 // BADTRUNC  - Bad Truncation                    [TSIG]
 	RcodeBadCookie      = 23 // BADCOOKIE - Bad/missing Server Cookie         [DNS Cookies]
 
-	// Message Opcodes. There is no 3.
+	// OpcodeQuery Message Opcodes. There is no 3.
 	OpcodeQuery  = 0
 	OpcodeIQuery = 1
 	OpcodeStatus = 2

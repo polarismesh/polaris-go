@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// 执行路由链过滤，返回经过路由后的实例列表
+// ProcessRouters 执行路由链过滤，返回经过路由后的实例列表
 func (e *Engine) ProcessRouters(req *model.ProcessRoutersRequest) (*model.InstancesResponse, error) {
 	routers, err := e.parseRouters(req.Routers)
 	if nil != err {
@@ -57,7 +57,7 @@ func (e *Engine) parseRouters(routers []string) ([]servicerouter.ServiceRouter, 
 	return svcRouters, nil
 }
 
-// 执行负载均衡策略，返回负载均衡后的实例
+// ProcessLoadBalance 执行负载均衡策略，返回负载均衡后的实例
 func (e *Engine) ProcessLoadBalance(req *model.ProcessLoadBalanceRequest) (*model.OneInstanceResponse, error) {
 	// 方法开始时间
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)

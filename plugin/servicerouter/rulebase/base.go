@@ -93,17 +93,17 @@ type prioritySubsets struct {
 	totalWeight uint32
 }
 
-// 获取节点累积的权重
+// GetValue 获取节点累积的权重
 func (p *prioritySubsets) GetValue(index int) uint64 {
 	return uint64(p.subsets[index].weight)
 }
 
-// 获取总权重值
+// TotalWeight 获取总权重值
 func (p *prioritySubsets) TotalWeight() int {
 	return int(p.totalWeight)
 }
 
-// 获取数组成员数
+// Count 获取数组成员数
 func (p *prioritySubsets) Count() int {
 	return len(p.subsets)
 }
@@ -458,7 +458,6 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 			cluster: cluster,
 			weight:  weightedSubsets.totalWeight,
 		})
-
 	}
 	return true, nil
 }
@@ -504,9 +503,7 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 }
 
 // 根据路由规则进行服务实例过滤, 并返回过滤后的实例列表
-func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.RouteInfo,
-	ruleMatchType int) []*namingpb.Route {
-
+func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.RouteInfo, ruleMatchType int) []*namingpb.Route {
 	// 跟据服务类型获取对应路由规则
 	// 被调inbound
 	if ruleMatchType == dstRouteRuleMatch {
@@ -634,9 +631,7 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 }
 
 // 在instance中全匹配被调服务metadata
-func (g *RuleBasedInstancesFilter) searchMetadata(destServiceMetadata map[string]string,
-	instanceMetadata map[string]string) bool {
-
+func (g *RuleBasedInstancesFilter) searchMetadata(destServiceMetadata map[string]string, instanceMetadata map[string]string) bool {
 	// metadata是否全部匹配
 	allMetaMatched := true
 	// instanceMetadata中找到的metadata个数, 用于辅助判断是否能匹配成功

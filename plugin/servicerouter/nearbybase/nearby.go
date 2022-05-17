@@ -31,7 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
-// RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
+// NearbyBasedInstancesFilter RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type NearbyBasedInstancesFilter struct {
 	*plugin.PluginBase
 	wholeCfg              config.Configuration
@@ -91,7 +91,7 @@ const (
 	priorityLevelCampus
 )
 
-// 当前是否需要启动该服务路由插件
+// Enable 当前是否需要启动该服务路由插件
 func (g *NearbyBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	location := g.valueCtx.GetCurrentLocation().GetLocation()
 	return nil != location && clusters.IsNearbyEnabled()
@@ -146,7 +146,6 @@ func (g *NearbyBasedInstancesFilter) modifyOutClusterLevel(outCluster *model.Clu
 		}
 		outCluster.ClearClusterValue()
 	}
-	return
 }
 
 // 检查某个level的实例数量是否满足要求，实例数量是否大于0

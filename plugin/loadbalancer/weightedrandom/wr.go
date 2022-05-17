@@ -27,7 +27,7 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// weightedrandom负载均衡插件
+// WRLoadBalancer weightedrandom负载均衡插件
 type WRLoadBalancer struct {
 	*plugin.PluginBase
 	scalableRand *rand.ScalableRand

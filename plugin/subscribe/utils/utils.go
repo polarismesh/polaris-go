@@ -23,6 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// CheckAddInstances check if the instances are valid
 func CheckAddInstances(event *common.ServiceEventObject) *model.InstanceAddEvent {
 	if event.NewValue == nil {
 		return nil
@@ -55,6 +56,7 @@ func CheckAddInstances(event *common.ServiceEventObject) *model.InstanceAddEvent
 	return nil
 }
 
+// CheckUpdateInstances check if the instances are valid
 func CheckUpdateInstances(event *common.ServiceEventObject) *model.InstanceUpdateEvent {
 	if event.OldValue != nil && event.NewValue != nil {
 		upEvent := &model.InstanceUpdateEvent{}
@@ -84,6 +86,7 @@ func CheckUpdateInstances(event *common.ServiceEventObject) *model.InstanceUpdat
 	return nil
 }
 
+// CheckDeleteInstances check if the instances are valid
 func CheckDeleteInstances(event *common.ServiceEventObject) *model.InstanceDeleteEvent {
 	if event.OldValue == nil {
 		return nil

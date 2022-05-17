@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of ServiceRouter
+// Proxy is a proxy for service router
 type Proxy struct {
 	ServiceRouter
 	engine model.Engine

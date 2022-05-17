@@ -28,14 +28,15 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"gopkg.in/check.v1"
+
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
-	"google.golang.org/grpc"
-	"gopkg.in/check.v1"
 )
 
 var (

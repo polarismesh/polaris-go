@@ -39,9 +39,9 @@ type AmountDuration struct {
 
 // QuotaBucket 配额池
 type QuotaBucket interface {
-	// 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
+	// GetQuota 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
 	GetQuota() (*QuotaResult, error)
-	// 释放配额（仅对于并发数限流有用）
+	// Release 释放配额（仅对于并发数限流有用）
 	Release()
 }
 

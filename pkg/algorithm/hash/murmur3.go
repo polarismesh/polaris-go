@@ -25,6 +25,7 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
+// DefaultHashFuncName is the name of murmur3 hash function.
 const DefaultHashFuncName = "murmur3"
 
 var (

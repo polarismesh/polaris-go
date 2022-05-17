@@ -27,24 +27,24 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// ketama算法的一致性hash负载均衡器
+// KetamaLoadBalancer ketama算法的一致性hash负载均衡器
 type KetamaLoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
 }
 
-// 插件类型
+// Type 插件类型
 func (k *KetamaLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-// 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (k *KetamaLoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerRingHash
 }
 
-// 初始化插件
+// Init 初始化插件
 func (k *KetamaLoadBalancer) Init(ctx *plugin.InitContext) error {
 	k.PluginBase = plugin.NewPluginBase(ctx)
 	k.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(k.Name()).(*Config)
@@ -100,12 +100,12 @@ func (k *KetamaLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	if nil != nodes {
 		criteria.ReplicateInfo.Nodes = nodes.GetInstances()
 	}
-	var instance model.Instance
-	instance = svcInstances.GetInstances()[index]
+
+	instance := svcInstances.GetInstances()[index]
 	return instance, nil
 }
 
-// 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (k *KetamaLoadBalancer) Destroy() error {
 	return nil
 }

@@ -63,11 +63,9 @@ type LocalCache struct {
 	*plugin.PluginBase
 	*common.RunContext
 	// 这个锁的只有在服务新增或者删除时候触发，频率较小
-	servicesMutex *sync.RWMutex
-	services      model.HashSet
-
-	serviceMap *sync.Map
-
+	servicesMutex          *sync.RWMutex
+	services               model.HashSet
+	serviceMap             *sync.Map
 	connector              serverconnector.ServerConnector
 	serviceRefreshInterval time.Duration
 	serviceExpireTime      time.Duration
@@ -111,7 +109,7 @@ func (g *LocalCache) Name() string {
 	return name
 }
 
-// destroy
+// Destroy 销毁插件
 func (g *LocalCache) Destroy() error {
 	err := g.PluginBase.Destroy()
 	if err != nil {
@@ -220,7 +218,7 @@ func (g *LocalCache) logServiceMap() {
 	}
 }
 
-// 启动插件
+// Start 启动插件
 func (g *LocalCache) Start() error {
 	g.loadCacheFromFiles()
 	go g.eliminateExpiredCache()
@@ -297,7 +295,7 @@ func (g *LocalCache) deleteServiceFromSet(svcKey *model.ServiceEventKey) {
 func (g *LocalCache) deleteService(svcKey *model.ServiceEventKey, oldValue interface{}) {
 	// log.GetBaseLogger().Infof("service %s has been cleared", *svcKey)
 	log.GetBaseLogger().Infof("%s, deregister %s", g.GetSDKContextID(), svcKey)
-	g.connector.DeRegisterServiceHandler(svcKey)
+	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
 	g.deleteServiceFromSet(svcKey)
 	svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
@@ -356,8 +354,8 @@ finally:
 	return status
 }
 
-// 创建默认的实例本地信息
-func (g *LocalCache) CreateDefaultInstanceLocalValue(instId string) local.InstanceLocalValue {
+// CreateDefaultInstanceLocalValue 创建默认的实例本地信息
+func (g *LocalCache) CreateDefaultInstanceLocalValue(instID string) local.InstanceLocalValue {
 	newLocalValue := local.NewInstanceLocalValue()
 	eventHandlers := g.plugins.GetEventSubscribers(common.OnInstanceLocalValueCreated)
 	if len(eventHandlers) == 0 {
@@ -366,7 +364,7 @@ func (g *LocalCache) CreateDefaultInstanceLocalValue(instId string) local.Instan
 	event := &common.PluginEvent{
 		EventType: common.OnInstanceLocalValueCreated, EventObject: newLocalValue}
 	for _, handler := range eventHandlers {
-		handler.Callback(event)
+		_ = handler.Callback(event)
 	}
 	return newLocalValue
 }
@@ -588,7 +586,7 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 	return nil
 }
 
-// 获取服务列表
+// GetServices 获取服务列表
 func (g *LocalCache) GetServices() model.HashSet {
 	g.servicesMutex.RLock()
 	defer g.servicesMutex.RUnlock()
@@ -619,7 +617,7 @@ func poolGetSvcEventKey(svcKey *model.ServiceKey, eventType model.EventType) *mo
 	return svcEventKey
 }
 
-// 非阻塞获取配置信息
+// GetServiceRouteRule 非阻塞获取配置信息
 func (g *LocalCache) GetServiceRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule {
 	svcEventKey := poolGetSvcEventKey(key, model.EventRouting)
 	svcRule := g.GetServiceRule(svcEventKey, includeCache)
@@ -627,7 +625,7 @@ func (g *LocalCache) GetServiceRouteRule(key *model.ServiceKey, includeCache boo
 	return svcRule
 }
 
-// 非阻塞获取网格
+// GetMesh 非阻塞获取网格
 func (g *LocalCache) GetMesh(key *model.ServiceKey, includeCache bool) model.Mesh {
 	svcEventKey := poolGetSvcEventKey(key, model.EventMesh)
 	mc := g.GetMeshImp(svcEventKey, includeCache)
@@ -635,7 +633,7 @@ func (g *LocalCache) GetMesh(key *model.ServiceKey, includeCache bool) model.Mes
 	return mc
 }
 
-// 非阻塞获取网格具体逻辑
+// GetMeshImp 非阻塞获取网格具体逻辑
 func (g *LocalCache) GetMeshImp(svcEventKey *model.ServiceEventKey, includeCache bool) model.Mesh {
 	value, ok := g.serviceMap.Load(*svcEventKey)
 	if !ok {
@@ -661,7 +659,7 @@ func (g *LocalCache) GetMeshImp(svcEventKey *model.ServiceEventKey, includeCache
 	return emptyMesh
 }
 
-// 非阻塞获取网格规则
+// GetMeshConfig 非阻塞获取网格规则
 func (g *LocalCache) GetMeshConfig(key *model.ServiceKey, includeCache bool) model.MeshConfig {
 	svcEventKey := poolGetSvcEventKey(key, model.EventMeshConfig)
 	mc := g.GetMeshConfigImp(svcEventKey, includeCache)
@@ -669,7 +667,7 @@ func (g *LocalCache) GetMeshConfig(key *model.ServiceKey, includeCache bool) mod
 	return mc
 }
 
-// 非阻塞获取网格规则具体逻辑
+// GetMeshConfigImp 非阻塞获取网格规则具体逻辑
 func (g *LocalCache) GetMeshConfigImp(svcEventKey *model.ServiceEventKey, includeCache bool) model.MeshConfig {
 	value, ok := g.serviceMap.Load(*svcEventKey)
 	if !ok {
@@ -693,9 +691,9 @@ func (g *LocalCache) GetMeshConfigImp(svcEventKey *model.ServiceEventKey, includ
 		return ruleValue.(model.MeshConfig)
 	}
 	return emptyMeshConfig
-
 }
 
+// GetServicesByMeta 非阻塞获取服务列表
 func (g *LocalCache) GetServicesByMeta(key *model.ServiceKey, includeCache bool) model.Services {
 	svcEventKey := poolGetSvcEventKey(key, model.EventServices)
 	value, ok := g.serviceMap.Load(*svcEventKey)
@@ -718,7 +716,7 @@ func (g *LocalCache) GetServicesByMeta(key *model.ServiceKey, includeCache bool)
 	return ruleValue.(model.Services)
 }
 
-// 非阻塞获取限流规则
+// GetServiceRateLimitRule 非阻塞获取限流规则
 func (g *LocalCache) GetServiceRateLimitRule(key *model.ServiceKey, includeCache bool) model.ServiceRule {
 	svcEventKey := poolGetSvcEventKey(key, model.EventRateLimiting)
 	svcRule := g.GetServiceRule(svcEventKey, includeCache)
@@ -727,7 +725,7 @@ func (g *LocalCache) GetServiceRateLimitRule(key *model.ServiceKey, includeCache
 	return svcRule
 }
 
-// 非阻塞获取规则信息
+// GetServiceRule 非阻塞获取规则信息
 func (g *LocalCache) GetServiceRule(svcEventKey *model.ServiceEventKey, includeCache bool) model.ServiceRule {
 	value, ok := g.serviceMap.Load(*svcEventKey)
 	if !ok {
@@ -812,7 +810,7 @@ func (g *LocalCache) newServicesHandler() CacheHandlers {
 // 删除服务信息，包括从注销监听和删除本地缓存信息
 func (g *LocalCache) deleteRule(svcKey *model.ServiceEventKey, oldValue interface{}) {
 	log.GetBaseLogger().Infof("%s, deregister %s", g.GetSDKContextID(), svcKey)
-	g.connector.DeRegisterServiceHandler(svcKey)
+	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
 	g.deleteServiceFromSet(svcKey)
 	cacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
@@ -957,12 +955,12 @@ func compareMeshConfig(instValue interface{}, newValue proto.Message) CachedStat
 finally:
 	if status != CacheNotChanged {
 		log.GetBaseLogger().Infof(
-			"meshconfig rule %s:%s has updated, compare status %s: old revision is %s, new revision is %s",
+			"mesh config rule %s:%s has updated, compare status %s: old revision is %s, new revision is %s",
 			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
 			status, oldRevision, newRevision)
 	} else {
 		log.GetBaseLogger().Debugf(
-			"meshconfig rule %s:%s is not updated, compare status %s: old revision is %s, new revision is %s",
+			"mesh config rule %s:%s is not updated, compare status %s: old revision is %s, new revision is %s",
 			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
 			status, oldRevision, newRevision)
 	}
@@ -1080,7 +1078,6 @@ finally:
 			status, oldRevision, newRevision)
 	}
 	return status
-
 }
 
 // 比较限流规则的变化
@@ -1122,8 +1119,7 @@ finally:
 }
 
 // PB对象转服务实例对象
-func messageToServiceRule(cachedValue interface{}, value proto.Message,
-	svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
+func messageToServiceRule(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
 	respInProto := value.(*namingpb.DiscoverResponse)
 	svcRule := pb.NewServiceRuleInProto(respInProto)
 	if cacheLoaded {
@@ -1159,8 +1155,7 @@ func messageToMesh(cachedValue interface{}, value proto.Message,
 	return mc
 }
 
-func messageToServices(cachedValue interface{}, value proto.Message,
-	svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
+func messageToServices(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
 	respInProto := value.(*namingpb.DiscoverResponse)
 	mc := pb.NewServicesProto(respInProto)
 	if cacheLoaded {
@@ -1170,7 +1165,7 @@ func messageToServices(cachedValue interface{}, value proto.Message,
 	return mc
 }
 
-// 非阻塞发起配置加载
+// LoadServiceRouteRule 非阻塞发起配置加载
 func (g *LocalCache) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error) {
 	return g.LoadServiceRule(&model.ServiceEventKey{
 		ServiceKey: model.ServiceKey{
@@ -1181,7 +1176,7 @@ func (g *LocalCache) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifi
 	})
 }
 
-// 非阻塞加载网格规则
+// LoadMeshConfig 非阻塞加载网格规则
 func (g *LocalCache) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error) {
 	return g.LoadServiceRule(&model.ServiceEventKey{
 		ServiceKey: model.ServiceKey{
@@ -1192,7 +1187,7 @@ func (g *LocalCache) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, er
 	})
 }
 
-// 非阻塞加载网格
+// LoadMesh 非阻塞加载网格
 func (g *LocalCache) LoadMesh(key *model.ServiceKey) (*common.Notifier, error) {
 	return g.LoadServiceRule(&model.ServiceEventKey{
 		ServiceKey: model.ServiceKey{
@@ -1203,7 +1198,7 @@ func (g *LocalCache) LoadMesh(key *model.ServiceKey) (*common.Notifier, error) {
 	})
 }
 
-// 非阻塞加载批量服务
+// LoadServices 非阻塞加载批量服务
 func (g *LocalCache) LoadServices(key *model.ServiceKey) (*common.Notifier, error) {
 	log.GetBaseLogger().Infof("LoadServices", *key)
 	return g.LoadServiceRule(&model.ServiceEventKey{
@@ -1215,7 +1210,7 @@ func (g *LocalCache) LoadServices(key *model.ServiceKey) (*common.Notifier, erro
 	})
 }
 
-// 非阻塞发起限流规则加载
+// LoadServiceRateLimitRule 非阻塞发起限流规则加载
 func (g *LocalCache) LoadServiceRateLimitRule(key *model.ServiceKey) (*common.Notifier, error) {
 	return g.LoadServiceRule(&model.ServiceEventKey{
 		ServiceKey: model.ServiceKey{
@@ -1226,7 +1221,7 @@ func (g *LocalCache) LoadServiceRateLimitRule(key *model.ServiceKey) (*common.No
 	})
 }
 
-// 非阻塞发起规则加载
+// LoadServiceRule 非阻塞发起规则加载
 func (g *LocalCache) LoadServiceRule(svcEventKey *model.ServiceEventKey) (*common.Notifier, error) {
 	log.GetBaseLogger().Debugf("LoadServiceRule: serviceEvent %s", *svcEventKey)
 	return g.loadRemoteValue(svcEventKey, g.eventToCacheHandlers[svcEventKey.Type])
@@ -1350,7 +1345,7 @@ func (g *LocalCache) eliminateExpiredCache() {
 	}
 }
 
-// 对PB缓存进行持久化
+// PersistMessage 对PB缓存进行持久化
 func (g *LocalCache) PersistMessage(file string, message proto.Message) error {
 	g.persistTasks.Store(file, &persistTask{
 		op:       addCache,
@@ -1359,12 +1354,12 @@ func (g *LocalCache) PersistMessage(file string, message proto.Message) error {
 	return nil
 }
 
-// 从文件中加载PB缓存
+// LoadPersistedMessage 从文件中加载PB缓存
 func (g *LocalCache) LoadPersistedMessage(file string, msg proto.Message) error {
 	return g.cachePersistHandler.LoadMessageFromFile(file, msg)
 }
 
-// 服务订阅
+// WatchService 服务订阅
 func (g *LocalCache) WatchService(svcEventKey *model.ServiceEventKey) error {
 	value, ok := g.serviceMap.Load(*svcEventKey)
 	if !ok {

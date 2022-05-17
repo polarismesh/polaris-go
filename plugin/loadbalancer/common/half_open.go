@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
+// SelectAvailableInstanceSet select available instance set
 // 选择可用实例集合
 // 优先选择健康（close以及存在半开配额实例）
 // 如果不满足健康，则选择close+半开实例

@@ -74,6 +74,7 @@ func NewLimitAPIByFile(path string) (LimitAPI, error) {
 	return &limitAPI{rawAPI: l}, nil
 }
 
+// NewLimitAPIByAddress 通过地址创建SDK LimitAPI对象
 func NewLimitAPIByAddress(address ...string) (LimitAPI, error) {
 	l, err := api.NewLimitAPIByAddress(address...)
 	if err != nil {

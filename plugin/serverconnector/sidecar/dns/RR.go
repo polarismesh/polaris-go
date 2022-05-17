@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
@@ -22,25 +23,24 @@ import (
 	"errors"
 	"net"
 
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-
 	"github.com/golang/protobuf/proto"
 
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	sidecarPb "github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/model/pb"
 )
 
-// 标准的DNS IPv4 RR
+// A 标准的DNS IPv4 RR
 type A struct {
 	Hdr RR_Header
 	A   net.IP `dns:"a"`
 }
 
-// 返回header
+// Header 返回header
 func (rr *A) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 打印string
+// String 打印string
 func (rr *A) String() string {
 	if rr.A == nil {
 		return rr.Hdr.String()
@@ -48,17 +48,17 @@ func (rr *A) String() string {
 	return rr.Hdr.String() + rr.A.String()
 }
 
-// 深拷贝
+// Copy 深拷贝
 func (rr *A) Copy() RR {
 	return &A{rr.Hdr, copyIP(rr.A)}
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *A) GetData() []byte {
 	return rr.A
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *A) PackData(buff *bytes.Buffer) (int, error) {
 	switch len(rr.A) {
 	case net.IPv4len, net.IPv6len:
@@ -74,7 +74,7 @@ func (rr *A) PackData(buff *bytes.Buffer) (int, error) {
 	return 4, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *A) UnPackData(msg []byte, off int) (int, error) {
 	if off+net.IPv4len > len(msg) {
 		return len(msg), &Error{err: "overflow unpacking a"}
@@ -84,18 +84,18 @@ func (rr *A) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 标准的DNS IPv6 RR
+// AAAA 标准的DNS IPv6 RR
 type AAAA struct {
 	Hdr  RR_Header
 	AAAA net.IP `dns:"aaaa"`
 }
 
-// 返回header
+// Header 返回header
 func (rr *AAAA) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 打印string
+// String 打印string
 func (rr *AAAA) String() string {
 	if rr.AAAA == nil {
 		return rr.Hdr.String()
@@ -103,12 +103,12 @@ func (rr *AAAA) String() string {
 	return rr.Hdr.String() + rr.AAAA.String()
 }
 
-// 深拷贝
+// Copy 深拷贝
 func (rr *AAAA) Copy() RR {
 	return &AAAA{rr.Hdr, copyIP(rr.AAAA)}
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *AAAA) PackData(buff *bytes.Buffer) (int, error) {
 	switch len(rr.AAAA) {
 	case net.IPv6len:
@@ -124,7 +124,7 @@ func (rr *AAAA) PackData(buff *bytes.Buffer) (int, error) {
 	return net.IPv6len, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *AAAA) UnPackData(msg []byte, off int) (int, error) {
 	if off+net.IPv6len > len(msg) {
 		return len(msg), &Error{err: "overflow unpacking aaaa"}
@@ -134,7 +134,7 @@ func (rr *AAAA) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *AAAA) GetData() []byte {
 	return rr.AAAA
 }
@@ -148,7 +148,7 @@ type SRV struct {
 	Target   string `dns:"domain-name"`
 }
 
-// 用于大量数据，UDP分包控制
+// PackageCtrlRR 用于大量数据，UDP分包控制
 type PackageCtrlRR struct {
 	Hdr          RR_Header
 	TotalCount   uint16
@@ -156,17 +156,17 @@ type PackageCtrlRR struct {
 	SplitMode    uint8
 }
 
-// 返回header
+// Header 返回header
 func (rr *PackageCtrlRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 打印string
+// String 打印string
 func (rr *PackageCtrlRR) String() string {
 	return ""
 }
 
-// 深拷贝
+// Copy 深拷贝
 func (rr *PackageCtrlRR) Copy() RR {
 	return &PackageCtrlRR{
 		TotalCount:   rr.TotalCount,
@@ -174,7 +174,7 @@ func (rr *PackageCtrlRR) Copy() RR {
 	}
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *PackageCtrlRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	err := packUint16(rr.TotalCount, buff)
@@ -192,7 +192,7 @@ func (rr *PackageCtrlRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *PackageCtrlRR) UnPackData(msg []byte, off int) (int, error) {
 	var err error
 	if off+4 > len(msg) {
@@ -214,49 +214,49 @@ func (rr *PackageCtrlRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *PackageCtrlRR) GetData() []byte {
 	return nil
 }
 
-// polaris 自定义header RR (additional RR)
+// PolarisHeaderRR polaris 自定义header RR (additional RR)
 type PolarisHeaderRR struct {
 	Hdr RR_Header
 }
 
-// 返回header
+// Header 返回header
 func (rr *PolarisHeaderRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *PolarisHeaderRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len(), nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *PolarisHeaderRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// GetData
+// GetData GetData
 func (rr *PolarisHeaderRR) GetData() []byte {
 	return nil
 }
 
-// location RR
+// LocationRR location RR
 type LocationRR struct {
 	StreamRR
 	Hdr     RR_Header
 	SideCar *namingpb.Client
 }
 
-// 返回header
+// Header 返回header
 func (rr *LocationRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *LocationRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	bytes, err := proto.Marshal(rr.SideCar)
@@ -270,7 +270,7 @@ func (rr *LocationRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *LocationRR) UnPackData(msg []byte, off int) (int, error) {
 	var err error
 	size := rr.Hdr.Rdlength
@@ -283,18 +283,18 @@ func (rr *LocationRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// polaris 二进制流RR 用于4层分包
+// StreamRR polaris 二进制流RR 用于4层分包
 type StreamRR struct {
 	Hdr   RR_Header
 	Bytes []byte
 }
 
-// 返回header
+// Header 返回header
 func (rr *StreamRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *StreamRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	_, err := buff.Write(rr.Bytes)
@@ -304,7 +304,7 @@ func (rr *StreamRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *StreamRR) UnPackData(msg []byte, off int) (int, error) {
 	length := rr.Hdr.Rdlength
 	rr.Bytes = append(msg[off : off+int(length)])
@@ -312,23 +312,23 @@ func (rr *StreamRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *StreamRR) GetData() []byte {
 	return rr.Bytes
 }
 
-// polaris 详细错误 RR
+// DetailErrInfoRR polaris 详细错误 RR
 type DetailErrInfoRR struct {
 	Hdr     RR_Header
 	ErrInfo *sidecarPb.DetailErrInfo
 }
 
-// 返回header
+// Header 返回header
 func (rr *DetailErrInfoRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *DetailErrInfoRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 
@@ -343,7 +343,7 @@ func (rr *DetailErrInfoRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *DetailErrInfoRR) UnPackData(msg []byte, off int) (int, error) {
 	length := rr.Hdr.Rdlength
 	bytes := msg[off : off+int(length)]
@@ -357,24 +357,24 @@ func (rr *DetailErrInfoRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *DetailErrInfoRR) GetData() []byte {
 	return nil
 }
 
-// polaris 应答RR
+// ResponseRR polaris 应答RR
 type ResponseRR struct {
 	StreamRR
 	Hdr      RR_Header
 	Response *namingpb.Response
 }
 
-// 返回header
+// Header 返回header
 func (rr *ResponseRR) Header() *RR_Header {
 	return &rr.Hdr
 }
 
-// 序列化 RR data
+// PackData 序列化 RR data
 func (rr *ResponseRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 
@@ -389,7 +389,7 @@ func (rr *ResponseRR) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// 反序列化RR data
+// UnPackData 反序列化RR data
 func (rr *ResponseRR) UnPackData(msg []byte, off int) (int, error) {
 	length := rr.Hdr.Rdlength
 	rr.Bytes = append(msg[off : off+int(length)])
@@ -403,7 +403,7 @@ func (rr *ResponseRR) UnPackData(msg []byte, off int) (int, error) {
 	return off, nil
 }
 
-// 获取RR data
+// GetData 获取RR data
 func (rr *ResponseRR) GetData() []byte {
 	return rr.Bytes
 }

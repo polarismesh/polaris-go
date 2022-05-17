@@ -206,11 +206,10 @@ func (s *Reporter) constructRecordAndSend(namespace string, service string, data
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
-			if name == s.Name() {
-				return true
-			}
+	}
+	for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
+		if name == s.Name() {
+			return true
 		}
 	}
 	return false
@@ -258,6 +257,7 @@ func (s *Reporter) generateStatData(event *common.PluginEvent) error {
 	return nil
 }
 
+// Info 获取插件信息
 func (s *Reporter) Info() model.StatInfo {
 	return model.StatInfo{
 		Target: "polaris-router-momitor",

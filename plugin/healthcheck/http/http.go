@@ -114,6 +114,7 @@ func (g *Detector) doHttpDetect(address string) bool {
 		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %s, err is %v", address, err)
 		return false
 	}
+	defer resp.Body.Close()
 	code := resp.StatusCode
 	for _, statusCodeRange := range g.cfg.ExpectedStatuses {
 		if code >= statusCodeRange.Start && code < statusCodeRange.End {

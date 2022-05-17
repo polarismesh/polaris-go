@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of StatReporter
+// Proxy is a proxy plugin for stat reporter
 type Proxy struct {
 	StatReporter
 	engine model.Engine

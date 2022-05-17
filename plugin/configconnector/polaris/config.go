@@ -25,18 +25,18 @@ import (
 )
 
 const (
-	// 默认GRPC链路包接收大小
+	// DefaultMaxCallRecvMsgSize 默认GRPC链路包接收大小.
 	DefaultMaxCallRecvMsgSize = 50 * 1024 * 1024
-	// GRPC链路包接收大小的设置上限
+	// MaxMaxCallRecvMsgSize GRPC链路包接收大小的设置上限.
 	MaxMaxCallRecvMsgSize = 500 * 1024 * 1024
 )
 
-// GRPC插件级别配置
+// GRPC插件级别配置.
 type networkConfig struct {
 	MaxCallRecvMsgSize int `yaml:"maxCallRecvMsgSize"`
 }
 
-// 校验GRPC配置值
+// Verify 校验GRPC配置值.
 func (r *networkConfig) Verify() error {
 	var errs error
 	if r.MaxCallRecvMsgSize <= 0 || r.MaxCallRecvMsgSize > MaxMaxCallRecvMsgSize {
@@ -45,7 +45,7 @@ func (r *networkConfig) Verify() error {
 	return errs
 }
 
-// 设置GRPC配置默认值
+// SetDefault 设置GRPC配置默认值.
 func (r *networkConfig) SetDefault() {
 	if r.MaxCallRecvMsgSize <= 0 {
 		r.MaxCallRecvMsgSize = DefaultMaxCallRecvMsgSize

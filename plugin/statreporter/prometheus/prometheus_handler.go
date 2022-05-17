@@ -22,17 +22,18 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/plugin/statreporter/prometheus/addons"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// PrometheusHandler
+// PrometheusHandler handler for prometheus
 type PrometheusHandler struct {
-	//prometheus的metrics注册
+	// prometheus的metrics注册
 	registry *prometheus.Registry
 	// metrics的 http handler
 	handler http.Handler
@@ -269,6 +270,7 @@ func (p *PrometheusHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitB
 	return labels
 }
 
+// Close the prometheus handler
 func (p *PrometheusHandler) Close() error {
 	if p.ln != nil {
 		if err := p.ln.Close(); err != nil {

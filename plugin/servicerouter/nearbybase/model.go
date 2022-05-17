@@ -32,47 +32,47 @@ type nearbyConfig struct {
 	UnhealthyPercentToDegrade       int    `yaml:"unhealthyPercentToDegrade" json:"unhealthyPercentToDegrade"`
 }
 
-// 设置配置级别
+// SetMatchLevel 设置配置级别
 func (n *nearbyConfig) SetMatchLevel(level string) {
 	n.MatchLevel = level
 }
 
-// 返回配置级别
+// GetMatchLevel 返回配置级别
 func (n *nearbyConfig) GetMatchLevel() string {
 	return n.MatchLevel
 }
 
-// 设置配置级别
+// SetLowestMatchLevel 设置配置级别
 func (n *nearbyConfig) SetLowestMatchLevel(level string) {
 	n.MaxMatchLevel = level
 }
 
-// 返回配置级别
+// GetLowestMatchLevel 返回配置级别
 func (n *nearbyConfig) GetLowestMatchLevel() string {
 	return n.MaxMatchLevel
 }
 
-// 设置最大降级匹配级别
+// SetMaxMatchLevel 设置最大降级匹配级别
 func (n *nearbyConfig) SetMaxMatchLevel(level string) {
 	n.MaxMatchLevel = level
 }
 
-// 返回最大降级匹配级别
+// GetMaxMatchLevel 返回最大降级匹配级别
 func (n *nearbyConfig) GetMaxMatchLevel() string {
 	return n.MaxMatchLevel
 }
 
-//
+// SetStrictNearby 是否开启严格模式
 func (n *nearbyConfig) SetStrictNearby(s bool) {
 	n.StrictNearby = s
 }
 
-//
+// IsStrictNearby 返回是否严格按照配置级别匹配
 func (n *nearbyConfig) IsStrictNearby() bool {
 	return n.StrictNearby
 }
 
-//
+// IsEnableDegradeByUnhealthyPercent 是否启用降级
 func (n *nearbyConfig) IsEnableDegradeByUnhealthyPercent() bool {
 	if n.EnableDegradeByUnhealthyPercent == nil {
 		return true
@@ -80,27 +80,27 @@ func (n *nearbyConfig) IsEnableDegradeByUnhealthyPercent() bool {
 	return *n.EnableDegradeByUnhealthyPercent
 }
 
-//
+// SetEnableDegradeByUnhealthyPercent 设置是否启用降级
 func (n *nearbyConfig) SetEnableDegradeByUnhealthyPercent(e bool) {
 	n.EnableDegradeByUnhealthyPercent = &e
 }
 
-//
+// GetUnhealthyPercentToDegrade 获取降级的百分比
 func (n *nearbyConfig) GetUnhealthyPercentToDegrade() int {
 	return n.UnhealthyPercentToDegrade
 }
 
-//
+// SetUnhealthyPercentToDegrade 设置最大降级匹配级别
 func (n *nearbyConfig) SetUnhealthyPercentToDegrade(u int) {
 	n.UnhealthyPercentToDegrade = u
 }
 
-// 设置默认值
+// SetDefault 设置默认值
 func (n *nearbyConfig) SetDefault() {
-	if "" == n.MatchLevel {
+	if n.MatchLevel == "" {
 		n.MatchLevel = config.DefaultMatchLevel
 	}
-	if 0 == n.UnhealthyPercentToDegrade {
+	if n.UnhealthyPercentToDegrade == 0 {
 		n.UnhealthyPercentToDegrade = 100
 	}
 	if nil == n.EnableDegradeByUnhealthyPercent {
@@ -117,7 +117,7 @@ var nearbyLevels = map[string]int{
 	config.CampusLevel: priorityLevelCampus,
 }
 
-// 校验
+// Verify 校验
 func (n *nearbyConfig) Verify() error {
 	if config.RegionLevel != n.MatchLevel && config.ZoneLevel != n.MatchLevel && config.CampusLevel != n.MatchLevel {
 		return fmt.Errorf("invalud match level for nearby router: %s, it must be one of %s, %s and %s",

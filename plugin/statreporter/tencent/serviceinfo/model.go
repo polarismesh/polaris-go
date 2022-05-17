@@ -148,9 +148,9 @@ func newStatusList() *statusList {
 
 // addStatus 添加一个版本号状态
 func (s *statusList) addStatus(data interface{}, currentTime time.Time) {
-	current_seq := atomic.AddUint32(&s.seq, 1)
+	currentSeq := atomic.AddUint32(&s.seq, 1)
 	newNode := &statusNode{
-		changeSeq:  current_seq,
+		changeSeq:  currentSeq,
 		changeTime: currentTime,
 		changeData: data,
 	}
@@ -168,9 +168,9 @@ func (s *statusList) addStatus(data interface{}, currentTime time.Time) {
 
 // addDeleteStatus 添加一个删除状态
 func (s *statusList) addDeleteStatus(data interface{}, currentTime time.Time) {
-	current_seq := atomic.AddUint32(&s.seq, 1)
+	currentSeq := atomic.AddUint32(&s.seq, 1)
 	newNode := &statusNode{
-		changeSeq:  current_seq,
+		changeSeq:  currentSeq,
 		changeTime: currentTime,
 		changeData: data,
 	}
@@ -183,7 +183,7 @@ func (s *statusList) addDeleteStatus(data interface{}, currentTime time.Time) {
 		s.count++
 		atomic.StoreUint32(&s.lock, 0)
 		// 如果这个实例或者路由信息被删除了，重置seq
-		atomic.CompareAndSwapUint32(&s.seq, current_seq, 0)
+		atomic.CompareAndSwapUint32(&s.seq, currentSeq, 0)
 		return
 	}
 }

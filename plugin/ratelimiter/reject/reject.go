@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
-// 基于直接拒绝策略的限流控制器
+// RateLimiterReject 基于直接拒绝策略的限流控制器
 type RateLimiterReject struct {
 	*plugin.PluginBase
 }
@@ -51,7 +51,7 @@ func (g *RateLimiterReject) Destroy() error {
 	return nil
 }
 
-// enable
+// IsEnable enable
 func (g *RateLimiterReject) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
@@ -60,21 +60,21 @@ func (g *RateLimiterReject) IsEnable(cfg config.Configuration) bool {
 	}
 }
 
-// 空实现的bucket
+// DoNothingBucket 空实现的bucket
 type DoNothingBucket struct {
 }
 
-// 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
+// GetQuota 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
 func (d *DoNothingBucket) GetQuota() (*ratelimiter.QuotaResult, error) {
 	return &ratelimiter.QuotaResult{Code: model.QuotaResultOk}, nil
 }
 
-// 释放配额（仅对于并发数限流有用）
+// Release 释放配额（仅对于并发数限流有用）
 func (d *DoNothingBucket) Release() {
 
 }
 
-// 初始化并创建限流窗口
+// InitQuota 初始化并创建限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterReject) InitQuota(criteria *ratelimiter.InitCriteria) (ratelimiter.QuotaBucket, error) {
 	return &DoNothingBucket{}, nil

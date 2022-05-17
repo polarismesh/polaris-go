@@ -74,7 +74,7 @@ func (g *RuleBasedInstancesFilter) Destroy() error {
 	return nil
 }
 
-// 是否需要启动规则路由
+// Enable 是否需要启动规则路由
 func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	dstRoutes := g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
 	sourceRoutes := g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
@@ -82,18 +82,15 @@ func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, cl
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
-func (g *RuleBasedInstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
-	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
+func (g *RuleBasedInstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	var dstFilteredInstances, sourceFilteredInstances *model.Cluster
 	var dstRoutes, sourceRoutes []*namingpb.Route
 	var filteredInstances *model.Cluster
 	var summary ruleMatchSummary
-
 	// 检查输入参数
 	if isValid, errInfo := g.validateParams(routeInfo); !isValid {
 		return nil, errInfo
 	}
-
 	// 根据匹配过程修改状态, 默认无路由策略状态
 	ruleStatus := noRouteRule
 
@@ -196,7 +193,6 @@ func getErrorRegexText(regexErrors map[string]string) string {
 
 // 检查请求参数
 func (g *RuleBasedInstancesFilter) validateParams(routeInfo *servicerouter.RouteInfo) (bool, error) {
-
 	// 规则实例为nil, 返回参数错误
 	if reflect2.IsNil(routeInfo) {
 		return false, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil,

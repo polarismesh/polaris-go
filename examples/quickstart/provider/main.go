@@ -45,7 +45,7 @@ func initArgs() {
 	flag.StringVar(&token, "token", "", "token")
 }
 
-// PolarisProvider .
+// PolarisProvider is an example of provider
 type PolarisProvider struct {
 	provider   polaris.ProviderAPI
 	namespace  string
@@ -55,7 +55,7 @@ type PolarisProvider struct {
 	isShutdown bool
 }
 
-// Run . execute
+// Run starts the provider
 func (svr *PolarisProvider) Run() {
 	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
 	if err != nil {
@@ -160,7 +160,7 @@ func main() {
 	}
 	provider, err := polaris.NewProviderAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	//provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
+	// provider, err = api.NewProviderAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create providerAPI, err is %v", err)

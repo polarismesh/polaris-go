@@ -29,7 +29,6 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
-	_ "github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 )
@@ -41,9 +40,10 @@ const (
 	protocolSidecar = "sidecar"
 )
 
+// GetNewConnFunc returns a new connection function.
 type GetNewConnFunc func() Conn
 
-// SideCar connector
+// Connector SideCar connector
 type Connector struct {
 	*plugin.PluginBase
 	Timeout      time.Duration
@@ -54,7 +54,7 @@ type Connector struct {
 	Conn *AsyncConn // 用于异步发送
 
 	discoverConnector *connector.DiscoverConnector
-
+	// DnsID dns id
 	DnsID uint32
 
 	SideCarIp   string
@@ -68,7 +68,7 @@ func getSyncConn() Conn {
 	return conn
 }
 
-// 返回结果记录结构
+// RspData 返回结果记录结构
 type RspData struct {
 	RRArr         []dns.RR
 	DetailErrInfo *dns.DetailErrInfoRR
@@ -76,12 +76,12 @@ type RspData struct {
 	RCode         int
 }
 
-// 返回Name
+// Name 返回Name
 func (c *Connector) Name() string {
 	return protocolSidecar
 }
 
-// 初始化
+// Init 初始化
 func (c *Connector) Init(ctx *plugin.InitContext) {
 	c.PluginBase = plugin.NewPluginBase(ctx)
 	cfgValue := ctx.Config.GetGlobal().GetServerConnector().GetPluginConfig(c.Name())
@@ -95,8 +95,8 @@ func (c *Connector) Init(ctx *plugin.InitContext) {
 	c.GetSyncConnFunc = getSyncConn
 }
 
-// enable
-func (g *Connector) IsEnable(cfg config.Configuration) bool {
+// IsEnable enable
+func (c *Connector) IsEnable(cfg config.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return true
 	} else {
@@ -112,7 +112,7 @@ func (c *Connector) getDnsMsgId() uint16 {
 	return uint16(dnsId)
 }
 
-// 异步发送
+// Send 异步发送
 func (c *Connector) Send(request *namingpb.DiscoverRequest) error {
 	dnsMsg, err := convertDiscoverRequestToDnsMsg(request, c.getDnsMsgId())
 	if err != nil {
@@ -124,7 +124,7 @@ func (c *Connector) Send(request *namingpb.DiscoverRequest) error {
 	return err
 }
 
-// 异步接收
+// Recv 异步接收
 func (c *Connector) Recv() (*namingpb.DiscoverResponse, error) {
 	select {
 	case rspData := <-c.Conn.ReadChan:

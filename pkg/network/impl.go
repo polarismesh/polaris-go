@@ -151,7 +151,7 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 		Address:  addr,
 		instance: instance,
 	}
-	connectDuration := time.Now().Sub(connectTime)
+	connectDuration := time.Since(connectTime)
 	if err != nil {
 		if !reflect2.IsNil(instance) {
 			s.manager.ReportFail(connID, int32(model.ErrCodeConnectError), connectDuration)
@@ -183,7 +183,7 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 	clsService config.ClusterService, instance model.Instance) (*Connection, error) {
 	connectTime := time.Now()
 	tcpConn, err := s.manager.creator.CreateConnection(addr, timeout, &s.manager.ClientInfo)
-	connectDuration := time.Now().Sub(connectTime)
+	connectDuration := time.Since(connectTime)
 	if err != nil {
 		return nil, fmt.Errorf("fail to connect to %s, timeout is %v, service is %s, because %s",
 			addr, connectDuration, s.service, err.Error())

@@ -122,27 +122,27 @@ const (
 type RouteStatus int
 
 const (
-	// 正常结束
+	// Normal 正常结束
 	Normal RouteStatus = 0
-	// 全活
+	// RecoverAll 全活
 	RecoverAll RouteStatus = 1
-	// 降级到城市
+	// DegradeToCity 降级到城市
 	DegradeToCity RouteStatus = 2
-	// 降级到大区
+	// DegradeToRegion 降级到大区
 	DegradeToRegion RouteStatus = 3
-	// 降级到全部区域
+	// DegradeToAll 降级到全部区域
 	DegradeToAll RouteStatus = 4
-	// 降级到不完全匹配的金丝雀节点
+	// DegradeToNotMatchCanary 降级到不完全匹配的金丝雀节点
 	DegradeToNotMatchCanary RouteStatus = 5
-	// 降级到非金丝雀节点
+	// DegradeToNotCanary 降级到非金丝雀节点
 	DegradeToNotCanary RouteStatus = 6
-	// 正常环境降级到金丝雀环境
+	// DegradeToCanary 正常环境降级到金丝雀环境
 	DegradeToCanary RouteStatus = 7
-	// 金丝雀环境发生异常
+	// LimitedCanary 金丝雀环境发生异常
 	LimitedCanary RouteStatus = 8
-	// 非金丝雀环境发生异常
+	// LimitedNoCanary 非金丝雀环境发生异常
 	LimitedNoCanary RouteStatus = 9
-	// 降级使用filterOnly
+	// DegradeToFilterOnly 降级使用filterOnly
 	DegradeToFilterOnly RouteStatus = 10
 )
 
@@ -160,6 +160,7 @@ var routeStatusMap = map[RouteStatus]string{
 	DegradeToFilterOnly:     "DegradeToFilterOnly",
 }
 
+// String 转换为字符串
 func (rs RouteStatus) String() string {
 	return routeStatusMap[rs]
 }
@@ -183,9 +184,9 @@ type RouterChain struct {
 // ServiceRouter 【扩展点接口】服务路由
 type ServiceRouter interface {
 	plugin.Plugin
-	// 当前是否需要启动该服务路由插件
+	// Enable 当前是否需要启动该服务路由插件
 	Enable(routeInfo *RouteInfo, serviceClusters model.ServiceClusters) bool
-	// 获取通过规则过滤后的服务集群信息以及服务实例列表
+	// GetFilteredInstances 获取通过规则过滤后的服务集群信息以及服务实例列表
 	// routeInfo: 路由信息，包括源和目标服务的实例及路由规则
 	// serviceClusters：服务级缓存信息
 	// withinCluster：上一个环节过滤的集群信息，本次路由需要继承

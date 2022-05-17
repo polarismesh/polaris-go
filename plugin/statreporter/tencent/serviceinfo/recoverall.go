@@ -34,8 +34,10 @@ import (
 )
 
 const (
+	// NoRecoverAll is a constant for no recover all.
 	NoRecoverAll uint32 = 0
-	RecoverAll   uint32 = 1
+	// RecoverAll is a constant for recover all.
+	RecoverAll uint32 = 1
 )
 
 // onRecoverAllChanged 在一个cluster的全死全活状态发生改变时触发

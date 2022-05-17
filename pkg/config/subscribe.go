@@ -40,22 +40,22 @@ func (s *SubscribeImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeSubScribe)
 }
 
-// Verify
+// Verify.
 func (s *SubscribeImpl) Verify() error {
 	return nil
 }
 
-// SetType 设置插件
+// SetType 设置插件.
 func (s *SubscribeImpl) SetType(typeStr string) {
 	s.Type = typeStr
 }
 
-// GetType 获取插件
+// GetType 获取插件.
 func (s *SubscribeImpl) GetType() string {
 	return s.Type
 }
 
-// GetPluginConfig
+// GetPluginConfig.
 func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	if s.Plugin == nil {
 		return nil
@@ -68,7 +68,7 @@ func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	}
 }
 
-// SetPluginConfig
+// SetPluginConfig.
 func (s *SubscribeImpl) SetPluginConfig(plugName string, value BaseConfig) error {
 	return nil
 }
