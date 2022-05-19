@@ -27,7 +27,7 @@ type routerAPI struct {
 	sdkCtx api.SDKContext
 }
 
-// process routers to filter instances
+// ProcessRouters process routers to filter instances
 func (r *routerAPI) ProcessRouters(request *ProcessRoutersRequest) (*model.InstancesResponse, error) {
 	if err := api.CheckAvailable(r); err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (r *routerAPI) ProcessRouters(request *ProcessRoutersRequest) (*model.Insta
 	return r.sdkCtx.GetEngine().ProcessRouters(&request.ProcessRoutersRequest)
 }
 
-// process load balancer to get the target instances
+// ProcessLoadBalance process load balancer to get the target instances
 func (r *routerAPI) ProcessLoadBalance(request *ProcessLoadBalanceRequest) (*model.OneInstanceResponse, error) {
 	if err := api.CheckAvailable(r); err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func NewRouterAPI() (RouterAPI, error) {
 	return NewRouterAPIByConfig(config.NewDefaultConfigurationWithDomain())
 }
 
-// NewProviderAPIByFile 通过配置文件创建SDK RouterAPI对象
+// NewRouterAPIByFile 通过配置文件创建SDK RouterAPI对象
 func NewRouterAPIByFile(path string) (RouterAPI, error) {
 	context, err := api.InitContextByFile(path)
 	if err != nil {
@@ -68,7 +68,7 @@ func NewRouterAPIByFile(path string) (RouterAPI, error) {
 	return &routerAPI{context}, nil
 }
 
-// newRouterAPIByConfig 通过配置对象创建SDK RouterAPI对象
+// NewRouterAPIByConfig 通过配置对象创建SDK RouterAPI对象
 func NewRouterAPIByConfig(cfg config.Configuration) (RouterAPI, error) {
 	context, err := api.InitContextByConfig(cfg)
 	if err != nil {

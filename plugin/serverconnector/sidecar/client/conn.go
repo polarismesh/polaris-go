@@ -19,7 +19,6 @@ package client
 
 import (
 	"errors"
-	_ "fmt"
 	"net"
 	"time"
 
@@ -27,9 +26,9 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
 )
 
-// conn interface
+// Conn conn interface
 type Conn interface {
-	Dial(dstIp string, port int) error
+	Dial(dstIP string, port int) error
 	Close()
 	ReadMsg() (*dns.Msg, error)
 	WriteMsg(m *dns.Msg) error
@@ -37,20 +36,20 @@ type Conn interface {
 	SetReadDeadline(t time.Time) error
 }
 
-// 发送Conn
+// ConnBase 发送Conn
 type ConnBase struct {
 	UdpConn *net.UDPConn
 	UDPSize uint16
 }
 
-// UDP dial
-func (c *ConnBase) Dial(dstIp string, port int) error {
+// Dial UDP dial
+func (co *ConnBase) Dial(dstIP string, port int) error {
 	var err error
 	srcAddr := &net.UDPAddr{IP: net.IPv4zero, Port: 0}
-	dst := net.ParseIP(dstIp)
+	dst := net.ParseIP(dstIP)
 	dstAddr := &net.UDPAddr{IP: dst, Port: port}
 
-	c.UdpConn, err = net.DialUDP("udp", srcAddr, dstAddr)
+	co.UdpConn, err = net.DialUDP("udp", srcAddr, dstAddr)
 	if err != nil {
 		return err
 	}
@@ -58,14 +57,14 @@ func (c *ConnBase) Dial(dstIp string, port int) error {
 	return nil
 }
 
-// 关闭
-func (c *ConnBase) Close() {
-	if c.UdpConn != nil {
-		c.UdpConn.Close()
+// Close 关闭
+func (co *ConnBase) Close() {
+	if co.UdpConn != nil {
+		_ = co.UdpConn.Close()
 	}
 }
 
-// 接收消息
+// ReadMsg 接收消息
 func (co *ConnBase) ReadMsg() (*dns.Msg, error) {
 	p, err := co.readUdpPack()
 	if err != nil {
@@ -92,7 +91,7 @@ func (co *ConnBase) readUdpPack() ([]byte, error) {
 	return data[:n], err
 }
 
-// 发包
+// WriteMsg 发包
 func (co *ConnBase) WriteMsg(m *dns.Msg) (err error) {
 	buf, err := m.Pack()
 	if err != nil {
@@ -104,20 +103,18 @@ func (co *ConnBase) WriteMsg(m *dns.Msg) (err error) {
 	return err
 }
 
-// SetWriteDeadline
+// SetWriteDeadline 设置写超时
 func (co *ConnBase) SetWriteDeadline(t time.Time) error {
 	if co.UdpConn != nil {
 		return co.UdpConn.SetWriteDeadline(t)
-	} else {
-		return errors.New("udpConn is nil")
 	}
+	return errors.New("udpConn is nil")
 }
 
-// SetReadDeadline
+// SetReadDeadline 设置读超时
 func (co *ConnBase) SetReadDeadline(t time.Time) error {
 	if co.UdpConn != nil {
 		return co.UdpConn.SetReadDeadline(t)
-	} else {
-		return errors.New("udpConn is nil")
 	}
+	return errors.New("udpConn is nil")
 }

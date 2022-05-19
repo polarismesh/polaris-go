@@ -91,13 +91,9 @@ func (g *Detector) doTCPDetect(address string) bool {
 	return true
 }
 
-// enable
+// IsEnable enable
 func (g *Detector) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	} else {
-		return true
-	}
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // init 注册插件信息

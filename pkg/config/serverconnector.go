@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/go-multierror"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// 对接注册中心相关配置
+// ServerConnectorConfigImpl 对接注册中心相关配置.
 type ServerConnectorConfigImpl struct {
 	Addresses []string `yaml:"addresses" json:"addresses"`
 
@@ -52,93 +52,93 @@ type ServerConnectorConfigImpl struct {
 }
 
 // GetAddresses global.serverConnector.addresses
-// 远端cl5 server地址，格式为<host>:<port>
+// 远端cl5 server地址，格式为<host>:<port>.
 func (s *ServerConnectorConfigImpl) GetAddresses() []string {
 	return s.Addresses
 }
 
-// SetAddresses 设置远端cl5 server地址，格式为<host>:<port>
+// SetAddresses 设置远端cl5 server地址，格式为<host>:<port>.
 func (s *ServerConnectorConfigImpl) SetAddresses(addresses []string) {
 	s.Addresses = addresses
 }
 
 // GetProtocol global.serverConnector.protocol
-// 与cl5 server对接的协议
+// 与cl5 server对接的协议.
 func (s *ServerConnectorConfigImpl) GetProtocol() string {
 	return s.Protocol
 }
 
-// SetProtocol 设置与cl5 server对接的协议
+// SetProtocol 设置与cl5 server对接的协议.
 func (s *ServerConnectorConfigImpl) SetProtocol(protocol string) {
 	s.Protocol = protocol
 }
 
 // GetConnectTimeout global.serverConnector.connectTimeout
-// 与server的连接超时时间
+// 与server的连接超时时间.
 func (s *ServerConnectorConfigImpl) GetConnectTimeout() time.Duration {
 	return *s.ConnectTimeout
 }
 
-// SetConnectTimeout 设置与server的连接超时时间
+// SetConnectTimeout 设置与server的连接超时时间.
 func (s *ServerConnectorConfigImpl) SetConnectTimeout(timeout time.Duration) {
 	s.ConnectTimeout = &timeout
 }
 
 // GetMessageTimeout global.serverConnector.messageTimeout
-// 远程请求超时时间
+// 远程请求超时时间.
 func (s *ServerConnectorConfigImpl) GetMessageTimeout() time.Duration {
 	return *s.MessageTimeout
 }
 
-// SetMessageTimeout 设置远程请求超时时间
+// SetMessageTimeout 设置远程请求超时时间.
 func (s *ServerConnectorConfigImpl) SetMessageTimeout(timeout time.Duration) {
 	s.MessageTimeout = &timeout
 }
 
-// GetConnectionExpireInterval global.serverConnector.connectionIdleTimeout
-// 连接空闲后超时时间
+// GetConnectionIdleTimeout global.serverConnector.connectionIdleTimeout
+// 连接空闲后超时时间.
 func (s *ServerConnectorConfigImpl) GetConnectionIdleTimeout() time.Duration {
 	return *s.ConnectionIdleTimeout
 }
 
-// SetConnectionIdleTimeout 设置连接空闲后超时时间
+// SetConnectionIdleTimeout 设置连接空闲后超时时间.
 func (s *ServerConnectorConfigImpl) SetConnectionIdleTimeout(timeout time.Duration) {
 	s.ConnectionIdleTimeout = &timeout
 }
 
 // GetRequestQueueSize global.serverConnector.requestQueueSize
-// 新请求的队列BUFFER容量
+// 新请求的队列BUFFER容量.
 func (s *ServerConnectorConfigImpl) GetRequestQueueSize() int32 {
 	return *s.RequestQueueSize
 }
 
-// SetRequestQueueSize 设置新请求的队列BUFFER容量
+// SetRequestQueueSize 设置新请求的队列BUFFER容量.
 func (s *ServerConnectorConfigImpl) SetRequestQueueSize(queueSize int32) {
 	s.RequestQueueSize = &queueSize
 }
 
 // GetServerSwitchInterval global.serverConnector.serverSwitchInterval
-// server的切换时延
+// server的切换时延.
 func (s *ServerConnectorConfigImpl) GetServerSwitchInterval() time.Duration {
 	return *s.ServerSwitchInterval
 }
 
-// SetServerSwitchInterval server的切换时延
+// SetServerSwitchInterval server的切换时延.
 func (s *ServerConnectorConfigImpl) SetServerSwitchInterval(interval time.Duration) {
 	s.ServerSwitchInterval = &interval
 }
 
-// GetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间
+// GetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间.
 func (s *ServerConnectorConfigImpl) GetReconnectInterval() time.Duration {
 	return *s.ReconnectInterval
 }
 
-// SetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间
+// SetReconnectInterval 一次连接失败后，到下一次连接之间的最小间隔时间.
 func (s *ServerConnectorConfigImpl) SetReconnectInterval(interval time.Duration) {
 	s.ReconnectInterval = &interval
 }
 
-// GetPluginConfig global.serverConnector.plugin
+// GetPluginConfig global.serverConnector.plugin.
 func (s *ServerConnectorConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := s.Plugin[pluginName]
 	if !ok {
@@ -147,12 +147,12 @@ func (s *ServerConnectorConfigImpl) GetPluginConfig(pluginName string) BaseConfi
 	return cfgValue.(BaseConfig)
 }
 
-// SetPluginConfig 输出插件具体配置
+// SetPluginConfig 输出插件具体配置.
 func (s *ServerConnectorConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeServerConnector, pluginName, value)
 }
 
-// Verify 检验ServerConnector配置
+// Verify 检验ServerConnector配置.
 func (s *ServerConnectorConfigImpl) Verify() error {
 	if nil == s {
 		return errors.New("ServerConnectorConfig is nil")
@@ -180,7 +180,7 @@ func (s *ServerConnectorConfigImpl) Verify() error {
 	return errs
 }
 
-// SetDefault 设置ServerConnector配置的默认值
+// SetDefault 设置ServerConnector配置的默认值.
 func (s *ServerConnectorConfigImpl) SetDefault() {
 	if nil == s.ConnectTimeout {
 		s.ConnectTimeout = model.ToDurationPtr(DefaultServerConnectTimeout)
@@ -206,7 +206,7 @@ func (s *ServerConnectorConfigImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeServerConnector)
 }
 
-// Init 配置初始化
+// Init 配置初始化.
 func (s *ServerConnectorConfigImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeServerConnector)

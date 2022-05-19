@@ -14,15 +14,16 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
-// connector错误定义
+// Error connector错误定义
 type Error struct {
 	// err info
 	err string
 }
 
-// 返回 err
+// Error 返回 err
 func (e *Error) Error() string {
 	if e == nil {
 		return "dns: <nil>"

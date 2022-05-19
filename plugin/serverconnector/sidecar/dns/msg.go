@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
@@ -32,18 +33,20 @@ const (
 )
 
 const (
-	year68     = 1 << 31 // For RFC1982 (Serial Arithmetic) calculations in 32 bits.
-	defaultTtl = 3600    // Default internal TTL.
+	// year68 is the year represented by "68", which is used in RFC3597.
+	year68 = 1 << 31 // For RFC1982 (Serial Arithmetic) calculations in 32 bits.
+	// defaultTtl is the default TTL value to use when none is given in the message.
+	defaultTtl = 3600 // Default internal TTL.
 
-	// UDP最小包长度
+	// MinMsgSize UDP最小包长度
 	MinMsgSize = 512
-	// UDP最大包长度
+	// MaxMsgSize UDP最大包长度
 	MaxMsgSize = 65535
 )
 
 // Errors defined in this package.
 var (
-	// ErrAuth indicates an error in the TSIG authentication.
+	// ErrBuf ErrAuth indicates an error in the TSIG authentication.
 	ErrBuf error = &Error{err: "buffer size too small"}
 	// ErrConnEmpty indicates a connection is being used before it is initialized.
 	ErrConnEmpty error = &Error{err: "conn has no connection"}
@@ -58,7 +61,7 @@ var (
 	ErrRRSet error = &Error{err: "bad rrset"}
 )
 
-// dns协议头
+// MsgHdr dns协议头
 type MsgHdr struct {
 	// dns session id
 	Id uint16
@@ -122,7 +125,7 @@ func (h *MsgHdr) String() string {
 	return s
 }
 
-// header反序列化
+// Unpack header反序列化
 func (h *MsgHdr) Unpack(msg []byte) (int, error) {
 	var off int
 	var err error
@@ -165,7 +168,7 @@ func (h *MsgHdr) Unpack(msg []byte) (int, error) {
 	return off, nil
 }
 
-// header序列化
+// Pack header序列化
 func (h *MsgHdr) Pack(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 	err := packUint16(h.Id, buff)
@@ -222,7 +225,7 @@ func (h *MsgHdr) Pack(buff *bytes.Buffer) (int, error) {
 	return length, nil
 }
 
-// header 深拷贝函数
+// Copy header 深拷贝函数
 func (h *MsgHdr) Copy(dst *MsgHdr) error {
 	dst.Id = h.Id
 	dst.Response = h.Response
@@ -242,7 +245,7 @@ func (h *MsgHdr) Copy(dst *MsgHdr) error {
 	return nil
 }
 
-// header设置默认值
+// SetDefaultValue header设置默认值
 func (h *MsgHdr) SetDefaultValue(id uint16, opCode int) {
 	h.Id = id
 	h.Response = false
@@ -261,7 +264,7 @@ func (h *MsgHdr) SetDefaultValue(id uint16, opCode int) {
 	h.Arcount = 0
 }
 
-// 完整的DNS协议
+// Msg 完整的DNS协议
 type Msg struct {
 	MsgHdr
 	// Compress bool       `json:"-"` // If true, the message will be compressed when converted to wire format.
@@ -271,7 +274,7 @@ type Msg struct {
 	Extra    []RR       // Holds the RR(s) of the additional section.
 }
 
-// 序列化
+// Pack 序列化
 func (dns *Msg) Pack() (*bytes.Buffer, error) {
 	if dns.Opcode == OpcodeQuery {
 		buf := new(bytes.Buffer)
@@ -280,14 +283,13 @@ func (dns *Msg) Pack() (*bytes.Buffer, error) {
 			return nil, err
 		}
 		return buf, nil
-	} else {
-		buf := new(bytes.Buffer)
-		err := dns.polarisStreamPack(buf)
-		if err != nil {
-			return nil, err
-		}
-		return buf, nil
 	}
+	buf := new(bytes.Buffer)
+	err := dns.polarisStreamPack(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 // polaris dns序列化 （answer RR 为 stream RR，用于4层分包, 尚未做严格校验）
@@ -336,15 +338,14 @@ func (dns *Msg) dnsPack(buff *bytes.Buffer) error {
 	if buff.Len() > MinMsgSize {
 		buff.Reset()
 		dns.MsgHdr.Truncated = true
-		_, err := dns.MsgHdr.Pack(buff)
-		if err != nil {
+		if _, err := dns.MsgHdr.Pack(buff); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// 反序列化body
+// UnpackBody 反序列化body
 func (dns *Msg) UnpackBody(msg []byte, off int) (err error) {
 	// If we are at the end of the message we should return *just* the
 	// header. This can still be useful to the caller. 9.9.9.9 sends these
@@ -387,10 +388,9 @@ func (dns *Msg) UnpackBody(msg []byte, off int) (err error) {
 		// println("dns: extra bytes in dns packet", off, "<", len(msg))
 	}
 	return err
-
 }
 
-// dns反序列化
+// Unpack dns反序列化
 func (dns *Msg) Unpack(msg []byte) (err error) {
 	off, err := dns.MsgHdr.Unpack(msg)
 	if err != nil {
@@ -399,7 +399,7 @@ func (dns *Msg) Unpack(msg []byte) (err error) {
 	return dns.UnpackBody(msg, off)
 }
 
-// 设置返回
+// SetReply 设置返回
 func (dns *Msg) SetReply(request *Msg) {
 	dns.Id = request.Id
 	dns.Response = true
@@ -416,7 +416,7 @@ func (dns *Msg) SetReply(request *Msg) {
 	}
 }
 
-// 设置返回，不拷贝question
+// SetReplyWithoutQuestions 设置返回，不拷贝question
 func (dns *Msg) SetReplyWithoutQuestions(request *Msg) {
 	dns.Id = request.Id
 	dns.Response = true
@@ -428,7 +428,7 @@ func (dns *Msg) SetReplyWithoutQuestions(request *Msg) {
 	dns.Rcode = RcodeSuccess
 }
 
-// SetQuestion
+// SetDNSQuestion Set Question
 func (dns *Msg) SetDNSQuestion(z string, t uint16) *Msg {
 	dns.RecursionDesired = true
 	dns.Question = make([]Question, 1)
@@ -437,7 +437,7 @@ func (dns *Msg) SetDNSQuestion(z string, t uint16) *Msg {
 	return dns
 }
 
-// 获取包控制RR
+// GetPackControlRR 获取包控制RR
 func (dns *Msg) GetPackControlRR() *PackageCtrlRR {
 	if dns.Arcount == 0 {
 		return nil
@@ -450,7 +450,7 @@ func (dns *Msg) GetPackControlRR() *PackageCtrlRR {
 	return nil
 }
 
-// 获取详细错误RR（Polaris使用）
+// GetDetailErrRR 获取详细错误RR（Polaris使用）
 func (dns *Msg) GetDetailErrRR() *DetailErrInfoRR {
 	if dns.Arcount == 0 {
 		return nil

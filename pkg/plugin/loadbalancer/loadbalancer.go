@@ -46,7 +46,7 @@ type ReplicateInfo struct {
 // LoadBalancer 【扩展点接口】负载均衡
 type LoadBalancer interface {
 	plugin.Plugin
-	// 进行负载均衡，选择一个实例
+	// ChooseInstance 进行负载均衡，选择一个实例
 	ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error)
 }
 

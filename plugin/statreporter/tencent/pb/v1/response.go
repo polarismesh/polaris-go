@@ -19,9 +19,7 @@ package v1
 
 import "github.com/golang/protobuf/ptypes/wrappers"
 
-/**
- * @brief 创建回复
- */
+// NewResponse 创建回复
 func NewResponse(id string, code uint32) *StatResponse {
 	return &StatResponse{
 		Id:   &wrappers.StringValue{Value: id},

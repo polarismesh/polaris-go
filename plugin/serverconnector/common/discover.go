@@ -24,23 +24,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
-	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/plugin"
-
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/modern-go/reflect2"
 
+	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
+	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	"github.com/polarismesh/polaris-go/pkg/network"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-
-	"github.com/golang/protobuf/ptypes/wrappers"
-
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/polarismesh/polaris-go/pkg/network"
+	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 )
 
@@ -288,10 +285,10 @@ func logDiscoverResponse(resp *namingpb.DiscoverResponse, connection *network.Co
 			Type: pb.GetEventType(resp.Type),
 		}
 		jsonMarshaler := &jsonpb.Marshaler{}
-		respJson, _ := jsonMarshaler.MarshalToString(resp)
-		if len(respJson) <= maxLogMsgSize {
+		respJSON, _ := jsonMarshaler.MarshalToString(resp)
+		if len(respJSON) <= maxLogMsgSize {
 			log.GetBaseLogger().Debugf("received response from %s(%s), service %s: \n%v",
-				connection.ConnID, connection.Address, svcKey, respJson)
+				connection.ConnID, connection.Address, svcKey, respJSON)
 		} else {
 			log.GetBaseLogger().Debugf("received response from %s(%s), service %s: message size exceed %v",
 				connection.ConnID, connection.Address, svcKey, maxLogMsgSize)
@@ -661,10 +658,7 @@ finally:
 
 // 是否需要关闭流
 func (g *DiscoverConnector) needCloseSend(lastRecvTime time.Time) bool {
-	if !lastRecvTime.Add(g.connectionIdleTimeout).Before(time.Now()) {
-		return false
-	}
-	return true
+	return lastRecvTime.Add(g.connectionIdleTimeout).Before(time.Now())
 }
 
 // 获取超时任务列表
@@ -909,9 +903,9 @@ func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
 		},
 	}
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
+		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
 		log.GetBaseLogger().Debugf(
-			"discover request to send is %s", reqJson)
+			"discover request to send is %s", reqJSON)
 	}
 	return request
 }

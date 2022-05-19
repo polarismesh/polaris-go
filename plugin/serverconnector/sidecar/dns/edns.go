@@ -14,11 +14,12 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
+// Package dns edns provides EDNS options for DNS queries.
 package dns
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 )
 
@@ -47,12 +48,12 @@ type OPT struct {
 	Option []EDNS0 `dns:"opt"`
 }
 
-// Header
+// Header returns the header of the ens.
 func (o *OPT) Header() *RR_Header {
 	return &o.Hdr
 }
 
-// PackData
+// PackData marshals the OPT record and returns the wire format.
 func (o *OPT) PackData(buff *bytes.Buffer) (int, error) {
 	var dataCommon EDNSDataCommon
 	oldLen := buff.Len()
@@ -75,7 +76,7 @@ func (o *OPT) PackData(buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// UnPackData
+// UnPackData unmarshal the wire format into an OPT record.
 func (o *OPT) UnPackData(msg []byte, off int) (int, error) {
 	var err error
 	var dataCommon EDNSDataCommon
@@ -99,13 +100,13 @@ func (o *OPT) UnPackData(msg []byte, off int) (int, error) {
 			break
 		}
 		if size > int(o.Hdr.Rdlength) {
-			return 0, errors.New(fmt.Sprintf("OPT unpack size > int(o.Hdr.Rdlength"))
+			return 0, fmt.Errorf("OPT unpack size > int(o.Hdr.Rdlength")
 		}
 	}
 	return off, nil
 }
 
-// GetData
+// GetData gets the data stored in the OPT record.
 func (o *OPT) GetData() []byte {
 	return nil
 }
@@ -114,9 +115,9 @@ func (o *OPT) GetData() []byte {
 type EDNS0 interface {
 	// Option returns the option code for the option.
 	Option() uint16
-	// pack returns the bytes of the option data.
+	// PackData pack returns the bytes of the option data.
 	PackData() ([]byte, error)
-	// unpack sets the data as found in the buffer. Is also sets
+	// UnpackData unpack sets the data as found in the buffer. Is also sets
 	// the length of the slice as the length of the option data.
 	UnpackData([]byte) error
 	// String returns the string representation of the option.
@@ -125,18 +126,18 @@ type EDNS0 interface {
 	// copy() EDNS0
 }
 
-// Base EDNS data common
+// EDNSDataCommon Base EDNS data common
 type EDNSDataCommon struct {
 	OptionCode   uint16
 	OptionLength uint16
 }
 
-// Option
+// Option implements the EDNS0 interface.
 func (d *EDNSDataCommon) Option() uint16 {
 	return 0
 }
 
-// Pack
+// Pack implements the EDNS0 interface.
 func (d *EDNSDataCommon) Pack(buff *bytes.Buffer) error {
 	err := packUint16(d.OptionCode, buff)
 	if err != nil {
@@ -149,7 +150,7 @@ func (d *EDNSDataCommon) Pack(buff *bytes.Buffer) error {
 	return nil
 }
 
-// Unpack
+// Unpack implements the EDNS0 interface.
 func (d *EDNSDataCommon) Unpack(msg []byte, offset int) (int, error) {
 	var err error
 	d.OptionCode, offset, err = unpackUint16(msg, offset)
@@ -163,24 +164,24 @@ func (d *EDNSDataCommon) Unpack(msg []byte, offset int) (int, error) {
 	return offset, nil
 }
 
-// Base edns data
+// BaseEDNSData Base edns data
 type BaseEDNSData struct {
 	Code       uint16
 	OptionData []byte
 }
 
-// PackData
+// PackData implements the EDNS0 interface.
 func (b *BaseEDNSData) PackData() ([]byte, error) {
 	return b.OptionData, nil
 }
 
-// UnpackData
+// UnpackData implements the EDNS0 interface.
 func (b *BaseEDNSData) UnpackData(data []byte) error {
 	b.OptionData = data
 	return nil
 }
 
-// Option() uint16
+// Option uint16 implements the EDNS0 interface.
 func (b *BaseEDNSData) Option() uint16 {
 	return 0
 }

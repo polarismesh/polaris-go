@@ -78,6 +78,7 @@ func (c *consumerAPI) Destroy() {
 	c.rawAPI.Destroy()
 }
 
+// NewConsumerAPI 创建调用者API
 func NewConsumerAPI() (ConsumerAPI, error) {
 	c, err := api.NewConsumerAPI()
 	if nil != err {
@@ -86,6 +87,7 @@ func NewConsumerAPI() (ConsumerAPI, error) {
 	return &consumerAPI{rawAPI: c}, nil
 }
 
+// NewConsumerAPIByFile 创建调用者API
 func NewConsumerAPIByFile(path string) (ConsumerAPI, error) {
 	c, err := api.NewConsumerAPIByFile(path)
 	if nil != err {
@@ -94,6 +96,7 @@ func NewConsumerAPIByFile(path string) (ConsumerAPI, error) {
 	return &consumerAPI{rawAPI: c}, nil
 }
 
+// NewConsumerAPIByAddress 创建调用者API
 func NewConsumerAPIByAddress(address ...string) (ConsumerAPI, error) {
 	c, err := api.NewConsumerAPIByAddress(address...)
 	if nil != err {
@@ -102,11 +105,13 @@ func NewConsumerAPIByAddress(address ...string) (ConsumerAPI, error) {
 	return &consumerAPI{rawAPI: c}, nil
 }
 
+// NewConsumerAPIByContext 创建调用者API
 func NewConsumerAPIByContext(context api.SDKContext) ConsumerAPI {
 	c := api.NewConsumerAPIByContext(context)
 	return &consumerAPI{rawAPI: c}
 }
 
+// NewConsumerAPIByConfig 创建调用者API
 func NewConsumerAPIByConfig(cfg config.Configuration) (ConsumerAPI, error) {
 	c, err := api.NewConsumerAPIByConfig(cfg)
 	if nil != err {
@@ -115,14 +120,17 @@ func NewConsumerAPIByConfig(cfg config.Configuration) (ConsumerAPI, error) {
 	return &consumerAPI{rawAPI: c}, nil
 }
 
+// NewSDKContext 创建SDK上下文
 func NewSDKContext() (api.SDKContext, error) {
 	return api.InitContextByConfig(config.NewDefaultConfigurationWithDomain())
 }
 
+// NewSDKContextByAddress 根据address创建SDK上下文
 func NewSDKContextByAddress(address ...string) (api.SDKContext, error) {
 	return api.InitContextByConfig(config.NewDefaultConfiguration(address))
 }
 
+// NewSDKContextByConfig 根据配置创建SDK上下文
 func NewSDKContextByConfig(cfg config.Configuration) (api.SDKContext, error) {
 	return api.InitContextByConfig(cfg)
 }

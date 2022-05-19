@@ -18,6 +18,7 @@
 package localchannel
 
 const (
+	// DefaultChannelBufferSize is the default channel buffer size.
 	DefaultChannelBufferSize = 30
 )
 

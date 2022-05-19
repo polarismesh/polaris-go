@@ -169,19 +169,19 @@ func (s *Stat2MonitorReporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
-// start 启动定时协程
-func (g *Stat2MonitorReporter) Start() error {
-	go g.uploadStat()
+// Start 启动定时协程
+func (s *Stat2MonitorReporter) Start() error {
+	go s.uploadStat()
 	return nil
 }
 
-// enable
-func (g *Stat2MonitorReporter) IsEnable(cfg sysconfig.Configuration) bool {
+// IsEnable 是否启用
+func (s *Stat2MonitorReporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
 	} else {
 		for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
-			if name == g.Name() {
+			if name == s.Name() {
 				return true
 			}
 		}
@@ -189,13 +189,13 @@ func (g *Stat2MonitorReporter) IsEnable(cfg sysconfig.Configuration) bool {
 	return false
 }
 
-// destroy
-func (g *Stat2MonitorReporter) Destroy() error {
-	err := g.PluginBase.Destroy()
+// Destroy 销毁插件
+func (s *Stat2MonitorReporter) Destroy() error {
+	err := s.PluginBase.Destroy()
 	if err != nil {
 		return err
 	}
-	err = g.RunContext.Destroy()
+	err = s.RunContext.Destroy()
 	if err != nil {
 		return err
 	}
@@ -312,6 +312,7 @@ func iterateSvcStat(handler *statHandler, registry localregistry.LocalRegistry) 
 			if atomic.LoadInt64(&sliceWindowMap.readTime) > atomic.LoadInt64(&sliceWindowMap.updateTime) {
 				continue
 			}
+			inst := inst
 			atomic.StoreInt64(&sliceWindowMap.readTime, clock.GetClock().Now().UnixNano())
 			sliceWindowMap.windows.Range(func(resCode, sliceWindowIntf interface{}) bool {
 				sliceWindow := sliceWindowIntf.(*dimensionRecord)

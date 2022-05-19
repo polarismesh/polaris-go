@@ -20,7 +20,6 @@ package pb
 import (
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/duration"
 )
 
@@ -29,7 +28,7 @@ func ConvertDuration(d *duration.Duration) (time.Duration, error) {
 	if d == nil {
 		return 0, nil
 	}
-	return ptypes.Duration(d)
+	return d.AsDuration(), nil
 }
 
 // ProtoDurationToMS pb时间段转毫秒

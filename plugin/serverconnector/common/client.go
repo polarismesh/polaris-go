@@ -25,16 +25,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 )
 
-// 服务发现客户端接口
+// DiscoverClient 服务发现客户端接口
 type DiscoverClient interface {
-	// 发送服务发现请求
+	// Send 发送服务发现请求
 	Send(*namingpb.DiscoverRequest) error
-	// 接收服务发现应答
+	// Recv 接收服务发现应答
 	Recv() (*namingpb.DiscoverResponse, error)
-	// 发送EOF
+	// CloseSend 发送EOF
 	CloseSend() error
 }
 
-// 创建client的函数
+// DiscoverClientCreator 创建client的函数
 type DiscoverClientCreator func(
 	reqId string, connection *network.Connection, timeout time.Duration) (DiscoverClient, context.CancelFunc, error)

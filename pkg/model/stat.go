@@ -21,35 +21,35 @@ import (
 	"time"
 )
 
-// InstanceGauge 针对单个实例的单次评估指标
+// InstanceGauge 针对单个实例的单次评估指标.
 type InstanceGauge interface {
-	// 获取服务的命名空间
+	// GetNamespace 获取服务的命名空间
 	GetNamespace() string
-	// 获取服务名
+	// GetService 获取服务名
 	GetService() string
-	// 获取调用api
+	// GetAPI 获取调用api
 	GetAPI() ApiOperation
-	// 实例的节点信息
+	// GetHost 实例的节点信息
 	GetHost() string
-	// 实例的端口信息
+	// GetPort 实例的端口信息
 	GetPort() int
-	// 实例的调用返回状态
+	// GetRetStatus 实例的调用返回状态
 	GetRetStatus() RetStatus
-	// 实例的熔断状态
+	// GetCircuitBreakerStatus 实例的熔断状态
 	GetCircuitBreakerStatus() CircuitBreakerStatus
-	// 实例的返回码
+	// GetRetCodeValue 实例的返回码
 	GetRetCodeValue() int32
-	// 调用时延
+	// GetDelay 调用时延
 	GetDelay() *time.Duration
-	// 调用时延
+	// GetDelayRange 调用时延
 	GetDelayRange() ApiDelayRange
-	// 获取被调节点
+	// GetCalledInstance 获取被调节点
 	GetCalledInstance() Instance
-	// 检测指标是否合法
+	// Validate 检测指标是否合法
 	Validate() error
 }
 
-// MetricType 统计类型
+// MetricType 统计类型.
 type MetricType int
 
 const (
@@ -66,84 +66,83 @@ const (
 
 var metricTypes = HashSet{}
 
-// ValidMetircType 检测是不是合法的统计类型
+// ValidMetircType 检测是不是合法的统计类型.
 func ValidMetircType(t MetricType) bool {
 	return metricTypes.Contains(t)
 }
 
-// EmptyInstanceGauge instangeGauge的空实现
-type EmptyInstanceGauge struct {
-}
+// EmptyInstanceGauge instangeGauge的空实现.
+type EmptyInstanceGauge struct{}
 
-// GetNamespace
+// GetNamespace 获取服务的命名空间
 func (e EmptyInstanceGauge) GetNamespace() string {
 	return ""
 }
 
-// GetService
+// GetService 获取服务名
 func (e EmptyInstanceGauge) GetService() string {
 	return ""
 }
 
-// GetHost
+// GetHost 实例的节点信息
 func (e EmptyInstanceGauge) GetHost() string {
 	return ""
 }
 
-// GetPort
+// GetPort 实例的端口信息
 func (e EmptyInstanceGauge) GetPort() int {
 	return -1
 }
 
-// GetRetStatus
+// GetRetStatus 实例的调用返回状态
 func (e EmptyInstanceGauge) GetRetStatus() RetStatus {
 	return RetFail
 }
 
-// GetCircuitBreakerStatus
+// GetCircuitBreakerStatus 实例的熔断状态
 func (e EmptyInstanceGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return nil
 }
 
-// GetRetCodeValue retcode
+// GetRetCodeValue 实例的返回码 ret code.
 func (e EmptyInstanceGauge) GetRetCodeValue() int32 {
 	return 0
 }
 
-// GetDelay delay
+// GetDelay 调用时延 delay.
 func (e EmptyInstanceGauge) GetDelay() *time.Duration {
 	return nil
 }
 
-// GetAPI api
+// GetAPI api.
 func (e EmptyInstanceGauge) GetAPI() ApiOperation {
 	return ApiOperationMax
 }
 
-// Validate 校验
+// Validate 校验.
 func (e EmptyInstanceGauge) Validate() error {
 	return nil
 }
 
-// GetCalledInstance 获取被调节点
+// GetCalledInstance 获取被调节点.
 func (e EmptyInstanceGauge) GetCalledInstance() Instance {
 	return nil
 }
 
-// GetDelayRange 调用时延
+// GetDelayRange 调用时延.
 func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 	return ApiDelayMax
 }
 
-// 命名类型，标识具体的API类型
+// ApiOperation 命名类型，标识具体的API类型.
 type ApiOperation int
 
-// String ToString方法
+// String ToString方法.
 func (a ApiOperation) String() string {
 	return apiOperationPresents[a]
 }
 
-// API标识
+// API标识.
 const (
 	ApiGetOneInstance ApiOperation = iota
 	ApiGetInstances
@@ -159,11 +158,11 @@ const (
 	ApiMesh
 	ApiProcessRouters
 	ApiProcessLoadBalance
-	// ApiOperationMax这个必须在最下面
+	// ApiOperationMax 这个必须在最下面
 	ApiOperationMax
 )
 
-// API标识到别名
+// API标识到别名.
 var (
 	apiOperationPresents = map[ApiOperation]string{
 		ApiGetOneInstance:          "Consumer::GetOneInstance",
@@ -183,10 +182,10 @@ var (
 	}
 )
 
-// ApiDelayRange API延时范围
+// ApiDelayRange API延时范围.
 type ApiDelayRange int
 
-// API延时范围常量
+// API延时范围常量.
 const (
 	ApiDelayBelow50 ApiDelayRange = iota
 	ApiDelayBelow100
@@ -196,17 +195,15 @@ const (
 	ApiDelayMax
 )
 
-var (
-	apiDelayPresents = map[ApiDelayRange]string{
-		ApiDelayBelow50:  "[0ms,50ms)",
-		ApiDelayBelow100: "[50ms,100ms)",
-		ApiDelayBelow150: "[100ms,150ms)",
-		ApiDelayBelow200: "[150ms,200ms)",
-		ApiDelayOver200:  "[200ms,)",
-	}
-)
+var apiDelayPresents = map[ApiDelayRange]string{
+	ApiDelayBelow50:  "[0ms,50ms)",
+	ApiDelayBelow100: "[50ms,100ms)",
+	ApiDelayBelow150: "[100ms,150ms)",
+	ApiDelayBelow200: "[150ms,200ms)",
+	ApiDelayOver200:  "[200ms,)",
+}
 
-// String ToString方法
+// String ToString方法.
 func (a ApiDelayRange) String() string {
 	return apiDelayPresents[a]
 }
@@ -216,7 +213,7 @@ const (
 	maxTimeRange = 200 * time.Millisecond
 )
 
-// GetApiDelayRange 获取api时延范围
+// GetApiDelayRange 获取api时延范围.
 func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	if delay > maxTimeRange {
 		delay = maxTimeRange
@@ -225,7 +222,7 @@ func GetApiDelayRange(delay time.Duration) ApiDelayRange {
 	return ApiDelayRange(diff)
 }
 
-// init 初始化
+// init 初始化.
 func init() {
 	metricTypes.Add(SDKAPIStat)
 	metricTypes.Add(ServiceStat)

@@ -37,12 +37,15 @@ import (
 )
 
 const (
+	// PatternService is the pattern of service name
 	PatternService = "svc#%s#%s#%s"
-	CacheSuffix    = ".json"
-	PatternGlob    = "svc#?*#?*#?*"
+	// CacheSuffix filesystem suffix
+	CacheSuffix = ".json"
+	// PatternGlob is the pattern of glob
+	PatternGlob = "svc#?*#?*#?*"
 )
 
-// 持久化工具类
+// CachePersistHandler 持久化工具类
 type CachePersistHandler struct {
 	persistDir    string
 	maxWriteRetry int
@@ -51,12 +54,13 @@ type CachePersistHandler struct {
 	marshaler     *jsonpb.Marshaler
 }
 
+// CacheFileInfo 文件信息
 type CacheFileInfo struct {
 	Msg      proto.Message
 	FileInfo os.FileInfo
 }
 
-// 创建持久化处理器
+// NewCachePersistHandler create persistence handler
 func NewCachePersistHandler(persistDir string, maxWriteRetry int,
 	maxReadRetry int, retryInterval time.Duration) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
@@ -81,7 +85,7 @@ func (cph *CachePersistHandler) init() error {
 	return nil
 }
 
-// 加载目录中所有的缓存文件
+// LoadPersistedServices 加载目录中所有的缓存文件
 func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKey]CacheFileInfo {
 	cacheFiles, _ := filepath.Glob(filepath.Join(cph.persistDir, PatternGlob+CacheSuffix))
 	if len(cacheFiles) == 0 {
@@ -127,7 +131,7 @@ func (cph *CachePersistHandler) loadCacheFromFile(
 	return svcValueKey, fileInfo, nil
 }
 
-// 从相对文件中加载缓存
+// LoadMessageFromFile 从相对文件中加载缓存
 func (cph *CachePersistHandler) LoadMessageFromFile(relativeFile string, message proto.Message) error {
 	absFile := filepath.Join(cph.persistDir, relativeFile)
 	return cph.loadMessageFromAbsoluteFile(absFile, message, cph.maxReadRetry)
@@ -183,7 +187,7 @@ func (cph *CachePersistHandler) fileNameToServiceEventKey(fileName string) (*mod
 	return svcValueKey, nil
 }
 
-// 删除缓存文件
+// DeleteCacheFromFile 删除缓存文件
 func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	fileToDelete := filepath.Join(cph.persistDir, fileName)
 	log.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
@@ -206,7 +210,7 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	}
 }
 
-// 按服务来进行缓存存储
+// SaveMessageToFile 按服务来进行缓存存储
 func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto.Message) {
 	fileToAdd := filepath.Join(cph.persistDir, fileName)
 	log.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
@@ -269,7 +273,7 @@ func (cph *CachePersistHandler) closeTmpFile(tmpFile *os.File, cacheFile string)
 	return nil
 }
 
-// 服务名转化为文件名
+// ServiceEventKeyToFileName 服务名转化为文件名
 func ServiceEventKeyToFileName(svcKey model.ServiceEventKey) string {
 	svcKey.Namespace = url.QueryEscape(svcKey.Namespace)
 	svcKey.Service = url.QueryEscape(svcKey.Service)

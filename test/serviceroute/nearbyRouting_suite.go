@@ -865,8 +865,7 @@ func (t *NearbyTestingSuite) TestCase10(c *check.C) {
 	defer consumer.Destroy()
 	t.addInstance("A", "a", "0", false)
 	t.addInstance("A", "a", "0", false)
-	var getInstancesReq *api.GetOneInstanceRequest
-	getInstancesReq = &api.GetOneInstanceRequest{}
+	var getInstancesReq = &api.GetOneInstanceRequest{}
 	getInstancesReq.FlowID = 1
 	getInstancesReq.Namespace = srNamespace
 	getInstancesReq.Service = srService

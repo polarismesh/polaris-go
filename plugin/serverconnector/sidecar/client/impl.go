@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package client
 
 import (
@@ -25,18 +26,18 @@ import (
 )
 
 // RegisterServiceHandler 注册服务监听
-func (g *Connector) RegisterServiceHandler(svcEventHandler *serverconnector.ServiceEventHandler) error {
-	return g.discoverConnector.RegisterServiceHandler(svcEventHandler)
+func (c *Connector) RegisterServiceHandler(svcEventHandler *serverconnector.ServiceEventHandler) error {
+	return c.discoverConnector.RegisterServiceHandler(svcEventHandler)
 }
 
-// DeRegisterEventHandler 反注册事件监听器
-func (g *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
-	return g.discoverConnector.DeRegisterServiceHandler(key)
+// DeRegisterServiceHandler 反注册事件监听器
+func (c *Connector) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
+	return c.discoverConnector.DeRegisterServiceHandler(key)
 }
 
 // RegisterInstance 同步注册服务
-func (g *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
+func (c *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisRegisterInstance
 
 	dnsMsgReq.Qdcount = 1
@@ -46,7 +47,7 @@ func (g *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*m
 	question.Req = connectorComm.RegisterRequestToProto(request)
 	dnsMsgReq.Question = append(dnsMsgReq.Question, &question)
 
-	rsp, _, err := g.SyncExchange(dnsMsgReq)
+	rsp, _, err := c.SyncExchange(dnsMsgReq)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +59,8 @@ func (g *Connector) RegisterInstance(request *model.InstanceRegisterRequest) (*m
 }
 
 // DeregisterInstance 同步反注册服务
-func (g *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest) error {
-	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
+func (c *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest) error {
+	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisDeregisterInstance
 
 	dnsMsgReq.Qdcount = 1
@@ -69,7 +70,7 @@ func (g *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest
 	question.Req = connectorComm.DeregisterRequestToProto(instance)
 	dnsMsgReq.Question = append(dnsMsgReq.Question, &question)
 
-	rsp, _, err := g.SyncExchange(dnsMsgReq)
+	rsp, _, err := c.SyncExchange(dnsMsgReq)
 	if err != nil {
 		return err
 	}
@@ -79,9 +80,9 @@ func (g *Connector) DeregisterInstance(instance *model.InstanceDeRegisterRequest
 	return nil
 }
 
-// 心跳上报
-func (g *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
-	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
+// Heartbeat 心跳上报
+func (c *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
+	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisHeartbeat
 
 	dnsMsgReq.Qdcount = 1
@@ -91,7 +92,7 @@ func (g *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
 	question.Req = connectorComm.HeartbeatRequestToProto(instance)
 	dnsMsgReq.Question = append(dnsMsgReq.Question, &question)
 
-	rsp, _, err := g.SyncExchange(dnsMsgReq)
+	rsp, _, err := c.SyncExchange(dnsMsgReq)
 	if err != nil {
 		return err
 	}
@@ -101,9 +102,9 @@ func (g *Connector) Heartbeat(instance *model.InstanceHeartbeatRequest) error {
 	return nil
 }
 
-// 报客户端信息
-func (g *Connector) ReportClient(request *model.ReportClientRequest) (*model.ReportClientResponse, error) {
-	dnsMsgReq := newDefaultDnsMsg(g.getDnsMsgId())
+// ReportClient 报客户端信息
+func (c *Connector) ReportClient(request *model.ReportClientRequest) (*model.ReportClientResponse, error) {
+	dnsMsgReq := newDefaultDnsMsg(c.getDnsMsgId())
 	dnsMsgReq.Opcode = dns.OpCodePolarisReportClient
 
 	dnsMsgReq.Qdcount = 1
@@ -113,7 +114,7 @@ func (g *Connector) ReportClient(request *model.ReportClientRequest) (*model.Rep
 	question.Req = connectorComm.ReportClientRequestToProto(request)
 	dnsMsgReq.Question = append(dnsMsgReq.Question, &question)
 
-	rsp, _, err := g.SyncExchange(dnsMsgReq)
+	rsp, _, err := c.SyncExchange(dnsMsgReq)
 	if err != nil {
 		return nil, err
 	}
@@ -124,15 +125,15 @@ func (g *Connector) ReportClient(request *model.ReportClientRequest) (*model.Rep
 	return reportClientRsp, nil
 }
 
-// 更新服务端地址 sideCar模式目前无需实现
-func (g *Connector) UpdateServers(key *model.ServiceEventKey) error {
+// UpdateServers 更新服务端地址 sideCar模式目前无需实现
+func (c *Connector) UpdateServers(key *model.ServiceEventKey) error {
 	return nil
 }
 
-// 同步获取资源
-func (g *Connector) SyncGetResourceReq(request *namingpb.DiscoverRequest) (*namingpb.DiscoverResponse, error) {
-	dnsMsg, err := convertDiscoverRequestToDnsMsg(request, g.getDnsMsgId())
-	rsp, _, err := g.SyncExchange(dnsMsg)
+// SyncGetResourceReq 同步获取资源
+func (c *Connector) SyncGetResourceReq(request *namingpb.DiscoverRequest) (*namingpb.DiscoverResponse, error) {
+	var dnsMsg, err = convertDiscoverRequestToDnsMsg(request, c.getDnsMsgId())
+	rsp, _, err := c.SyncExchange(dnsMsg)
 	if err != nil {
 		return nil, err
 	}

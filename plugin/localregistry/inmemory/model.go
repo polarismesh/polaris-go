@@ -50,18 +50,22 @@ type persistTask struct {
 	protoMsg proto.Message
 }
 
-// 缓存状态
+// CachedStatus 缓存状态
 type CachedStatus int
 
 const (
+	// CacheNotExists 缓存不存在
 	CacheNotExists CachedStatus = iota + 1
+	// CacheChanged 缓存已改变
 	CacheChanged
+	// CacheNotChanged 缓存未改变
 	CacheNotChanged
-	// cache是空的，但是server没有返回data
+	// CacheEmptyButNoData cache是空的，但是server没有返回data
 	CacheEmptyButNoData
 )
 
 var (
+	// CachedStatusToPresent 将缓存状态转换为present状态
 	CachedStatusToPresent = map[CachedStatus]string{
 		CacheNotExists:  "CacheNotExists",
 		CacheChanged:    "CacheChanged",
@@ -69,7 +73,7 @@ var (
 	}
 )
 
-// 缓存状态ToString
+// String 缓存状态ToString
 func (c CachedStatus) String() string {
 	return CachedStatusToPresent[c]
 }
@@ -81,17 +85,17 @@ type circuitBreakGauge struct {
 	previousCBStatus model.CircuitBreakerStatus
 }
 
-// 获取变化前的熔断状态
+// GetCircuitBreakerStatus 获取变化前的熔断状态
 func (cbg *circuitBreakGauge) GetCircuitBreakerStatus() model.CircuitBreakerStatus {
 	return cbg.previousCBStatus
 }
 
-// 获取状态发生改变的实例
+// GetCalledInstance 获取状态发生改变的实例
 func (cbg *circuitBreakGauge) GetCalledInstance() model.Instance {
 	return cbg.changeInstance
 }
 
-// 检测指标是否合法
+// Validate 检测指标是否合法
 func (cbg *circuitBreakGauge) Validate() error {
 	if !reflect2.IsNil(cbg.changeInstance) {
 		return nil
@@ -99,20 +103,20 @@ func (cbg *circuitBreakGauge) Validate() error {
 	return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "empty change instance")
 }
 
-// 不同的事件回调函数
+// CacheHandlers 不同的事件回调函数
 type CacheHandlers struct {
-	// 消息比较，返回比较结果
+	// CompareMessage 消息比较，返回比较结果
 	CompareMessage func(cacheValue interface{}, newMessage proto.Message) CachedStatus
-	// 原始消息转换为缓存对象
+	// MessageToCacheValue 原始消息转换为缓存对象
 	MessageToCacheValue func(cacheValue interface{}, newMessage proto.Message,
 		svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue
-	// 缓存被删除
+	// OnEventDeleted 缓存被删除
 	OnEventDeleted func(key *model.ServiceEventKey, cacheValue interface{})
-	// 缓存更新的后续擦欧洲哦
+	// PostCacheUpdated 缓存更新的后续擦欧洲哦
 	PostCacheUpdated func(svcKey *model.ServiceEventKey, newCacheValue interface{}, preCacheStatus CachedStatus)
 }
 
-// 缓存值的管理基类
+// CacheObject 缓存值的管理基类
 type CacheObject struct {
 	// 最后一次访问的时间，初始化时为加入轮询队列的时间
 	lastVisitTime   int64
@@ -140,7 +144,7 @@ type CacheObject struct {
 	serviceIsWatched uint32
 }
 
-// 创建缓存对象
+// NewCacheObject 创建缓存对象
 func NewCacheObject(
 	handler CacheHandlers, registry *LocalCache, serviceValueKey *model.ServiceEventKey) *CacheObject {
 	res := &CacheObject{
@@ -159,7 +163,7 @@ func NewCacheObject(
 	return res
 }
 
-// 创建带初始值的缓存对象
+// NewCacheObjectWithInitValue 创建带初始值的缓存对象
 func NewCacheObjectWithInitValue(handler CacheHandlers, registry *LocalCache,
 	serviceValueKey *model.ServiceEventKey, message proto.Message) *CacheObject {
 	cacheObject := &CacheObject{
@@ -179,14 +183,14 @@ func NewCacheObjectWithInitValue(handler CacheHandlers, registry *LocalCache,
 	return cacheObject
 }
 
-// 将本缓存值为不可用，只用于首次请求时，向后端connector监听失败的场景
+// MakeInValid 将本缓存值为不可用，只用于首次请求时，向后端connector监听失败的场景
 func (s *CacheObject) MakeInValid(err model.SDKError) {
 	if atomic.CompareAndSwapUint32(&s.inValid, 0, 1) {
 		s.notifier.Notify(err)
 	}
 }
 
-// 判断缓存是否不可用
+// IsInValid 判断缓存是否不可用
 func (s *CacheObject) IsInValid() bool {
 	return atomic.LoadUint32(&s.inValid) > 0
 }
@@ -197,13 +201,10 @@ func (s *CacheObject) isValueAvailable() bool {
 		return false
 	}
 	value := s.LoadValue(false)
-	if reflect2.IsNil(value) {
-		return false
-	}
-	return true
+	return !reflect2.IsNil(value)
 }
 
-// 判断缓存值是否可读取
+// LoadValue 判断缓存值是否可读取
 func (s *CacheObject) LoadValue(updateVisitTime bool) interface{} {
 	if updateVisitTime {
 		atomic.StoreInt64(&s.lastVisitTime, clock.GetClock().Now().UnixNano())
@@ -242,12 +243,12 @@ func (s *CacheObject) notifyServiceAdded(value interface{}) {
 	}
 }
 
-// 获取通知对象
+// GetNotifier 获取通知对象
 func (s *CacheObject) GetNotifier() *common.Notifier {
 	return s.notifier
 }
 
-// 服务远程实例更新事件到来后的回调操作
+// OnServiceUpdate 服务远程实例更新事件到来后的回调操作
 func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool {
 	err, svcEventKey := event.Error, &event.ServiceEventKey
 	// 更新标记为，表示该对象已经经过远程更新
@@ -414,7 +415,7 @@ func (s *CacheObject) calcMeshResourceDiffInfo(oldResource *namingpb.MeshConfig,
 	}
 }
 
-// 获取服务对象的版本号
+// GetRevision 获取服务对象的版本号
 func (s *CacheObject) GetRevision() string {
 	value := s.LoadValue(false)
 	if nil == value {
@@ -424,13 +425,14 @@ func (s *CacheObject) GetRevision() string {
 	return svcValue.GetRevision()
 }
 
-// 设置缓存对象
+// SetValue 设置缓存对象
 func (s *CacheObject) SetValue(cacheValue model.RegistryValue) {
 	s.value.Store(cacheValue)
 	log.GetBaseLogger().Infof(
 		"CacheObject: value for %s is updated, revision %s", *s.serviceValueKey, cacheValue.GetRevision())
 }
 
+// GetMeshResource 获取网格资源类型
 func (s *CacheObject) GetMeshResource() *namingpb.MeshResource {
 	meshinfos := strings.Split(s.serviceValueKey.Service, model.MeshKeySpliter)
 	out := &namingpb.MeshResource{}
@@ -444,6 +446,7 @@ func (s *CacheObject) GetMeshResource() *namingpb.MeshResource {
 	return out
 }
 
+// GetMeshConfig 获取网格配置
 func (s *CacheObject) GetMeshConfig() *namingpb.MeshConfig {
 	meshinfos := strings.Split(s.serviceValueKey.Service, model.MeshKeySpliter)
 	out := &namingpb.MeshConfig{}
@@ -457,6 +460,7 @@ func (s *CacheObject) GetMeshConfig() *namingpb.MeshConfig {
 	return out
 }
 
+// GetBusiness 获取业务类型
 func (s *CacheObject) GetBusiness() string {
 	if s.serviceValueKey.Type == model.EventServices {
 		return s.serviceValueKey.Service

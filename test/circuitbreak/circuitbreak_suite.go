@@ -303,7 +303,7 @@ func (t *CircuitBreakSuite) openToHalfOpen(openInstance model.Instance, cbDurati
 	openTime := openInstance.GetCircuitBreakerStatus().GetStartTime()
 	halfOpenTime := openTime.Add(cbDuration)
 	fmt.Printf("To be halfopen in %v\n", halfOpenTime)
-	time.Sleep(halfOpenTime.Sub(time.Now()) + 2*time.Second)
+	time.Sleep(time.Until(halfOpenTime) + 2*time.Second)
 	c.Assert(openInstance.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 	// CheckInstanceAvailable(c, consumerAPI, openInstance, true, cbNS, cbSVC)
 }
@@ -454,13 +454,13 @@ func (t *CircuitBreakSuite) testCircuitBreakByDefault(skipRouter bool, c *check.
 				// fmt.Printf("report fail for %s:%d\n", instance.GetHost(), instance.GetPort())
 				callResult.RetStatus = model.RetFail
 				callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
-				callResult.RetCode = proto.Int(-1)
+				callResult.RetCode = proto.Int32(-1)
 				callResult.CalledInstance = instance
 			} else {
 				// fmt.Printf("report success for %s:%d\n", instance.GetHost(), instance.GetPort())
 				callResult.RetStatus = model.RetSuccess
 				callResult.Delay = model.ToDurationPtr(10 * time.Millisecond)
-				callResult.RetCode = proto.Int(0)
+				callResult.RetCode = proto.Int32(0)
 				callResult.CalledInstance = instance
 			}
 			err = consumerAPI.UpdateServiceCallResult(callResult)
@@ -528,13 +528,13 @@ func (t *CircuitBreakSuite) TestErrCountTriggerOpenThreshold(c *check.C) {
 	var callResult = &api.ServiceCallResult{}
 	callResult.RetStatus = model.RetFail
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
-	callResult.RetCode = proto.Int(-1)
+	callResult.RetCode = proto.Int32(-1)
 	callResult.CalledInstance = targetIns
 
 	var callResultOk = &api.ServiceCallResult{}
 	callResultOk.RetStatus = model.RetSuccess
 	callResultOk.Delay = model.ToDurationPtr(1000 * time.Millisecond)
-	callResultOk.RetCode = proto.Int(-1)
+	callResultOk.RetCode = proto.Int32(-1)
 	callResultOk.CalledInstance = targetIns
 
 	for i := 0; i < 10; i++ {

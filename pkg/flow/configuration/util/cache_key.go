@@ -18,8 +18,9 @@
 package util
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"strings"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
@@ -42,6 +43,6 @@ func ExtractConfigFileMetadataFromKey(key string) model.ConfigFileMetadata {
 	return &model.DefaultConfigFileMetadata{
 		Namespace: info[0],
 		FileGroup: info[1],
-		FileName: info[2],
+		FileName:  info[2],
 	}
 }

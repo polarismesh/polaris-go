@@ -14,16 +14,16 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strconv"
 )
 
-// RR new Map.
+// TypeToRR RR new Map.
 var TypeToRR = map[uint16]func() RR{
 	TypeA:                      func() RR { return new(A) },
 	TypeAAAA:                   func() RR { return new(AAAA) },
@@ -36,7 +36,7 @@ var TypeToRR = map[uint16]func() RR{
 	TypeOPT:                    func() RR { return new(OPT) },
 }
 
-// RR的header
+// RR_Header RR的header
 type RR_Header struct {
 	Name     string `dns:"cdomain-name"`
 	Rrtype   uint16
@@ -45,13 +45,13 @@ type RR_Header struct {
 	Rdlength uint16 // Length of data after header.
 }
 
-// 返回RR header
+// Header 返回RR header
 func (h *RR_Header) Header() *RR_Header { return h }
 
 // 深拷贝函数，未实现
 func (h *RR_Header) copy() RR { return nil }
 
-// 为了调试输出，非必要实现
+// String 为了调试输出，非必要实现
 func (h *RR_Header) String() string {
 	var s string
 
@@ -79,21 +79,21 @@ func (h *RR_Header) unpack(msg []byte, off int) (int, error) {
 }
 
 // RR header序列化
-func (hdr RR_Header) packHeader(buff *bytes.Buffer, dataLength uint16) (int, error) {
+func (h RR_Header) packHeader(buff *bytes.Buffer, dataLength uint16) (int, error) {
 	oldLen := buff.Len()
-	err := packDomainName(hdr.Name, buff)
+	err := packDomainName(h.Name, buff)
 	if err != nil {
 		return 0, err
 	}
-	err = packUint16(hdr.Rrtype, buff)
+	err = packUint16(h.Rrtype, buff)
 	if err != nil {
 		return 0, err
 	}
-	err = packUint16(hdr.Class, buff)
+	err = packUint16(h.Class, buff)
 	if err != nil {
 		return 0, err
 	}
-	err = packUint32(hdr.Ttl, buff)
+	err = packUint32(h.Ttl, buff)
 	if err != nil {
 		return 0, err
 	}
@@ -137,17 +137,17 @@ func unpackRRHeader(msg []byte, off int) (rr RR_Header, off1 int, err error) {
 
 // RR interface定义
 type RR interface {
-	// 返回RR header
+	// Header 返回RR header
 	Header() *RR_Header
-	// RR中data的序列化
+	// PackData RR中data的序列化
 	PackData(buff *bytes.Buffer) (int, error)
-	// RR中data的反序列化
+	// UnPackData RR中data的反序列化
 	UnPackData(msg []byte, off int) (int, error)
-	// 获取RR data的二进制数据
+	// GetData 获取RR data的二进制数据
 	GetData() []byte
 }
 
-// RR序列化
+// PackRR RR序列化
 func PackRR(rr RR, buff *bytes.Buffer) (int, error) {
 	if rr == nil {
 		return 0, &Error{err: "nil rr"}
@@ -168,7 +168,7 @@ func PackRR(rr RR, buff *bytes.Buffer) (int, error) {
 	return buff.Len() - oldLen, nil
 }
 
-// RR反序列化
+// UnpackRR RR反序列化
 func UnpackRR(msg []byte, off int) (RR, int, error) {
 	h, off, err := unpackRRHeader(msg, off)
 	if err != nil {
@@ -177,7 +177,7 @@ func UnpackRR(msg []byte, off int) (RR, int, error) {
 	return UnpackRRWithRRHeader(h, msg, off)
 }
 
-// 通过RR header信息反序列化RR其他部分
+// UnpackRRWithRRHeader 通过RR header信息反序列化RR其他部分
 func UnpackRRWithRRHeader(h RR_Header, msg []byte, off int) (RR, int, error) {
 	var err error
 	var rr RR
@@ -185,7 +185,7 @@ func UnpackRRWithRRHeader(h RR_Header, msg []byte, off int) (RR, int, error) {
 		rr = newFn()
 		*rr.Header() = h
 	} else {
-		return nil, 0, errors.New(fmt.Sprintf("invalid RR rtype:%d", h.Rrtype))
+		return nil, 0, fmt.Errorf("invalid RR rtype:%d", h.Rrtype)
 	}
 
 	if h.Rdlength == 0 {

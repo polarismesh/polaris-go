@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -30,11 +31,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 )
 
-// 创建连接
+// CreateConnection 创建连接
 func (g *Connector) CreateConnection(
 	address string, timeout time.Duration, clientInfo *network.ClientInfo) (network.ClosableConn, error) {
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	opts = append(opts, grpc.WithBlock())
 	localIPValue := clientInfo.GetIPString()
 	if len(localIPValue) == 0 {

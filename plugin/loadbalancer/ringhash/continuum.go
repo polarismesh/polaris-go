@@ -52,26 +52,26 @@ type continuumPoint struct {
 // hash环数组
 type points []continuumPoint
 
-// 比较环中节点hash值
+// Less 比较环中节点hash值
 func (c points) Less(i, j int) bool { return c[i].hashValue < c[j].hashValue }
 
-// 获取环长度
+// Len 获取环长度
 func (c points) Len() int { return len(c) }
 
-// 交换位置
+// Swap 交换位置
 func (c points) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// 获取数组下标的值
+// GetValue 获取数组下标的值
 func (c points) GetValue(idx int) uint64 {
 	return c[idx].hashValue
 }
 
-// 数组长度
+// Count 数组长度
 func (c points) Count() int {
 	return c.Len()
 }
 
-// 一致性hash环
+// ContinuumSelector 一致性hash环
 type ContinuumSelector struct {
 	model.SelectorBase
 	svcClusters model.ServiceClusters
@@ -84,7 +84,7 @@ const (
 	maxRehashIteration = 5
 )
 
-// 创建hash环
+// NewContinuum 创建hash环
 func NewContinuum(
 	instanceSet *model.InstanceSet, vnodeCount int, hashFunc hash.HashFuncWithSeed, id int32) (*ContinuumSelector, error) {
 	var continuum = &ContinuumSelector{
@@ -151,7 +151,7 @@ func NewContinuum(
 	return continuum, nil
 }
 
-// 打印hash环
+// String 打印hash环
 func (c ContinuumSelector) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString("[")
@@ -195,7 +195,7 @@ func (c *ContinuumSelector) doRehash(
 	return hashValue, lastHashStr, nil
 }
 
-// 选择实例下标
+// Select 选择实例下标
 func (c *ContinuumSelector) Select(value interface{}) (int, *model.ReplicateNodes, error) {
 	ringLen := len(c.ring)
 	switch ringLen {

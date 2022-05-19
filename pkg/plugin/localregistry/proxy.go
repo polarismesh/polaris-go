@@ -25,7 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy proxy of LocalRegistry
+// Proxy of LocalRegistry
 type Proxy struct {
 	LocalRegistry
 	engine model.Engine
@@ -61,7 +61,7 @@ func (p *Proxy) PersistMessage(file string, msg proto.Message) error {
 //	return err
 // }
 
-// proxy LocalRegistry LoadServiceRouteRule
+// LoadServiceRouteRule proxy LocalRegistry LoadServiceRouteRule
 func (p *Proxy) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadServiceRouteRule(key)
 	return result, err

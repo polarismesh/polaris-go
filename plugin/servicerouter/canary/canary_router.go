@@ -62,7 +62,7 @@ func (g *CanaryRouterFilter) Destroy() error {
 	return nil
 }
 
-// CanaryRouterFilter 插件模式进行服务实例过滤，并返回过滤后的实例列表
+// GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 
@@ -225,7 +225,7 @@ func (g *CanaryRouterFilter) noCanaryLimitedFilter(clusters model.ServiceCluster
 	return nil, errors.New("no available instances")
 }
 
-// 是否需要启动规则路由
+// Enable 是否需要启动规则路由
 func (g *CanaryRouterFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	return clusters.IsCanaryEnabled()
 }

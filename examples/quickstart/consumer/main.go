@@ -41,12 +41,14 @@ func initArgs() {
 	flag.Int64Var(&port, "port", 18080, "port")
 }
 
+// PolarisConsumer is a consumer of polaris
 type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
 }
 
+// Run starts the consumer
 func (svr *PolarisConsumer) Run() {
 	svr.runWebServer()
 }
@@ -123,7 +125,7 @@ func main() {
 	}
 	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	//consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
+	// consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)

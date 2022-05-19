@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// proxy of LoadBalancer
+// Proxy of LoadBalancer
 type Proxy struct {
 	LoadBalancer
 	engine model.Engine
@@ -35,6 +35,7 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 	p.engine = engine
 }
 
+// SelectStatus 获取负载均衡状态
 type SelectStatus struct {
 	HasLimitedInstances bool
 	IncludeHalfOpen     bool

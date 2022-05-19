@@ -28,44 +28,44 @@ import (
 )
 
 const (
+	// PluginName is the name of the plugin.
 	PluginName string = "prometheus"
 )
 
-var (
-	_ statreporter.StatReporter = (*PrometheusReporter)(nil)
-)
+var _ statreporter.StatReporter = (*PrometheusReporter)(nil)
 
-//init 注册插件
+// init 注册插件.
 func init() {
 	plugin.RegisterPlugin(&PrometheusReporter{})
 }
 
+// PrometheusReporter is a prometheus reporter.
 type PrometheusReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
 	// 本插件的配置
 	cfg *Config
-	//全局上下文
+	// 全局上下文
 	globalCtx model.ValueContext
-	//sdk加载的插件
+	// sdk加载的插件
 	sdkPlugins string
-	//插件工厂
+	// 插件工厂
 	plugins plugin.Supplier
-	//prometheus的metrics注册
+	// prometheus的metrics注册
 	handler *PrometheusHandler
 }
 
-//Type 插件类型
+// Type 插件类型.
 func (s *PrometheusReporter) Type() common.Type {
 	return common.TypeStatReporter
 }
 
-//Name 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一.
 func (s *PrometheusReporter) Name() string {
 	return PluginName
 }
 
-//Init 初始化插件
+// Init 初始化插件.
 func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	s.RunContext = common.NewRunContext()
 	s.globalCtx = ctx.ValueCtx
@@ -79,10 +79,12 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
+// ReportStat 报告统计数据.
 func (s *PrometheusReporter) ReportStat(metricType model.MetricType, metricsVal model.InstanceGauge) error {
 	return s.handler.ReportStat(metricType, metricsVal)
 }
 
+// Info 插件信息.
 func (s *PrometheusReporter) Info() model.StatInfo {
 	if !s.handler.exportSuccess() {
 		return model.StatInfo{}
@@ -95,23 +97,23 @@ func (s *PrometheusReporter) Info() model.StatInfo {
 	}
 }
 
-// Destroy
-func (g *PrometheusReporter) Destroy() error {
-	err := g.PluginBase.Destroy()
+// Destroy .销毁插件.
+func (s *PrometheusReporter) Destroy() error {
+	err := s.PluginBase.Destroy()
 	if err != nil {
 		return err
 	}
-	err = g.RunContext.Destroy()
+	err = s.RunContext.Destroy()
 	if err != nil {
 		return err
 	}
 
-	if g.handler != nil {
-		if err := g.handler.Close(); err != nil {
+	if s.handler != nil {
+		if err := s.handler.Close(); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -120,7 +122,7 @@ type metricsHttpHandler struct {
 	lock             *sync.RWMutex
 }
 
-// ServeHTTP 提供 prometheus http 服务
+// ServeHTTP 提供 prometheus http 服务.
 func (p *metricsHttpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()

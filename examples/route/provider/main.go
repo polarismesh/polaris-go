@@ -65,7 +65,7 @@ func convertMetadatas() map[string]string {
 	return meta
 }
 
-// PolarisProvider .
+// PolarisProvider is a provider for route
 type PolarisProvider struct {
 	provider  polaris.ProviderAPI
 	namespace string

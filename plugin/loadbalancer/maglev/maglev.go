@@ -27,7 +27,7 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// 基于maglev算法的负载均衡器
+// MaglevLoadBalancer 基于maglev算法的负载均衡器
 // maglev算法基于论文：https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44824.pdf
 type MaglevLoadBalancer struct {
 	*plugin.PluginBase
@@ -35,17 +35,17 @@ type MaglevLoadBalancer struct {
 	hashFunc hash.HashFuncWithSeed
 }
 
-// 插件类型
+// Type 插件类型
 func (m *MaglevLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-// 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (m *MaglevLoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerMaglev
 }
 
-// 初始化插件
+// Init 初始化插件
 func (m *MaglevLoadBalancer) Init(ctx *plugin.InitContext) error {
 	m.PluginBase = plugin.NewPluginBase(ctx)
 	m.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(m.Name()).(*Config)
@@ -101,12 +101,12 @@ func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	if nil != replicateNodes {
 		criteria.ReplicateInfo.Nodes = replicateNodes.GetInstances()
 	}
-	var instance model.Instance
-	instance = svcInstances.GetInstances()[index]
+
+	instance := svcInstances.GetInstances()[index]
 	return instance, nil
 }
 
-// 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源
 func (m *MaglevLoadBalancer) Destroy() error {
 	return nil
 }

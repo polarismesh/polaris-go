@@ -18,10 +18,10 @@
 package configuration
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
@@ -57,7 +57,7 @@ func (c *configFileManager) getConfigFile(configFileMetadata model.ConfigFileMet
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	//double check
+	// double check
 	configFileObj, ok = c.configFileCache.Load(cacheKey)
 
 	if ok {

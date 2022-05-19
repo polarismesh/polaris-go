@@ -24,11 +24,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// Proxy is a config connector proxy
 type Proxy struct {
 	ConfigConnector
 	engine model.Engine
 }
 
+// SetRealPlugin set real plugin
 func (p *Proxy) SetRealPlugin(plugin plugin.Plugin, engine model.Engine) {
 	p.ConfigConnector = plugin.(ConfigConnector)
 	p.engine = engine

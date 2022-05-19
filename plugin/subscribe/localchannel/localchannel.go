@@ -34,6 +34,7 @@ var (
 	bufferSize uint32 = 30
 )
 
+// SubscribeLocalChannel plugin
 type SubscribeLocalChannel struct {
 	*plugin.PluginBase
 	*common.RunContext
@@ -44,6 +45,7 @@ type SubscribeLocalChannel struct {
 	lock            *sync.Mutex
 }
 
+// Init is called when plugin is loaded
 func (s *SubscribeLocalChannel) Init(ctx *plugin.InitContext) error {
 	s.PluginBase = plugin.NewPluginBase(ctx)
 	conf := ctx.Config.GetConsumer().GetSubScribe().GetPluginConfig(s.Name())
@@ -57,22 +59,27 @@ func (s *SubscribeLocalChannel) Init(ctx *plugin.InitContext) error {
 	return nil
 }
 
+// Type returns the type of this plugin
 func (s *SubscribeLocalChannel) Type() common.Type {
 	return common.TypeSubScribe
 }
 
+// Name returns the name of this plugin
 func (s *SubscribeLocalChannel) Name() string {
 	return config.SubscribeLocalChannel
 }
 
+// Start starts the plugin
 func (s *SubscribeLocalChannel) Start() error {
 	return nil
 }
 
+// Destroy cleans up the plugin
 func (s *SubscribeLocalChannel) Destroy() error {
 	return nil
 }
 
+// IsEnable returns whether this plugin is enabled
 func (s *SubscribeLocalChannel) IsEnable(cfg config.Configuration) bool {
 	return true
 }
@@ -86,6 +93,7 @@ func pushToBufferChannel(event model.SubScribeEvent, ch chan model.SubScribeEven
 	}
 }
 
+// DoSubScribe is called when a new subscription is created
 func (s *SubscribeLocalChannel) DoSubScribe(event *common.PluginEvent) error {
 	if event.EventType != common.OnServiceUpdated {
 		return nil
@@ -121,6 +129,7 @@ func (s *SubscribeLocalChannel) DoSubScribe(event *common.PluginEvent) error {
 	return err
 }
 
+// WatchService is called when a new service is added
 func (s *SubscribeLocalChannel) WatchService(key model.ServiceKey) (interface{}, error) {
 	value, ok := s.eventChannelMap.Load(key)
 	if !ok {
@@ -129,11 +138,10 @@ func (s *SubscribeLocalChannel) WatchService(key model.ServiceKey) (interface{},
 		v, secondCheck := s.eventChannelMap.Load(key)
 		if secondCheck {
 			return v, nil
-		} else {
-			ch := make(chan model.SubScribeEvent, bufferSize)
-			s.eventChannelMap.Store(key, ch)
-			return ch, nil
 		}
+		ch := make(chan model.SubScribeEvent, bufferSize)
+		s.eventChannelMap.Store(key, ch)
+		return ch, nil
 	}
 	return value, nil
 }

@@ -70,8 +70,7 @@ func (c *cacheFilters) toContextKey() (dstInstKey *ContextKey, srcRouterKey *Con
 }
 
 // instancesRequestToCacheFilters 实例请求转换为获取缓存的请求
-func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesRequest,
-	redirectedService *model.ServiceInfo) *cacheFilters {
+func (e *Engine) instancesRequestToCacheFilters(request *model.GetInstancesRequest, redirectedService *model.ServiceInfo) *cacheFilters {
 	filters := &cacheFilters{
 		namespace: request.Namespace,
 		service:   request.Service,

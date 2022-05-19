@@ -88,11 +88,10 @@ func (s *Reporter) Name() string {
 func (s *Reporter) IsEnable(cfg sysconfig.Configuration) bool {
 	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
 		return false
-	} else {
-		for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
-			if name == s.Name() {
-				return true
-			}
+	}
+	for _, name := range cfg.GetGlobal().GetStatReporter().GetChain() {
+		if name == s.Name() {
+			return true
 		}
 	}
 	return false
@@ -370,13 +369,13 @@ func getChangedInstances(change *monitorpb.InstancesChange, oldSvcInstances mode
 	var addInstances []model.Instance
 	var deleteInstances []model.Instance
 	for _, newInst := range newInstances {
-		instId := newInst.GetId()
-		if oldInst, ok := oldInstMap[instId]; ok {
+		instID := newInst.GetId()
+		if oldInst, ok := oldInstMap[instID]; ok {
 			modifiedInst := getModifiedInstance(oldInst, newInst)
 			if modifiedInst != nil {
 				change.ModifiedInstances = append(change.ModifiedInstances, modifiedInst)
 			}
-			delete(oldInstMap, instId)
+			delete(oldInstMap, instID)
 		} else {
 			addInstances = append(addInstances, newInst)
 		}
@@ -704,14 +703,14 @@ func (s *Reporter) getSingleMeshResourceRevisions(resourceMap *sync.Map) []*moni
 func (s *Reporter) getSingleRateLimitRevisions(rulesMap *sync.Map) []*monitorpb.SingleRateLimitRuleHistory {
 	var res []*monitorpb.SingleRateLimitRuleHistory
 	rulesMap.Range(func(k, v interface{}) bool {
-		ruleId := k.(string)
+		ruleID := k.(string)
 		ruleStatusList := v.(*statusList)
 		ruleStatus, ruleSeq, ruleCount := ruleStatusList.getNodes()
 		if ruleCount > 0 {
 			revisions := make([]*monitorpb.RevisionHistory, ruleCount, ruleCount)
 			s.fillRevisions(revisions, ruleStatus, ruleCount)
 			res = append(res, &monitorpb.SingleRateLimitRuleHistory{
-				RuleId:   ruleId,
+				RuleId:   ruleID,
 				Revision: revisions,
 			})
 		}

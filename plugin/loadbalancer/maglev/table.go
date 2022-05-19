@@ -28,7 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// maglev向量表选择器
+// TableSelector maglev向量表选择器
 type TableSelector struct {
 	model.SelectorBase
 	nodes             []*model.WeightedIndex
@@ -84,7 +84,7 @@ func (t *TableSelector) buildTableEntries(
 	return maxNormalizedWeight, entries, nil
 }
 
-// 创建maglev向量选择器
+// NewTable 创建maglev向量选择器
 func NewTable(
 	instanceSet *model.InstanceSet, tableSize uint64, hashFunc hash.HashFuncWithSeed, id int32) (*TableSelector, error) {
 	var selector = &TableSelector{
@@ -141,7 +141,7 @@ func (t *TableSelector) permutation(entry *tableBuildEntry) uint64 {
 	return (entry.offset + entry.skip*entry.next) % t.tableSize
 }
 
-// 选择实例下标
+// Select 选择实例下标
 func (t *TableSelector) Select(value interface{}) (int, *model.ReplicateNodes, error) {
 	ringLen := len(t.nodes)
 	if ringLen == 0 {

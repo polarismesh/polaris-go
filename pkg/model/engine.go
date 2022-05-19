@@ -52,75 +52,76 @@ type ControlParam struct {
 
 // CacheValueQuery 缓存查询请求对象
 type CacheValueQuery interface {
-	// 获取目标服务
+	// GetDstService 获取目标服务
 	GetDstService() *ServiceKey
-	// 获取源服务
+	// GetSrcService 获取源服务
 	GetSrcService() *ServiceKey
-	// 获取缓存查询触发器
+	// GetNotifierTrigger 获取缓存查询触发器
 	GetNotifierTrigger() *NotifyTrigger
-	// 设置目标服务实例
+	// SetDstInstances 设置目标服务实例
 	SetDstInstances(instances ServiceInstances)
-	// 设置目标服务路由规则
+	// SetDstRoute 设置目标服务路由规则
 	SetDstRoute(rule ServiceRule)
-	// 设置目标服务限流规则
+	// SetDstRateLimit 设置目标服务限流规则
 	SetDstRateLimit(rule ServiceRule)
-	// 设置源服务路由规则
+	// SetSrcRoute 设置源服务路由规则
 	SetSrcRoute(rule ServiceRule)
-	// 获取API调用控制参数
+	// GetControlParam 获取API调用控制参数
 	GetControlParam() *ControlParam
-	// 获取API调用统计
+	// GetCallResult 获取API调用统计
 	GetCallResult() *APICallResult
-	// 设置网格规则
+	// SetMeshConfig 设置网格规则
 	SetMeshConfig(mc MeshConfig)
 }
 
 // Engine 编排调度引擎，API相关逻辑在这里执行
 type Engine interface {
-	// 销毁流程引擎
+	// Destroy 销毁流程引擎
 	Destroy() error
-	// 同步加载资源，可通过配置参数指定一次同时加载多个资源
+	// SyncGetResources 同步加载资源，可通过配置参数指定一次同时加载多个资源
 	SyncGetResources(req CacheValueQuery) error
-	// 同步获取负载均衡后的服务实例
+	// SyncGetOneInstance 同步获取负载均衡后的服务实例
 	SyncGetOneInstance(req *GetOneInstanceRequest) (*OneInstanceResponse, error)
-	// 同步获取批量服务实例
+	// SyncGetInstances 同步获取批量服务实例
 	SyncGetInstances(req *GetInstancesRequest) (*InstancesResponse, error)
-	// 同步获取全量服务实例
+	// SyncGetAllInstances 同步获取全量服务实例
 	SyncGetAllInstances(req *GetAllInstancesRequest) (*InstancesResponse, error)
-	// 同步进行服务注册
+	// SyncRegister 同步进行服务注册
 	SyncRegister(instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
-	// 同步进行服务反注册
+	// SyncDeregister 同步进行服务反注册
 	SyncDeregister(instance *InstanceDeRegisterRequest) error
-	// 同步进行心跳上报
+	// SyncHeartbeat 同步进行心跳上报
 	SyncHeartbeat(instance *InstanceHeartbeatRequest) error
-	// 上报调用结果信息
+	// SyncUpdateServiceCallResult 上报调用结果信息
 	SyncUpdateServiceCallResult(result *ServiceCallResult) error
-	// 上报实例统计信息
+	// SyncReportStat 上报实例统计信息
 	SyncReportStat(typ MetricType, stat InstanceGauge) error
-	// 同步获取服务规则
+	// SyncGetServiceRule 同步获取服务规则
 	SyncGetServiceRule(
 		eventType EventType, req *GetServiceRuleRequest) (*ServiceRuleResponse, error)
-	// 同步获取网格规则
+	// SyncGetMeshConfig 同步获取网格规则
 	SyncGetMeshConfig(
 		eventType EventType, req *GetMeshConfigRequest) (*MeshConfigResponse, error)
-	// 同步获取网格
+	// SyncGetMesh 同步获取网格
 	SyncGetMesh(
 		eventType EventType, req *GetMeshRequest) (*MeshResponse, error)
-	// 同步获取批量服务
+	// SyncGetServices 同步获取批量服务
 	SyncGetServices(
 		eventType EventType, req *GetServicesRequest) (*ServicesResponse, error)
-	// 同步获取配额信息
+	// AsyncGetQuota 同步获取配额信息
 	AsyncGetQuota(request *QuotaRequestImpl) (*QuotaFutureImpl, error)
-	// 启动定时任务
+	// ScheduleTask 启动定时任务
 	ScheduleTask(task *PeriodicTask) (chan<- *PriorityTask, TaskValues)
-	// 监听服务的change
+	// WatchService 监听服务的change
 	WatchService(request *WatchServiceRequest) (*WatchServiceResponse, error)
+	// GetContext 获取上下文
 	GetContext() ValueContext
-	// 所需的被调初始化
+	// InitCalleeService 所需的被调初始化
 	InitCalleeService(req *InitCalleeServiceRequest) error
 	// SyncGetConfigFile 同步获取配置文件
 	SyncGetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
-	// 执行路由链过滤，返回经过路由后的实例列表
+	// ProcessRouters 执行路由链过滤，返回经过路由后的实例列表
 	ProcessRouters(req *ProcessRoutersRequest) (*InstancesResponse, error)
-	// 执行负载均衡策略，返回负载均衡后的实例
+	// ProcessLoadBalance 执行负载均衡策略，返回负载均衡后的实例
 	ProcessLoadBalance(req *ProcessLoadBalanceRequest) (*OneInstanceResponse, error)
 }

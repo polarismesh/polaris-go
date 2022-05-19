@@ -19,6 +19,7 @@ package clientid
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -66,6 +67,7 @@ func (h *ReportHandler) Destroy() error {
 	return nil
 }
 
+// InitLocal 初始化本地插件
 func (h *ReportHandler) InitLocal(_ *namingpb.Client) {
 
 }

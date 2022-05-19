@@ -20,13 +20,14 @@ package remote
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
-	"sync"
-	"time"
 )
 
 const (
@@ -71,14 +72,14 @@ func NewConfigFileRepo(metadata model.ConfigFileMetadata,
 
 	configFileRepos = append(configFileRepos, repo)
 
-	//1. 同步从服务端拉取配置
+	// 1. 同步从服务端拉取配置
 	err := repo.pull()
 	if err != nil {
 		return nil, err
 	}
-	//2. 加到长轮询的池子里
+	// 2. 加到长轮询的池子里
 	repo.addToLongPollingPoll()
-	//3. 启动定时比对版本号的任务
+	// 3. 启动定时比对版本号的任务
 	startCheckVersionOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		stopCheckVersionTask = cancel
@@ -88,6 +89,7 @@ func NewConfigFileRepo(metadata model.ConfigFileMetadata,
 	return repo, nil
 }
 
+// GetContent 获取配置文件内容
 func (r *ConfigFileRepo) GetContent() string {
 	if r.remoteConfigFile == nil {
 		return NotExistedFileContent
@@ -132,7 +134,7 @@ func (r *ConfigFileRepo) pull() error {
 		pulledConfigFile := response.GetConfigFile()
 		responseCode := response.GetCode()
 
-		//打印请求信息
+		// 打印请求信息
 		pulledConfigFileVersion := int64(-1)
 		if pulledConfigFile != nil {
 			pulledConfigFileVersion = int64(pulledConfigFile.GetVersion())
@@ -140,9 +142,9 @@ func (r *ConfigFileRepo) pull() error {
 		log.GetBaseLogger().Infof("[Config] pull config file finished. config file = %+v, code = %d, version = %d, duration = %d ms",
 			pulledConfigFile, responseCode, pulledConfigFileVersion, time.Now().UnixNano()/1e6-startTime.UnixNano()/1e6)
 
-		//拉取成功
+		// 拉取成功
 		if responseCode == v1.ExecuteSuccess {
-			//本地配置文件落后，更新内存缓存
+			// 本地配置文件落后，更新内存缓存
 			if r.remoteConfigFile == nil || pulledConfigFile.Version >= r.remoteConfigFile.Version {
 				r.remoteConfigFile = deepCloneConfigFile(pulledConfigFile)
 				r.fireChangeEvent(pulledConfigFile.GetContent())
@@ -150,11 +152,11 @@ func (r *ConfigFileRepo) pull() error {
 			return nil
 		}
 
-		//远端没有此配置文件
+		// 远端没有此配置文件
 		if responseCode == v1.NotFoundResource {
 			log.GetBaseLogger().Warnf("[Config] config file not found, please check whether config file released. %+v", r.configFileMetadata)
 
-			//删除配置文件
+			// 删除配置文件
 			if r.remoteConfigFile != nil {
 				r.remoteConfigFile = nil
 				r.fireChangeEvent(NotExistedFileContent)
@@ -163,7 +165,7 @@ func (r *ConfigFileRepo) pull() error {
 			return nil
 		}
 
-		//预期之外的状态码，重试
+		// 预期之外的状态码，重试
 		log.GetBaseLogger().Errorf("[Config] pull response with unexpected code. retry times = %d, code = %d", retryTimes, responseCode)
 		err = fmt.Errorf("pull config file with unexpect code. %d", responseCode)
 		r.retryPolicy.fail()
@@ -185,7 +187,7 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 }
 
 func (r *ConfigFileRepo) addToLongPollingPoll() {
-	//从服务端找不到配置文件或者拉取异常
+	// 从服务端找不到配置文件或者拉取异常
 	if r.remoteConfigFile == nil {
 		r.remoteConfigFile = &configconnector.ConfigFile{
 			Namespace: r.configFileMetadata.GetNamespace(),
@@ -198,6 +200,7 @@ func (r *ConfigFileRepo) addToLongPollingPoll() {
 	addConfigFileToLongPollingPool(r)
 }
 
+// StopCheckVersionTask 停止检查版本任务
 func StopCheckVersionTask() {
 	if stopCheckVersionTask != nil {
 		stopCheckVersionTask()
@@ -213,11 +216,11 @@ func startCheckVersionTask(ctx context.Context) {
 			break
 		case <-t.C:
 			for _, repo := range configFileRepos {
-				//没有通知版本号
+				// 没有通知版本号
 				if repo.notifiedVersion == initVersion {
 					continue
 				}
-				//从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
+				// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
 				if repo.remoteConfigFile == nil || repo.notifiedVersion > repo.remoteConfigFile.GetVersion() {
 					if repo.remoteConfigFile == nil {
 						log.GetBaseLogger().Warnf("[Config] client does not pull the configuration, it will be pulled again."+
@@ -252,6 +255,7 @@ func (r *ConfigFileRepo) onLongPollingNotified(newVersion uint64) {
 	}
 }
 
+// AddChangeListener 添加配置文件变更监听器
 func (r *ConfigFileRepo) AddChangeListener(listener ConfigFileRepoChangeListener) {
 	r.listeners = append(r.listeners, listener)
 }

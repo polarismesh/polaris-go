@@ -117,10 +117,7 @@ func (g *Connector) Destroy() error {
 
 // IsEnable .插件开关
 func (g *Connector) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	}
-	return true
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // RegisterServiceHandler 注册服务监听器

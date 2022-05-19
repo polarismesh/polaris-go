@@ -18,7 +18,6 @@
 package quota
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -42,7 +41,9 @@ import (
 )
 
 const (
-	Disabled      = "rateLimit disabled"
+	// Disabled is a constant for disabled quota.
+	Disabled = "rateLimit disabled"
+	// RuleNotExists is a constant for rules not exist.
 	RuleNotExists = "quota rule not exists"
 )
 
@@ -76,27 +77,33 @@ type FlowQuotaAssistant struct {
 	localRules map[model.ServiceKey]model.ServiceRule
 }
 
+// AsyncRateLimitConnector 异步限流连接器
 func (f *FlowQuotaAssistant) AsyncRateLimitConnector() AsyncRateLimitConnector {
 	return f.asyncRateLimitConnector
 }
 
+// Destroy 销毁
 func (f *FlowQuotaAssistant) Destroy() {
 	atomic.StoreUint32(&f.destroyed, 1)
 	f.asyncRateLimitConnector.Destroy()
 }
 
+// IsDestroyed 是否已销毁
 func (f *FlowQuotaAssistant) IsDestroyed() bool {
 	return atomic.LoadUint32(&f.destroyed) > 0
 }
 
+// AddWindowCount 添加窗口数量
 func (f *FlowQuotaAssistant) AddWindowCount() {
 	atomic.AddInt32(&f.windowCount, 1)
 }
 
+// DelWindowCount 减少窗口数量
 func (f *FlowQuotaAssistant) DelWindowCount() {
 	atomic.AddInt32(&f.windowCount, -1)
 }
 
+// GetWindowCount 获取窗口数量
 func (f *FlowQuotaAssistant) GetWindowCount() int32 {
 	return atomic.LoadInt32(&f.windowCount)
 }
@@ -200,13 +207,14 @@ func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey
 		}
 		svcRule := pb.NewServiceRuleInProto(respInProto)
 		if err := svcRule.ValidateAndBuildCache(); err != nil {
-			return nil, errors.New(fmt.Sprintf("fail to validate config local rule, err is %v", err))
+			return nil, fmt.Errorf("fail to validate config local rule, err is %v", err)
 		}
 		values[svcKey] = svcRule
 	}
 	return values, nil
 }
 
+// DeleteRateLimitWindowSet 删除窗口集合
 func (f *FlowQuotaAssistant) DeleteRateLimitWindowSet(svcKey model.ServiceKey) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -264,7 +272,7 @@ func (f *FlowQuotaAssistant) GetRateLimitWindow(svcKey model.ServiceKey, rule *n
 	return windowSet, windowSet.GetRateLimitWindow(rule, label)
 }
 
-// 服务更新回调，找到具体的限流窗口集合，然后触发更新
+// OnServiceUpdated 服务更新回调，找到具体的限流窗口集合，然后触发更新
 func (f *FlowQuotaAssistant) OnServiceUpdated(event *common.PluginEvent) error {
 	svcEventObject := event.EventObject.(*common.ServiceEventObject)
 	if svcEventObject.SvcEventKey.Type != model.EventRateLimiting {

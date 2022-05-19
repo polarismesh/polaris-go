@@ -287,7 +287,7 @@ func (e *Engine) SyncGetInstances(req *model.GetInstancesRequest) (*model.Instan
 	return resp, err
 }
 
-// SyncGetInstances 同步获取服务实例
+// SyncGetAllInstances 同步获取服务实例
 func (e *Engine) SyncGetAllInstances(req *model.GetAllInstancesRequest) (*model.InstancesResponse, error) {
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByGetAllRequest(req, e.configuration)
@@ -481,7 +481,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	return nil
 }
 
-// SyncGetServices
+// SyncGetServices 获取服务列表
 func (e *Engine) SyncGetServices(eventType model.EventType,
 	req *model.GetServicesRequest) (*model.ServicesResponse, error) {
 	commonRequest := data.PoolGetServicesRequest()
@@ -500,7 +500,7 @@ func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.
 	return commonRequest.BuildServicesResponse(commonRequest.GetServices()), nil
 }
 
-// SyncGetMeshConfig
+// SyncGetMeshConfig 获取mesh配置
 func (e *Engine) SyncGetMeshConfig(eventType model.EventType,
 	req *model.GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
 	// 方法开始时间

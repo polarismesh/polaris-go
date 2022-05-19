@@ -227,7 +227,7 @@ func (s *SliceWindow) lookupAndCreateBucketByMillTime(curTime int64) *Bucket {
 	return bucket
 }
 
-// 限流桶操作函数
+// BucketOperation 限流桶操作函数
 type BucketOperation func(bucket *Bucket) int64
 
 // AddHistoryMetric 添加历史数据
@@ -240,6 +240,7 @@ func (s *SliceWindow) AddHistoryMetric(now time.Time, operation BucketOperation)
 	return operation(bucket), true
 }
 
+// AddHistoryMetricByMillTime 添加历史数据
 func (s *SliceWindow) AddHistoryMetricByMillTime(now int64, operation BucketOperation) (int64, bool) {
 	bucket := s.lookupBucketByMillTime(now)
 	if nil == bucket {
@@ -322,12 +323,13 @@ func (s *SliceWindow) AddGaugeByValue(value int64, curTime time.Time) int64 {
 	return bucket.AddMetric(0, value)
 }
 
+// AddGaugeByValueByMillTime 添加统计数据
 func (s *SliceWindow) AddGaugeByValueByMillTime(value int64, curTime int64) int64 {
-	var bucket *Bucket
-	bucket = s.lookupAndCreateBucketByMillTime(curTime)
+	bucket := s.lookupAndCreateBucketByMillTime(curTime)
 	return bucket.AddMetric(0, value)
 }
 
+// SetPeriodStart 根据当前时间设置周期开始时间
 func (s *SliceWindow) SetPeriodStart(now int64) {
 	s.PeriodStartTime = s.CalcStartTime(now)
 }

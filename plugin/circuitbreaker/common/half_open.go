@@ -33,11 +33,11 @@ import (
 
 // 半开调用结果统计维度
 const (
-	// 半开成功数
+	// KeyHalfOpenSuccessCount 半开成功数
 	KeyHalfOpenSuccessCount int = iota
-	// 半开总请求数
+	// KeyHalfOpenRequestCount 半开总请求数
 	KeyHalfOpenRequestCount
-	// 半开错误统计维度总数
+	// MaxHalfOpenDimension 半开错误统计维度总数
 	MaxHalfOpenDimension
 )
 

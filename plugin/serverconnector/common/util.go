@@ -65,52 +65,52 @@ const (
 	OpKeyWatchConfigFiles      = "WatchConfigFiles"
 )
 
-// 生成GetInstances调用的请求Id
+// NextDiscoverReqID 生成GetInstances调用的请求Id
 func NextDiscoverReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixDiscover, uuid.New().ID())
 }
 
-// 生成RegisterService调用的请求Id
+// NextRegisterInstanceReqID 生成RegisterService调用的请求Id
 func NextRegisterInstanceReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRegisterInstance, uuid.New().ID())
 }
 
-// 生成RegisterService调用的请求Id
+// NextDeRegisterInstanceReqID 生成RegisterService调用的请求Id
 func NextDeRegisterInstanceReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixDeregisterInstance, uuid.New().ID())
 }
 
-// 生成RegisterService调用的请求Id
+// NextHeartbeatReqID 生成RegisterService调用的请求Id
 func NextHeartbeatReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixInstanceHeartbeat, uuid.New().ID())
 }
 
-// 生成ReportClient调用的请求Id
+// NextReportClientReqID 生成ReportClient调用的请求Id
 func NextReportClientReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixReportClient, uuid.New().ID())
 }
 
-// 生成RateLimit初始化调用的请求Id
+// NextRateLimitInitReqID 生成RateLimit初始化调用的请求Id
 func NextRateLimitInitReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRateLimitInit, uuid.New().ID())
 }
 
-// 生成RateLimit配额获取调用的请求Id
+// NextRateLimitAcquireReqID 生成RateLimit配额获取调用的请求Id
 func NextRateLimitAcquireReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixRateLimitAcquire, uuid.New().ID())
 }
 
-// 生成GetConfigFile调用的请求Id
+// NextGetConfigFileReqID 生成GetConfigFile调用的请求Id
 func NextGetConfigFileReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixGetConfigFile, uuid.New().ID())
 }
 
-// 生成WatchConfigFiles调用的请求Id
+// NextWatchConfigFilesReqID 生成WatchConfigFiles调用的请求Id
 func NextWatchConfigFilesReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixWatchConfigFiles, uuid.New().ID())
 }
 
-// 获取连接错误码
+// GetConnErrorCode 获取连接错误码
 func GetConnErrorCode(err error) int32 {
 	code, ok := status.FromError(err)
 	if ok {
@@ -119,7 +119,7 @@ func GetConnErrorCode(err error) int32 {
 	return int32(model.ErrCodeNetworkError)
 }
 
-// 返回网络错误，并回收连接
+// NetworkError 返回网络错误，并回收连接
 func NetworkError(connManager network.ConnectionManager, conn *network.Connection,
 	errCode int32, err error, startTime time.Time, msg string) model.SDKError {
 	endTime := clock.GetClock().Now()
@@ -130,12 +130,12 @@ func NetworkError(connManager network.ConnectionManager, conn *network.Connectio
 	return model.NewSDKError(model.ErrCodeNetworkError, err, msg)
 }
 
-// 获取一个updateTask的请求更新时间
+// GetUpdateTaskRequestTime 获取一个updateTask的请求更新时间
 func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 	consumeTime := maxConnTimeout
 	msgSendTimeValue := updateTask.msgSendTime.Load()
 	if !reflect2.IsNil(msgSendTimeValue) {
-		consumeTime = time.Now().Sub(msgSendTimeValue.(time.Time))
+		consumeTime = time.Since(msgSendTimeValue.(time.Time))
 	}
 	return consumeTime
 }
@@ -152,7 +152,7 @@ func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 //	return metadata.NewOutgoingContext(ctx, md)
 // }
 
-// 创建传输grpc头的valueContext
+// CreateHeaderContext 创建传输grpc头的valueContext
 func CreateHeaderContext(timeout time.Duration, headers map[string]string) (context.Context, context.CancelFunc) {
 	md := metadata.New(headers)
 	var ctx context.Context
@@ -166,7 +166,7 @@ func CreateHeaderContext(timeout time.Duration, headers map[string]string) (cont
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
 
-// 创建传输grpc头的valueContext
+// CreateHeaderContextWithReqId 创建传输grpc头的valueContext
 func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.Context, context.CancelFunc) {
 	md := metadata.New(map[string]string{headerRequestID: reqID})
 	var ctx context.Context

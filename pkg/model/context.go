@@ -27,20 +27,20 @@ import (
 )
 
 const (
-	// 主流程引擎的上下文key
+	// ContextKeyEngine 主流程引擎的上下文key
 	// SDK初始化后，会将主流程引擎对象放入上下文中，供插件按需使用
 	ContextKeyEngine = "engine"
-	// SDK的唯一标识id
+	// ContextKeyToken SDK的唯一标识id
 	ContextKeyToken = "SDKToken"
-	// sdkcontext上面的pluginManager
+	// ContextKeyPlugins sdkcontext上面的pluginManager
 	ContextKeyPlugins = "plugins"
-	// sdkContext创建开始时间
+	// ContextKeyTakeEffectTime sdkContext创建开始时间
 	ContextKeyTakeEffectTime = "SDKTakeEffectTime"
-	// sdkContext创建结束时间
+	// ContextKeyFinishInitTime sdkContext创建结束时间
 	ContextKeyFinishInitTime = "SDKFinishInitTime"
 )
 
-// sdkContext的唯一标识
+// SDKToken sdkContext的唯一标识
 type SDKToken struct {
 	IP       string
 	PID      int32
@@ -53,38 +53,38 @@ type SDKToken struct {
 
 // LocationInfo 地域信息
 type LocationInfo interface {
-	// 获取地域明细
+	// GetLocation 获取地域明细
 	GetLocation() *Location
-	// 在地域信息获取过程中的错误信息
+	// GetLastError 在地域信息获取过程中的错误信息
 	GetLastError() SDKError
-	// 获取地域信息状态
+	// GetStatus 获取地域信息状态
 	GetStatus() uint32
-	// 查看地域信息是否已初始化状态
+	// IsLocationInitialized 查看地域信息是否已初始化状态
 	IsLocationInitialized() bool
-	// 查看地域信息是否ready状态
+	// IsLocationReady 查看地域信息是否ready状态
 	IsLocationReady() bool
 }
 
 // ValueContext 用于主流程传递kv数据的上下文对象，线程安全
 type ValueContext interface {
-	// 设置kv值
+	// SetValue 设置kv值
 	SetValue(key string, value interface{})
-	// 获取kv值
+	// GetValue 获取kv值
 	GetValue(key string) (interface{}, bool)
-	// 获取当前节点地域信息
+	// GetCurrentLocation 获取当前节点地域信息
 	GetCurrentLocation() LocationInfo
-	// 获取客户端ID
+	// GetClientId 获取客户端ID
 	GetClientId() string
-	// 获取引擎接口
+	// GetEngine 获取引擎接口
 	GetEngine() Engine
-	// 等待location是否达到locationStatus
+	// WaitLocationInfo 等待location是否达到locationStatus
 	WaitLocationInfo(ctx context.Context, locationStatus uint32) bool
-	// 设置当前节点地域信息
+	// SetCurrentLocation 设置当前节点地域信息
 	// 返回是否由非ready转换为ready
 	SetCurrentLocation(*Location, SDKError) bool
-	// 获取当前时间戳
+	// Now 获取当前时间戳
 	Now() time.Time
-	// 计算时间间隔
+	// Since 计算时间间隔
 	Since(time.Time) time.Duration
 }
 
@@ -103,13 +103,13 @@ func NewValueContext() ValueContext {
 }
 
 const (
-	// 地域信息初始化，未获取到地域信息
+	// LocationInit 地域信息初始化，未获取到地域信息
 	LocationInit uint32 = iota
-	// 地域信息获取失败，出现异常
+	// LocationError 地域信息获取失败，出现异常
 	LocationError
-	// 地域信息获取成功
+	// LocationReady 地域信息获取成功
 	LocationReady
-	// 地域信息获取成功，但是是空的，即没有在cmdb上面发现地域信息
+	// LocationEmpty 地域信息获取成功，但是是空的，即没有在cmdb上面发现地域信息
 	LocationEmpty
 )
 

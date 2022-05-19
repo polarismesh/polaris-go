@@ -73,7 +73,6 @@ func (p *LocationProvider) Name() string {
 
 // Destroy 销毁插件，可用于释放资源
 func (p *LocationProvider) Destroy() error {
-
 	return p.PluginBase.Destroy()
 }
 
@@ -113,8 +112,8 @@ func getQCloudLocatoin() (*model.Location, error) {
 }
 
 func sendRequest(typ string) (string, error) {
-	reqApi := fmt.Sprintf(qCloudApi, typ)
-	resp, err := http.Get(reqApi)
+	reqAPI := fmt.Sprintf(qCloudApi, typ)
+	resp, err := http.Get(reqAPI)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +127,7 @@ func sendRequest(typ string) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("curl %s failed", reqApi)
+		return "", fmt.Errorf("curl %s failed", reqAPI)
 	}
 
 	return string(val), nil

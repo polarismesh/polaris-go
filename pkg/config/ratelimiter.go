@@ -26,7 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// RateLimitConfigImpl 限流配置对象
+// RateLimitConfigImpl 限流配置对象.
 type RateLimitConfigImpl struct {
 	// 是否启动限流
 	Enable *bool `yaml:"enable" json:"enable"`
@@ -40,7 +40,7 @@ type RateLimitConfigImpl struct {
 	Rules []RateLimitRule `yaml:"rules"`
 }
 
-// RateLimitRule 限流规则
+// RateLimitRule 限流规则.
 type RateLimitRule struct {
 	Namespace     string             `yaml:"namespace"`
 	Service       string             `yaml:"service"`
@@ -49,7 +49,7 @@ type RateLimitRule struct {
 	ValidDuration time.Duration      `yaml:"validDuration"`
 }
 
-// Verify 校验限流规则
+// Verify 校验限流规则.
 func (r *RateLimitRule) Verify() error {
 	if len(r.Namespace) == 0 {
 		return errors.New("namespace is empty")
@@ -83,26 +83,26 @@ const (
 	TypeRegex = "REGEX"
 )
 
-// Matcher 标签匹配类型
+// Matcher 标签匹配类型.
 type Matcher struct {
 	Type  string `yaml:"type"`
 	Value string `yaml:"value"`
 }
 
-// IsEnable 是否启用限流能力
+// IsEnable 是否启用限流能力.
 func (r *RateLimitConfigImpl) IsEnable() bool {
 	return *r.Enable
 }
 
-// SetEnable 设置是否启用限流能力
+// SetEnable 设置是否启用限流能力.
 func (r *RateLimitConfigImpl) SetEnable(value bool) {
 	r.Enable = &value
 }
 
-// ForbidServerMetricService 已经禁用的限流集群名
+// ForbidServerMetricService 已经禁用的限流集群名.
 const ForbidServerMetricService = "polaris.metric"
 
-// Verify 校验配置参数
+// Verify 校验配置参数.
 func (r *RateLimitConfigImpl) Verify() error {
 	if nil == r {
 		return errors.New("RateLimitConfig is nil")
@@ -120,7 +120,7 @@ func (r *RateLimitConfigImpl) Verify() error {
 	return r.Plugin.Verify()
 }
 
-// GetPluginConfig 获取插件配置
+// GetPluginConfig 获取插件配置.
 func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := r.Plugin[pluginName]
 	if !ok {
@@ -129,7 +129,7 @@ func (r *RateLimitConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	return cfgValue.(BaseConfig)
 }
 
-// SetDefault 设置默认参数
+// SetDefault 设置默认参数.
 func (r *RateLimitConfigImpl) SetDefault() {
 	if r.Enable == nil {
 		r.Enable = &DefaultRateLimitEnable
@@ -143,12 +143,12 @@ func (r *RateLimitConfigImpl) SetDefault() {
 	r.Plugin.SetDefault(common.TypeRateLimiter)
 }
 
-// SetPluginConfig 设置插件配置
+// SetPluginConfig 设置插件配置.
 func (r *RateLimitConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return r.Plugin.SetPluginConfig(common.TypeRateLimiter, pluginName, value)
 }
 
-// Init 配置初始化
+// Init 配置初始化.
 func (r *RateLimitConfigImpl) Init() {
 	r.Rules = []RateLimitRule{}
 	r.Plugin = PluginConfigs{}
@@ -175,12 +175,12 @@ func (r *RateLimitConfigImpl) SetPurgeInterval(v time.Duration) {
 	r.PurgeInterval = v
 }
 
-// GetRules 获取规则
+// GetRules 获取规则.
 func (r *RateLimitConfigImpl) GetRules() []RateLimitRule {
 	return r.Rules
 }
 
-// SetRules 。设置规则
+// SetRules 。设置规则.
 func (r *RateLimitConfigImpl) SetRules(rules []RateLimitRule) {
 	r.Rules = rules
 }

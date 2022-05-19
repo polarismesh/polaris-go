@@ -14,6 +14,7 @@
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package dns
 
 import (
@@ -21,7 +22,7 @@ import (
 	"encoding/binary"
 )
 
-// uint16序列化
+// uint16序列化.
 func packUint16(i uint16, buffer *bytes.Buffer) error {
 	err := binary.Write(buffer, binary.BigEndian, i)
 	if err != nil {
@@ -30,7 +31,7 @@ func packUint16(i uint16, buffer *bytes.Buffer) error {
 	return nil
 }
 
-// uint16反序列化
+// uint16反序列化.
 func unpackUint16(msg []byte, off int) (uint16, int, error) {
 	if off+2 > len(msg) {
 		return 0, len(msg), &Error{err: "overflow unpacking uint16"}
@@ -38,7 +39,7 @@ func unpackUint16(msg []byte, off int) (uint16, int, error) {
 	return binary.BigEndian.Uint16(msg[off:]), off + 2, nil
 }
 
-// uint32序列化
+// uint32序列化.
 func packUint32(i uint32, buffer *bytes.Buffer) error {
 	err := binary.Write(buffer, binary.BigEndian, i)
 	if err != nil {
@@ -47,7 +48,7 @@ func packUint32(i uint32, buffer *bytes.Buffer) error {
 	return nil
 }
 
-// uint32反序列化
+// uint32反序列化.
 func unpackUint32(msg []byte, off int) (uint32, int, error) {
 	if off+4 > len(msg) {
 		return 0, len(msg), &Error{err: "overflow unpacking uint32"}
@@ -55,7 +56,7 @@ func unpackUint32(msg []byte, off int) (uint32, int, error) {
 	return binary.BigEndian.Uint32(msg[off:]), off + 4, nil
 }
 
-// polaris 序列化（有4层分包逻辑）
+// PackStreamDataToDnsProto polaris 序列化（有4层分包逻辑）.
 func PackStreamDataToDnsProto(data []byte, id uint16, opCode int, rrType uint16) ([]*Msg, error) {
 	// maxStreamRRDataSize 需要精确计算，重新定义
 	maxStreamRRDataSize := 50000

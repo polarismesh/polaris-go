@@ -28,22 +28,22 @@ import (
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
 )
 
-// l5一致性算法的hash负载均衡器
+// L5CSTLoadBalancer l5一致性算法的hash负载均衡器
 type L5CSTLoadBalancer struct {
 	*plugin.PluginBase
 }
 
-// 插件类型
+// Type 插件类型
 func (l *L5CSTLoadBalancer) Type() common.Type {
 	return common.TypeLoadBalancer
 }
 
-// 插件名，一个类型下插件名唯一
+// Name 插件名，一个类型下插件名唯一
 func (l *L5CSTLoadBalancer) Name() string {
 	return mconfig.DefaultLoadBalancerL5CST
 }
 
-// 初始化插件
+// Init 初始化插件
 func (l *L5CSTLoadBalancer) Init(ctx *plugin.InitContext) error {
 	l.PluginBase = plugin.NewPluginBase(ctx)
 	return nil
@@ -93,8 +93,8 @@ func (l *L5CSTLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	if nil != nodes {
 		criteria.ReplicateInfo.Nodes = nodes.GetInstances()
 	}
-	var instance model.Instance
-	instance = svcInstances.GetInstances()[index]
+
+	instance := svcInstances.GetInstances()[index]
 	return instance, nil
 }
 

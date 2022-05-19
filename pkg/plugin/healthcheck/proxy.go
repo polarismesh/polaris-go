@@ -23,7 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// Proxy . proxy of HealthChecker
+// Proxy .proxy of HealthChecker
 type Proxy struct {
 	HealthChecker
 	engine model.Engine

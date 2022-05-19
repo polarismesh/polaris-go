@@ -32,6 +32,7 @@ type limitedStatKey struct {
 	Mode     quota.LimitMode
 }
 
+// passStat .
 type passStat struct {
 	passNum int64
 }
@@ -46,17 +47,17 @@ type statData struct {
 // limitedStat的数组
 type limitedSlice []*limitedStat
 
-// len
+// Len is the number of elements in the collection.
 func (l limitedSlice) Len() int {
 	return len(l)
 }
 
-// swap
+// Swap 交换两个元素
 func (l limitedSlice) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-// less
+// Less 比较两个元素
 func (l limitedSlice) Less(i, j int) bool {
 	return l[i].validDuration > l[j].validDuration
 }

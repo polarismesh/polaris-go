@@ -157,23 +157,23 @@ func SetLoggersLevel(loglevel int) error {
 	var err error
 	logErr := log.GetStatReportLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set statReport loglevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set statReport loglevel"))
 	}
 	logErr = log.GetBaseLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set base loglevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set base loglevel"))
 	}
 	logErr = log.GetDetectLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set detect loglevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set detect loglevel"))
 	}
 	logErr = log.GetStatLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set stat loglevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set stat loglevel"))
 	}
 	logErr = log.GetNetworkLogger().SetLogLevel(loglevel)
 	if nil != logErr {
-		err = multierror.Append(err, multierror.Prefix(err, fmt.Sprintf("fail to set network logLevel")))
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set network logLevel"))
 	}
 	return err
 }
