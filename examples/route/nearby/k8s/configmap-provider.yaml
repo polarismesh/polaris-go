@@ -4,7 +4,7 @@ data:
     global:
       serverConnector:
         addresses:
-          - 9.135.118.235:8091
+          - { PolarisServerIP:GrpcPort }
       location:
         # 设置 polaris-go 进程地理信息的提供插件
         # 设置为 env 时，可以在 linux 中注入以下环境变量
@@ -29,4 +29,4 @@ data:
 kind: ConfigMap
 metadata:
   name: polaris-provider-config
-  namespace: springliao-polaris-server
+  namespace: default

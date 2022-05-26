@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: examples-go-nearby-provider
-  namespace: springliao-polaris-server
+  namespace: default
   labels:
     app: provider
 spec:
@@ -17,7 +17,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: provider-1
-  namespace: springliao-polaris-server
+  namespace: default
 spec:
   replicas: 2
   selector:
@@ -62,7 +62,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: provider-2
-  namespace: springliao-polaris-server
+  namespace: default
 spec:
   replicas: 2
   selector:
@@ -108,7 +108,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: provider-3
-  namespace: springliao-polaris-server
+  namespace: default
 spec:
   replicas: 2
   selector:
