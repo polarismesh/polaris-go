@@ -122,6 +122,23 @@ func (svr *PolarisProvider) deregisterService() {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
 	log.Printf("deregister successfully.")
+	go svr.doHeartbeat()
+}
+
+func (svr *PolarisProvider) doHeartbeat() {
+	log.Printf("start to invoke heartbeat operation")
+	ticker := time.NewTicker(time.Duration(5 * time.Second))
+	for range ticker.C {
+		if !svr.isShutdown {
+			heartbeatRequest := &polaris.InstanceHeartbeatRequest{}
+			heartbeatRequest.Namespace = namespace
+			heartbeatRequest.Service = service
+			heartbeatRequest.Host = svr.host
+			heartbeatRequest.Port = svr.port
+			heartbeatRequest.ServiceToken = token
+			svr.provider.Heartbeat(heartbeatRequest)
+		}
+	}
 }
 
 func (svr *PolarisProvider) runMainLoop() {
