@@ -1,6 +1,6 @@
 # Polaris Go
 
-[English](./README.md)
+[English](./README.md) | 中文
 
 ## 使用配置管理功能
 

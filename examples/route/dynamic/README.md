@@ -1,50 +1,50 @@
 # Polaris Go
 
-[English Document](./README.md)
+English | [中文](./README-zh.md)
 
-## 使用服务路由功能
+## Using Service Routing Function
 
-北极星支持根据请求标签、实例标签和标签匹配规则，对线上流量进行动态调度，可以应用于按地域就近、单元化隔离和金丝雀发布等多种场景。
+Polaris support according to the request label, instance tag, and label matching rules, the line traffic is dynamically scheduled, which can be applied to a variety of scenes such as the region, unitized isolation and Canary release.
 
-## 如何使用
+## How to use
 
-### 构建可执行文件
+### Build an executable
 
-构建 provider
+Build provider
 
 ```
-# linux/mac构建命令
+# linux/mac
 cd ./provider
 go build -o provider
 
-# windows构建命令
+# windows
 cd ./consumer
 go build -o provider.exe
 ```
 
-构建 consumer
+Build consumer
 
 ```
-# linux/mac构建命令
+# linux/mac
 cd ./consumer
 go build -o consumer
 
-# windows构建命令
+# windows
 cd ./consumer
 go build -o consumer.exe
 ```
 
-### 创建服务
+### Enter console
 
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8080打开控制台
+Create a corresponding service through the Arctic Star Console, if you are installed by a local one-click installation package, open the console directly on the browser through 127.0.0.1:8080
 
-### 创建路由规则
+### Create routing rules
 
 ![create_service_rule](./image/create_service_rule.png)
 
-### 修改配置
+### Change setting
 
-指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
+Specify the Arctic Star server address, you need to edit the Polaris.yaml file, fill in the server address.
 
 ```
 global:
@@ -52,39 +52,39 @@ global:
     addresses:
     - 127.0.0.1:8091
 ```
-### 执行程序
+### execute program
 
-运行构建出的**provider**可执行文件
+Run the built **provider** executable
 
 ```
-# linux/mac运行命令
+# linux/mac
 ./provider --metadata="env=dev" > provider-20000.log 2>&1 &
 ./provider --metadata="env=test" > provider-20001.log 2>&1 &
 ./provider --metadata="env=pre" > provider-20002.log 2>&1 &
 ./provider --metadata="env=prod" > provider-20003.log 2>&1 &
 
-# windows运行命令
+# windows
 ./provider.exe --metadata="env=dev" > provider-20000.log
 ./provider.exe --metadata="env=test" > provider-20001.log
 ./provider.exe --metadata="env=pre" > provider-20002.log
 ./provider.exe --metadata="env=prod" > provider-20003.log
 ```
 
-运行构建出的**consumer**可执行文件
+Run the built **consumer** executable
 
 > consumer
 
 ```
-# linux/mac运行命令
+# linux/mac
 ./consumer --selfNamespace={selfName} --selfService=EchoConsumer
 
-# windows运行命令
+# windows
 ./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
 ```
 
-### 验证
+### Verify
 
-通过设置请求头参数***env***的值，实现路由到不同的服务实例
+Realize the route to different service instances by setting the value of the request header **env**
 
 ```
 curl -H 'env: pre' http://127.0.0.1:18080/echo
