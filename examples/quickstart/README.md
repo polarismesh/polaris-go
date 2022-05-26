@@ -1,6 +1,6 @@
 # Polaris Go
 
-[中文文档](./README-zh.md)
+English | [中文](./README-zh.md)
 
 ## Use service registration discovery function
 
