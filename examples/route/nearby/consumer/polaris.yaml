@@ -1,0 +1,25 @@
+global:
+  serverConnector:
+    addresses:
+      - 183.47.111.80:8091
+  location:
+    # 设置 polaris-go 进程地理信息的提供插件
+    # 设置为 env 时，可以在 linux 中注入以下环境变量
+    # POLARIS_INSTANCE_REGION: 设置 region 信息, 例如 china
+    # POLARIS_INSTANCE_ZONE: 设置 zone 信息, 例如 ap-guangzhou
+    # POLARIS_INSTANCE_CAMPUS: 设置 IDC 信息, 例如 ap-guangzhou-3
+    provider: env
+consumer:
+  serviceRouter:
+    # 服务路由链
+    chain:
+      # 基于主调和被调服务规则的路由策略(默认的路由策略)
+      - ruleBasedRouter
+      # 就近路由策略
+      - nearbyBasedRouter
+    #描述：服务路由插件的配置
+    plugin:
+      nearbyBasedRouter:
+        #描述:就近路由的最小匹配级别
+        #范围:region(大区)、zone(区域)、campus(园区)
+        matchLevel: campus
