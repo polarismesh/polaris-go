@@ -142,6 +142,8 @@ type CacheObject struct {
 	cachePersistentAvailable uint32
 	// 服务是否被订阅
 	serviceIsWatched uint32
+	// 服务推空保护
+	pushEmptyProtection bool
 }
 
 // NewCacheObject 创建缓存对象
@@ -426,10 +428,24 @@ func (s *CacheObject) GetRevision() string {
 }
 
 // SetValue 设置缓存对象
-func (s *CacheObject) SetValue(cacheValue model.RegistryValue) {
+func (s *CacheObject) SetValue(cacheValue model.RegistryValue) bool {
+	canSet := true
+	if cacheValue.GetType() == model.EventInstances && s.pushEmptyProtection {
+		canSet = !(len(cacheValue.(*pb.ServiceInstancesInProto).GetInstances()) == 0)
+	}
+
+	if !canSet {
+		log.GetBaseLogger().Warnf(
+			"CacheObject: value for %s is not updated, revision %s, pushEmptyProtection: %+v",
+			*s.serviceValueKey, cacheValue.GetRevision(), s.pushEmptyProtection)
+		return false
+	}
+
 	s.value.Store(cacheValue)
 	log.GetBaseLogger().Infof(
 		"CacheObject: value for %s is updated, revision %s", *s.serviceValueKey, cacheValue.GetRevision())
+
+	return true
 }
 
 // GetMeshResource 获取网格资源类型
