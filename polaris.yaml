@@ -168,11 +168,15 @@ consumer:
     #默认值:1s
     persistAvailableInterval: 60s
     #描述:启动后，首次名字服务是否可以使用缓存文件
-    #类型:string
-    #格式:^\d+(ms|s|m|h)$
-    #范围:[1ms:...]
-    #默认值:1s
+    #类型:bool
+    #范围:[true: false]
+    #默认值:true
     startUseFileCache: true
+    #描述:实例推空保护
+    #类型:bool
+    #范围:[true: false]
+    #默认值:false
+    pushEmptyProtection: false
   #描述:服务路由相关配置
   serviceRouter:
     # 服务路由链

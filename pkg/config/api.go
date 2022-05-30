@@ -302,6 +302,10 @@ type LocalCacheConfig interface {
 	GetStartUseFileCache() bool
 	// SetStartUseFileCache 设置是否可以直接使用缓存
 	SetStartUseFileCache(useCacheFile bool)
+	// SetPushEmptyProtection 设置推空保护开关
+	SetPushEmptyProtection(pushEmptyProtection bool)
+	// GetPushEmptyProtection 获取推空保护开关
+	GetPushEmptyProtection() bool
 }
 
 // NearbyConfig 就近路由配置.
