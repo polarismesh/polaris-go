@@ -11,6 +11,8 @@ linters:
   enable:
 #    - deadcode
 #    - errcheck
+#    - funlen
+#    - gocritic
 #    - gofmt
     - goimports
 #    - gosimple
@@ -33,11 +35,17 @@ issues:
       text: "context.Context should be the first parameter of a function"
       linters:
         - revive
+        - gomnd
     # Yes, they are, but it's okay in a test
     - path: _test\.go
       text: "exported func.*returns unexported type.*which can be annoying to use"
       linters:
         - revive
+
+    # https://github.com/go-critic/go-critic/issues/926
+    - linters:
+        - gocritic
+      text: "unnecessaryDefer:"
 
 linters-settings:
   misspell:
@@ -61,3 +69,26 @@ linters-settings:
     # Check that each sentence starts with a capital letter.
     # Default: false
     capital: false
+  revive:
+    ignore-generated-header: true
+    severity: warning
+    rules:
+      - name: atomic
+      - name: line-length-limit
+        severity: error
+        arguments: [140]
+      - name: unhandled-error
+        arguments : ["fmt.Printf", "myFunction"]
+  funlen:
+    # Checks the number of lines in a function.
+    # If lower than 0, disable the check.
+    # Default: 60
+    lines: 110
+    # Checks the number of statements in a function.
+    # If lower than 0, disable the check.
+    # Default: 40
+    statements: 40
+  goconst:
+    # Ignore test files.
+    # Default: false
+    ignore-tests: true
