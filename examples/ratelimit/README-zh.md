@@ -1,6 +1,6 @@
 # Polaris Go
 
-[English Document](./README.md)
+[English](./README.md) | 中文
 
 ## 使用服务限流功能
 

@@ -52,12 +52,18 @@ type LocalCacheConfigImpl struct {
 	PersistAvailableInterval *time.Duration `yaml:"persistAvailableInterval" json:"persistAvailableInterval"`
 	// 启动后，首次名字服务是否可以使用缓存文件
 	StartUseFileCache *bool `yaml:"startUseFileCache" json:"startUseFileCache"`
+	// PushEmptyProtection 推空保护开关
+	PushEmptyProtection *bool `yaml:"pushEmptyProtection" json:"pushEmptyProtection"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
-// DefaultUseFileCacheFlag 默认启动后，首次名字服务是否可以使用缓存文件
-var DefaultUseFileCacheFlag = true
+var (
+	// DefaultUseFileCacheFlag 默认启动后，首次名字服务是否可以使用缓存文件
+	DefaultUseFileCacheFlag = true
+	// DefaultPushEmptyProtection 推空保护默认关闭
+	DefaultPushEmptyProtection = false
+)
 
 // GetServiceExpireTime consumer.localCache.service.expireTime,
 // 服务的超时淘汰时间.
@@ -153,6 +159,16 @@ func (l *LocalCacheConfigImpl) SetType(typ string) {
 	l.Type = typ
 }
 
+// SetPushEmptyProtection 设置推空保护开关
+func (l *LocalCacheConfigImpl) SetPushEmptyProtection(pushEmptyProtection bool) {
+	l.PushEmptyProtection = &pushEmptyProtection
+}
+
+// GetPushEmptyProtection 获取推空保护开关
+func (l *LocalCacheConfigImpl) GetPushEmptyProtection() bool {
+	return *l.PushEmptyProtection
+}
+
 // GetPluginConfig consumer.localCache.plugin.
 func (l *LocalCacheConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := l.Plugin[pluginName]
@@ -212,6 +228,9 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 	}
 	if nil == l.StartUseFileCache {
 		l.StartUseFileCache = &DefaultUseFileCacheFlag
+	}
+	if nil == l.PushEmptyProtection {
+		l.PushEmptyProtection = &DefaultPushEmptyProtection
 	}
 	l.Plugin.SetDefault(common.TypeLocalRegistry)
 }
