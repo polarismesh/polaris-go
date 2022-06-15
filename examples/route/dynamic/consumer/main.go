@@ -18,6 +18,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -25,8 +26,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"go.uber.org/zap/buffer"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -89,7 +88,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		}
 		log.Printf("router instances count %d", len(routerInstancesResp.Instances))
 
-		buf := &buffer.Buffer{}
+		buf := &bytes.Buffer{}
 		for i := 0; i < 10; i++ {
 			lbRequest := &polaris.ProcessLoadBalanceRequest{}
 			lbRequest.DstInstances = routerInstancesResp
