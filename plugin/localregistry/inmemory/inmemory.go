@@ -89,6 +89,8 @@ type LocalCache struct {
 	namespaceToPluginValues map[string]*pb.SvcPluginValues
 	// 首次拉取是否使用缓存文件
 	startUseFileCache bool
+	// pushEmptyProtection 实例推空保护开关
+	pushEmptyProtection bool
 	// 缓存文件的有效时间
 	cacheFromPersistAvailableInterval time.Duration
 }
@@ -152,6 +154,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 		return err
 	}
 	g.globalConfig = ctx.Config
+	g.pushEmptyProtection = ctx.Config.GetConsumer().GetLocalCache().GetPushEmptyProtection()
 	g.services = model.HashSet{}
 	g.servicesMutex = &sync.RWMutex{}
 	g.serviceRefreshInterval = ctx.Config.GetConsumer().GetLocalCache().GetServiceRefreshInterval()
