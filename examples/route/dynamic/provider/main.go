@@ -35,6 +35,7 @@ var (
 	namespace string
 	service   string
 	host      string
+	port      int
 	token     string
 	metadata  string
 )
@@ -42,7 +43,7 @@ var (
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "RouteEchoServer", "service")
-
+	flag.IntVar(&port, "port", 8888, "service port")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.StringVar(&metadata, "metadata", "", "key1=value1&key2=value2")
@@ -157,6 +158,7 @@ func main() {
 		namespace: namespace,
 		service:   service,
 		host:      host,
+		port:      port,
 	}
 
 	svr.Run()
