@@ -906,7 +906,7 @@ func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 		}
 	}
 	fmt.Println("-----set1Num", set1Num)
-	c.Assert(math.Abs(600-float64(set1Num)) < 50, check.Equals, true)
+	c.Assert(math.Abs(600-float64(set1Num)) < 100, check.Equals, true)
 }
 
 // TestInboundNoSources 测试inbound no sources
