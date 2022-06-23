@@ -380,6 +380,7 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
+	awaitServerReady(ruleServerIPAddr, ruleServerPort)
 	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
 		Namespace: config.ServerNamespace,
 		Service:   config.ServerMonitorService,
