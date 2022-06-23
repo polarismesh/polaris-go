@@ -15,7 +15,7 @@ global:
     # 服务的定时同步周期
     serverSwitchInterval: 50m
     # 连接超时时间
-    connectTimeout: 10ms
+    connectTimeout: 1s
   statReporter:
     enable: false
 consumer:
