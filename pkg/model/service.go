@@ -779,6 +779,8 @@ type ServiceCallResult struct {
 	RetCode *int32
 	// 必选，被调服务实例获取接口的最大时延
 	Delay *time.Duration
+	// 可选，主调服务实例的服务信息
+	SourceService *ServiceInfo
 }
 
 // RateLimitGauge Rate Limit Gauge
@@ -926,6 +928,22 @@ func (s *ServiceCallResult) SetDelay(duration time.Duration) *ServiceCallResult 
 // GetRetStatus 获取本地调用状态
 func (s *ServiceCallResult) GetRetStatus() RetStatus {
 	return s.RetStatus
+}
+
+// GetCallerService 获取主调服务实例的服务信息
+func (s *ServiceCallResult) GetCallerService() string {
+	if s.SourceService != nil {
+		return s.SourceService.Service
+	}
+	return ""
+}
+
+// GetCallerNamespace 获取主调服务实例的命名空间
+func (s *ServiceCallResult) GetCallerNamespace() string {
+	if s.SourceService != nil {
+		return s.SourceService.Namespace
+	}
+	return ""
 }
 
 // APICallResult sdk api调用结果
