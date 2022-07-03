@@ -234,11 +234,19 @@ var (
 		},
 		CallerNamespace: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
-			return val.GetNamespace()
+			namespace := val.GetCallerNamespace()
+			if namespace != "" {
+				return namespace
+			}
+			return NilValue
 		},
 		CallerService: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
-			return val.GetService()
+			service := val.GetCallerService()
+			if service != "" {
+				return service
+			}
+			return NilValue
 		},
 		CallerIP: func(args interface{}) string {
 			return NilValue

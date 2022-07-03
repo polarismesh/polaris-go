@@ -166,7 +166,7 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 	configuration.Global.ServerConnector.SetServerSwitchInterval(interval)
 	configuration.GetGlobal().GetSystem().GetDiscoverCluster().SetNamespace(config.ServerNamespace)
 	configuration.GetGlobal().GetSystem().GetDiscoverCluster().SetService(config.ServerDiscoverService)
-	configuration.GetGlobal().GetServerConnector().SetConnectTimeout(50 * time.Millisecond)
+	configuration.GetGlobal().GetServerConnector().SetConnectTimeout(1 * time.Second)
 	configuration.GetGlobal().GetServerConnector().SetConnectionIdleTimeout(100 * time.Millisecond)
 	configuration.Global.System.DiscoverCluster.RefreshInterval = model.ToDurationPtr(2 * time.Second)
 	configuration.Consumer.LocalCache.PersistDir = util.BackupDir
