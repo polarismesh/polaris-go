@@ -179,3 +179,12 @@ func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.
 	}
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
+
+func AppendHeaderContextWithRegisterVersion(ctx context.Context, version int) context.Context {
+	switch version {
+	case 2:
+		return metadata.AppendToOutgoingContext(ctx, "async-regis", "true")
+	default:
+		return ctx
+	}
+}

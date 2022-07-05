@@ -18,6 +18,10 @@
 package api
 
 import (
+	"fmt"
+	"sync"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
@@ -25,7 +29,133 @@ import (
 
 // providerAPI 被调者对外接口实现
 type providerAPI struct {
-	context SDKContext
+	context          SDKContext
+	mutex            *sync.Mutex
+	registerStateMap map[string]*registerState
+}
+
+type registerState struct {
+	instance         *InstanceRegisterRequest
+	lastRegisterTime time.Time
+	stoppedchan      chan struct{}
+}
+
+func newRegisterState(instance *InstanceRegisterRequest) *registerState {
+	return &registerState{
+		instance:         instance,
+		lastRegisterTime: time.Now(),
+		stoppedchan:      make(chan struct{}),
+	}
+}
+
+func (c *providerAPI) putRegisterState(instance *InstanceRegisterRequest) (*registerState, bool) {
+	key := buildRegisterKey(instance.Namespace, instance.Service, instance.Host, instance.Port)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	_, ok := c.registerStateMap[key]
+	if !ok {
+		state := newRegisterState(instance)
+		c.registerStateMap[key] = state
+		return state, true
+	}
+	return nil, false
+}
+
+func (c *providerAPI) removeRegisterState(instance *InstanceDeRegisterRequest) (*registerState, bool) {
+	key := buildRegisterKey(instance.Namespace, instance.Service, instance.Host, instance.Port)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	state, ok := c.registerStateMap[key]
+	if ok {
+		delete(c.registerStateMap, key)
+		return state, true
+	}
+	return nil, false
+}
+
+func buildRegisterKey(namespace string, service string, host string, port int) string {
+	return fmt.Sprintf("%s##%s##%s##%d", namespace, service, host, port)
+}
+
+func (c *providerAPI) AsyncRegister(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	instance.SetDefaultAsyncRegister()
+	if err := instance.ValidateAsyncRegister(); err != nil {
+		return nil, err
+	}
+
+	resp, err := c.context.GetEngine().SyncRegister(&instance.InstanceRegisterRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	state, ok := c.putRegisterState(instance)
+	if ok {
+		go c.runAsyncRegisterTask(state)
+	}
+	return resp, nil
+}
+
+func (c *providerAPI) runAsyncRegisterTask(state *registerState) {
+	GetBaseLogger().Infof("async register task started %s", state.instance.String())
+	ticker := time.NewTicker(time.Duration(*state.instance.TTL) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-state.stoppedchan:
+			GetBaseLogger().Infof("async register task stopped %s", state.instance.String())
+			return
+		case <-ticker.C:
+			if err := checkAvailable(c); err != nil {
+				GetBaseLogger().Errorf("async register task abnormal %s", state.instance.String(), err)
+				break
+			}
+			err := c.doHeartbeat(state.instance)
+			if err == nil {
+				break
+			}
+			sdkErr, ok := err.(model.SDKError)
+			if !ok {
+				break
+			}
+			ec := sdkErr.ServerCode()
+			// HeartbeatOnDisabledIns
+			if ec != 400141 {
+				break
+			}
+			minInterval := c.context.GetConfig().GetProvider().GetMinRegisterInterval()
+			now := time.Now()
+			if now.Before(state.lastRegisterTime.Add(minInterval)) {
+				break
+			}
+
+			state.lastRegisterTime = now
+			_, err = c.context.GetEngine().SyncRegister(&state.instance.InstanceRegisterRequest)
+			if err == nil {
+				GetBaseLogger().Infof("re-register instatnce success %s", state.instance.String())
+			} else {
+				GetBaseLogger().Warnf("re-register instatnce failed %s", state.instance.String(), err)
+			}
+		}
+	}
+}
+
+func (c *providerAPI) doHeartbeat(instance *InstanceRegisterRequest) error {
+	hbRequest := &InstanceHeartbeatRequest{}
+	hbRequest.Namespace = instance.Namespace
+	hbRequest.Service = instance.Service
+	hbRequest.Host = instance.Host
+	hbRequest.Port = instance.Port
+	hbRequest.ServiceToken = instance.ServiceToken
+	err := c.context.GetEngine().SyncHeartbeat(&hbRequest.InstanceHeartbeatRequest)
+	if err != nil {
+		GetBaseLogger().Warnf("heartbeat failed %s", instance.String(), err)
+	} else {
+		GetBaseLogger().Debugf("heartbeat success %s", instance.String())
+	}
+	return err
 }
 
 // Register 同步注册服务，服务注册成功后会填充instance中的InstanceId字段
@@ -48,6 +178,12 @@ func (c *providerAPI) Deregister(instance *InstanceDeRegisterRequest) error {
 	if err := instance.Validate(); err != nil {
 		return err
 	}
+
+	state, ok := c.removeRegisterState(instance)
+	if ok {
+		close(state.stoppedchan)
+	}
+
 	return c.context.GetEngine().SyncDeregister(&instance.InstanceDeRegisterRequest)
 }
 
@@ -85,7 +221,7 @@ func newProviderAPIByFile(path string) (ProviderAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &providerAPI{context}, nil
+	return newProviderAPIByContext(context), nil
 }
 
 // NewProviderAPIByConfig 通过配置对象创建SDK ProviderAPI对象
@@ -94,12 +230,12 @@ func newProviderAPIByConfig(cfg config.Configuration) (ProviderAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &providerAPI{context}, nil
+	return newProviderAPIByContext(context), nil
 }
 
 // NewProviderAPIByContext 通过上下文创建SDK ProviderAPI对象
 func newProviderAPIByContext(context SDKContext) ProviderAPI {
-	return &providerAPI{context}
+	return &providerAPI{context, &sync.Mutex{}, map[string]*registerState{}}
 }
 
 // newProviderAPIByDefaultConfigFile 通过系统默认配置文件创建ProviderAPI

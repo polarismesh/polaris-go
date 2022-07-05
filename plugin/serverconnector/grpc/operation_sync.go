@@ -63,6 +63,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
 		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
+	ctx = connector.AppendHeaderContextWithRegisterVersion(ctx, req.RegisterVersion)
 	pbResp, err := namingClient.RegisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
 	if err != nil {
@@ -205,10 +206,10 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 		if serverCodeType == model.ErrCodeServerError {
 			// 当server发生内部错误时，上报调用服务失败
 			g.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
-			return model.NewSDKError(model.ErrCodeServerException, nil, errMsg)
+			return model.NewSDKErrorWithServerInfo(model.ErrCodeServerException, nil, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), errMsg)
 		}
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
-		return model.NewSDKError(model.ErrCodeServerUserError, nil, errMsg)
+		return model.NewSDKErrorWithServerInfo(model.ErrCodeServerUserError, nil, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), errMsg)
 	} else {
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	}

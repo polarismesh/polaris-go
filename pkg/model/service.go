@@ -18,6 +18,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -1175,6 +1176,13 @@ const (
 const (
 	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
+	// DefaultHeartbeatTtl
+	DefaultHeartbeatTtl int = 20
+)
+
+const (
+	// async register version number
+	AsyncRegisterVersion int = 2
 )
 
 // InstanceRegisterRequest 注册服务请求
@@ -1215,6 +1223,9 @@ type InstanceRegisterRequest struct {
 	Timeout *time.Duration
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
+	// optional, specify the register interface version,
+	// e.g. 2 means async-regis
+	RegisterVersion int
 }
 
 // String 打印消息内容
@@ -1252,6 +1263,11 @@ func (g *InstanceRegisterRequest) SetLocation(loc *Location) {
 	g.Location = loc
 }
 
+// SetRegisterVersion specify the register interface version
+func (g *InstanceRegisterRequest) SetRegisterVersion(v int) {
+	g.RegisterVersion = v
+}
+
 // GetTimeoutPtr 获取超时值指针
 func (g *InstanceRegisterRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
@@ -1267,6 +1283,30 @@ func (g *InstanceRegisterRequest) GetLocation() *Location {
 	return g.Location
 }
 
+// GetRegisterVersion get specified register interface version
+func (g *InstanceRegisterRequest) GetRegisterVersion() int {
+	return g.RegisterVersion
+}
+
+// SetDefaultTTL set default ttl
+func (g *InstanceRegisterRequest) SetDefaultAsyncRegister() {
+	if g.TTL == nil {
+		g.SetTTL(DefaultHeartbeatTtl)
+	}
+	g.SetRegisterVersion(AsyncRegisterVersion)
+}
+
+func (g *InstanceRegisterRequest) verifyTTL() error {
+	if g.TTL == nil {
+		return errors.New("InstanceRegisterRequest: heartbeat ttl should be set")
+	}
+	ttl := *g.TTL
+	if ttl <= 0 {
+		return errors.New("InstanceRegisterRequest: heartbeat ttl should be greater than zero")
+	}
+	return nil
+}
+
 // validateMetadata 校验元数据的key是否为空
 func validateMetadata(prefix string, metadata map[string]string) error {
 	if len(metadata) > 0 {
@@ -1275,6 +1315,26 @@ func validateMetadata(prefix string, metadata map[string]string) error {
 				return fmt.Errorf("%s: metadata has empty key", prefix)
 			}
 		}
+	}
+	return nil
+}
+
+// Validate 校验InstanceRegisterRequest
+func (g *InstanceRegisterRequest) ValidateAsyncRegister() error {
+	if err := g.Validate(); err != nil {
+		return err
+	}
+
+	var errs error
+	if err := g.verifyTTL(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
+	if g.RegisterVersion != AsyncRegisterVersion {
+		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: registerVersion should be %d", AsyncRegisterVersion))
+	}
+
+	if errs != nil {
+		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceRegisterRequest: ")
 	}
 	return nil
 }
