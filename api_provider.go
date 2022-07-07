@@ -33,10 +33,10 @@ func (p *providerAPI) SDKContext() api.SDKContext {
 	return p.rawAPI.SDKContext()
 }
 
-// AsyncRegister
-// minimum supported verson of polaris-server is v1.10.0
-func (p *providerAPI) AsyncRegister(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	return p.rawAPI.AsyncRegister((*api.InstanceRegisterRequest)(instance))
+// RegisterInstance
+// minimum supported version of polaris-server is v1.10.0
+func (p *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	return p.rawAPI.RegisterInstance((*api.InstanceRegisterRequest)(instance))
 }
 
 // Register
