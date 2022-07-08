@@ -86,7 +86,7 @@ type Engine interface {
 	SyncGetInstances(req *GetInstancesRequest) (*InstancesResponse, error)
 	// SyncGetAllInstances 同步获取全量服务实例
 	SyncGetAllInstances(req *GetAllInstancesRequest) (*InstancesResponse, error)
-	// AsyncRegister async-regis
+	// SyncRegisterV2 async-regis
 	SyncRegisterV2(Instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
 	// SyncRegister 同步进行服务注册
 	SyncRegister(instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
