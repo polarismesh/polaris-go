@@ -18,11 +18,8 @@
 package flow
 
 import (
-	"time"
-
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -40,67 +37,4 @@ func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFut
 	}
 	e.syncRateLimitReportAndFinalize(commonRequest)
 	return future, err
-}
-
-// AsyncRegister async-regis
-func (e *Engine) AsyncRegister(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	resp, err := e.SyncRegister(request)
-	if err != nil {
-		return nil, err
-	}
-
-	state, ok := e.registerStates.putRegisterState(request)
-	if ok {
-		go e.runAsyncRegisterTask(state)
-	}
-	return resp, nil
-
-}
-
-func (e *Engine) runAsyncRegisterTask(state *registerState) {
-	log.GetBaseLogger().Infof("async register task started %s", state.instance.String())
-	ticker := time.NewTicker(time.Duration(*state.instance.TTL) * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-state.stoppedchan:
-			log.GetBaseLogger().Infof("async register task stopped %s", state.instance.String())
-			return
-		case <-ticker.C:
-			hbReq := &model.InstanceHeartbeatRequest{
-				Namespace:    state.instance.Namespace,
-				Service:      state.instance.Service,
-				Host:         state.instance.Host,
-				Port:         state.instance.Port,
-				ServiceToken: state.instance.ServiceToken,
-			}
-			err := e.SyncHeartbeat(hbReq)
-			if err == nil {
-				log.GetBaseLogger().Debugf("heartbeat success %s", state.instance.String())
-				break
-			}
-			sdkErr, ok := err.(model.SDKError)
-			if !ok {
-				break
-			}
-			ec := sdkErr.ServerCode()
-			// HeartbeatOnDisabledIns
-			if ec != 400141 {
-				break
-			}
-			minInterval := e.configuration.GetProvider().GetMinRegisterInterval()
-			now := time.Now()
-			if now.Before(state.lastRegisterTime.Add(minInterval)) {
-				break
-			}
-
-			state.lastRegisterTime = now
-			_, err = e.SyncRegister(state.instance)
-			if err == nil {
-				log.GetBaseLogger().Infof("re-register instatnce success %s", state.instance.String())
-			} else {
-				log.GetBaseLogger().Warnf("re-register instatnce failed %s", state.instance.String(), err)
-			}
-		}
-	}
 }

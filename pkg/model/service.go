@@ -1225,7 +1225,7 @@ type InstanceRegisterRequest struct {
 	RetryCount *int
 	// optional, specify the register interface version,
 	// e.g. 2 means async-regis
-	RegisterVersion int
+	registerVersion int
 }
 
 // String 打印消息内容
@@ -1263,9 +1263,9 @@ func (g *InstanceRegisterRequest) SetLocation(loc *Location) {
 	g.Location = loc
 }
 
-// SetRegisterVersion specify the register interface version
-func (g *InstanceRegisterRequest) SetRegisterVersion(v int) {
-	g.RegisterVersion = v
+// setRegisterVersion specify the register interface version
+func (g *InstanceRegisterRequest) setRegisterVersion(v int) {
+	g.registerVersion = v
 }
 
 // GetTimeoutPtr 获取超时值指针
@@ -1285,7 +1285,7 @@ func (g *InstanceRegisterRequest) GetLocation() *Location {
 
 // GetRegisterVersion get specified register interface version
 func (g *InstanceRegisterRequest) GetRegisterVersion() int {
-	return g.RegisterVersion
+	return g.registerVersion
 }
 
 // SetDefaultTTL set default ttl
@@ -1293,7 +1293,7 @@ func (g *InstanceRegisterRequest) SetDefaultAsyncRegister() {
 	if g.TTL == nil {
 		g.SetTTL(DefaultHeartbeatTtl)
 	}
-	g.SetRegisterVersion(AsyncRegisterVersion)
+	g.setRegisterVersion(AsyncRegisterVersion)
 }
 
 func (g *InstanceRegisterRequest) verifyTTL() error {
@@ -1329,7 +1329,7 @@ func (g *InstanceRegisterRequest) ValidateAsyncRegister() error {
 	if err := g.verifyTTL(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	if g.RegisterVersion != AsyncRegisterVersion {
+	if g.registerVersion != AsyncRegisterVersion {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: registerVersion should be %d", AsyncRegisterVersion))
 	}
 

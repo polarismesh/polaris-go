@@ -63,7 +63,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
 		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
-	ctx = connector.AppendHeaderContextWithRegisterVersion(ctx, req.RegisterVersion)
+	ctx = connector.AppendHeaderContextWithRegisterVersion(ctx, req.GetRegisterVersion())
 	pbResp, err := namingClient.RegisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
 	if err != nil {

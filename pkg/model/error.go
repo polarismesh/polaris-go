@@ -170,12 +170,11 @@ func NewSDKError(errCode ErrCode, cause error, msg string, args ...interface{}) 
 		cause:     cause}
 }
 
-// NewSDKError SDK错误相关的类构建器
+// NewSDKErrorWithServerInfo SDK错误相关的类构建器
 func NewSDKErrorWithServerInfo(errCode ErrCode, cause error, serverCode uint32, serverInfo string, msg string, args ...interface{}) SDKError {
-	var errDetail = fmt.Sprintf(msg, args...)
 	return &sdkError{
 		errCode:    errCode,
-		errDetail:  errDetail,
+		errDetail:  fmt.Sprintf(msg, args...),
 		cause:      cause,
 		serverCode: serverCode,
 		serverInfo: serverInfo,

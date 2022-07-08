@@ -371,10 +371,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 
 // SyncDeregister 同步进行服务反注册
 func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error {
-	state, ok := e.registerStates.removeRegisterState(instance)
-	if ok {
-		close(state.stoppedchan)
-	}
+	e.registerStates.removeRegisterState(instance)
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{

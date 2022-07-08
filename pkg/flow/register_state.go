@@ -53,23 +53,26 @@ func (c *registerStates) putRegisterState(instance *model.InstanceRegisterReques
 	defer c.mu.Unlock()
 	_, ok := c.states[key]
 	if !ok {
-		state := &registerState{instance, time.Now(), make(chan struct{})}
+		state := &registerState{
+			instance:         instance,
+			lastRegisterTime: time.Now(),
+			stoppedchan:      make(chan struct{}),
+		}
 		c.states[key] = state
 		return state, true
 	}
 	return nil, false
 }
 
-func (c *registerStates) removeRegisterState(instance *model.InstanceDeRegisterRequest) (*registerState, bool) {
+func (c *registerStates) removeRegisterState(instance *model.InstanceDeRegisterRequest) {
 	key := buildRegisterStateKey(instance.Namespace, instance.Service, instance.Host, instance.Port)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	state, ok := c.states[key]
 	if ok {
+		close(state.stoppedchan)
 		delete(c.states, key)
-		return state, true
 	}
-	return nil, false
 }
 
 func buildRegisterStateKey(namespace string, service string, host string, port int) string {

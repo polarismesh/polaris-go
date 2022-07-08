@@ -37,7 +37,7 @@ func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*mode
 		return nil, err
 	}
 
-	return c.context.GetEngine().AsyncRegister(&instance.InstanceRegisterRequest)
+	return c.context.GetEngine().SyncRegisterV2(&instance.InstanceRegisterRequest)
 }
 
 // Register 同步注册服务，服务注册成功后会填充instance中的InstanceId字段
