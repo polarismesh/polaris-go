@@ -18,7 +18,6 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -1263,8 +1262,8 @@ func (g *InstanceRegisterRequest) SetLocation(loc *Location) {
 	g.Location = loc
 }
 
-// setRegisterVersion specify the register interface version
-func (g *InstanceRegisterRequest) setRegisterVersion(v int) {
+// SetRegisterVersion specify the register interface version
+func (g *InstanceRegisterRequest) SetRegisterVersion(v int) {
 	g.registerVersion = v
 }
 
@@ -1289,22 +1288,10 @@ func (g *InstanceRegisterRequest) GetRegisterVersion() int {
 }
 
 // SetDefaultTTL set default ttl
-func (g *InstanceRegisterRequest) SetDefaultAsyncRegister() {
+func (g *InstanceRegisterRequest) SetDefaultTTL() {
 	if g.TTL == nil {
 		g.SetTTL(DefaultHeartbeatTtl)
 	}
-	g.setRegisterVersion(AsyncRegisterVersion)
-}
-
-func (g *InstanceRegisterRequest) verifyTTL() error {
-	if g.TTL == nil {
-		return errors.New("InstanceRegisterRequest: heartbeat ttl should be set")
-	}
-	ttl := *g.TTL
-	if ttl <= 0 {
-		return errors.New("InstanceRegisterRequest: heartbeat ttl should be greater than zero")
-	}
-	return nil
 }
 
 // validateMetadata 校验元数据的key是否为空
@@ -1315,26 +1302,6 @@ func validateMetadata(prefix string, metadata map[string]string) error {
 				return fmt.Errorf("%s: metadata has empty key", prefix)
 			}
 		}
-	}
-	return nil
-}
-
-// Validate 校验InstanceRegisterRequest
-func (g *InstanceRegisterRequest) ValidateAsyncRegister() error {
-	if err := g.Validate(); err != nil {
-		return err
-	}
-
-	var errs error
-	if err := g.verifyTTL(); err != nil {
-		errs = multierror.Append(errs, err)
-	}
-	if g.registerVersion != AsyncRegisterVersion {
-		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: registerVersion should be %d", AsyncRegisterVersion))
-	}
-
-	if errs != nil {
-		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "fail to validate InstanceRegisterRequest: ")
 	}
 	return nil
 }
@@ -1364,6 +1331,9 @@ func (g *InstanceRegisterRequest) Validate() error {
 	if nil != g.Priority && (*g.Priority < MinPriority || *g.Priority > MaxPriority) {
 		errs = multierror.Append(errs,
 			fmt.Errorf("InstanceRegisterRequest: priority should be in range [%d, %d]", MinPriority, MaxPriority))
+	}
+	if g.TTL != nil && *g.TTL <= 0 {
+		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: heartbeat ttl should be greater than zero"))
 	}
 	var err error
 	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); err != nil {

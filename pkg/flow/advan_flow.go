@@ -30,6 +30,9 @@ const (
 
 // SyncRegisterV2 async-regis
 func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	request.SetDefaultTTL()
+	request.SetRegisterVersion(model.AsyncRegisterVersion)
+
 	resp, err := e.SyncRegister(request)
 	if err != nil {
 		return nil, err
@@ -44,27 +47,33 @@ func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.
 }
 
 func (e *Engine) runHeartbeat(state *registerState) {
-	log.GetBaseLogger().Infof("async register task started %s", state.instance.String())
-	ticker := time.NewTicker(time.Duration(*state.instance.TTL) * time.Second)
+	instance := state.instance
+	log.GetBaseLogger().Infof("async register task started {%s, %s, %s:%d}",
+		instance.Namespace, instance.Service, instance.Host, instance.Port)
+	ticker := time.NewTicker(time.Duration(*instance.TTL) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-state.stoppedchan:
-			log.GetBaseLogger().Infof("async register task stopped %s", state.instance.String())
+			log.GetBaseLogger().Infof("async register task stopped {%s, %s, %s:%d}",
+				instance.Namespace, instance.Service, instance.Host, instance.Port)
 			return
 		case <-ticker.C:
 			hbReq := &model.InstanceHeartbeatRequest{
-				Namespace:    state.instance.Namespace,
-				Service:      state.instance.Service,
-				Host:         state.instance.Host,
-				Port:         state.instance.Port,
-				ServiceToken: state.instance.ServiceToken,
+				Namespace:    instance.Namespace,
+				Service:      instance.Service,
+				Host:         instance.Host,
+				Port:         instance.Port,
+				ServiceToken: instance.ServiceToken,
 			}
 			err := e.SyncHeartbeat(hbReq)
 			if err == nil {
-				log.GetBaseLogger().Debugf("heartbeat success %s", state.instance.String())
+				log.GetBaseLogger().Debugf("heartbeat success {%s, %s, %s:%d}",
+					instance.Namespace, instance.Service, instance.Host, instance.Port)
 				break
 			}
+			log.GetBaseLogger().Errorf("heartbeat failed {%s, %s, %s:%d}",
+				instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 			sdkErr, ok := err.(model.SDKError)
 			if !ok {
 				break
@@ -79,11 +88,13 @@ func (e *Engine) runHeartbeat(state *registerState) {
 			}
 
 			state.lastRegisterTime = time.Now()
-			_, err = e.SyncRegister(state.instance)
+			_, err = e.SyncRegister(instance)
 			if err == nil {
-				log.GetBaseLogger().Infof("re-register instatnce success %s", state.instance.String())
+				log.GetBaseLogger().Infof("re-register instatnce success {%s, %s, %s:%d}",
+					instance.Namespace, instance.Service, instance.Host, instance.Port)
 			} else {
-				log.GetBaseLogger().Warnf("re-register instatnce failed %s", state.instance.String(), err)
+				log.GetBaseLogger().Warnf("re-register instatnce failed {%s, %s, %s:%d}",
+					instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 			}
 		}
 	}

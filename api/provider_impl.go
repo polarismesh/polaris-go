@@ -32,11 +32,9 @@ func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*mode
 	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
-	instance.SetDefaultAsyncRegister()
-	if err := instance.ValidateAsyncRegister(); err != nil {
+	if err := instance.Validate(); err != nil {
 		return nil, err
 	}
-
 	return c.context.GetEngine().SyncRegisterV2(&instance.InstanceRegisterRequest)
 }
 
