@@ -36,7 +36,7 @@ import (
 )
 
 // RegisterInstance 同步注册服务
-func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error) {
 	var err error
 	if err = g.waitDiscoverReady(); err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 	defer conn.Release(opKey)
 	namingClient := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+	ctx, cancel := connector.CreateHeaderContext(*req.Timeout, connector.AppendHeaderWithReqId(header, reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -63,7 +63,6 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest) (*model
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
 		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
-	ctx = connector.AppendHeaderContextWithRegisterVersion(ctx, req.GetRegisterVersion())
 	pbResp, err := namingClient.RegisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
 	if err != nil {

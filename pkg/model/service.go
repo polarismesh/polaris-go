@@ -1179,11 +1179,6 @@ const (
 	DefaultHeartbeatTtl int = 20
 )
 
-const (
-	// async register version number
-	AsyncRegisterVersion int = 2
-)
-
 // InstanceRegisterRequest 注册服务请求
 type InstanceRegisterRequest struct {
 	// 必选，服务名
@@ -1222,9 +1217,6 @@ type InstanceRegisterRequest struct {
 	Timeout *time.Duration
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
-	// optional, specify the register interface version,
-	// e.g. 2 means async-regis
-	registerVersion int
 }
 
 // String 打印消息内容
@@ -1262,11 +1254,6 @@ func (g *InstanceRegisterRequest) SetLocation(loc *Location) {
 	g.Location = loc
 }
 
-// SetRegisterVersion specify the register interface version
-func (g *InstanceRegisterRequest) SetRegisterVersion(v int) {
-	g.registerVersion = v
-}
-
 // GetTimeoutPtr 获取超时值指针
 func (g *InstanceRegisterRequest) GetTimeoutPtr() *time.Duration {
 	return g.Timeout
@@ -1280,11 +1267,6 @@ func (g *InstanceRegisterRequest) GetRetryCountPtr() *int {
 // GetLocation 获取实例的地址信息
 func (g *InstanceRegisterRequest) GetLocation() *Location {
 	return g.Location
-}
-
-// GetRegisterVersion get specified register interface version
-func (g *InstanceRegisterRequest) GetRegisterVersion() int {
-	return g.registerVersion
 }
 
 // SetDefaultTTL set default ttl

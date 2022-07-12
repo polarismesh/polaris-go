@@ -180,11 +180,11 @@ func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
 
-func AppendHeaderContextWithRegisterVersion(ctx context.Context, version int) context.Context {
-	switch version {
-	case 2:
-		return metadata.AppendToOutgoingContext(ctx, "async-regis", "true")
-	default:
-		return ctx
+func AppendHeaderWithReqId(header map[string]string, reqID string) map[string]string {
+	m := make(map[string]string, len(header)+1)
+	for k, v := range header {
+		m[k] = v
 	}
+	m[headerRequestID] = reqID
+	return m
 }

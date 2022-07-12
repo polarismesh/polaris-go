@@ -337,6 +337,11 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 
 // SyncRegister 同步进行服务注册
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	return e.doSyncRegister(instance, nil)
+}
+
+// doSyncRegister 同步进行服务注册
+func (e *Engine) doSyncRegister(instance *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error) {
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{
@@ -358,7 +363,7 @@ func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.I
 	}
 
 	resp, err := data.RetrySyncCall("register", &svcKey, instance, func(request interface{}) (interface{}, error) {
-		return e.connector.RegisterInstance(request.(*model.InstanceRegisterRequest))
+		return e.connector.RegisterInstance(request.(*model.InstanceRegisterRequest), header)
 	}, param)
 	consumeTime := e.globalCtx.Since(startTime)
 	if err != nil {

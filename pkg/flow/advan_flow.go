@@ -26,14 +26,16 @@ import (
 
 const (
 	ErrorCode_HeartbeartOnDisable = 400141
+
+	HEADER_KEY_ASYNC_REGIS   = "async-regis"
+	HEADER_VALUE_ASYNC_REGIS = "true"
 )
 
 // SyncRegisterV2 async-regis
 func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	request.SetDefaultTTL()
-	request.SetRegisterVersion(model.AsyncRegisterVersion)
 
-	resp, err := e.SyncRegister(request)
+	resp, err := e.doSyncRegister(request, createRegisterV2Header())
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +50,14 @@ func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.
 
 func (e *Engine) runHeartbeat(state *registerState) {
 	instance := state.instance
-	log.GetBaseLogger().Infof("async register task started {%s, %s, %s:%d}",
+	log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task started {%s, %s, %s:%d}",
 		instance.Namespace, instance.Service, instance.Host, instance.Port)
 	ticker := time.NewTicker(time.Duration(*instance.TTL) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-state.stoppedchan:
-			log.GetBaseLogger().Infof("async register task stopped {%s, %s, %s:%d}",
+			log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task stopped {%s, %s, %s:%d}",
 				instance.Namespace, instance.Service, instance.Host, instance.Port)
 			return
 		case <-ticker.C:
@@ -88,7 +90,7 @@ func (e *Engine) runHeartbeat(state *registerState) {
 			}
 
 			state.lastRegisterTime = time.Now()
-			_, err = e.SyncRegister(instance)
+			_, err = e.doSyncRegister(instance, createRegisterV2Header())
 			if err == nil {
 				log.GetBaseLogger().Infof("re-register instatnce success {%s, %s, %s:%d}",
 					instance.Namespace, instance.Service, instance.Host, instance.Port)
@@ -98,4 +100,11 @@ func (e *Engine) runHeartbeat(state *registerState) {
 			}
 		}
 	}
+}
+
+func createRegisterV2Header() map[string]string {
+	header := map[string]string{
+		HEADER_KEY_ASYNC_REGIS: HEADER_VALUE_ASYNC_REGIS,
+	}
+	return header
 }
