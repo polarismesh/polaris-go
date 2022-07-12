@@ -153,6 +153,7 @@ func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
+	awaitServerReady(srIPAddr, srPort)
 	var err error
 	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mocksvr, model.ServiceKey{
 		Namespace: config.ServerNamespace,
@@ -164,6 +165,18 @@ func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	})
 	if err != nil {
 		log.Fatalf("fail to setup monitor, err %v", err)
+	}
+}
+
+func awaitServerReady(ip string, port int) {
+	for {
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			fmt.Printf("dial mock server failed, err: %v\n", err)
+		} else {
+			conn.Close()
+			break
+		}
 	}
 }
 
