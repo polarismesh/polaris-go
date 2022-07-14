@@ -32,18 +32,14 @@ var (
 		model.EventInstances:    namingpb.DiscoverRequest_INSTANCE,
 		model.EventRouting:      namingpb.DiscoverRequest_ROUTING,
 		model.EventRateLimiting: namingpb.DiscoverRequest_RATE_LIMIT,
-		model.EventMeshConfig:   namingpb.DiscoverRequest_MESH_CONFIG,
-		model.EventMesh:         namingpb.DiscoverRequest_MESH,
 		model.EventServices:     namingpb.DiscoverRequest_SERVICES,
 	}
 
 	protoRespTypeToEventType = map[namingpb.DiscoverResponse_DiscoverResponseType]model.EventType{
-		namingpb.DiscoverResponse_INSTANCE:    model.EventInstances,
-		namingpb.DiscoverResponse_ROUTING:     model.EventRouting,
-		namingpb.DiscoverResponse_RATE_LIMIT:  model.EventRateLimiting,
-		namingpb.DiscoverResponse_MESH_CONFIG: model.EventMeshConfig,
-		namingpb.DiscoverResponse_MESH:        model.EventMesh,
-		namingpb.DiscoverResponse_SERVICES:    model.EventServices,
+		namingpb.DiscoverResponse_INSTANCE:   model.EventInstances,
+		namingpb.DiscoverResponse_ROUTING:    model.EventRouting,
+		namingpb.DiscoverResponse_RATE_LIMIT: model.EventRateLimiting,
+		namingpb.DiscoverResponse_SERVICES:   model.EventServices,
 	}
 )
 

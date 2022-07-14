@@ -52,18 +52,6 @@ func (e *Engine) syncRuleReportAndFinalize(commonRequest *data.CommonRuleRequest
 	data.PoolPutCommonRuleRequest(commonRequest)
 }
 
-func (e *Engine) syncMeshConfigAndFinalize(commonRequest *data.MeshConfigRequest) {
-	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
-	data.PoolPutMeshConfigRequest(commonRequest)
-}
-
-func (e *Engine) syncMeshAndFinalize(commonRequest *data.MeshRequest) {
-	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
-	data.PoolPutMeshRequest(commonRequest)
-}
-
 func (e *Engine) syncServicesAndFinalize(commonRequest *data.ServicesRequest) {
 	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
@@ -498,46 +486,6 @@ func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.
 		return nil, err
 	}
 	return commonRequest.BuildServicesResponse(commonRequest.GetServices()), nil
-}
-
-// SyncGetMeshConfig 获取mesh配置
-func (e *Engine) SyncGetMeshConfig(eventType model.EventType,
-	req *model.GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
-	// 方法开始时间
-	commonRequest := data.PoolGetMeshConfigRequest()
-	commonRequest.InitByGetRuleRequest(eventType, req, e.configuration)
-	resp, err := e.doSyncGetMeshConfig(commonRequest)
-	e.syncMeshConfigAndFinalize(commonRequest)
-	return resp, err
-}
-
-func (e *Engine) doSyncGetMeshConfig(commonRequest *data.MeshConfigRequest) (
-	*model.MeshConfigResponse, error) {
-	err := e.SyncGetResources(commonRequest)
-	if err != nil {
-		return nil, err
-	}
-	return commonRequest.BuildMeshConfigResponse(commonRequest.GetMeshConfig()), nil
-}
-
-// SyncGetMesh 同步获取网格
-func (e *Engine) SyncGetMesh(eventType model.EventType,
-	req *model.GetMeshRequest) (*model.MeshResponse, error) {
-	// 方法开始时间
-	commonRequest := data.PoolGetMeshRequest()
-	commonRequest.InitByGetMeshRequest(eventType, req, e.configuration)
-	resp, err := e.doSyncGetMesh(commonRequest)
-	e.syncMeshAndFinalize(commonRequest)
-	return resp, err
-}
-
-func (e *Engine) doSyncGetMesh(commonRequest *data.MeshRequest) (
-	*model.MeshResponse, error) {
-	err := e.SyncGetResources(commonRequest)
-	if err != nil {
-		return nil, err
-	}
-	return commonRequest.BuildMeshResponse(commonRequest.GetMesh()), nil
 }
 
 // SyncGetServiceRule 同步获取服务规则

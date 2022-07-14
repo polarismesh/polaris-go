@@ -309,10 +309,6 @@ func discoverResponseToEvent(resp *namingpb.DiscoverResponse,
 		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
 		svcEvent.Error = model.NewSDKError(model.ErrCodeServiceNotFound, nil,
 			"service %s not found", svcEvent.ServiceEventKey)
-	} else if retCode == namingpb.NotFoundMeshConfig {
-		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
-		svcEvent.Error = model.NewSDKError(model.ErrCodeMeshConfigNotFound, nil,
-			"meshconfig %s not found", svcEvent.ServiceEventKey)
 	} else {
 		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
 		svcEvent.Error = model.NewServerSDKError(retCode,
@@ -895,11 +891,6 @@ func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
 			Namespace: &wrappers.StringValue{Value: s.Namespace},
 			Revision:  &wrappers.StringValue{Value: s.handler.GetRevision()},
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
-		},
-		// 网格请求
-		MeshConfig: s.handler.GetMeshConfig(),
-		Mesh: &namingpb.Mesh{
-			Id: &wrappers.StringValue{Value: s.Service},
 		},
 	}
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {

@@ -18,12 +18,10 @@
 package inmemory
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
@@ -225,9 +223,6 @@ func (s *CacheObject) LoadValue(updateVisitTime bool) interface{} {
 		if s.serviceValueKey.Type == model.EventRateLimiting {
 			eventObject.DiffInfo = calcRateLimitDiffInfo(nil, extractRateLimitFromCacheValue(value))
 		}
-		if s.serviceValueKey.Type == model.EventMeshConfig {
-			eventObject.DiffInfo = s.calcMeshResourceDiffInfo(nil, extractMeshConfigFromCacheValue(value))
-		}
 		s.notifyServiceAdded(eventObject)
 	}
 	return value
@@ -260,15 +255,11 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 		// 收取消息有出错
 		instancesValue := s.LoadValue(false)
 		// 没有服务信息直接删除
-		if atomic.CompareAndSwapUint32(&s.hasDeleted, 0, 1) &&
-			(model.ErrCodeServiceNotFound == err.ErrorCode() || model.ErrCodeMeshConfigNotFound == err.ErrorCode()) {
+		if atomic.CompareAndSwapUint32(&s.hasDeleted, 0, 1) && model.ErrCodeServiceNotFound == err.ErrorCode() {
 			s.Handler.OnEventDeleted(svcEventKey, instancesValue)
 			eventObject := &common.ServiceEventObject{SvcEventKey: *svcEventKey, OldValue: instancesValue}
 			if svcEventKey.Type == model.EventRateLimiting {
 				eventObject.DiffInfo = calcRateLimitDiffInfo(extractRateLimitFromCacheValue(instancesValue), nil)
-			}
-			if svcEventKey.Type == model.EventMeshConfig {
-				eventObject.DiffInfo = s.calcMeshResourceDiffInfo(extractMeshConfigFromCacheValue(instancesValue), nil)
 			}
 			deleteHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceDeleted)
 			if !reflect2.IsNil(instancesValue) && len(deleteHandlers) > 0 {
@@ -302,10 +293,6 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 				eventObject.DiffInfo = calcRateLimitDiffInfo(extractRateLimitFromCacheValue(cachedValue),
 					extractRateLimitFromCacheValue(cacheValue))
 			}
-			if svcEventKey.Type == model.EventMeshConfig {
-				eventObject.DiffInfo = s.calcMeshResourceDiffInfo(extractMeshConfigFromCacheValue(cachedValue),
-					extractMeshConfigFromCacheValue(cacheValue))
-			}
 			updateHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceUpdated)
 			// 更新后的cacheValue不会为空
 			if cachedStatus == CacheChanged && len(updateHandlers) > 0 {
@@ -323,10 +310,6 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 				atomic.StoreInt32(&cachedValue.(*pb.ServiceInstancesInProto).CacheLoaded, 0)
 			case model.EventRouting:
 				atomic.StoreInt32(&cachedValue.(*pb.ServiceRuleInProto).CacheLoaded, 0)
-			case model.EventMeshConfig:
-				atomic.StoreInt32(&cachedValue.(*pb.MeshConfigProto).CacheLoaded, 0)
-			case model.EventMesh:
-				atomic.StoreInt32(&cachedValue.(*pb.MeshProto).CacheLoaded, 0)
 			}
 		}
 	}
@@ -340,14 +323,6 @@ func extractRateLimitFromCacheValue(cacheValue interface{}) *namingpb.RateLimit 
 		return nil
 	}
 	return cacheValue.(model.ServiceRule).GetValue().(*namingpb.RateLimit)
-}
-
-// 从缓存的值中提取namingpb.MeshConfig网格规则
-func extractMeshConfigFromCacheValue(cacheValue interface{}) *namingpb.MeshConfig {
-	if reflect2.IsNil(cacheValue) {
-		return nil
-	}
-	return cacheValue.(model.MeshConfig).GetValue().(*namingpb.MeshConfig)
 }
 
 // 计算新旧限流规则的变化信息
@@ -382,41 +357,6 @@ func calcRateLimitDiffInfo(oldRule *namingpb.RateLimit, newRule *namingpb.RateLi
 	}
 }
 
-// 计算新旧网格规则的变化信息
-func (s *CacheObject) calcMeshResourceDiffInfo(oldResource *namingpb.MeshConfig,
-	newResource *namingpb.MeshConfig) *common.MeshResourceDiffInfo {
-	updatedResources := make(map[string]*common.RevisionChange)
-	deletedResources := make(map[string]string)
-	if newResource != nil {
-		for _, resource := range newResource.GetResources() {
-			updatedResources[resource.GetName().GetValue()] = &common.RevisionChange{
-				OldRevision: "",
-				NewRevision: resource.GetRevision().GetValue(),
-			}
-		}
-	}
-	if oldResource != nil {
-		for _, resource := range oldResource.GetResources() {
-			newRevision, ok := updatedResources[resource.GetName().GetValue()]
-			if !ok {
-				deletedResources[resource.GetName().GetValue()] = resource.GetRevision().GetValue()
-			} else {
-				if newRevision.NewRevision == resource.GetRevision().GetValue() {
-					delete(updatedResources, resource.GetName().GetValue())
-				} else {
-					newRevision.OldRevision = resource.GetRevision().GetValue()
-				}
-			}
-		}
-	}
-	return &common.MeshResourceDiffInfo{
-		MeshID:           s.GetMeshConfig().GetMeshId().GetValue(),
-		ResourceType:     s.GetMeshResource(),
-		UpdatedResources: updatedResources,
-		DeletedResources: deletedResources,
-	}
-}
-
 // GetRevision 获取服务对象的版本号
 func (s *CacheObject) GetRevision() string {
 	value := s.LoadValue(false)
@@ -446,34 +386,6 @@ func (s *CacheObject) SetValue(cacheValue model.RegistryValue) bool {
 		"CacheObject: value for %s is updated, revision %s", *s.serviceValueKey, cacheValue.GetRevision())
 
 	return true
-}
-
-// GetMeshResource 获取网格资源类型
-func (s *CacheObject) GetMeshResource() *namingpb.MeshResource {
-	meshinfos := strings.Split(s.serviceValueKey.Service, model.MeshKeySpliter)
-	out := &namingpb.MeshResource{}
-	if s.serviceValueKey.Type == model.EventMeshConfig && len(meshinfos) ==
-		model.MeshKeyLen && meshinfos[0] == model.MeshPrefix {
-		out.MeshName = &wrappers.StringValue{Value: meshinfos[1]}
-		out.TypeUrl = &wrappers.StringValue{Value: meshinfos[2]}
-		out.Revision = &wrappers.StringValue{Value: s.GetRevision()}
-		log.GetBaseLogger().Debugf("(s *CacheObject) GetMeshResource", meshinfos, out)
-	}
-	return out
-}
-
-// GetMeshConfig 获取网格配置
-func (s *CacheObject) GetMeshConfig() *namingpb.MeshConfig {
-	meshinfos := strings.Split(s.serviceValueKey.Service, model.MeshKeySpliter)
-	out := &namingpb.MeshConfig{}
-	if s.serviceValueKey.Type == model.EventMeshConfig && len(meshinfos) ==
-		model.MeshKeyLen && meshinfos[0] == model.MeshPrefix {
-		out.MeshId = &wrappers.StringValue{Value: meshinfos[1]}
-		out.TypeUrl = &wrappers.StringValue{Value: meshinfos[2]}
-		out.Revision = &wrappers.StringValue{Value: s.GetRevision()}
-		log.GetBaseLogger().Infof("(s *CacheObject) GetMeshConfig", meshinfos, out)
-	}
-	return out
 }
 
 // GetBusiness 获取业务类型
