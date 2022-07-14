@@ -530,14 +530,6 @@ func (g *GetServicesRequest) GetRetryCountPtr() *int {
 // Validate 验证请求参数
 func (g *GetServicesRequest) Validate() error {
 	var errs error
-	if g.EnableBusiness && len(g.Business) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("enablebusiness but none"))
-		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
-	}
-	if !g.EnableBusiness && len(g.Metadata) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("metadata empty"))
-		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
-	}
 	return nil
 }
 
