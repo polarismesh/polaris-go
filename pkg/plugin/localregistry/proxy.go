@@ -55,21 +55,9 @@ func (p *Proxy) PersistMessage(file string, msg proto.Message) error {
 	return err
 }
 
-// func (p *Proxy) LoadPersistedMessage(file string, msg proto.Message) error {
-//	err := p.LocalRegistry.LoadPersistedMessage(file, msg)
-//	stat.ReportPluginStat(p, p.engine, stat.MethodLoadPersistedMessage, err)
-//	return err
-// }
-
 // LoadServiceRouteRule proxy LocalRegistry LoadServiceRouteRule
 func (p *Proxy) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error) {
 	result, err := p.LocalRegistry.LoadServiceRouteRule(key)
-	return result, err
-}
-
-// LoadMeshConfig 加载网格规则
-func (p *Proxy) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error) {
-	result, err := p.LocalRegistry.LoadMeshConfig(key)
 	return result, err
 }
 

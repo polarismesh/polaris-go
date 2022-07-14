@@ -41,7 +41,6 @@ const (
 	MethodLoadPersistedMessage
 	MethodGetServiceRouteRule
 	MethodLoadServiceRouteRule
-	MethodLoadMeshConfig
 	MethodGetServiceRateLimitRule
 	MethodLoadServiceRateLimitRule
 	MethodDetectInstance
@@ -76,7 +75,6 @@ var methodMap = map[PluginAPI]string{
 	MethodLoadPersistedMessage:        "LoadPersistedMessage",
 	MethodGetServiceRouteRule:         "GetServiceRouteRule",
 	MethodLoadServiceRouteRule:        "LoadServiceRouteRule",
-	MethodLoadMeshConfig:              "LoadMeshConfig",
 	MethodGetServiceRateLimitRule:     "GetServiceRateLimitRule",
 	MethodLoadServiceRateLimitRule:    "LoadServiceRateLimitRule",
 	MethodDetectInstance:              "DetectInstance",

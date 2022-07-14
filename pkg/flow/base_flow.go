@@ -188,53 +188,21 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			notifiers = append(notifiers, NewSingleNotifyContext(dstRateLimitKey, notifier))
 		}
 	}
-	if trigger.EnableMeshConfig {
-		meshconfig := registry.GetMeshConfig(dstService, false)
-		if meshconfig.IsInitialized() {
-			request.SetMeshConfig(meshconfig)
-			log.GetBaseLogger().Debugf("Mesh config IsInitialized")
-			trigger.EnableMeshConfig = false
-		} else {
-			dstMeshConfigKey := &ContextKey{ServiceKey: dstService, Operation: keyDstMeshConfig}
-			log.GetBaseLogger().Debugf("Mesh value not initialized, scheduled context %s", dstMeshConfigKey)
-			notifier, err := registry.LoadMeshConfig(dstService)
-			if err != nil {
-				return nil, err.(model.SDKError)
-			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshConfigKey, notifier))
-		}
-	}
-	if trigger.EnableMesh {
-		mesh := registry.GetMesh(dstService, false)
-		if mesh.IsInitialized() {
-			request.SetMeshConfig(mesh)
-			log.GetBaseLogger().Debugf("Mesh IsInitialized")
-			trigger.EnableMesh = false
-		} else {
-			dstMeshKey := &ContextKey{ServiceKey: dstService, Operation: keyDstMesh}
-			log.GetBaseLogger().Debugf("Mesh value not initialized, scheduled context %s", dstMeshKey)
-			notifier, err := registry.LoadMesh(dstService)
-			if err != nil {
-				return nil, err.(model.SDKError)
-			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshKey, notifier))
-		}
-	}
 	if trigger.EnableServices {
 		services := registry.GetServicesByMeta(dstService, false)
 		if services.IsInitialized() {
 			// 复用接口
-			request.SetMeshConfig(services)
+			request.SetServices(services)
 			log.GetBaseLogger().Debugf("services by meta IsInitialized")
 			trigger.EnableServices = false
 		} else {
-			dstMeshConfigKey := &ContextKey{ServiceKey: dstService, Operation: keyDstServices}
-			log.GetBaseLogger().Debugf("services value not initialized, scheduled context %s", dstMeshConfigKey)
+			dstServicesKey := &ContextKey{ServiceKey: dstService, Operation: keyDstServices}
+			log.GetBaseLogger().Debugf("services value not initialized, scheduled context %s", dstServicesKey)
 			notifier, err := registry.LoadServices(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstMeshConfigKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstServicesKey, notifier))
 		}
 	}
 	// 构造远程获取的复合上下文
@@ -304,21 +272,6 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 			failNum++
 		}
 	}
-	if trigger.EnableMeshConfig {
-		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache meshconfig")
-		_, err := registry.LoadMeshConfig(dstService)
-		if err != nil {
-			return false, err.(model.SDKError)
-		}
-		mc := registry.GetMeshConfig(dstService, true)
-		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache mc:", mc)
-		if mc.IsInitialized() {
-			request.SetMeshConfig(mc)
-			trigger.EnableMeshConfig = false
-		} else {
-			failNum++
-		}
-	}
 	if trigger.EnableServices {
 		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache services")
 		_, err := registry.LoadServices(dstService)
@@ -326,25 +279,10 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 			return false, err.(model.SDKError)
 		}
 		// 复用网格接口
-		services := registry.GetMeshConfig(dstService, true)
+		services := registry.GetServicesByMeta(dstService, true)
 		if services.IsInitialized() {
-			request.SetMeshConfig(services)
+			request.SetServices(services)
 			trigger.EnableServices = false
-		} else {
-			failNum++
-		}
-	}
-	if trigger.EnableMesh {
-		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache mesh, %v", dstService)
-		_, err := registry.LoadMesh(dstService)
-		if err != nil {
-			return false, err.(model.SDKError)
-		}
-		mc := registry.GetMesh(dstService, true)
-		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache mc:", mc)
-		if mc.IsInitialized() {
-			request.SetMeshConfig(mc)
-			trigger.EnableMesh = false
 		} else {
 			failNum++
 		}

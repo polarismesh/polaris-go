@@ -25,20 +25,16 @@ import (
 type EventType uint32
 
 const (
-	// 未知事件
+	// EventUnknown 未知事件
 	EventUnknown EventType = 0
 	// EventInstances 实例事件
 	EventInstances EventType = 0x2001
-	// EventTypeConfig 路由配置事件
+	// EventRouting 路由配置事件
 	EventRouting EventType = 0x2002
 	// EventRateLimiting 限流配置事件
 	EventRateLimiting EventType = 0x2003
-	// mesh config
-	EventMeshConfig EventType = 0x2004
-	// EventRateLimiting 批量服务
+	// EventServices 批量服务
 	EventServices EventType = 0x2005
-	// mesh
-	EventMesh EventType = 0x2006
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
@@ -65,8 +61,6 @@ var (
 		EventInstances:    "instance",
 		EventRouting:      "routing",
 		EventRateLimiting: "rate_limiting",
-		EventMeshConfig:   "mesh_config",
-		EventMesh:         "mesh",
 		EventServices:     "services",
 	}
 
@@ -74,8 +68,6 @@ var (
 		"instance":      EventInstances,
 		"routing":       EventRouting,
 		"rate_limiting": EventRateLimiting,
-		"mesh_config":   EventMeshConfig,
-		"mesh":          EventMesh,
 		"services":      EventServices,
 	}
 )
