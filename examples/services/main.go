@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// 打印配置文件内容
-	log.Printf("service length is %s", len(servicesResp.GetValue()))
+	log.Printf("service length is %d", len(servicesResp.GetValue()))
 	for _, svc := range servicesResp.GetValue() {
 		log.Printf("svc is %s:%s", svc.Namespace, svc.Service)
 	}
