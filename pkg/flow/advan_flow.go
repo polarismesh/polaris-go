@@ -78,6 +78,7 @@ func (e *Engine) runHeartbeat(state *registerState) {
 				instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 			sdkErr, ok := err.(model.SDKError)
 			if !ok {
+				log.GetBaseLogger().Errorf("unexpected err ", err)
 				break
 			}
 			ec := sdkErr.ServerCode()

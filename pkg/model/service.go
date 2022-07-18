@@ -1176,7 +1176,7 @@ const (
 	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
 	// DefaultHeartbeatTtl
-	DefaultHeartbeatTtl int = 20
+	DefaultHeartbeatTtl int = 5
 )
 
 // InstanceRegisterRequest 注册服务请求
