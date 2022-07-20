@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration/remote"
+	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -104,12 +105,28 @@ func (c *defaultConfigFile) AddChangeListenerWithChannel(changeChan chan model.C
 	c.changeListenerChans = append(c.changeListenerChans, changeChan)
 }
 
+// RemoveChangeListenerWithChannel 删除配置文件变更监听channel
+func (c *defaultConfigFile) RemoveChangeListenerWithChannel(changeChan chan model.ConfigFileChangeEvent) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.changeListenerChans = util.RemoveFromChangeListenerChans(c.changeListenerChans, changeChan)
+}
+
 // AddChangeListener 增加配置文件变更监听器
 func (c *defaultConfigFile) AddChangeListener(cb model.OnConfigFileChange) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.changeListeners = append(c.changeListeners, cb)
+}
+
+// RemoveChangeListerner 删除配置文件变更监听器
+func (c *defaultConfigFile) RemoveChangeListerner(cb model.OnConfigFileChange) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.changeListeners = util.RemoveFromChangeListeners(c.changeListeners, cb)
 }
 
 func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {

@@ -68,6 +68,10 @@ type ConfigFile interface {
 	AddChangeListenerWithChannel(chan ConfigFileChangeEvent)
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
+	// RemoveChangeListenerWithChannel 删除配置文件变更监听channel
+	RemoveChangeListenerWithChannel(chan ConfigFileChangeEvent)
+	// RemoveChangeListerner 删除配置文件变更监听器
+	RemoveChangeListerner(cb OnConfigFileChange)
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类
