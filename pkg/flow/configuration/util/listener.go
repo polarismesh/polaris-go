@@ -33,7 +33,7 @@ func RemoveFromChangeListenerChans(changeListenerChans []chan model.ConfigFileCh
 		}
 	}
 	if index == -1 {
-		log.GetBaseLogger().Warnf("no value match")
+		log.GetBaseLogger().Debugf("no value match")
 		return changeListenerChans
 	}
 	return append(changeListenerChans[:index], changeListenerChans[index+1:]...)
@@ -48,7 +48,7 @@ func RemoveFromChangeListeners(changeListeners []func(event model.ConfigFileChan
 		}
 	}
 	if index == -1 {
-		log.GetBaseLogger().Warnf("no value match")
+		log.GetBaseLogger().Debugf("no value match")
 		return changeListeners
 	}
 	return append(changeListeners[:index], changeListeners[index+1:]...)
