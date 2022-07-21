@@ -24,7 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// RemoveFromChangeListenerChans remove chan from chan array
+// RemoveFromChangeListenerChans remove chan from chan slice
 func RemoveFromChangeListenerChans(changeListenerChans []chan model.ConfigFileChangeEvent, changeChan chan model.ConfigFileChangeEvent) (result []chan model.ConfigFileChangeEvent) {
 	index := -1
 
@@ -40,7 +40,7 @@ func RemoveFromChangeListenerChans(changeListenerChans []chan model.ConfigFileCh
 	return append(changeListenerChans[:index], changeListenerChans[index+1:]...)
 }
 
-// RemoveFromChangeListeners remove function from function array
+// RemoveFromChangeListeners remove function from function slice
 func RemoveFromChangeListeners(changeListeners []func(event model.ConfigFileChangeEvent), changeEvent model.OnConfigFileChange) (result []func(event model.ConfigFileChangeEvent)) {
 	index := -1
 
