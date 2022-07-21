@@ -121,8 +121,8 @@ func (c *defaultConfigFile) AddChangeListener(cb model.OnConfigFileChange) {
 	c.changeListeners = append(c.changeListeners, cb)
 }
 
-// RemoveChangeListerner 删除配置文件变更监听器
-func (c *defaultConfigFile) RemoveChangeListerner(cb model.OnConfigFileChange) {
+// RemoveChangeListener 删除配置文件变更监听器
+func (c *defaultConfigFile) RemoveChangeListener(cb model.OnConfigFileChange) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
