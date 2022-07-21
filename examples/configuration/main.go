@@ -50,6 +50,7 @@ func main() {
 	configFile.AddChangeListener(changeListener)
 
 	// 方式二：添加监听器
+	// 后续将弃用，推荐使用方式一. Marked 2022/07/21
 	changeChan := make(chan model.ConfigFileChangeEvent)
 	configFile.AddChangeListenerWithChannel(changeChan)
 

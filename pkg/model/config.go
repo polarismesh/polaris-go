@@ -65,13 +65,17 @@ type ConfigFile interface {
 	// HasContent 是否有配置内容
 	HasContent() bool
 	// AddChangeListenerWithChannel 增加配置文件变更监听器
+	//
+	// Deprecated: Use AddChangeListener instead. Marked 2022/07/21
 	AddChangeListenerWithChannel(chan ConfigFileChangeEvent)
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
 	// RemoveChangeListenerWithChannel 删除配置文件变更监听channel
+	//
+	// Deprecated: Use RemoveChangeListener instead. Marked 2022/07/21
 	RemoveChangeListenerWithChannel(chan ConfigFileChangeEvent)
-	// RemoveChangeListerner 删除配置文件变更监听器
-	RemoveChangeListerner(cb OnConfigFileChange)
+	// RemoveChangeListener 删除配置文件变更监听器
+	RemoveChangeListener(cb OnConfigFileChange)
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类
