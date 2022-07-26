@@ -47,10 +47,8 @@ const (
 )
 
 var (
-	emptyInstance   = pb.NewServiceInstancesInProto(nil, nil, nil, nil)
-	emptyRule       = pb.NewServiceRuleInProto(nil)
-	emptyMeshConfig = pb.NewMeshConfigInProto(nil)
-	emptyMesh       = pb.NewMeshInProto(nil)
+	emptyInstance = pb.NewServiceInstancesInProto(nil, nil, nil, nil)
+	emptyRule     = pb.NewServiceRuleInProto(nil)
 )
 
 var (
@@ -169,9 +167,6 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers[model.EventInstances] = g.newServiceCacheHandler()
 	g.eventToCacheHandlers[model.EventRouting] = g.newRuleCacheHandler()
 	g.eventToCacheHandlers[model.EventRateLimiting] = g.newRateLimitCacheHandler()
-	// mesh
-	g.eventToCacheHandlers[model.EventMeshConfig] = g.newMeshConfigHandler()
-	g.eventToCacheHandlers[model.EventMesh] = g.newMeshHandler()
 	// 批量服务
 	g.eventToCacheHandlers[model.EventServices] = g.newServicesHandler()
 	g.cachePersistHandler, err = lrplug.NewCachePersistHandler(
@@ -628,74 +623,6 @@ func (g *LocalCache) GetServiceRouteRule(key *model.ServiceKey, includeCache boo
 	return svcRule
 }
 
-// GetMesh 非阻塞获取网格
-func (g *LocalCache) GetMesh(key *model.ServiceKey, includeCache bool) model.Mesh {
-	svcEventKey := poolGetSvcEventKey(key, model.EventMesh)
-	mc := g.GetMeshImp(svcEventKey, includeCache)
-	poolPutSvcEventKey(svcEventKey)
-	return mc
-}
-
-// GetMeshImp 非阻塞获取网格具体逻辑
-func (g *LocalCache) GetMeshImp(svcEventKey *model.ServiceEventKey, includeCache bool) model.Mesh {
-	value, ok := g.serviceMap.Load(*svcEventKey)
-	if !ok {
-		return emptyMesh
-	}
-	cacheObj := value.(*CacheObject)
-	ruleValue := cacheObj.LoadValue(true)
-	if reflect2.IsNil(ruleValue) {
-		return emptyMesh
-	}
-
-	if atomic.LoadUint32(&cacheObj.hasRemoteUpdated) > 0 {
-		return ruleValue.(model.Mesh)
-	}
-
-	if includeCache {
-		return ruleValue.(model.Mesh)
-	}
-
-	if g.startUseFileCache && atomic.LoadUint32(&cacheObj.cachePersistentAvailable) > 0 {
-		return ruleValue.(model.Mesh)
-	}
-	return emptyMesh
-}
-
-// GetMeshConfig 非阻塞获取网格规则
-func (g *LocalCache) GetMeshConfig(key *model.ServiceKey, includeCache bool) model.MeshConfig {
-	svcEventKey := poolGetSvcEventKey(key, model.EventMeshConfig)
-	mc := g.GetMeshConfigImp(svcEventKey, includeCache)
-	poolPutSvcEventKey(svcEventKey)
-	return mc
-}
-
-// GetMeshConfigImp 非阻塞获取网格规则具体逻辑
-func (g *LocalCache) GetMeshConfigImp(svcEventKey *model.ServiceEventKey, includeCache bool) model.MeshConfig {
-	value, ok := g.serviceMap.Load(*svcEventKey)
-	if !ok {
-		return emptyMeshConfig
-	}
-	cacheObj := value.(*CacheObject)
-	ruleValue := cacheObj.LoadValue(true)
-	if reflect2.IsNil(ruleValue) {
-		return emptyMeshConfig
-	}
-
-	if atomic.LoadUint32(&cacheObj.hasRemoteUpdated) > 0 {
-		return ruleValue.(model.MeshConfig)
-	}
-
-	if includeCache {
-		return ruleValue.(model.MeshConfig)
-	}
-
-	if g.startUseFileCache && atomic.LoadUint32(&cacheObj.cachePersistentAvailable) > 0 {
-		return ruleValue.(model.MeshConfig)
-	}
-	return emptyMeshConfig
-}
-
 // GetServicesByMeta 非阻塞获取服务列表
 func (g *LocalCache) GetServicesByMeta(key *model.ServiceKey, includeCache bool) model.Services {
 	svcEventKey := poolGetSvcEventKey(key, model.EventServices)
@@ -779,24 +706,6 @@ func (g *LocalCache) newRateLimitCacheHandler() CacheHandlers {
 	return CacheHandlers{
 		CompareMessage:      compareRateLimitRule,
 		MessageToCacheValue: messageToServiceRule,
-		OnEventDeleted:      g.deleteRule,
-	}
-}
-
-// 创建网格规则回调
-func (g *LocalCache) newMeshConfigHandler() CacheHandlers {
-	return CacheHandlers{
-		CompareMessage:      compareMeshConfig,
-		MessageToCacheValue: messageToMeshConfig,
-		OnEventDeleted:      g.deleteRule,
-	}
-}
-
-// 创建网格回调
-func (g *LocalCache) newMeshHandler() CacheHandlers {
-	return CacheHandlers{
-		CompareMessage:      compareMesh,
-		MessageToCacheValue: messageToMesh,
 		OnEventDeleted:      g.deleteRule,
 	}
 }
@@ -905,116 +814,6 @@ func onOriginalRateLimitRuleNotEmpty(oldRevision string, newRuleValue *namingpb.
 		return CacheNotChanged, emptyReplaceHolder
 	}
 	return CacheChanged, emptyReplaceHolder
-}
-
-func onOriginalMeshConfigEmpty(newRuleValue *namingpb.MeshConfig) (CachedStatus, string) {
-	if nil != newRuleValue {
-		return CacheNotExists, newRuleValue.GetRevision().GetValue()
-	}
-	return CacheNotExists, emptyReplaceHolder
-}
-
-func onOriginalMeshConfigNotEmpty(oldRevision string, newRuleValue *namingpb.MeshConfig) (CachedStatus, string) {
-	if nil != newRuleValue {
-		if newRuleValue.GetRevision().GetValue() != oldRevision {
-			return CacheChanged, newRuleValue.GetRevision().GetValue()
-		}
-		return CacheNotChanged, oldRevision
-	}
-	if len(oldRevision) == 0 {
-		return CacheNotChanged, emptyReplaceHolder
-	}
-	return CacheChanged, emptyReplaceHolder
-}
-
-// 比较网格规则变化
-func compareMeshConfig(instValue interface{}, newValue proto.Message) CachedStatus {
-	var status CachedStatus
-	var oldRevision string
-	var newRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
-	var meshValue = resp.GetMeshconfig()
-	log.GetBaseLogger().Debugf("compareMeshConfig", meshValue)
-	if meshValue == nil {
-		status = CacheNotChanged
-		goto finally
-	}
-	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
-		if reflect2.IsNil(instValue) {
-			status = CacheEmptyButNoData
-		} else {
-			status = CacheNotChanged
-		}
-		goto finally
-	}
-	if reflect2.IsNil(instValue) {
-		oldRevision = emptyReplaceHolder
-		status, newRevision = onOriginalMeshConfigEmpty(meshValue)
-	} else {
-		oldRevision = instValue.(model.MeshConfig).GetRevision()
-		status, newRevision = onOriginalMeshConfigNotEmpty(oldRevision, meshValue)
-	}
-finally:
-	if status != CacheNotChanged {
-		log.GetBaseLogger().Infof(
-			"mesh config rule %s:%s has updated, compare status %s: old revision is %s, new revision is %s",
-			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
-			status, oldRevision, newRevision)
-	} else {
-		log.GetBaseLogger().Debugf(
-			"mesh config rule %s:%s is not updated, compare status %s: old revision is %s, new revision is %s",
-			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
-			status, oldRevision, newRevision)
-	}
-	return status
-}
-
-// 比较网格变化
-func compareMesh(instValue interface{}, newValue proto.Message) CachedStatus {
-	var status CachedStatus
-	var oldRevision string
-	var newRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
-	var meshValue = resp.GetMesh()
-	log.GetBaseLogger().Debugf("compareMesh", meshValue)
-	if meshValue == nil {
-		status = CacheNotChanged
-		goto finally
-	}
-	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
-		if reflect2.IsNil(instValue) {
-			status = CacheEmptyButNoData
-		} else {
-			status = CacheNotChanged
-		}
-		goto finally
-	}
-	if reflect2.IsNil(instValue) {
-		oldRevision = emptyReplaceHolder
-		status, newRevision = CacheNotExists, meshValue.GetRevision().GetValue()
-	} else {
-		oldRevision = instValue.(model.Mesh).GetRevision()
-		if meshValue.GetRevision().GetValue() != oldRevision {
-			status, newRevision = CacheChanged, meshValue.GetRevision().GetValue()
-		} else {
-			status, newRevision = CacheNotChanged, oldRevision
-		}
-	}
-finally:
-	if status != CacheNotChanged {
-		log.GetBaseLogger().Infof(
-			"mesh %s:%s has updated, compare status %s: old revision is %s, new revision is %s",
-			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
-			status, oldRevision, newRevision)
-	} else {
-		log.GetBaseLogger().Debugf(
-			"mesh %s:%s is not updated, compare status %s: old revision is %s, new revision is %s",
-			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(),
-			status, oldRevision, newRevision)
-	}
-	return status
 }
 
 func onOriginalServicesEmpty(services []*namingpb.Service) (CachedStatus, string) {
@@ -1136,35 +935,13 @@ func messageToServiceRule(cachedValue interface{}, value proto.Message, svcLocal
 	return svcRule
 }
 
-func messageToMeshConfig(cachedValue interface{}, value proto.Message,
-	svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
-	respInProto := value.(*namingpb.DiscoverResponse)
-	mc := pb.NewMeshConfigInProto(respInProto)
-	if cacheLoaded {
-		mc.CacheLoaded = 1
-	}
-	log.GetBaseLogger().Debugf("messageToMeshConfig", respInProto.Meshconfig, mc, mc.GetValue())
-	return mc
-}
-
-func messageToMesh(cachedValue interface{}, value proto.Message,
-	svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
-	respInProto := value.(*namingpb.DiscoverResponse)
-	mc := pb.NewMeshInProto(respInProto)
-	if cacheLoaded {
-		mc.CacheLoaded = 1
-	}
-	log.GetBaseLogger().Debugf("messageToMesh", respInProto.Mesh, mc, mc.GetValue())
-	return mc
-}
-
 func messageToServices(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
 	respInProto := value.(*namingpb.DiscoverResponse)
 	mc := pb.NewServicesProto(respInProto)
 	if cacheLoaded {
 		mc.CacheLoaded = 1
 	}
-	log.GetBaseLogger().Debugf("messageToServices", respInProto.Meshconfig, mc, mc.GetValue(), mc.GetRevision())
+	log.GetBaseLogger().Debugf("messageToServices", respInProto.Services, mc, mc.GetValue(), mc.GetRevision())
 	return mc
 }
 
@@ -1176,28 +953,6 @@ func (g *LocalCache) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifi
 			Service:   key.Service,
 		},
 		Type: model.EventRouting,
-	})
-}
-
-// LoadMeshConfig 非阻塞加载网格规则
-func (g *LocalCache) LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error) {
-	return g.LoadServiceRule(&model.ServiceEventKey{
-		ServiceKey: model.ServiceKey{
-			Namespace: key.Namespace,
-			Service:   key.Service,
-		},
-		Type: model.EventMeshConfig,
-	})
-}
-
-// LoadMesh 非阻塞加载网格
-func (g *LocalCache) LoadMesh(key *model.ServiceKey) (*common.Notifier, error) {
-	return g.LoadServiceRule(&model.ServiceEventKey{
-		ServiceKey: model.ServiceKey{
-			Namespace: key.Namespace,
-			Service:   key.Service,
-		},
-		Type: model.EventMesh,
 	})
 }
 

@@ -42,7 +42,7 @@ const (
 	ErrCodePluginError ErrCode = BaseIndexErrCode + 3
 	// ErrCodeAPITimeoutError API超时错误的错误码
 	ErrCodeAPITimeoutError ErrCode = BaseIndexErrCode + 4
-	// ErrCodeAPITimeoutError SDK已经destroy后，继续调API会出现的错误码
+	// ErrCodeInvalidStateError SDK已经destroy后，继续调API会出现的错误码
 	ErrCodeInvalidStateError ErrCode = BaseIndexErrCode + 5
 	// ErrCodeServerUserError 连接server时，server返回400错误信息
 	ErrCodeServerUserError ErrCode = BaseIndexErrCode + 6
@@ -50,9 +50,9 @@ const (
 	ErrCodeNetworkError ErrCode = BaseIndexErrCode + 7
 	// ErrCodeCircuitBreakerError 服务熔断错误
 	ErrCodeCircuitBreakerError ErrCode = BaseIndexErrCode + 8
-	// 实例信息有误，如服务权重信息为空
+	// ErrCodeInstanceInfoError 实例信息有误，如服务权重信息为空
 	ErrCodeInstanceInfoError ErrCode = BaseIndexErrCode + 9
-	// ErrCodeAPIInstanceNotFOUND 服务实例获取失败
+	// ErrCodeAPIInstanceNotFound 服务实例获取失败
 	ErrCodeAPIInstanceNotFound ErrCode = BaseIndexErrCode + 10
 	// ErrCodeInvalidRule 路由规则非法
 	ErrCodeInvalidRule ErrCode = BaseIndexErrCode + 11
@@ -76,7 +76,7 @@ const (
 	ErrCodeMeshConfigNotFound ErrCode = BaseIndexErrCode + 20
 	// ErrCodeConsumerInitCalleeError 初始化服务运行中需要的被调服务失败
 	ErrCodeConsumerInitCalleeError ErrCode = BaseIndexErrCode + 21
-	// 接口错误码数量，每添加了一个错误码，将这个数值加1
+	// ErrCodeCount 接口错误码数量，每添加了一个错误码，将这个数值加1
 	ErrCodeCount = 23
 )
 

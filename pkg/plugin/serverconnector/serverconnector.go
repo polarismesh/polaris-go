@@ -24,7 +24,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -46,9 +45,6 @@ type EventHandler interface {
 	OnServiceUpdate(*ServiceEvent) (deleted bool)
 	// GetRevision 获取缓存版本号
 	GetRevision() string
-	// GetMeshResource 获取网格请求的resource
-	GetMeshResource() *namingpb.MeshResource
-	GetMeshConfig() *namingpb.MeshConfig
 	// GetBusiness 获取业务
 	GetBusiness() string
 }

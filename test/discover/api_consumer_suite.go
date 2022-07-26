@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -48,6 +49,8 @@ const (
 	consumerIPAddress = "127.0.0.1"
 	// 测试服务器的端口
 	consumerPort = 8008
+	// env name for config file
+	envName = "server_addr"
 )
 
 const (
@@ -77,13 +80,14 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	grpcOptions := make([]grpc.ServerOption, 0)
 	maxStreams := 100000
 	grpcOptions = append(grpcOptions, grpc.MaxConcurrentStreams(uint32(maxStreams)))
-
 	// get the grpc server wired up
 	grpc.EnableTracing = true
 
 	ipAddr := consumerIPAddress
 	shopPort := consumerPort
 	var err error
+	err = os.Setenv(envName, fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort))
+	c.Assert(err, check.IsNil)
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()

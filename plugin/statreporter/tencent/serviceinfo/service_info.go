@@ -233,20 +233,6 @@ func (s *Reporter) onCacheChanged(event *common.PluginEvent) error {
 			sh.histories[rateLimitStatus].addStatus(rateLimitObj.GetRevision(), currentTime)
 		}
 		s.handleRateLimitRuleRevisions(sh.rateLimitRules, svcEventObj.DiffInfo.(*common.RateLimitDiffInfo), currentTime)
-	} else if model.EventMeshConfig == rv.GetType() {
-		meshObj := rv.(model.MeshConfig)
-		diffInfo := svcEventObj.DiffInfo.(*common.MeshResourceDiffInfo)
-		meshKey := &meshKey{
-			meshID:  diffInfo.MeshID,
-			typeUrl: diffInfo.ResourceType.GetTypeUrl().GetValue(),
-		}
-		sh := s.getMeshStatusHistory(meshKey, true)
-		if deleteCache {
-			sh.history.addDeleteStatus("", currentTime)
-		} else {
-			sh.history.addStatus(meshObj.GetRevision(), currentTime)
-		}
-		s.handleMeshConfigRevision(sh.meshResources, svcEventObj.DiffInfo.(*common.MeshResourceDiffInfo), currentTime)
 	}
 	return nil
 }
@@ -407,29 +393,6 @@ func (s *Reporter) handleRateLimitRuleRevisions(rulesMap *sync.Map, diffInfo *co
 			statusListIntf, ok = rulesMap.LoadOrStore(k, newStatusList())
 		}
 		statusListIntf.(*statusList).addDeleteStatus("", currentTime)
-	}
-}
-
-// 处理网格规则变更记录
-func (s *Reporter) handleMeshConfigRevision(resourceMap *sync.Map, diffInfo *common.MeshResourceDiffInfo,
-	currentTime time.Time) {
-	for k, v := range diffInfo.UpdatedResources {
-		var statusListInf interface{}
-		var ok bool
-		statusListInf, ok = resourceMap.Load(k)
-		if !ok {
-			statusListInf, ok = resourceMap.LoadOrStore(k, newStatusList())
-		}
-		statusListInf.(*statusList).addStatus(v.NewRevision, currentTime)
-	}
-	for k := range diffInfo.DeletedResources {
-		var statusListInf interface{}
-		var ok bool
-		statusListInf, ok = resourceMap.Load(k)
-		if !ok {
-			statusListInf, ok = resourceMap.LoadOrStore(k, newStatusList())
-		}
-		statusListInf.(*statusList).addDeleteStatus("", currentTime)
 	}
 }
 
@@ -646,7 +609,6 @@ func (s *Reporter) sendMeshStatusToMonitor(mk *meshKey, sh *meshStatusHistory) (
 	}
 
 	req.Revision = make([]*monitorpb.RevisionHistory, meshCount, meshCount)
-	req.MeshConfigDeleted = meshSeq == 0
 	s.fillRevisions(req.Revision, meshStatus, meshCount)
 	req.SingleMeshResourceHistory = s.getSingleMeshResourceRevisions(sh.meshResources)
 	log.GetStatLogger().Infof("sdk mesh cache stat:%v", req)

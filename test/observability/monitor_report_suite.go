@@ -418,36 +418,6 @@ func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.Consume
 		Token:     &wrappers.StringValue{Value: serviceToken},
 	}
 	m.mockServer.RegisterService(testService)
-
-	request := &api.GetMeshConfigRequest{}
-	request.FlowID = 1111
-	request.Namespace = consumerNamespace
-	request.MeshId = testbus
-	request.MeshType = api.MeshVirtualService
-
-	// resp, err := consumer.GetMeshConfig(request)
-
-	m.mockServer.SetReturnException(true)
-	_, err := consumer.GetMeshConfig(request)
-	c.Assert(err, check.NotNil)
-	log.Printf("expected err %v", err)
-	m.mockServer.SetReturnException(false)
-
-	for i := 0; i < GetMeshSuccessNum; i++ {
-		_, err := consumer.GetMeshConfig(request)
-		c.Assert(err, check.IsNil)
-	}
-
-	// 命名空间和服务名有误
-	request.Namespace = calledNs + "err2"
-	request.Business = calledSvc + "err2"
-	m.mockServer.SetNotRegisterAssistant(true)
-	for i := 0; i < GetMeshFailNum; i++ {
-		_, err = consumer.GetMeshConfig(request)
-		c.Assert(err, check.NotNil)
-		log.Println("GetMeshConfig", err)
-	}
-	m.mockServer.SetNotRegisterAssistant(false)
 }
 
 // 测试获取所有实例和上报调用结果
@@ -572,13 +542,6 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 				uploadServiceCallResultSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
 			} else {
 				uploadServiceCallResultFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
-		case model.ApiMeshConfig.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetMeshSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetMeshFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
 				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
 			}
 		case model.ApiInitCalleeServices.String():

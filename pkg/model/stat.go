@@ -153,9 +153,8 @@ const (
 	ApiGetQuota
 	ApiGetAllInstances
 	ApiUpdateServiceCallResult
-	ApiMeshConfig
+	ApiServices
 	ApiInitCalleeServices
-	ApiMesh
 	ApiProcessRouters
 	ApiProcessLoadBalance
 	// ApiOperationMax 这个必须在最下面
@@ -174,9 +173,8 @@ var (
 		ApiHeartbeat:               "Provider::Heartbeat",
 		ApiGetQuota:                "Limit::GetQuota",
 		ApiUpdateServiceCallResult: "Consumer::UpdateServiceCallResult",
-		ApiMeshConfig:              "Consumer::GetMeshConfig",
+		ApiServices:                "Consumer::GetServices",
 		ApiInitCalleeServices:      "Consumer::InitCalleeServices",
-		ApiMesh:                    "Consumer::GetMesh",
 		ApiProcessRouters:          "Router::ProcessRouters",
 		ApiProcessLoadBalance:      "Router::ProcessLoadBalance",
 	}
