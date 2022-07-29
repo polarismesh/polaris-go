@@ -76,7 +76,7 @@ type ServerConnector interface {
 	// 异常场景：当sdk已经退出过程中，则返回error
 	DeRegisterServiceHandler(*model.ServiceEventKey) error
 	// RegisterInstance 同步注册服务
-	RegisterInstance(*model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
+	RegisterInstance(req *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error)
 	// DeregisterInstance 同步反注册服务
 	DeregisterInstance(instance *model.InstanceDeRegisterRequest) error
 	// Heartbeat 心跳上报

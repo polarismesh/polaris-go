@@ -28,6 +28,16 @@ type providerAPI struct {
 	context SDKContext
 }
 
+func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := instance.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncRegisterV2(&instance.InstanceRegisterRequest)
+}
+
 // Register 同步注册服务，服务注册成功后会填充instance中的InstanceId字段
 // 用户可保持该instance对象用于反注册和心跳上报
 func (c *providerAPI) Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
@@ -85,7 +95,7 @@ func newProviderAPIByFile(path string) (ProviderAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &providerAPI{context}, nil
+	return newProviderAPIByContext(context), nil
 }
 
 // NewProviderAPIByConfig 通过配置对象创建SDK ProviderAPI对象
@@ -94,7 +104,7 @@ func newProviderAPIByConfig(cfg config.Configuration) (ProviderAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &providerAPI{context}, nil
+	return newProviderAPIByContext(context), nil
 }
 
 // NewProviderAPIByContext 通过上下文创建SDK ProviderAPI对象

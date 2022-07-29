@@ -33,6 +33,12 @@ func (p *providerAPI) SDKContext() api.SDKContext {
 	return p.rawAPI.SDKContext()
 }
 
+// RegisterInstance
+// minimum supported version of polaris-server is v1.10.0
+func (p *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	return p.rawAPI.RegisterInstance((*api.InstanceRegisterRequest)(instance))
+}
+
 // Register
 // 同步注册服务，服务注册成功后会填充instance中的InstanceID字段
 // 用户可保持该instance对象用于反注册和心跳上报
