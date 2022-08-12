@@ -120,7 +120,6 @@ func (svr *PolarisProvider) deregisterService() {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
 	log.Printf("deregister successfully.")
-	go svr.doHeartbeat()
 }
 
 func (svr *PolarisProvider) doHeartbeat() {
