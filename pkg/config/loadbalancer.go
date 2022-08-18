@@ -24,9 +24,9 @@ import (
 // LoadBalancerConfigImpl 负载均衡配置.
 type LoadBalancerConfigImpl struct {
 	// 负载均衡类型
-	Type string `yaml:"type" json:"type"`
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // GetType 负载均衡类型.

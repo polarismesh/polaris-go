@@ -29,24 +29,24 @@ import (
 // RateLimitConfigImpl 限流配置对象.
 type RateLimitConfigImpl struct {
 	// 是否启动限流
-	Enable *bool `yaml:"enable" json:"enable"`
+	Enable *bool `yaml:"enable,omitempty" json:"enable,omitempty"`
 	// 各个限流插件的配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 	// 最大限流窗口数量
-	MaxWindowSize int `yaml:"maxWindowSize" json:"maxWindowSize"`
+	MaxWindowSize int `yaml:"maxWindowSize,omitempty" json:"maxWindowSize,omitempty"`
 	// 超时window检查周期
-	PurgeInterval time.Duration `yaml:"purgeInterval" json:"purgeInterval"`
+	PurgeInterval time.Duration `yaml:"purgeInterval,omitempty" json:"purgeInterval,omitempty"`
 	// 本地限流规则
-	Rules []RateLimitRule `yaml:"rules"`
+	Rules []RateLimitRule `yaml:"rules,omitempty" json:"rules,omitempty"`
 }
 
 // RateLimitRule 限流规则.
 type RateLimitRule struct {
-	Namespace     string             `yaml:"namespace"`
-	Service       string             `yaml:"service"`
-	Labels        map[string]Matcher `yaml:"labels"`
-	MaxAmount     int                `yaml:"maxAmount"`
-	ValidDuration time.Duration      `yaml:"validDuration"`
+	Namespace     string             `yaml:"namespace,omitempty"`
+	Service       string             `yaml:"service,omitempty"`
+	Labels        map[string]Matcher `yaml:"labels,omitempty"`
+	MaxAmount     int                `yaml:"maxAmount,omitempty"`
+	ValidDuration time.Duration      `yaml:"validDuration,omitempty"`
 }
 
 // Verify 校验限流规则.
@@ -85,8 +85,8 @@ const (
 
 // Matcher 标签匹配类型.
 type Matcher struct {
-	Type  string `yaml:"type"`
-	Value string `yaml:"value"`
+	Type  string `yaml:"type,omitempty"`
+	Value string `yaml:"value,omitempty"`
 }
 
 // IsEnable 是否启用限流能力.

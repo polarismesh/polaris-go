@@ -24,11 +24,11 @@ import (
 // StatReporterConfigImpl global.statReporter.
 type StatReporterConfigImpl struct {
 	// 是否启动上报
-	Enable *bool `yaml:"enable" json:"enable"`
+	Enable *bool `yaml:"enable,omitempty" json:"enable,omitempty"`
 	// 上报插件链
-	Chain []string `yaml:"chain" json:"chain"`
+	Chain []string `yaml:"chain,omitempty" json:"chain,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // IsEnable 是否启用上报.

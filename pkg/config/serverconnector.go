@@ -31,24 +31,24 @@ import (
 
 // ServerConnectorConfigImpl 对接注册中心相关配置.
 type ServerConnectorConfigImpl struct {
-	Addresses []string `yaml:"addresses" json:"addresses"`
+	Addresses []string `yaml:"addresses,omitempty" json:"addresses,omitempty"`
 
-	Protocol string `yaml:"protocol" json:"protocol"`
+	Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
 
-	ConnectTimeout *time.Duration `yaml:"connectTimeout" json:"connectTimeout"`
+	ConnectTimeout *time.Duration `yaml:"connectTimeout,omitempty" json:"connectTimeout,omitempty"`
 
 	// 远程请求超时时间
-	MessageTimeout *time.Duration `yaml:"messageTimeout" json:"messageTimeout"`
+	MessageTimeout *time.Duration `yaml:"messageTimeout,omitempty" json:"messageTimeout,omitempty"`
 
-	ConnectionIdleTimeout *time.Duration `yaml:"connectionIdleTimeout" json:"connectionIdleTimeout"`
+	ConnectionIdleTimeout *time.Duration `yaml:"connectionIdleTimeout,omitempty" json:"connectionIdleTimeout,omitempty"`
 
-	RequestQueueSize *int32 `yaml:"requestQueueSize" json:"requestQueueSize"`
+	RequestQueueSize *int32 `yaml:"requestQueueSize,omitempty" json:"requestQueueSize,omitempty"`
 
-	ServerSwitchInterval *time.Duration `yaml:"serverSwitchInterval" json:"serverSwitchInterval"`
+	ServerSwitchInterval *time.Duration `yaml:"serverSwitchInterval,omitempty" json:"serverSwitchInterval,omitempty"`
 
-	ReconnectInterval *time.Duration `yaml:"reconnectInterval" json:"reconnectInterval"`
+	ReconnectInterval *time.Duration `yaml:"reconnectInterval,omitempty" json:"reconnectInterval,omitempty"`
 
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // GetAddresses global.serverConnector.addresses

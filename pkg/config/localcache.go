@@ -32,30 +32,30 @@ import (
 type LocalCacheConfigImpl struct {
 	// consumer.localCache.service.expireTime,
 	// 服务的超时淘汰时间
-	ServiceExpireTime *time.Duration `yaml:"serviceExpireTime" json:"serviceExpireTime"`
+	ServiceExpireTime *time.Duration `yaml:"serviceExpireTime,omitempty" json:"serviceExpireTime,omitempty"`
 	// consumer.localCache.service.refreshInterval
 	// 服务的定期刷新时间
-	ServiceRefreshInterval *time.Duration `yaml:"serviceRefreshInterval" json:"serviceRefreshInterval"`
+	ServiceRefreshInterval *time.Duration `yaml:"serviceRefreshInterval,omitempty" json:"serviceRefreshInterval,omitempty"`
 	// consumer.localCache.persistDir
 	// 本地缓存持久化路径
-	PersistDir string `yaml:"persistDir" json:"persistDir"`
+	PersistDir string `yaml:"persistDir,omitempty" json:"persistDir,omitempty"`
 	// consumer.localCache.type
 	// 本地缓存类型，默认inmemory，可修改成具体的缓存插件名
-	Type string `yaml:"type" json:"type"`
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// consumer.localCache.persistMaxWriteRetry
-	PersistMaxWriteRetry int `yaml:"persistMaxWriteRetry" json:"persistMaxWriteRetry"`
+	PersistMaxWriteRetry int `yaml:"persistMaxWriteRetry,omitempty" json:"persistMaxWriteRetry,omitempty"`
 	// consumer.localCache.persistReadRetry
-	PersistMaxReadRetry int `yaml:"persistMaxReadRetry" json:"persistMaxReadRetry"`
+	PersistMaxReadRetry int `yaml:"persistMaxReadRetry,omitempty" json:"persistMaxReadRetry,omitempty"`
 	// consumer.localCache.persistRetryInterval
-	PersistRetryInterval *time.Duration `yaml:"persistRetryInterval" json:"persistRetryInterval"`
+	PersistRetryInterval *time.Duration `yaml:"persistRetryInterval,omitempty" json:"persistRetryInterval,omitempty"`
 	// 缓存文件有效时间差值
-	PersistAvailableInterval *time.Duration `yaml:"persistAvailableInterval" json:"persistAvailableInterval"`
+	PersistAvailableInterval *time.Duration `yaml:"persistAvailableInterval,omitempty" json:"persistAvailableInterval,omitempty"`
 	// 启动后，首次名字服务是否可以使用缓存文件
-	StartUseFileCache *bool `yaml:"startUseFileCache" json:"startUseFileCache"`
+	StartUseFileCache *bool `yaml:"startUseFileCache,omitempty" json:"startUseFileCache,omitempty"`
 	// PushEmptyProtection 推空保护开关
-	PushEmptyProtection *bool `yaml:"pushEmptyProtection" json:"pushEmptyProtection"`
+	PushEmptyProtection *bool `yaml:"pushEmptyProtection,omitempty" json:"pushEmptyProtection,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 var (

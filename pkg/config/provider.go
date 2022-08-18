@@ -30,9 +30,9 @@ var DefaultRateLimitEnable = true
 // ProviderConfigImpl 服务提供者配置.
 type ProviderConfigImpl struct {
 	// 限流配置
-	RateLimit *RateLimitConfigImpl `yaml:"rateLimit" json:"rateLimit"`
+	RateLimit *RateLimitConfigImpl `yaml:"rateLimit,omitempty" json:"rateLimit,omitempty"`
 	// minimum interval between tow register operation
-	MinRgisterInterval time.Duration `yaml:"minRegisterInterval" json:"minRegisterInterval"`
+	MinRgisterInterval time.Duration `yaml:"minRegisterInterval,omitempty" json:"minRegisterInterval,omitempty"`
 }
 
 // GetRateLimit 是否启用限流能力.

@@ -29,13 +29,13 @@ import (
 // ServiceRouterConfigImpl 服务路由配置.
 type ServiceRouterConfigImpl struct {
 	// 服务路由责任链
-	Chain []string `yaml:"chain" json:"chain"`
+	Chain []string `yaml:"chain,omitempty" json:"chain,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 	// 进行过滤时的最大过滤比例
-	PercentOfMinInstances *float64 `yaml:"percentOfMinInstances" json:"percentOfMinInstances"`
+	PercentOfMinInstances *float64 `yaml:"percentOfMinInstances,omitempty" json:"percentOfMinInstances,omitempty"`
 	// 是否启用全死全活机制
-	EnableRecoverAll *bool `yaml:"enableRecoverAll" json:"enableRecoverAll"`
+	EnableRecoverAll *bool `yaml:"enableRecoverAll,omitempty" json:"enableRecoverAll,omitempty"`
 }
 
 // GetNearbyConfig 获取就近路由配置.

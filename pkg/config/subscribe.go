@@ -23,9 +23,9 @@ import (
 
 type SubscribeImpl struct {
 	// 上报插件链
-	Type string `yaml:"type" json:"type"`
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 func (s *SubscribeImpl) Init() {

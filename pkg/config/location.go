@@ -20,9 +20,9 @@ package config
 import "github.com/polarismesh/polaris-go/pkg/plugin/common"
 
 type LocationConfigImpl struct {
-	Provider string `yaml:"provider" json:"provider"`
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
 	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // GetProvider 获取地理位置的提供者插件名称.

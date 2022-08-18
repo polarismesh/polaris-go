@@ -22,10 +22,10 @@ import (
 )
 
 type ServiceSpecific struct {
-	Namespace      string                    `yaml:"namespace" json:"namespace"`
-	Service        string                    `yaml:"service" json:"service"`
-	ServiceRouter  *ServiceRouterConfigImpl  `yaml:"serviceRouter" json:"serviceRouter"`
-	CircuitBreaker *CircuitBreakerConfigImpl `yaml:"circuitBreaker" json:"circuitBreaker"`
+	Namespace      string                    `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Service        string                    `yaml:"service,omitempty" json:"service,omitempty"`
+	ServiceRouter  *ServiceRouterConfigImpl  `yaml:"serviceRouter,omitempty" json:"serviceRouter,omitempty"`
+	CircuitBreaker *CircuitBreakerConfigImpl `yaml:"circuitBreaker,omitempty" json:"circuitBreaker,omitempty"`
 }
 
 type ServicesSpecificImpl struct {

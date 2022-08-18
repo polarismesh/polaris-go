@@ -31,23 +31,23 @@ import (
 // CircuitBreakerConfigImpl 熔断相关配置
 type CircuitBreakerConfigImpl struct {
 	// Enable 是否启动熔断
-	Enable *bool `yaml:"enable" json:"enable"`
+	Enable *bool `yaml:"enable,omitempty" json:"enable,omitempty"`
 	// CheckPeriod 熔断器定时检查周期
-	CheckPeriod *time.Duration `yaml:"checkPeriod" json:"checkPeriod"`
+	CheckPeriod *time.Duration `yaml:"checkPeriod,omitempty" json:"checkPeriod,omitempty"`
 	// Chain 熔断插件链
-	Chain []string `yaml:"chain"`
+	Chain []string `yaml:"chain,omitempty" json:"chain,omitempty"`
 	// SleepWindow 熔断周期，被熔断后多久可以变为半开
-	SleepWindow *time.Duration `yaml:"sleepWindow" json:"sleepWindow"`
+	SleepWindow *time.Duration `yaml:"sleepWindow,omitempty" json:"sleepWindow,omitempty"`
 	// RequestCountAfterHalfOpen 半开状态后最多分配多少个探测请求
-	RequestCountAfterHalfOpen int `yaml:"requestCountAfterHalfOpen" json:"requestCountAfterHalfOpen"`
+	RequestCountAfterHalfOpen int `yaml:"requestCountAfterHalfOpen,omitempty" json:"requestCountAfterHalfOpen,omitempty"`
 	// SuccessCountAfterHalfOpen 半开状态后多少个成功请求则恢复
-	SuccessCountAfterHalfOpen int `yaml:"successCountAfterHalfOpen" json:"successCountAfterHalfOpen"`
+	SuccessCountAfterHalfOpen int `yaml:"successCountAfterHalfOpen,omitempty" json:"successCountAfterHalfOpen,omitempty"`
 	// RecoverWindow 半开后的恢复周期，在这个周期内统计成功数
-	RecoverWindow *time.Duration `yaml:"recoverWindow" json:"recoverWindow"`
+	RecoverWindow *time.Duration `yaml:"recoverWindow,omitempty" json:"recoverWindow,omitempty"`
 	// RecoverNumBuckets 半开后的统计的滑窗数
-	RecoverNumBuckets int `yaml:"recoverNumBuckets" json:"recoverNumBuckets"`
+	RecoverNumBuckets int `yaml:"recoverNumBuckets,omitempty" json:"recoverNumBuckets,omitempty"`
 	// Plugin 插件配置反序列化后的对象
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Plugin PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // IsEnable 是否启用熔断

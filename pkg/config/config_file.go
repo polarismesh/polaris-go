@@ -32,11 +32,11 @@ var DefaultConfigFileEnable = true
 
 // 对接配置中心相关配置.
 type ConfigFileConfigImpl struct {
-	ConfigConnectorConfig *ConfigConnectorConfigImpl `yaml:"configConnector" json:"configConnector"`
+	ConfigConnectorConfig *ConfigConnectorConfigImpl `yaml:"configConnector,omitempty" json:"configConnector,omitempty"`
 	// 是否启动配置中心
-	Enable                    *bool  `yaml:"enable" json:"enable"`
-	PropertiesValueCacheSize  *int32 `yaml:"propertiesValueCacheSize" json:"propertiesValueCacheSize"`
-	PropertiesValueExpireTime *int64 `yaml:"propertiesValueExpireTime" json:"propertiesValueExpireTime"`
+	Enable                    *bool  `yaml:"enable,omitempty" json:"enable,omitempty"`
+	PropertiesValueCacheSize  *int32 `yaml:"propertiesValueCacheSize,omitempty" json:"propertiesValueCacheSize,omitempty"`
+	PropertiesValueExpireTime *int64 `yaml:"propertiesValueExpireTime,omitempty" json:"propertiesValueExpireTime,omitempty"`
 }
 
 // GetConfigConnectorConfig config.configConnector前缀开头的所有配置项.

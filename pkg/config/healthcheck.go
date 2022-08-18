@@ -27,12 +27,12 @@ import (
 
 // HealthCheckConfigImpl health check config implementation.
 type HealthCheckConfigImpl struct {
-	When        When          `yaml:"when" json:"when"`
-	Interval    time.Duration `yaml:"interval" json:"interval"`
-	Timeout     time.Duration `yaml:"timeout" json:"timeout"`
-	Chain       []string      `yaml:"chain" json:"chain"`
-	Concurrency int           `yaml:"concurrency" json:"concurrency"`
-	Plugin      PluginConfigs `yaml:"plugin" json:"plugin"`
+	When        When          `yaml:"when,omitempty" json:"when,omitempty"`
+	Interval    time.Duration `yaml:"interval,omitempty" json:"interval,omitempty"`
+	Timeout     time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Chain       []string      `yaml:"chain,omitempty" json:"chain,omitempty"`
+	Concurrency int           `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	Plugin      PluginConfigs `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 }
 
 // GetWhen get when to active health check.

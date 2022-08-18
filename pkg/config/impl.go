@@ -31,10 +31,10 @@ import (
 
 // ConfigurationImpl cl5全局配置.
 type ConfigurationImpl struct {
-	Global   *GlobalConfigImpl     `yaml:"global" json:"global"`
-	Consumer *ConsumerConfigImpl   `yaml:"consumer" json:"consumer"`
-	Provider *ProviderConfigImpl   `yaml:"provider" json:"provider"`
-	Config   *ConfigFileConfigImpl `yaml:"config" json:"config"`
+	Global   *GlobalConfigImpl     `yaml:"global,omitempty" json:"global,omitempty"`
+	Consumer *ConsumerConfigImpl   `yaml:"consumer,omitempty" json:"consumer,omitempty"`
+	Provider *ProviderConfigImpl   `yaml:"provider,omitempty" json:"provider,omitempty"`
+	Config   *ConfigFileConfigImpl `yaml:"config,omitempty" json:"config,omitempty"`
 }
 
 // GetGlobal cl5.global前缀开头的所有配置项.
@@ -59,11 +59,11 @@ func (c *ConfigurationImpl) GetConfigFile() ConfigFileConfig {
 
 // GlobalConfigImpl 全局配置.
 type GlobalConfigImpl struct {
-	System          *SystemConfigImpl          `yaml:"system" json:"system"`
-	API             *APIConfigImpl             `yaml:"api" json:"api"`
-	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector" json:"serverConnector"`
-	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
-	Location        *LocationConfigImpl        `yaml:"location" json:"location"`
+	System          *SystemConfigImpl          `yaml:"system,omitempty" json:"system,omitempty"`
+	API             *APIConfigImpl             `yaml:"api,omitempty" json:"api,omitempty"`
+	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector,omitempty" json:"serverConnector,omitempty"`
+	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter,omitempty" json:"statReporter,omitempty"`
+	Location        *LocationConfigImpl        `yaml:"location,omitempty" json:"location,omitempty"`
 }
 
 // GetSystem 获取系统配置.
@@ -93,13 +93,13 @@ func (g *GlobalConfigImpl) GetLocation() LocationConfig {
 
 // ConsumerConfigImpl 消费者配置.
 type ConsumerConfigImpl struct {
-	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache" json:"localCache"`
-	ServiceRouter    *ServiceRouterConfigImpl  `yaml:"serviceRouter" json:"serviceRouter"`
-	Loadbalancer     *LoadBalancerConfigImpl   `yaml:"loadbalancer" json:"loadbalancer"`
-	CircuitBreaker   *CircuitBreakerConfigImpl `yaml:"circuitBreaker" json:"circuitBreaker"`
-	HealthCheck      *HealthCheckConfigImpl    `yaml:"healthCheck" json:"healthCheck"`
-	Subscribe        *SubscribeImpl            `yaml:"subscribe" json:"subscribe"`
-	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific" json:"servicesSpecific"`
+	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache,omitempty" json:"localCache,omitempty"`
+	ServiceRouter    *ServiceRouterConfigImpl  `yaml:"serviceRouter,omitempty" json:"serviceRouter,omitempty"`
+	Loadbalancer     *LoadBalancerConfigImpl   `yaml:"loadbalancer,omitempty" json:"loadbalancer,omitempty"`
+	CircuitBreaker   *CircuitBreakerConfigImpl `yaml:"circuitBreaker,omitempty" json:"circuitBreaker,omitempty"`
+	HealthCheck      *HealthCheckConfigImpl    `yaml:"healthCheck,omitempty" json:"healthCheck,omitempty"`
+	Subscribe        *SubscribeImpl            `yaml:"subscribe,omitempty" json:"subscribe,omitempty"`
+	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific,omitempty" json:"servicesSpecific,omitempty"`
 }
 
 // GetLocalCache consumer.localCache前缀开头的所有配置.
@@ -145,15 +145,15 @@ func (c *ConsumerConfigImpl) GetServiceSpecific(namespace string, service string
 // SystemConfigImpl 系统配置.
 type SystemConfigImpl struct {
 	// SDK运行模式
-	Mode model.RunMode `yaml:"mode" json:"mode"`
+	Mode model.RunMode `yaml:"mode,omitempty" json:"mode,omitempty"`
 	// 服务发现集群
-	DiscoverCluster *ServerClusterConfigImpl `yaml:"discoverCluster" json:"discoverCluster"`
+	DiscoverCluster *ServerClusterConfigImpl `yaml:"discoverCluster,omitempty" json:"discoverCluster,omitempty"`
 	// 健康检查集群
-	HealthCheckCluster *ServerClusterConfigImpl `yaml:"healthCheckCluster" json:"healthCheckCluster"`
+	HealthCheckCluster *ServerClusterConfigImpl `yaml:"healthCheckCluster,omitempty" json:"healthCheckCluster,omitempty"`
 	// 监控上报集群
-	MonitorCluster *ServerClusterConfigImpl `yaml:"monitorCluster" json:"monitorCluster"`
+	MonitorCluster *ServerClusterConfigImpl `yaml:"monitorCluster,omitempty" json:"monitorCluster,omitempty"`
 	// 传入的路由规则variables
-	Variables map[string]string `yaml:"variables" json:"variables"`
+	Variables map[string]string `yaml:"variables,omitempty" json:"variables,omitempty"`
 }
 
 // GetMode SDK运行模式，agent还是noagent.
@@ -207,9 +207,9 @@ func (s *SystemConfigImpl) UnsetVariable(key string) {
 
 // ServerClusterConfigImpl 单个服务集群配置.
 type ServerClusterConfigImpl struct {
-	Namespace       string         `yaml:"namespace" json:"namespace"`
-	Service         string         `yaml:"service" json:"service"`
-	RefreshInterval *time.Duration `yaml:"refreshInterval" json:"refreshInterval"`
+	Namespace       string         `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Service         string         `yaml:"service,omitempty" json:"service,omitempty"`
+	RefreshInterval *time.Duration `yaml:"refreshInterval,omitempty" json:"refreshInterval,omitempty"`
 }
 
 // GetNamespace 获取命名空间.
@@ -260,13 +260,13 @@ func ServiceClusterToServiceKey(config ServerClusterConfig) model.ServiceKey {
 
 // APIConfigImpl API访问相关的配置.
 type APIConfigImpl struct {
-	Timeout        *time.Duration `yaml:"timeout" json:"timeout"`
-	BindIntf       string         `yaml:"bindIf" json:"bindIf"`
-	BindIP         string         `yaml:"bindIP" json:"bindIP"`
+	Timeout        *time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	BindIntf       string         `yaml:"bindIf,omitempty" json:"bindIf,omitempty"`
+	BindIP         string         `yaml:"bindIP,omitempty" json:"bindIP,omitempty"`
 	BindIPValue    string         `yaml:"-" json:"-"`
-	ReportInterval *time.Duration `yaml:"reportInterval" json:"reportInterval"`
-	MaxRetryTimes  int            `yaml:"maxRetryTimes" json:"maxRetryTimes"`
-	RetryInterval  *time.Duration `yaml:"retryInterval" json:"retryInterval"`
+	ReportInterval *time.Duration `yaml:"reportInterval,omitempty" json:"reportInterval,omitempty"`
+	MaxRetryTimes  int            `yaml:"maxRetryTimes,omitempty" json:"maxRetryTimes,omitempty"`
+	RetryInterval  *time.Duration `yaml:"retryInterval,omitempty" json:"retryInterval,omitempty"`
 }
 
 // GetTimeout 默认调用超时时间.
