@@ -27,9 +27,7 @@ type NotifyTrigger struct {
 	EnableDstRoute     bool
 	EnableSrcRoute     bool
 	EnableDstRateLimit bool
-	EnableMeshConfig   bool
 	EnableServices     bool
-	EnableMesh         bool
 }
 
 // Clear 清理缓存信息
@@ -38,9 +36,7 @@ func (n *NotifyTrigger) Clear() {
 	n.EnableDstRoute = false
 	n.EnableSrcRoute = false
 	n.EnableDstRateLimit = false
-	n.EnableMeshConfig = false
 	n.EnableServices = false
-	n.EnableMesh = false
 }
 
 // ControlParam 单次查询的控制参数
@@ -70,8 +66,8 @@ type CacheValueQuery interface {
 	GetControlParam() *ControlParam
 	// GetCallResult 获取API调用统计
 	GetCallResult() *APICallResult
-	// SetMeshConfig 设置网格规则
-	SetMeshConfig(mc MeshConfig)
+	// SetServices 设置服务列表
+	SetServices(mc Services)
 }
 
 // Engine 编排调度引擎，API相关逻辑在这里执行
@@ -86,6 +82,8 @@ type Engine interface {
 	SyncGetInstances(req *GetInstancesRequest) (*InstancesResponse, error)
 	// SyncGetAllInstances 同步获取全量服务实例
 	SyncGetAllInstances(req *GetAllInstancesRequest) (*InstancesResponse, error)
+	// SyncRegisterV2 async-regis
+	SyncRegisterV2(Instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
 	// SyncRegister 同步进行服务注册
 	SyncRegister(instance *InstanceRegisterRequest) (*InstanceRegisterResponse, error)
 	// SyncDeregister 同步进行服务反注册
@@ -99,12 +97,6 @@ type Engine interface {
 	// SyncGetServiceRule 同步获取服务规则
 	SyncGetServiceRule(
 		eventType EventType, req *GetServiceRuleRequest) (*ServiceRuleResponse, error)
-	// SyncGetMeshConfig 同步获取网格规则
-	SyncGetMeshConfig(
-		eventType EventType, req *GetMeshConfigRequest) (*MeshConfigResponse, error)
-	// SyncGetMesh 同步获取网格
-	SyncGetMesh(
-		eventType EventType, req *GetMeshRequest) (*MeshResponse, error)
 	// SyncGetServices 同步获取批量服务
 	SyncGetServices(
 		eventType EventType, req *GetServicesRequest) (*ServicesResponse, error)

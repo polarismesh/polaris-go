@@ -481,12 +481,10 @@ func (n *namingServer) skipRequest(operation OperationType) bool {
 }
 
 var pbTypeToEvent = map[namingpb.DiscoverRequest_DiscoverRequestType]model.EventType{
-	namingpb.DiscoverRequest_ROUTING:     model.EventRouting,
-	namingpb.DiscoverRequest_INSTANCE:    model.EventInstances,
-	namingpb.DiscoverRequest_RATE_LIMIT:  model.EventRateLimiting,
-	namingpb.DiscoverRequest_SERVICES:    model.EventServices,
-	namingpb.DiscoverRequest_MESH_CONFIG: model.EventMeshConfig,
-	namingpb.DiscoverRequest_MESH:        model.EventMesh,
+	namingpb.DiscoverRequest_ROUTING:    model.EventRouting,
+	namingpb.DiscoverRequest_INSTANCE:   model.EventInstances,
+	namingpb.DiscoverRequest_RATE_LIMIT: model.EventRateLimiting,
+	namingpb.DiscoverRequest_SERVICES:   model.EventServices,
 }
 
 // 检验是否首次不返回

@@ -30,13 +30,11 @@ import (
 )
 
 const (
-	keySourceRoute   = "sourceRoute"
-	keyDstRoute      = "destinationRoute"
-	keyDstRateLimit  = "destinationRateLimit"
-	keyDstInstances  = "destinationInstances"
-	keyDstMeshConfig = "destinationMeshConfig"
-	keyDstServices   = "destinationServices"
-	keyDstMesh       = "destinationMesh"
+	keySourceRoute  = "sourceRoute"
+	keyDstRoute     = "destinationRoute"
+	keyDstRateLimit = "destinationRateLimit"
+	keyDstInstances = "destinationInstances"
+	keyDstServices  = "destinationServices"
 )
 
 // ContextKey 上下文标识

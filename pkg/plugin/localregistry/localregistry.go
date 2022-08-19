@@ -124,14 +124,6 @@ type RuleRegistry interface {
 	GetServiceRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
 	// LoadServiceRouteRule 非阻塞发起配置加载
 	LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error)
-	// GetMeshConfig 非阻塞获取网格规则
-	GetMeshConfig(key *model.ServiceKey, includeCache bool) model.MeshConfig
-	// LoadMeshConfig 非阻塞发起网格规则加载
-	LoadMeshConfig(key *model.ServiceKey) (*common.Notifier, error)
-	// GetMesh 非阻塞获取网格
-	GetMesh(key *model.ServiceKey, includeCache bool) model.Mesh
-	// LoadMesh 非阻塞发起网格加载
-	LoadMesh(key *model.ServiceKey) (*common.Notifier, error)
 	// GetServiceRateLimitRule 非阻塞获取限流规则
 	GetServiceRateLimitRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
 	// LoadServiceRateLimitRule 非阻塞发起限流规则加载

@@ -148,7 +148,13 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 	// metadata是否全部匹配
 	allMetaMatched := true
 	for ruleMetaKey, ruleMetaValue := range ruleMeta {
+		if ruleMetaKey == matchAll {
+			continue
+		}
 		if srcMetaValue, ok := srcMeta[ruleMetaKey]; ok {
+			if ruleMetaValue.GetValue().GetValue() == matchAll {
+				continue
+			}
 			rawMetaValue, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue)
 			if !exist {
 				return false, "", nil
@@ -394,28 +400,28 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 	if routeInfo.SourceService != nil {
 		srcMeta = routeInfo.SourceService.GetMetadata()
 	}
-	var ruleMetaValueStr string
+	var processedRuleMetaValue string
 	var exist bool
 	switch ruleMetaValue.ValueType {
 	case namingpb.MatchString_TEXT:
-		ruleMetaValueStr = ruleMetaValue.GetValue().GetValue()
+		processedRuleMetaValue = ruleMetaValue.GetValue().GetValue()
 		exist = true
 	case namingpb.MatchString_PARAMETER:
 		if len(srcMeta) == 0 {
 			exist = false
 		} else {
-			ruleMetaValueStr, exist = srcMeta[ruleMetaKey]
+			processedRuleMetaValue, exist = srcMeta[ruleMetaKey]
 		}
 	case namingpb.MatchString_VARIABLE:
-		ruleMetaValueStr, exist = g.getVariable(ruleMetaValue.GetValue().GetValue())
+		processedRuleMetaValue, exist = g.getVariable(ruleMetaValue.GetValue().GetValue())
 		if exist {
-			addRouteInfoVariable(ruleMetaValue.GetValue().GetValue(), ruleMetaValueStr, routeInfo)
+			addRouteInfoVariable(ruleMetaValue.GetValue().GetValue(), processedRuleMetaValue, routeInfo)
 		}
 	default:
-		ruleMetaValueStr = ruleMetaValue.GetValue().GetValue()
+		processedRuleMetaValue = ruleMetaValue.GetValue().GetValue()
 		exist = true
 	}
-	return ruleMetaValueStr, exist
+	return processedRuleMetaValue, exist
 }
 
 // populateSubsetsFromDst 根据destination中的规则填充分组列表

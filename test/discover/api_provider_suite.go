@@ -107,7 +107,7 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	time.Sleep(2 * time.Second)
 }
 
-// TearDownSuite SetUpSuite 结束测试套程序
+// TearDownSuite 结束测试套程序
 func (t *ProviderTestingSuite) TearDownSuite(c *check.C) {
 	t.provider.Destroy()
 	t.grpcServer.Stop()

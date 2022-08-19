@@ -380,6 +380,7 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
+	awaitServerReady(ruleServerIPAddr, ruleServerPort)
 	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
 		Namespace: config.ServerNamespace,
 		Service:   config.ServerMonitorService,
@@ -905,7 +906,7 @@ func (t *RuleRoutingTestingSuite) TestDestWeight(c *check.C) {
 		}
 	}
 	fmt.Println("-----set1Num", set1Num)
-	c.Assert(math.Abs(600-float64(set1Num)) < 50, check.Equals, true)
+	c.Assert(math.Abs(600-float64(set1Num)) < 100, check.Equals, true)
 }
 
 // TestInboundNoSources 测试inbound no sources

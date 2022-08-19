@@ -62,8 +62,8 @@ type ConsumerAPI interface {
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// WatchService 订阅服务消息
 	WatchService(req *WatchServiceRequest) (*model.WatchServiceResponse, error)
-	// GetServicesByBusiness 根据业务同步获取批量服务
-	GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error)
+	// GetServices 根据业务同步获取批量服务
+	GetServices(req *GetServicesRequest) (*model.ServicesResponse, error)
 	// InitCalleeService 初始化服务运行中需要的被调服务
 	InitCalleeService(req *InitCalleeServiceRequest) error
 	// Destroy 销毁API，销毁后无法再进行调用
@@ -82,15 +82,20 @@ type InstanceHeartbeatRequest api.InstanceHeartbeatRequest
 // ProviderAPI CL5服务端API的主接口.
 type ProviderAPI interface {
 	api.SDKOwner
+	// RegisterInstance
+	// minimum supported version of polaris-server is v1.10.0
+	RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
 	// Register
 	// 同步注册服务，服务注册成功后会填充instance中的InstanceID字段
 	// 用户可保持该instance对象用于反注册和心跳上报
+	// Deprecated: Use RegisterInstance instead.
 	Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
 	// Deregister
 	// 同步反注册服务
 	Deregister(instance *InstanceDeRegisterRequest) error
 	// Heartbeat
 	// 心跳上报
+	// Deprecated: Use RegisterInstance instead.
 	Heartbeat(instance *InstanceHeartbeatRequest) error
 	// Destroy
 	// 销毁API，销毁后无法再进行调用

@@ -79,6 +79,8 @@ type Engine struct {
 	subscribe subscribe.Subscribe
 	// 配置中心门面类
 	configFileService *configuration.ConfigFileService
+	// 注册状态管理器
+	registerStates *registerStates
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -165,6 +167,9 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if cfg.GetConfigFile().IsEnable() {
 		flowEngine.configFileService = configuration.NewConfigFileService(flowEngine.configConnector, flowEngine.configuration)
 	}
+
+	// 初始注册状态管理器
+	flowEngine.registerStates = &registerStates{states: make(map[string]*registerState)}
 
 	return nil
 }
@@ -324,6 +329,7 @@ func (e *Engine) Destroy() error {
 	if e.configFileService != nil {
 		e.configFileService.Destroy()
 	}
+	e.registerStates.destroy()
 	return nil
 }
 

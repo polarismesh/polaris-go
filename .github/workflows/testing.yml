@@ -68,6 +68,7 @@ jobs:
       - name: run tests
         run: |
           cd ./test
-          go test -timeout=240m
+          go test -timeout=240m -v -coverprofile=coverage.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
 
-      # TODO: Examine coverage
+      - name: Coverage
+        run: bash <(curl -s https://codecov.io/bash)

@@ -492,11 +492,9 @@ func (g *GetInstancesRequest) Validate() error {
 type GetServicesRequest struct {
 	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
-	// 可选，是否使用业务过滤
-	EnableBusiness bool
-	// 必选，业务名
+	// 可选，业务名
 	Business string
-	// 必选，命名空间
+	// 可选，命名空间
 	Namespace string
 	// 可选，元数据信息，可用于过滤
 	Metadata map[string]string
@@ -529,15 +527,6 @@ func (g *GetServicesRequest) GetRetryCountPtr() *int {
 
 // Validate 验证请求参数
 func (g *GetServicesRequest) Validate() error {
-	var errs error
-	if g.EnableBusiness && len(g.Business) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("enablebusiness but none"))
-		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
-	}
-	if !g.EnableBusiness && len(g.Metadata) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("metadata empty"))
-		return NewSDKError(ErrCodeAPIInvalidArgument, errs, "input not correct")
-	}
 	return nil
 }
 
@@ -561,19 +550,15 @@ func (g *InitCalleeServiceRequest) Validate() error {
 // Services 批量服务
 type Services interface {
 	RegistryValue
-	GetNamespace() string
-	GetService() string
-	GetValue() interface{}
+	GetValue() []*ServiceKey
 }
 
 // ServicesResponse 批量服务应答
 type ServicesResponse struct {
 	// 规则类型
 	Type EventType
-	// 所属服务
-	Service ServiceKey
 	// 规则对象，不同EventType对应不同类型实例
-	Value interface{}
+	Value []*ServiceKey
 	// 规则版本信息
 	Revision string
 	// 规则缓存
@@ -589,7 +574,7 @@ func (s *ServicesResponse) GetType() EventType {
 
 // GetValue 获取值
 // PB场景下，路由规则类型为*Routing
-func (s *ServicesResponse) GetValue() interface{} {
+func (s *ServicesResponse) GetValue() []*ServiceKey {
 	return s.Value
 }
 
@@ -601,16 +586,6 @@ func (s *ServicesResponse) IsInitialized() bool {
 // GetRevision 获取配置规则的修订版本信息
 func (s *ServicesResponse) GetRevision() string {
 	return s.Revision
-}
-
-// GetNamespace 获取命名空间
-func (s *ServicesResponse) GetNamespace() string {
-	return s.Service.Namespace
-}
-
-// GetService 获取服务名
-func (s *ServicesResponse) GetService() string {
-	return s.Service.Service
 }
 
 // GetValidateError 获取规则校验异常
@@ -779,6 +754,8 @@ type ServiceCallResult struct {
 	RetCode *int32
 	// 必选，被调服务实例获取接口的最大时延
 	Delay *time.Duration
+	// 可选，主调服务实例的服务信息
+	SourceService *ServiceInfo
 }
 
 // RateLimitGauge Rate Limit Gauge
@@ -926,6 +903,22 @@ func (s *ServiceCallResult) SetDelay(duration time.Duration) *ServiceCallResult 
 // GetRetStatus 获取本地调用状态
 func (s *ServiceCallResult) GetRetStatus() RetStatus {
 	return s.RetStatus
+}
+
+// GetCallerService 获取主调服务实例的服务信息
+func (s *ServiceCallResult) GetCallerService() string {
+	if s.SourceService != nil {
+		return s.SourceService.Service
+	}
+	return ""
+}
+
+// GetCallerNamespace 获取主调服务实例的命名空间
+func (s *ServiceCallResult) GetCallerNamespace() string {
+	if s.SourceService != nil {
+		return s.SourceService.Namespace
+	}
+	return ""
 }
 
 // APICallResult sdk api调用结果
@@ -1157,6 +1150,8 @@ const (
 const (
 	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
+	// DefaultHeartbeatTtl
+	DefaultHeartbeatTtl int = 5
 )
 
 // InstanceRegisterRequest 注册服务请求
@@ -1249,6 +1244,13 @@ func (g *InstanceRegisterRequest) GetLocation() *Location {
 	return g.Location
 }
 
+// SetDefaultTTL set default ttl
+func (g *InstanceRegisterRequest) SetDefaultTTL() {
+	if g.TTL == nil {
+		g.SetTTL(DefaultHeartbeatTtl)
+	}
+}
+
 // validateMetadata 校验元数据的key是否为空
 func validateMetadata(prefix string, metadata map[string]string) error {
 	if len(metadata) > 0 {
@@ -1286,6 +1288,9 @@ func (g *InstanceRegisterRequest) Validate() error {
 	if nil != g.Priority && (*g.Priority < MinPriority || *g.Priority > MaxPriority) {
 		errs = multierror.Append(errs,
 			fmt.Errorf("InstanceRegisterRequest: priority should be in range [%d, %d]", MinPriority, MaxPriority))
+	}
+	if g.TTL != nil && *g.TTL <= 0 {
+		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: heartbeat ttl should be greater than zero"))
 	}
 	var err error
 	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); err != nil {
