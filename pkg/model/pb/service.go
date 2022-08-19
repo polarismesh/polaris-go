@@ -406,11 +406,9 @@ func GenServicesRevision(services []*namingpb.Service) string {
 
 // ServicesProto 批量服务.
 type ServicesProto struct {
-	*model.ServiceKey
 	initialized bool
 	revision    string
-	ruleValue   []*namingpb.Service
-	ruleCache   model.RuleCache
+	ruleValue   []*model.ServiceKey
 	eventType   model.EventType
 	CacheLoaded int32
 }
@@ -422,13 +420,16 @@ func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
 		value.initialized = false
 		return value
 	}
-	value.ServiceKey = &model.ServiceKey{
-		Namespace: resp.Service.Namespace.GetValue(),
-		Service:   resp.Service.Name.GetValue(),
-	}
 	value.initialized = true
 	value.eventType = GetEventType(resp.GetType())
-	value.ruleValue = resp.Services
+	if len(resp.Services) > 0 {
+		for _, svc := range resp.Services {
+			value.ruleValue = append(value.ruleValue, &model.ServiceKey{
+				Namespace: svc.GetNamespace().GetValue(),
+				Service:   svc.GetName().GetValue(),
+			})
+		}
+	}
 	value.revision = GenServicesRevision(resp.Services)
 	return value
 }
@@ -449,16 +450,6 @@ func (s *ServicesProto) GetRevision() string {
 }
 
 // GetValue 获取值.
-func (s *ServicesProto) GetValue() interface{} {
+func (s *ServicesProto) GetValue() []*model.ServiceKey {
 	return s.ruleValue
-}
-
-// GetNamespace 获取Namespace.
-func (s *ServicesProto) GetNamespace() string {
-	return s.Namespace
-}
-
-// GetService 获取Service.
-func (s *ServicesProto) GetService() string {
-	return s.Service
 }

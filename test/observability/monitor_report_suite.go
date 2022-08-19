@@ -62,10 +62,6 @@ var (
 	// ServiceCallSuccessNum 上报服务调用的次数
 	ServiceCallSuccessNum = 0
 	ServiceCallFailNum    = 0
-
-	// GetMeshSuccessNum 获取网格调用次数
-	GetMeshSuccessNum = 0
-	GetMeshFailNum    = 0
 )
 
 // providerAPI各种方法调用次数
@@ -289,9 +285,6 @@ func (m *MonitorReportSuite) initStatNum() {
 	GetQuotaSuccessNum = rand.Intn(20) + 1
 	GetQuotaFailNum = rand.Intn(20) + 1
 
-	GetMeshSuccessNum = rand.Intn(20) + 1
-	GetMeshFailNum = rand.Intn(20) + 1
-
 }
 
 // TestMonitorReportConsumer 测试consumerAPI方法的上报
@@ -318,9 +311,6 @@ func (m *MonitorReportSuite) TestMonitorReportConsumer(c *check.C) {
 
 	// 测试getOneInstance
 	m.checkGetOneInstance(c, consumer)
-
-	// 测试网格规则获取
-	m.checkGetMeshConfig(c, consumer)
 
 	// 获取路由请求
 	routeRequest := &api.GetServiceRuleRequest{}
@@ -387,67 +377,6 @@ func (m *MonitorReportSuite) checkGetOneInstance(c *check.C, consumer api.Consum
 		_, err = consumer.GetOneInstance(request)
 		c.Assert(err, check.NotNil)
 	}
-}
-
-// 测试网格获取
-func (m *MonitorReportSuite) checkGetMeshConfig(c *check.C, consumer api.ConsumerAPI) {
-	// 添加辅助服务
-	testbus := "ExistBusiness"
-	consumerNamespace := "testns"
-
-	// 添加server网格规则
-	m.mockServer.RegisterMeshConfig(&namingpb.Service{
-		Namespace: &wrappers.StringValue{Value: consumerNamespace},
-		Business:  &wrappers.StringValue{Value: testbus},
-	}, model.MeshVirtualService,
-		&namingpb.MeshConfig{
-			MeshId:   &wrappers.StringValue{Value: testbus},
-			Revision: &wrappers.StringValue{Value: time.Now().String()},
-			Resources: []*namingpb.MeshResource{
-				{
-					TypeUrl:  &wrappers.StringValue{Value: api.MeshVirtualService},
-					Revision: &wrappers.StringValue{Value: time.Now().String()},
-				},
-			},
-		})
-	//
-	serviceToken := uuid.New().String()
-	testService := &namingpb.Service{
-		Name:      &wrappers.StringValue{Value: model.MeshPrefix + model.MeshKeySpliter + testbus + model.MeshKeySpliter + api.MeshVirtualService},
-		Namespace: &wrappers.StringValue{Value: consumerNamespace},
-		Token:     &wrappers.StringValue{Value: serviceToken},
-	}
-	m.mockServer.RegisterService(testService)
-
-	request := &api.GetMeshConfigRequest{}
-	request.FlowID = 1111
-	request.Namespace = consumerNamespace
-	request.MeshId = testbus
-	request.MeshType = api.MeshVirtualService
-
-	// resp, err := consumer.GetMeshConfig(request)
-
-	m.mockServer.SetReturnException(true)
-	_, err := consumer.GetMeshConfig(request)
-	c.Assert(err, check.NotNil)
-	log.Printf("expected err %v", err)
-	m.mockServer.SetReturnException(false)
-
-	for i := 0; i < GetMeshSuccessNum; i++ {
-		_, err := consumer.GetMeshConfig(request)
-		c.Assert(err, check.IsNil)
-	}
-
-	// 命名空间和服务名有误
-	request.Namespace = calledNs + "err2"
-	request.Business = calledSvc + "err2"
-	m.mockServer.SetNotRegisterAssistant(true)
-	for i := 0; i < GetMeshFailNum; i++ {
-		_, err = consumer.GetMeshConfig(request)
-		c.Assert(err, check.NotNil)
-		log.Println("GetMeshConfig", err)
-	}
-	m.mockServer.SetNotRegisterAssistant(false)
 }
 
 // 测试获取所有实例和上报调用结果
@@ -523,8 +452,8 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	uploadServiceCallResultSuccessNum := 0
 	uploadServiceCallResultFailNum := 0
 	// mesh
-	uploadGetMeshSuccessNum := 0
-	uploadGetMeshFailNum := 0
+	//uploadGetMeshSuccessNum := 0
+	//uploadGetMeshFailNum := 0
 
 	execptionFailNum := 0
 
@@ -574,13 +503,6 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 				uploadServiceCallResultFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
 				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
 			}
-		case model.ApiMeshConfig.String():
-			if s.GetKey().GetSuccess().GetValue() {
-				uploadGetMeshSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-			} else {
-				uploadGetMeshFailNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
-				c.Assert(s.GetKey().GetResult().String(), check.Equals, monitorpb.APIResultType_UserFail.String())
-			}
 		case model.ApiInitCalleeServices.String():
 			if s.GetKey().GetSuccess().GetValue() {
 				uploadGetInitCalleeSuccessNum += int(s.GetValue().GetTotalRequestPerMinute().GetValue())
@@ -599,8 +521,6 @@ func (m *MonitorReportSuite) checkConsumerStat(sdkStat []*monitorpb.SDKAPIStatis
 	c.Assert(execptionFailNum, check.Equals, 1)
 	c.Assert(uploadGetRouteRuleSuccessNum >= GetRouteRuleSuccessNum, check.Equals, true)
 	c.Assert(uploadGetRouteRuleFailNum >= GetRouteRuleFailNum, check.Equals, true)
-	c.Assert(uploadGetMeshSuccessNum >= GetMeshSuccessNum, check.Equals, true)
-	c.Assert(uploadGetMeshFailNum >= GetMeshFailNum, check.Equals, true)
 	fmt.Println("===================uploadGetInitCalleeSuccessNum", uploadGetInitCalleeSuccessNum)
 	c.Assert(uploadGetInitCalleeSuccessNum >= uploadGetInitCalleeFailNum, check.Equals, true)
 

@@ -48,8 +48,8 @@ func (p *Proxy) DeRegisterServiceHandler(key *model.ServiceEventKey) error {
 }
 
 // RegisterInstance proxy ServerConnector RegisterInstance
-func (p *Proxy) RegisterInstance(req *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	result, err := p.ServerConnector.RegisterInstance(req)
+func (p *Proxy) RegisterInstance(req *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error) {
+	result, err := p.ServerConnector.RegisterInstance(req, header)
 	return result, err
 }
 

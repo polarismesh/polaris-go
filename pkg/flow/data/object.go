@@ -39,10 +39,6 @@ var (
 	ruleRequestPool = &sync.Pool{}
 	// 限流请求对象池
 	rateLimitRequestPool = &sync.Pool{}
-	// 网格规则请求对象池
-	meshConfigRequestPool = &sync.Pool{}
-	// 网格请求对象池
-	meshRequestPool = &sync.Pool{}
 	// 批量服务请求对象池
 	servicesRequestPool = &sync.Pool{}
 	// 调用结果上报请求对象池
@@ -164,13 +160,13 @@ func (br *BaseRequest) GetCallResult() *model.APICallResult {
 	return &br.CallResult
 }
 
-// SetMeshConfig 设置网格规则
-func (br *BaseRequest) SetMeshConfig(mc model.MeshConfig) {
+// SetDstInstances 设置实例
+func (br *BaseRequest) SetDstInstances(instances model.ServiceInstances) {
 	// do nothing
 }
 
-// SetDstInstances 设置实例
-func (br *BaseRequest) SetDstInstances(instances model.ServiceInstances) {
+// SetServices 设置网格规则
+func (br *BaseRequest) SetServices(mc model.Services) {
 	// do nothing
 }
 
@@ -396,11 +392,6 @@ func (c *CommonInstancesRequest) SetDstRateLimit(rule model.ServiceRule) {
 	// do nothing
 }
 
-// SetMeshConfig 设置网格规则
-func (c *CommonInstancesRequest) SetMeshConfig(mc model.MeshConfig) {
-	// do nothing
-}
-
 // SetSrcRoute 设置源服务路由规则
 func (c *CommonInstancesRequest) SetSrcRoute(rule model.ServiceRule) {
 	c.RouteInfo.SourceRouteRule = rule
@@ -414,6 +405,11 @@ func (c *CommonInstancesRequest) GetCallResult() *model.APICallResult {
 // GetControlParam 获取API调用控制参数
 func (c *CommonInstancesRequest) GetControlParam() *model.ControlParam {
 	return &c.ControlParam
+}
+
+// SetServices 设置网格规则
+func (c *CommonInstancesRequest) SetServices(mc model.Services) {
+	// do nothing
 }
 
 // SingleInstancesOwner 获取单个实例数组的持有者
@@ -466,9 +462,8 @@ func (cr *ServicesRequest) GetServices() model.Services {
 	return cr.Services
 }
 
-// SetMeshConfig 设置网格规则
-func (cr *ServicesRequest) SetMeshConfig(mc model.MeshConfig) {
-	// 此处复用网格接口
+// SetServices 设置网格规则
+func (cr *ServicesRequest) SetServices(mc model.Services) {
 	cr.Services = mc
 }
 
@@ -477,7 +472,7 @@ func (cr *ServicesRequest) InitByGetServicesRequest(
 	eventType model.EventType, request *model.GetServicesRequest, cfg config.Configuration) {
 	cr.clearValues()
 	cr.FlowID = request.FlowID
-	cr.CallResult.APIName = model.ApiMeshConfig
+	cr.CallResult.APIName = model.ApiServices
 	cr.CallResult.RetStatus = model.RetSuccess
 	cr.CallResult.RetCode = model.ErrCodeSuccess
 	cr.DstService.Namespace = request.Namespace
@@ -491,181 +486,9 @@ func (cr *ServicesRequest) BuildServicesResponse(mesh model.Services) *model.Ser
 	resp := model.ServicesResponse{
 		Type:     mesh.GetType(),
 		Value:    mesh.GetValue(),
-		Service:  cr.DstService,
 		Revision: mesh.GetRevision(),
 	}
 	return &resp
-}
-
-// PoolGetMeshConfigRequest 获取对象池中请求
-func PoolGetMeshConfigRequest() *MeshConfigRequest {
-	value := meshConfigRequestPool.Get()
-	if nil == value {
-		return &MeshConfigRequest{}
-	}
-	return value.(*MeshConfigRequest)
-}
-
-// PoolPutMeshConfigRequest 归还到请求对象到池子
-func PoolPutMeshConfigRequest(request *MeshConfigRequest) {
-	meshConfigRequestPool.Put(request)
-}
-
-// PoolGetMeshRequest 获取对象池中请求
-func PoolGetMeshRequest() *MeshRequest {
-	value := meshRequestPool.Get()
-	if nil == value {
-		return &MeshRequest{}
-	}
-	return value.(*MeshRequest)
-}
-
-// PoolPutMeshRequest 归还到请求对象到池子
-func PoolPutMeshRequest(request *MeshRequest) {
-	meshRequestPool.Put(request)
-}
-
-// MeshRequest 网格请求
-type MeshRequest struct {
-	BaseRequest
-	Mesh model.Mesh
-}
-
-// GetMesh 获取services
-func (mr *MeshRequest) GetMesh() model.Mesh {
-	return mr.Mesh
-}
-
-// SetMeshConfig 设置网格规则
-func (mr *MeshRequest) SetMeshConfig(mc model.MeshConfig) {
-	// 此处复用网格接口
-	mr.Mesh = mc
-}
-
-// InitByGetMeshRequest 初始化请求
-func (mr *MeshRequest) InitByGetMeshRequest(
-	eventType model.EventType, request *model.GetMeshRequest, cfg config.Configuration) {
-	mr.clearValues()
-	mr.FlowID = request.FlowID
-	mr.CallResult.APIName = model.ApiMesh
-	mr.CallResult.RetStatus = model.RetSuccess
-	mr.CallResult.RetCode = model.ErrCodeSuccess
-	mr.DstService.Namespace = request.Namespace
-	mr.DstService.Service = request.MeshId
-	mr.Trigger.EnableMesh = true
-	BuildControlParam(request, cfg, &mr.ControlParam)
-}
-
-// BuildMeshResponse 构建答复
-func (mr *MeshRequest) BuildMeshResponse(mesh model.Mesh) *model.MeshResponse {
-	resp := model.MeshResponse{
-		Type:     mesh.GetType(),
-		Value:    mesh.GetValue(),
-		Service:  mr.DstService,
-		Revision: mesh.GetRevision(),
-	}
-	return &resp
-}
-
-// MeshConfigRequest 网格规则请求
-type MeshConfigRequest struct {
-	FlowID       uint64
-	DstService   model.ServiceKey
-	SrcService   model.ServiceKey
-	Trigger      model.NotifyTrigger
-	ControlParam model.ControlParam
-	CallResult   model.APICallResult
-	MeshConfig   model.MeshConfig
-	MeshType     string
-}
-
-// SetMeshConfig 设置网格规则
-func (cr *MeshConfigRequest) SetMeshConfig(mc model.MeshConfig) {
-	cr.MeshConfig = mc
-}
-
-// GetMeshConfig 获取网格规则
-func (cr *MeshConfigRequest) GetMeshConfig() model.MeshConfig {
-	return cr.MeshConfig
-}
-
-func (cr *MeshConfigRequest) clearValues() {
-	cr.FlowID = 0
-	// cr.DstService = nil
-	cr.Trigger.EnableMeshConfig = false
-	cr.Trigger.Clear()
-}
-
-// InitByGetRuleRequest 初始化
-func (cr *MeshConfigRequest) InitByGetRuleRequest(
-	eventType model.EventType, request *model.GetMeshConfigRequest, cfg config.Configuration) {
-	cr.clearValues()
-	cr.FlowID = request.FlowID
-	cr.CallResult.APIName = model.ApiMeshConfig
-	cr.CallResult.RetStatus = model.RetSuccess
-	cr.CallResult.RetCode = model.ErrCodeSuccess
-	cr.DstService.Namespace = request.Namespace
-	cr.DstService.Service = model.MeshPrefix + model.MeshKeySpliter +
-		request.MeshId + model.MeshKeySpliter + request.MeshType
-	cr.MeshType = request.MeshType
-	cr.Trigger.EnableMeshConfig = true
-	BuildControlParam(request, cfg, &cr.ControlParam)
-}
-
-// BuildMeshConfigResponse 构建答复
-func (cr *MeshConfigRequest) BuildMeshConfigResponse(mesh model.MeshConfig) *model.MeshConfigResponse {
-	resp := model.MeshConfigResponse{
-		Type:     mesh.GetType(),
-		Value:    mesh.GetValue(),
-		Service:  cr.DstService,
-		Revision: mesh.GetRevision(),
-	}
-	return &resp
-}
-
-// GetDstService 获取DstService
-func (cr *MeshConfigRequest) GetDstService() *model.ServiceKey {
-	return &cr.DstService
-}
-
-// GetSrcService 获取SrcService
-func (cr *MeshConfigRequest) GetSrcService() *model.ServiceKey {
-	return &cr.SrcService
-}
-
-// GetNotifierTrigger 获取Trigger
-func (cr *MeshConfigRequest) GetNotifierTrigger() *model.NotifyTrigger {
-	return &cr.Trigger
-}
-
-// SetDstInstances 设置实例
-func (cr *MeshConfigRequest) SetDstInstances(instances model.ServiceInstances) {
-	// do nothing
-}
-
-// SetDstRoute 设置路由规则
-func (cr *MeshConfigRequest) SetDstRoute(rule model.ServiceRule) {
-	// do nothing
-}
-
-// SetDstRateLimit 设置ratelimit
-func (cr *MeshConfigRequest) SetDstRateLimit(rule model.ServiceRule) {
-	// do nothing
-}
-
-// SetSrcRoute 设置route
-func (cr *MeshConfigRequest) SetSrcRoute(rule model.ServiceRule) {
-	// do nothing
-}
-
-// GetControlParam 获取ControlParam
-func (cr *MeshConfigRequest) GetControlParam() *model.ControlParam {
-	return &cr.ControlParam
-}
-
-// GetCallResult 获取结果
-func (cr *MeshConfigRequest) GetCallResult() *model.APICallResult {
-	return &cr.CallResult
 }
 
 // CommonRuleRequest 通用规则查询请求
@@ -808,11 +631,6 @@ func (cl *CommonRateLimitRequest) SetDstRateLimit(rule model.ServiceRule) {
 	cl.RateLimitRule = rule
 }
 
-// SetMeshConfig 设置网格规则
-func (cl *CommonRateLimitRequest) SetMeshConfig(mc model.MeshConfig) {
-	// do nothing
-}
-
 // SetSrcRoute 设置源服务路由规则
 func (cl *CommonRateLimitRequest) SetSrcRoute(rule model.ServiceRule) {
 	// do nothing
@@ -826,6 +644,11 @@ func (cl *CommonRateLimitRequest) GetCallResult() *model.APICallResult {
 // GetControlParam 获取API调用控制参数
 func (cl *CommonRateLimitRequest) GetControlParam() *model.ControlParam {
 	return &cl.ControlParam
+}
+
+// SetServices 设置网格规则
+func (cl *CommonRateLimitRequest) SetServices(mc model.Services) {
+	// do nothing
 }
 
 // FormatLabelToStr 格式化字符串

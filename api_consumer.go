@@ -64,8 +64,8 @@ func (c *consumerAPI) WatchService(req *WatchServiceRequest) (*model.WatchServic
 }
 
 // GetServicesByBusiness 根据业务同步获取批量服务
-func (c *consumerAPI) GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error) {
-	return c.rawAPI.GetServicesByBusiness((*api.GetServicesRequest)(req))
+func (c *consumerAPI) GetServices(req *GetServicesRequest) (*model.ServicesResponse, error) {
+	return c.rawAPI.GetServices((*api.GetServicesRequest)(req))
 }
 
 // InitCalleeService 初始化服务运行中需要的被调服务

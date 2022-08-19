@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"log"
+	"os"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -386,7 +387,9 @@ func LoadConfiguration(buf []byte) (*ConfigurationImpl, error) {
 	var err error
 	cfg := &ConfigurationImpl{}
 	cfg.Init()
-	decoder := yaml.NewDecoder(bytes.NewBuffer(buf))
+	// to support environment variables
+	content := os.ExpandEnv(string(buf))
+	decoder := yaml.NewDecoder(bytes.NewBufferString(content))
 	if err = decoder.Decode(cfg); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err,
 			"fail to decode config string")

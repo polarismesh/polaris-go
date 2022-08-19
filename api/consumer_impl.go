@@ -89,24 +89,8 @@ func (c *consumerAPI) GetRouteRule(req *GetServiceRuleRequest) (*model.ServiceRu
 	return c.context.GetEngine().SyncGetServiceRule(model.EventRouting, &req.GetServiceRuleRequest)
 }
 
-// GetMeshConfig 同步获取mesh配置
-func (c *consumerAPI) GetMeshConfig(req *GetMeshConfigRequest) (*model.MeshConfigResponse, error) {
-	if err := checkAvailable(c); err != nil {
-		return nil, err
-	}
-	return c.context.GetEngine().SyncGetMeshConfig(model.EventMeshConfig, &req.GetMeshConfigRequest)
-}
-
-// GetMesh 同步获取网格
-func (c *consumerAPI) GetMesh(req *GetMeshRequest) (*model.MeshResponse, error) {
-	if err := checkAvailable(c); err != nil {
-		return nil, err
-	}
-	return c.context.GetEngine().SyncGetMesh(model.EventMesh, &req.GetMeshRequest)
-}
-
-// GetServicesByBusiness 同步获取批量服务
-func (c *consumerAPI) GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error) {
+// GetServices 同步获取批量服务
+func (c *consumerAPI) GetServices(req *GetServicesRequest) (*model.ServicesResponse, error) {
 	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}

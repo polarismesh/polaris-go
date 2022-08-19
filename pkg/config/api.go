@@ -70,6 +70,8 @@ type ProviderConfig interface {
 	BaseConfig
 	// GetRateLimit 获取限流配置
 	GetRateLimit() RateLimitConfig
+	// GetMinRegisterInterval get minimum interval between two register operation
+	GetMinRegisterInterval() time.Duration
 }
 
 // ConfigFileConfig 配置中心的配置.

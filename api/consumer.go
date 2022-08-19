@@ -67,16 +67,6 @@ type GetServiceRuleRequest struct {
 	model.GetServiceRuleRequest
 }
 
-// GetMeshConfigRequest 获取网格规则请求
-type GetMeshConfigRequest struct {
-	model.GetMeshConfigRequest
-}
-
-// GetMeshRequest 获取网格规则请求
-type GetMeshRequest struct {
-	model.GetMeshRequest
-}
-
 // GetServicesRequest 获取批量服务请求
 type GetServicesRequest struct {
 	model.GetServicesRequest
@@ -109,12 +99,8 @@ type ConsumerAPI interface {
 	Destroy()
 	// WatchService 订阅服务消息
 	WatchService(req *WatchServiceRequest) (*model.WatchServiceResponse, error)
-	// GetMeshConfig 同步获取网格规则
-	GetMeshConfig(req *GetMeshConfigRequest) (*model.MeshConfigResponse, error)
-	// GetMesh 同步获取网格
-	GetMesh(req *GetMeshRequest) (*model.MeshResponse, error)
-	// GetServicesByBusiness 根据业务同步获取批量服务
-	GetServicesByBusiness(req *GetServicesRequest) (*model.ServicesResponse, error)
+	// GetServices 根据业务同步获取批量服务
+	GetServices(req *GetServicesRequest) (*model.ServicesResponse, error)
 	// InitCalleeService 初始化服务运行中需要的被调服务
 	InitCalleeService(req *InitCalleeServiceRequest) error
 }

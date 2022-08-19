@@ -179,3 +179,12 @@ func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.
 	}
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
+
+func AppendHeaderWithReqId(header map[string]string, reqID string) map[string]string {
+	m := make(map[string]string, len(header)+1)
+	for k, v := range header {
+		m[k] = v
+	}
+	m[headerRequestID] = reqID
+	return m
+}
