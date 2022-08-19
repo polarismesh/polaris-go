@@ -14,6 +14,9 @@ warningCode = 0
 [rule.exported]
 [rule.if-return]
 [rule.increment-decrement]
+[rule.line-length-limit]
+    severity = "error"
+    arguments= [120]
 [rule.var-naming]
 [rule.var-declaration]
 [rule.package-comments]

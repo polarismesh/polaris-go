@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// SubscribeImpl global.subscribe.
 type SubscribeImpl struct {
 	// 上报插件链
 	Type string `yaml:"type" json:"type"`
@@ -28,11 +29,13 @@ type SubscribeImpl struct {
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
 
+// Init 初始化.
 func (s *SubscribeImpl) Init() {
 	s.Plugin = PluginConfigs{}
 	s.Plugin.Init(common.TypeSubScribe)
 }
 
+// SetDefault 设置默认值.
 func (s *SubscribeImpl) SetDefault() {
 	if s.Type == "" {
 		s.Type = SubscribeLocalChannel
@@ -40,7 +43,7 @@ func (s *SubscribeImpl) SetDefault() {
 	s.Plugin.SetDefault(common.TypeSubScribe)
 }
 
-// Verify.
+// Verify 检验配置.
 func (s *SubscribeImpl) Verify() error {
 	return nil
 }
@@ -55,7 +58,7 @@ func (s *SubscribeImpl) GetType() string {
 	return s.Type
 }
 
-// GetPluginConfig.
+// GetPluginConfig 获取插件配置.
 func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	if s.Plugin == nil {
 		return nil
@@ -63,12 +66,11 @@ func (s *SubscribeImpl) GetPluginConfig(pluginName string) BaseConfig {
 	if v, ok := s.Plugin[pluginName]; ok {
 		conf := v.(BaseConfig)
 		return conf
-	} else {
-		return nil
 	}
+	return nil
 }
 
-// SetPluginConfig.
+// SetPluginConfig 设置插件配置
 func (s *SubscribeImpl) SetPluginConfig(plugName string, value BaseConfig) error {
 	return nil
 }

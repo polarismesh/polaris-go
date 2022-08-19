@@ -32,7 +32,7 @@ import (
 // 插件配置类型
 var pluginConfigTypes = make(map[common.Type]map[string]reflect.Type)
 
-// RegisterPlugin 注册插件到全局配置对象，并注册插件配置类型.
+// RegisterPluginConfigType RegisterPlugin 注册插件到全局配置对象，并注册插件配置类型.
 func RegisterPluginConfigType(typ common.Type, name string, cfg BaseConfig) {
 	if reflect2.IsNil(cfg) {
 		return
@@ -47,41 +47,41 @@ func RegisterPluginConfigType(typ common.Type, name string, cfg BaseConfig) {
 
 // ErrorCountConfig 连续错误数熔断配置.
 type ErrorCountConfig interface {
-	// 连续错误数阈值
+	// GetContinuousErrorThreshold 连续错误数阈值
 	GetContinuousErrorThreshold() int
-	// 设置连续错误数阈值
+	// SetContinuousErrorThreshold 设置连续错误数阈值
 	SetContinuousErrorThreshold(int)
-	// 连续错误数统计时间窗口
+	// GetMetricStatTimeWindow 连续错误数统计时间窗口
 	GetMetricStatTimeWindow() time.Duration
-	// 设置连续错误数统计时间窗口
+	// SetMetricStatTimeWindow 设置连续错误数统计时间窗口
 	SetMetricStatTimeWindow(time.Duration)
-	// 连续错误数统计滑桶数量
+	// GetMetricNumBuckets 连续错误数统计滑桶数量
 	GetMetricNumBuckets() int
-	// 设置连续错误数统计滑桶数量
+	// SetMetricNumBuckets 设置连续错误数统计滑桶数量
 	SetMetricNumBuckets(int)
-	// 获取单个滑桶的时间间隔
+	// GetBucketInterval 获取单个滑桶的时间间隔
 	GetBucketInterval() time.Duration
 }
 
 // ErrorRateConfig 错误率熔断配置.
 type ErrorRateConfig interface {
-	// 触发错误率熔断的请求量阈值
+	// GetRequestVolumeThreshold 触发错误率熔断的请求量阈值
 	GetRequestVolumeThreshold() int
-	// 设置触发错误率熔断的请求量阈值
+	// SetRequestVolumeThreshold 设置触发错误率熔断的请求量阈值
 	SetRequestVolumeThreshold(int)
-	// 触发熔断的错误率阈值，取值范围(0, 100]
+	// GetErrorRatePercent 触发熔断的错误率阈值，取值范围(0, 100]
 	GetErrorRatePercent() int
-	// 设置错误率阈值
+	// SetErrorRatePercent 设置错误率阈值
 	SetErrorRatePercent(int)
-	// 错误率统计时间窗口
+	// GetMetricStatTimeWindow 错误率统计时间窗口
 	GetMetricStatTimeWindow() time.Duration
-	// 设置错误率统计时间窗口
+	// SetMetricStatTimeWindow 设置错误率统计时间窗口
 	SetMetricStatTimeWindow(time.Duration)
-	// 统计窗口细分的桶数量
+	// GetMetricNumBuckets 统计窗口细分的桶数量
 	GetMetricNumBuckets() int
-	// 设置统计窗口细分的桶数量
+	// SetMetricNumBuckets 设置统计窗口细分的桶数量
 	SetMetricNumBuckets(int)
-	// 获取单个滑桶的时间间隔
+	// GetBucketInterval 获取单个滑桶的时间间隔
 	GetBucketInterval() time.Duration
 }
 

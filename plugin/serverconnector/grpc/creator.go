@@ -74,10 +74,9 @@ func (s *statHandler) HandleRPC(context.Context, stats.RPCStats) {
 // The returned context will be used for stats handling.
 // For conn stats handling, the context used in HandleConn for this
 // connection will be derived from the context returned.
-// For RPC stats handling,
-//  - On server side, the context used in HandleRPC for all RPCs on this
-// connection will be derived from the context returned.
-//  - On client side, the context is not derived from the context returned.
+// For RPC stats handling, On server side, the context used in
+// HandleRPC for all RPCs on this connection will be derived from the context returned.
+// On client side, the context is not derived from the context returned.
 func (s *statHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
 	localAddr := info.LocalAddr.String()
 	localIP := strings.Split(localAddr, ":")[0]

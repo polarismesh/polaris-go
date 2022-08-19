@@ -19,6 +19,7 @@ package config
 
 import "github.com/polarismesh/polaris-go/pkg/plugin/common"
 
+// LocationConfigImpl 地理位置配置.
 type LocationConfigImpl struct {
 	Provider string `yaml:"provider" json:"provider"`
 	// 插件相关配置
