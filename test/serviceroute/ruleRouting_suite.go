@@ -1458,6 +1458,29 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	c.Assert(firstValue > 0, check.Equals, true)
 	c.Assert(secondValue > 0, check.Equals, true)
 
+	// 更换正则表达式 测试先行断言反向匹配
+	log.Printf("Start to TestNegativeLookahead ")
+	firstValue, secondValue = 0, 0
+	request1.SourceService.Metadata = map[string]string{
+		"k1": "v1",
+		"k2": "((?!v2d+).)*",
+	}
+	for i := 0; i < 10; i++ {
+		resp, err := consumer.GetOneInstance(request1)
+		c.Assert(err, check.IsNil)
+		c.Assert(len(resp.GetInstances()), check.Equals, 1)
+		k2Value := resp.GetInstances()[0].GetMetadata()["k2"]
+		if k2Value == "v2x" {
+			firstValue++
+		}
+		if k2Value == "v2xx" {
+			secondValue++
+		}
+	}
+	c.Assert(firstValue+secondValue, check.Equals, 10)
+	c.Assert(firstValue > 0, check.Equals, true)
+	c.Assert(secondValue > 0, check.Equals, true)
+
 	// 规则中 source 的正则表达式有问题，要进行报错
 	request1.SourceService.Metadata = map[string]string{
 		"k1": "*",

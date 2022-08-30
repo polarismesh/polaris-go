@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/agiledragon/gomonkey v2.0.2+incompatible
+	github.com/dlclark/regexp2 v1.7.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/protobuf v1.5.2
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
