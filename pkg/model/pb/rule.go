@@ -19,9 +19,10 @@ package pb
 
 import (
 	"fmt"
-	"regexp"
+
 	"sync/atomic"
 
+	regexp "github.com/dlclark/regexp2"
 	"github.com/golang/protobuf/proto"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -115,7 +116,7 @@ func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache 
 		if pattern := ruleCache.GetRegexMatcher(valueRawStr); nil != pattern {
 			continue
 		}
-		regexValue, err := regexp.Compile(valueRawStr)
+		regexValue, err := regexp.Compile(valueRawStr, regexp.RE2)
 		if err != nil {
 			return fmt.Errorf("invalid regex expression %s, error is %v", valueRawStr, err)
 		}
