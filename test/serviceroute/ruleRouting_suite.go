@@ -29,11 +29,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
-
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
-
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -43,6 +38,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (

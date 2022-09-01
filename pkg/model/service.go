@@ -24,9 +24,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/modern-go/reflect2"
-
 	"github.com/hashicorp/go-multierror"
+	"github.com/modern-go/reflect2"
 )
 
 // RunMode SDK的运行模式，可以指定为agent或者no-agent模式

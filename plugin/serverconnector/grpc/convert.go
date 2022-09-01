@@ -18,10 +18,7 @@
 package grpc
 
 import (
-	// "github.com/polarismesh/polaris-go/pkg/model"
-	// namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	// "github.com/golang/protobuf/ptypes/wrappers"
 )
 
 var (

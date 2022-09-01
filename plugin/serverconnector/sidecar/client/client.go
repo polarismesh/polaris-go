@@ -27,10 +27,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/polarismesh/polaris-go/pkg/plugin"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 	"github.com/polarismesh/polaris-go/plugin/serverconnector/sidecar/dns"
-
-	"github.com/polarismesh/polaris-go/pkg/plugin"
 )
 
 const (
