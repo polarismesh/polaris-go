@@ -18,6 +18,7 @@
 package registerstate
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -53,7 +54,7 @@ type RegisterStateManager struct {
 type registerState struct {
 	instance         *model.InstanceRegisterRequest
 	lastRegisterTime time.Time
-	stoppedchan      chan struct{}
+	cancel           context.CancelFunc
 }
 
 func (c *RegisterStateManager) Destroy() {
@@ -63,7 +64,7 @@ func (c *RegisterStateManager) Destroy() {
 	c.mu.Unlock()
 
 	for _, state := range pre {
-		close(state.stoppedchan)
+		state.cancel()
 	}
 }
 
@@ -75,13 +76,15 @@ func (c *RegisterStateManager) PutRegister(instance *model.InstanceRegisterReque
 	if ok {
 		return nil, false
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	state := &registerState{
 		instance:         instance,
 		lastRegisterTime: time.Now(),
-		stoppedchan:      make(chan struct{}),
+		cancel:           cancel,
 	}
 	c.states[key] = state
-	go c.runHeartbeat(state, regis, beat)
+	go c.runHeartbeat(ctx, state, regis, beat)
 	return state, true
 }
 
@@ -91,7 +94,7 @@ func (c *RegisterStateManager) RemoveRegister(instance *model.InstanceDeRegister
 	defer c.mu.Unlock()
 	state, ok := c.states[key]
 	if ok {
-		close(state.stoppedchan)
+		state.cancel()
 		delete(c.states, key)
 	}
 }
@@ -100,7 +103,7 @@ func buildRegisterStateKey(namespace string, service string, host string, port i
 	return fmt.Sprintf("%s##%s##%s##%d", namespace, service, host, port)
 }
 
-func (c *RegisterStateManager) runHeartbeat(state *registerState, regis registerFunc, beat heartbeatFunc) {
+func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *registerState, regis registerFunc, beat heartbeatFunc) {
 	instance := state.instance
 	log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task started {%s, %s, %s:%d}",
 		instance.Namespace, instance.Service, instance.Host, instance.Port)
@@ -112,7 +115,7 @@ func (c *RegisterStateManager) runHeartbeat(state *registerState, regis register
 
 	for {
 		select {
-		case <-state.stoppedchan:
+		case <-ctx.Done():
 			log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task stopped {%s, %s, %s:%d}",
 				instance.Namespace, instance.Service, instance.Host, instance.Port)
 			return

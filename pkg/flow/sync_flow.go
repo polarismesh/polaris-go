@@ -347,7 +347,6 @@ func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.
 
 	e.registerStates.PutRegister(request, e.doSyncRegister, e.SyncHeartbeat)
 	return resp, nil
-
 }
 
 // SyncRegister 同步进行服务注册
