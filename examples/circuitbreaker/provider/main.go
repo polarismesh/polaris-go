@@ -103,7 +103,7 @@ func runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGSEGV, syscall.SIGUSR1,
+		syscall.SIGSEGV,
 	}...)
 
 	for s := range ch {

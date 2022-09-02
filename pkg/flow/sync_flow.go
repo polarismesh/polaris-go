@@ -24,6 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
+	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -335,6 +336,20 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 		targetCls, instances, totalWeight, commonRequest.Revision, commonRequest.DstInstances.GetMetadata()), nil
 }
 
+// SyncRegisterV2 async-regis
+func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	request.SetDefaultTTL()
+
+	resp, err := e.doSyncRegister(request, registerstate.CreateRegisterV2Header())
+	if err != nil {
+		return nil, err
+	}
+
+	e.registerStates.PutRegister(request, e.doSyncRegister, e.SyncHeartbeat)
+	return resp, nil
+
+}
+
 // SyncRegister 同步进行服务注册
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	return e.doSyncRegister(instance, nil)
@@ -376,7 +391,7 @@ func (e *Engine) doSyncRegister(instance *model.InstanceRegisterRequest, header 
 
 // SyncDeregister 同步进行服务反注册
 func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error {
-	e.registerStates.removeRegisterState(instance)
+	e.registerStates.RemoveRegister(instance)
 	// 调用api的结果上报
 	apiCallResult := &model.APICallResult{
 		APICallKey: model.APICallKey{

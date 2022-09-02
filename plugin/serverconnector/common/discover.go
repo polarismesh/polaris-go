@@ -800,7 +800,7 @@ func (g *DiscoverConnector) processUpdateTask(
 			g.retryUpdateTask(task, err, true)
 			return streamingClient
 		}
-		task.targetCluster = config.DiscoverCluster
+		// task.targetCluster = config.DiscoverCluster
 		if !svcDeleted {
 			g.addUpdateTaskSet(task)
 		}
