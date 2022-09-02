@@ -19,7 +19,6 @@ package pb
 
 import (
 	"fmt"
-
 	"sync/atomic"
 
 	regexp "github.com/dlclark/regexp2"

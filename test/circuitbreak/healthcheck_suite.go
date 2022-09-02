@@ -26,20 +26,19 @@ import (
 	"os"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model/local"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
-
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/local"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (

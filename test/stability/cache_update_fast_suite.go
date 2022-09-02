@@ -46,9 +46,12 @@ const (
 )
 
 var testCacheSvcs = []string{"cacheUpdate1", "cacheUpdate2", "cacheUpdate3", "cacheUpdate4"}
+
 var testCacheTokens = []string{"abf588ceee5b48bbb68ba69ef5f5347e", "5039fdecf0d54def9317fa30c01a5e05",
 	"4591c171bed64672bf703613a2336bf2", "47812d435e294c7e937be901979867d6"}
+
 var newCacheInstNums = []int{6, 10, 8, 5}
+
 var testServices = make([]*namingpb.Service, 4, 4)
 
 // 缓存持久化测试套件

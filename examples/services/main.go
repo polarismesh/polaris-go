@@ -19,10 +19,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"log"
 )
 
 func main() {

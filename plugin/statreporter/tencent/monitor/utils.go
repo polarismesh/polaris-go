@@ -81,6 +81,7 @@ const (
 
 // 用于将sdkmetric计算出来的一维idx还原为多维数组的idx
 var reveseIdx = make([][]int, allIndexSize, allIndexSize)
+
 var sdkDimensions = make([]int, allIndexSize)
 
 const (
