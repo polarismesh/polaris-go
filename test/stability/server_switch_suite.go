@@ -235,10 +235,10 @@ func (t *ServerSwitchSuite) TestSwitchServer(c *check.C) {
 		notBuiltinDiscoverReqs += ms.GetServiceRequests(discoverKey)
 	}
 	log.Printf("request to all not builtin discover servers for discover %d", notBuiltinDiscoverReqs)
-	c.Assert(notBuiltinDiscoverReqs > 0, check.Equals, true)
+	c.Assert(notBuiltinDiscoverReqs == 0, check.Equals, true)
 	builtinDiscoverReqs := t.builtinServer.GetServiceRequests(discoverKey)
 	log.Printf("request to builtin discover servers for discover %d", builtinDiscoverReqs)
 	// 向埋点server请求discover的次数必须小于向discover请求的次数，并且要小于（20 / 2）
-	c.Assert(builtinDiscoverReqs < notBuiltinDiscoverReqs, check.Equals, true)
-	c.Assert(builtinDiscoverReqs < 10, check.Equals, true)
+	c.Assert(builtinDiscoverReqs > notBuiltinDiscoverReqs, check.Equals, true)
+	c.Assert(builtinDiscoverReqs > 10, check.Equals, true)
 }
