@@ -29,11 +29,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
-
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
-	"github.com/polarismesh/polaris-go/test/mock"
-	"github.com/polarismesh/polaris-go/test/util"
-
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -43,6 +38,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
+	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (
@@ -1451,6 +1449,29 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 			firstValue++
 		}
 		if k2Value == "v2dd" {
+			secondValue++
+		}
+	}
+	c.Assert(firstValue+secondValue, check.Equals, 10)
+	c.Assert(firstValue > 0, check.Equals, true)
+	c.Assert(secondValue > 0, check.Equals, true)
+
+	// 更换正则表达式 测试先行断言反向匹配
+	log.Printf("Start to TestNegativeLookahead ")
+	firstValue, secondValue = 0, 0
+	request1.SourceService.Metadata = map[string]string{
+		"k1": "v1",
+		"k2": "((?!v2d+).)*",
+	}
+	for i := 0; i < 10; i++ {
+		resp, err := consumer.GetOneInstance(request1)
+		c.Assert(err, check.IsNil)
+		c.Assert(len(resp.GetInstances()), check.Equals, 1)
+		k2Value := resp.GetInstances()[0].GetMetadata()["k2"]
+		if k2Value == "v2x" {
+			firstValue++
+		}
+		if k2Value == "v2xx" {
 			secondValue++
 		}
 	}

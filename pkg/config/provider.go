@@ -19,6 +19,7 @@ package config
 
 import (
 	"errors"
+	"time"
 
 	"github.com/hashicorp/go-multierror"
 )
@@ -30,11 +31,18 @@ var DefaultRateLimitEnable = true
 type ProviderConfigImpl struct {
 	// 限流配置
 	RateLimit *RateLimitConfigImpl `yaml:"rateLimit" json:"rateLimit"`
+	// minimum interval between tow register operation
+	MinRgisterInterval time.Duration `yaml:"minRegisterInterval" json:"minRegisterInterval"`
 }
 
 // GetRateLimit 是否启用限流能力.
 func (p *ProviderConfigImpl) GetRateLimit() RateLimitConfig {
 	return p.RateLimit
+}
+
+// GetMinRegisterInterval get minimum interval between two register operation
+func (p *ProviderConfigImpl) GetMinRegisterInterval() time.Duration {
+	return p.MinRgisterInterval
 }
 
 // Verify 校验配置参数.
@@ -47,6 +55,9 @@ func (p *ProviderConfigImpl) Verify() error {
 	if err = p.RateLimit.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if p.MinRgisterInterval <= 0 {
+		errs = multierror.Append(errs, errors.New("minRegisterInterval should be greater than zero"))
+	}
 	return errs
 }
 
@@ -56,6 +67,9 @@ func (p *ProviderConfigImpl) SetDefault() {
 		p.RateLimit = &RateLimitConfigImpl{}
 	}
 	p.RateLimit.SetDefault()
+	if p.MinRgisterInterval == 0 {
+		p.MinRgisterInterval = DefaultMinRegisterInterval
+	}
 }
 
 // Init 配置初始化.

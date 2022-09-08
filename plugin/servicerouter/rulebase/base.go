@@ -19,12 +19,13 @@ package rulebase
 
 import (
 	"os"
-	"regexp"
 	"sort"
 
+	regexp "github.com/dlclark/regexp2"
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
@@ -165,12 +166,16 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 				if ruleMetaValue.ValueType == namingpb.MatchString_TEXT {
 					matchExp = ruleCache.GetRegexMatcher(rawMetaValue)
 				} else {
-					matchExp, err = regexp.Compile(rawMetaValue)
+					matchExp, err = regexp.Compile(rawMetaValue, regexp.RE2)
 				}
 				if err != nil {
 					return false, rawMetaValue, err
 				}
-				if !matchExp.MatchString(srcMetaValue) {
+				m, err := matchExp.FindStringMatch(srcMetaValue)
+				if err != nil {
+					return false, rawMetaValue, err
+				}
+				if m == nil || m.String() == "" {
 					allMetaMatched = false
 				}
 			default:
@@ -311,7 +316,12 @@ func validateInMetadata(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	switch ruleMetaValue.Type {
 	case namingpb.MatchString_REGEX:
 		for value := range values {
-			if !matcher.MatchString(value) {
+			m, err := matcher.FindStringMatch(value)
+			if err != nil {
+				log.GetBaseLogger().Errorf("regex match metadata error. ruleMetaKey: %s, value: %s, errors: %s", ruleMetaKey, value, err)
+				return false
+			}
+			if m == nil || m.String() == "" {
 				return false
 			}
 		}
@@ -348,7 +358,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 				regexObj = ruleCache.GetRegexMatcher(ruleMetaValueStr)
 			} else {
 				var err error
-				regexObj, err = regexp.Compile(ruleMetaValueStr)
+				regexObj, err = regexp.Compile(ruleMetaValueStr, regexp.RE2)
 				if err != nil {
 					return nil, false, ruleMetaValueStr, err
 				}
@@ -359,7 +369,13 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			}
 			var hasMatchedValue bool
 			for value, composedValue := range metaValues {
-				if !regexObj.MatchString(value) {
+
+				m, err := regexObj.FindStringMatch(value)
+				if err != nil {
+					log.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, errors: %s", ruleMetaValueStr, value, err)
+					continue
+				}
+				if m == nil || m.String() == "" {
 					continue
 				}
 				hasMatchedValue = true

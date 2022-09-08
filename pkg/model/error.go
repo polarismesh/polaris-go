@@ -170,6 +170,17 @@ func NewSDKError(errCode ErrCode, cause error, msg string, args ...interface{}) 
 		cause:     cause}
 }
 
+// NewSDKErrorWithServerInfo SDK错误相关的类构建器
+func NewSDKErrorWithServerInfo(errCode ErrCode, cause error, serverCode uint32, serverInfo string, msg string, args ...interface{}) SDKError {
+	return &sdkError{
+		errCode:    errCode,
+		errDetail:  fmt.Sprintf(msg, args...),
+		cause:      cause,
+		serverCode: serverCode,
+		serverInfo: serverInfo,
+	}
+}
+
 const (
 	// 返回码取模的底数
 	RetCodeDivFactor = 1000

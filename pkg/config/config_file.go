@@ -23,14 +23,13 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/hashicorp/go-multierror"
 )
 
 // DefaultConfigFileEnable 默认打开配置中心能力
 var DefaultConfigFileEnable = true
 
-// 对接配置中心相关配置.
+// ConfigFileConfigImpl 对接配置中心相关配置.
 type ConfigFileConfigImpl struct {
 	ConfigConnectorConfig *ConfigConnectorConfigImpl `yaml:"configConnector" json:"configConnector"`
 	// 是否启动配置中心

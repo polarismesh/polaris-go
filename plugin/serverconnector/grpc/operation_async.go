@@ -21,16 +21,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
-	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 )
 
 const (

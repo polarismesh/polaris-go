@@ -24,9 +24,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/modern-go/reflect2"
-
 	"github.com/hashicorp/go-multierror"
+	"github.com/modern-go/reflect2"
 )
 
 // RunMode SDK的运行模式，可以指定为agent或者no-agent模式
@@ -1150,6 +1149,8 @@ const (
 const (
 	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
+	// DefaultHeartbeatTtl
+	DefaultHeartbeatTtl int = 5
 )
 
 // InstanceRegisterRequest 注册服务请求
@@ -1242,6 +1243,13 @@ func (g *InstanceRegisterRequest) GetLocation() *Location {
 	return g.Location
 }
 
+// SetDefaultTTL set default ttl
+func (g *InstanceRegisterRequest) SetDefaultTTL() {
+	if g.TTL == nil {
+		g.SetTTL(DefaultHeartbeatTtl)
+	}
+}
+
 // validateMetadata 校验元数据的key是否为空
 func validateMetadata(prefix string, metadata map[string]string) error {
 	if len(metadata) > 0 {
@@ -1279,6 +1287,9 @@ func (g *InstanceRegisterRequest) Validate() error {
 	if nil != g.Priority && (*g.Priority < MinPriority || *g.Priority > MaxPriority) {
 		errs = multierror.Append(errs,
 			fmt.Errorf("InstanceRegisterRequest: priority should be in range [%d, %d]", MinPriority, MaxPriority))
+	}
+	if g.TTL != nil && *g.TTL <= 0 {
+		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: heartbeat ttl should be greater than zero"))
 	}
 	var err error
 	if err = validateMetadata("InstanceRegisterRequest", g.Metadata); err != nil {

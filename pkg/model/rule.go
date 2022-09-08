@@ -18,9 +18,9 @@
 package model
 
 import (
-	"regexp"
 	"time"
 
+	regexp "github.com/dlclark/regexp2"
 	"github.com/golang/protobuf/proto"
 )
 

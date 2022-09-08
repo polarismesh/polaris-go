@@ -52,7 +52,7 @@ func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 	return c.Provider
 }
 
-// GetConfig config前缀开头的所有配置项.
+// GetConfigFile config前缀开头的所有配置项.
 func (c *ConfigurationImpl) GetConfigFile() ConfigFileConfig {
 	return c.Config
 }
@@ -352,14 +352,14 @@ func GetContainerNameEnvList() []string {
 // NewDefaultConfigurationWithDomain 创建带有默认埋点server域名的默认配置.
 func NewDefaultConfigurationWithDomain() *ConfigurationImpl {
 	var cfg *ConfigurationImpl
-	var err error
 	if model.IsFile(DefaultConfigFile) {
+		var err error
 		cfg, err = LoadConfigurationByDefaultFile()
 		if err != nil {
 			log.Printf("fail to load default config from %s, err is %v", DefaultConfigFile, err)
 		}
 	}
-	if nil != cfg {
+	if cfg != nil {
 		return cfg
 	}
 	return NewDefaultConfiguration(nil)

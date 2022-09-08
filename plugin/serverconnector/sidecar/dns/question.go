@@ -23,9 +23,9 @@ import (
 	"errors"
 	"strings"
 
-	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-
 	"github.com/golang/protobuf/proto"
+
+	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 var TypeToQuestion = map[int]func() Question{

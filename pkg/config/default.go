@@ -137,6 +137,8 @@ const (
 	DefaultConnectorType = "polaris"
 	// DefaultConfigConnectorAddresses 默认连接器类型.
 	DefaultConfigConnectorAddresses = "127.0.0.1:8093"
+	// DefaultMinRegisterInterval
+	DefaultMinRegisterInterval = 30 * time.Second
 )
 
 // defaultBuiltinServerPort 默认埋点server的端口，与上面的IP一一对应.

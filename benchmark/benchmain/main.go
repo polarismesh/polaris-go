@@ -100,8 +100,11 @@ func runModesFromWorkloads(workload string) runModes {
 }
 
 type startFunc func(mode string, bf stats.Features)
+
 type stopFunc func(count uint64)
+
 type rpcCallFunc func(pos int, ctx *runContext)
+
 type rpcCleanupFunc func()
 
 // benchOpts represents all configurable options available while running this

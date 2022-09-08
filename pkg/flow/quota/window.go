@@ -481,7 +481,12 @@ func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 	switch ruleMetaValue.Type {
 	case namingpb.MatchString_REGEX:
 		regexObj := ruleCache.GetRegexMatcher(ruleMetaValueStr)
-		if !regexObj.MatchString(value) {
+		m, err := regexObj.FindStringMatch(value)
+		if err != nil {
+			log.GetBaseLogger().Errorf("regex match labels error. ruleMetaValueStr: %s, value: %s, errors: %s", ruleMetaValueStr, value, err)
+			return false
+		}
+		if m == nil || m.String() == "" {
 			return false
 		}
 		return true

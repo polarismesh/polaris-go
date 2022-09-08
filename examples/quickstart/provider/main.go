@@ -27,7 +27,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/polarismesh/polaris-go"
 )
@@ -97,12 +96,11 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
-	resp, err := svr.provider.Register(registerRequest)
+	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
-	go svr.doHeartbeat()
 }
 
 func (svr *PolarisProvider) deregisterService() {
@@ -117,22 +115,6 @@ func (svr *PolarisProvider) deregisterService() {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
 	log.Printf("deregister successfully.")
-}
-
-func (svr *PolarisProvider) doHeartbeat() {
-	log.Printf("start to invoke heartbeat operation")
-	ticker := time.NewTicker(time.Duration(5 * time.Second))
-	for range ticker.C {
-		if !svr.isShutdown {
-			heartbeatRequest := &polaris.InstanceHeartbeatRequest{}
-			heartbeatRequest.Namespace = namespace
-			heartbeatRequest.Service = service
-			heartbeatRequest.Host = svr.host
-			heartbeatRequest.Port = svr.port
-			heartbeatRequest.ServiceToken = token
-			svr.provider.Heartbeat(heartbeatRequest)
-		}
-	}
 }
 
 func (svr *PolarisProvider) runMainLoop() {

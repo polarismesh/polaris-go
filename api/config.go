@@ -57,7 +57,6 @@ const (
 // 插件实例列表
 // 配置实例
 // 执行流程引擎，包括定时器等
-//
 type SDKContext interface {
 	// Destroy
 	// @brief 销毁SDK上下文
