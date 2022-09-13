@@ -36,9 +36,9 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 }
 
 // InitQuota proxy ServiceRateLimiter InitQuota
-func (p *Proxy) InitQuota(criteria *InitCriteria) (QuotaBucket, error) {
-	result, err := p.ServiceRateLimiter.InitQuota(criteria)
-	return result, err
+func (p *Proxy) InitQuota(criteria *InitCriteria) QuotaBucket {
+	result := p.ServiceRateLimiter.InitQuota(criteria)
+	return result
 }
 
 // init 注册proxy

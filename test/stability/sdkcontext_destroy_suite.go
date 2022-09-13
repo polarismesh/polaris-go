@@ -27,7 +27,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/api"
 	plog "github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/test/util"
 )
 
 // SDKContextDestroySuite
@@ -77,13 +76,11 @@ func parseRoutines(stack string) (int, int) {
 
 // 测试consumer api的销毁
 func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start to TestConsumerDestroy")
 	// 等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
 	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
-	configuration.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	var routinesCount int
 	var preCreateRoutinesNum int
 	curStack := getAllStack()
@@ -108,13 +105,11 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 
 // 测试provider api的销毁
 func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start to TestProviderDestroy")
 	// 等待golang一些系统初始化任务完成
 	time.Sleep(2 * time.Second)
 	configuration := api.NewConfiguration()
 	configuration.GetGlobal().GetServerConnector().SetAddresses([]string{"127.0.0.1:10011"})
-	configuration.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	var routinesCount int
 	var preCreateRoutinesNum int
 	routinesCount, _ = parseRoutines(getAllStack())

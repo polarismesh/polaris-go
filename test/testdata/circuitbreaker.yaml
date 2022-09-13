@@ -18,19 +18,6 @@ global:
     serverSwitchInterval: 50m
     # 连接超时时间
     connectTimeout: 1000ms
-  statReporter:
-    enable: true
-    chain:
-      - stat2Monitor
-      - serviceCache
-      - rateLimitRecord
-      - serviceRoute
-    plugin:
-      stat2Monitor:
-        metricsReportWindow: 30s
-        metricsNumBuckets: 6
-      serviceCache:
-        reportInterval: 10s
 consumer:
   localCache:
     # 缓存类型

@@ -4,16 +4,20 @@
       "id": "r0001",
       "service": "RemoteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "query"
-        },
-        "uin": {
-          "type": "EXACT",
-          "value": "007"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "query"
       },
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "uin",
+          "value": {
+            "type": "EXACT",
+            "value": "007"
+          }
+        }
+      ],
       "resource": "QPS",
       "type": "GLOBAL",
       "action": "reject",
@@ -37,12 +41,16 @@
       "id": "r0002",
       "service": "RemoteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "appId": {
-          "type": "REGEX",
-          "value": ".+"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "appId",
+          "value":  {
+            "type": "REGEX",
+            "value": ".+"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "GLOBAL",
       "action": "reject",
@@ -63,12 +71,16 @@
       "id": "r0003",
       "service": "RemoteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "test_uin": {
-          "type": "REGEX",
-          "value": ".+"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "test_uin",
+          "value":  {
+            "type": "REGEX",
+            "value": ".+"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "GLOBAL",
       "action": "reject",
@@ -89,12 +101,16 @@
       "id": "r0004",
       "service": "RemoteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "appIdShare": {
-          "type": "EXACT",
-          "value": "appShare"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "appIdShare",
+          "value":  {
+            "type": "EXACT",
+            "value": "appShare"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "GLOBAL",
       "action": "reject",

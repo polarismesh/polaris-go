@@ -20,7 +20,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -36,57 +35,10 @@ type RateLimitConfigImpl struct {
 	MaxWindowSize int `yaml:"maxWindowSize" json:"maxWindowSize"`
 	// 超时window检查周期
 	PurgeInterval time.Duration `yaml:"purgeInterval" json:"purgeInterval"`
-	// 本地限流规则
-	Rules []RateLimitRule `yaml:"rules"`
-}
-
-// RateLimitRule 限流规则.
-type RateLimitRule struct {
-	Namespace     string             `yaml:"namespace"`
-	Service       string             `yaml:"service"`
-	Labels        map[string]Matcher `yaml:"labels"`
-	MaxAmount     int                `yaml:"maxAmount"`
-	ValidDuration time.Duration      `yaml:"validDuration"`
-}
-
-// Verify 校验限流规则.
-func (r *RateLimitRule) Verify() error {
-	if len(r.Namespace) == 0 {
-		return errors.New("namespace is empty")
-	}
-	if len(r.Service) == 0 {
-		return errors.New("service is empty")
-	}
-	if len(r.Labels) > 0 {
-		for _, matcher := range r.Labels {
-			if len(matcher.Type) > 0 {
-				upperType := strings.ToUpper(matcher.Type)
-				if upperType != TypeExact && upperType != TypeRegex {
-					return fmt.Errorf("matcher.type should be %s or %s", TypeExact, TypeRegex)
-				}
-			}
-		}
-	}
-	if r.ValidDuration < time.Second {
-		return errors.New("validDuration must greater than or equals to 1s")
-	}
-	if r.MaxAmount < 0 {
-		return errors.New("maxAmount must greater than or equals to 0")
-	}
-	return nil
-}
-
-const (
-	// TypeExact .
-	TypeExact = "EXACT"
-	// TypeRegex .
-	TypeRegex = "REGEX"
-)
-
-// Matcher 标签匹配类型.
-type Matcher struct {
-	Type  string `yaml:"type"`
-	Value string `yaml:"value"`
+	// LimiterNamespace 限流服务的命名空间
+	LimiterNamespace string `yaml:"limiterNamespace" json:"limiterNamespace"`
+	// LimiterService 限流服务的服务名
+	LimiterService string `yaml:"limiterService" json:"limiterService		"`
 }
 
 // IsEnable 是否启用限流能力.
@@ -109,13 +61,6 @@ func (r *RateLimitConfigImpl) Verify() error {
 	}
 	if nil == r.Enable {
 		return fmt.Errorf("provider.rateLimit.enable must not be nil")
-	}
-	if len(r.Rules) > 0 {
-		for _, rule := range r.Rules {
-			if err := rule.Verify(); err != nil {
-				return err
-			}
-		}
 	}
 	return r.Plugin.Verify()
 }
@@ -140,6 +85,12 @@ func (r *RateLimitConfigImpl) SetDefault() {
 	if r.PurgeInterval == 0 {
 		r.PurgeInterval = DefaultRateLimitPurgeInterval
 	}
+	if len(r.LimiterNamespace) == 0 {
+		r.LimiterNamespace = DefaultLimiterNamespace
+	}
+	if len(r.LimiterService) == 0 {
+		r.LimiterService = DefaultLimiterService
+	}
 	r.Plugin.SetDefault(common.TypeRateLimiter)
 }
 
@@ -150,7 +101,6 @@ func (r *RateLimitConfigImpl) SetPluginConfig(pluginName string, value BaseConfi
 
 // Init 配置初始化.
 func (r *RateLimitConfigImpl) Init() {
-	r.Rules = []RateLimitRule{}
 	r.Plugin = PluginConfigs{}
 	r.Plugin.Init(common.TypeRateLimiter)
 }
@@ -175,12 +125,18 @@ func (r *RateLimitConfigImpl) SetPurgeInterval(v time.Duration) {
 	r.PurgeInterval = v
 }
 
-// GetRules 获取规则.
-func (r *RateLimitConfigImpl) GetRules() []RateLimitRule {
-	return r.Rules
+func (r *RateLimitConfigImpl) GetLimiterService() string {
+	return r.LimiterService
 }
 
-// SetRules 。设置规则.
-func (r *RateLimitConfigImpl) SetRules(rules []RateLimitRule) {
-	r.Rules = rules
+func (r *RateLimitConfigImpl) SetLimiterService(value string) {
+	r.LimiterService = value
+}
+
+func (r *RateLimitConfigImpl) SetLimiterNamespace(value string) {
+	r.LimiterNamespace = value
+}
+
+func (r *RateLimitConfigImpl) GetLimiterNamespace() string {
+	return r.LimiterNamespace
 }

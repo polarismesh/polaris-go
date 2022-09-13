@@ -93,8 +93,12 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 
 // Destroy 销毁插件，可用于释放资源.
 func (c *Connector) Destroy() error {
-	c.RunContext.Destroy()
-	c.connManager.Destroy()
+	if nil != c.RunContext {
+		c.RunContext.Destroy()
+	}
+	if nil != c.connManager {
+		c.connManager.Destroy()
+	}
 	return nil
 }
 

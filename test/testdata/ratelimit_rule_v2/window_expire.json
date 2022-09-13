@@ -5,16 +5,24 @@
       "service": "ExpireTestSvcV2",
       "namespace": "Test",
       "priority": 0,
-      "labels": {
-        "appId": {
-          "type": "EXACT",
-          "value": "remote"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "uin",
+          "value": {
+            "type": "REGEX",
+            "value": ".+"
+          }
         },
-        "uin": {
-          "type": "REGEX",
-          "value": ".+"
+        {
+          "type": "CUSTOM",
+          "key": "appId",
+          "value": {
+            "type": "EXACT",
+            "value": "remote"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "GLOBAL",
       "action": "reject",
@@ -35,12 +43,16 @@
       "service": "ExpireTestSvcV2",
       "namespace": "Test",
       "priority": 1,
-      "labels": {
-        "uin": {
-          "type": "REGEX",
-          "value": ".+"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "uin",
+          "value": {
+            "type": "REGEX",
+            "value": ".+"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "LOCAL",
       "action": "reject",

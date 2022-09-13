@@ -103,10 +103,14 @@ type RateLimitConfig interface {
 	GetPurgeInterval() time.Duration
 	// SetPurgeInterval 设置超时淘汰周期
 	SetPurgeInterval(time.Duration)
-	// GetRules GetRules
-	GetRules() []RateLimitRule
-	// SetRules SetRules
-	SetRules([]RateLimitRule)
+	// GetLimiterService 获取限流服务
+	GetLimiterService() string
+	// SetLimiterService 设置限流服务
+	SetLimiterService(value string)
+	// SetLimiterNamespace 设置限流命名空间
+	SetLimiterNamespace(value string)
+	// GetLimiterNamespace 获取限流命名空间
+	GetLimiterNamespace() string
 }
 
 // SystemConfig 系统配置信息.
@@ -271,6 +275,11 @@ type LocalCacheConfig interface {
 	GetServiceRefreshInterval() time.Duration
 	// SetServiceRefreshInterval 设置服务的定期刷新时间
 	SetServiceRefreshInterval(time.Duration)
+	// IsPersistEnable consumer.localCache.persistEnable
+	// 是否启用本地缓存
+	IsPersistEnable() bool
+	// SetPersistEnable 设置是否启用本地缓存
+	SetPersistEnable(enable bool)
 	// GetPersistDir consumer.localCache.persistDir
 	// 本地缓存持久化路径
 	GetPersistDir() string

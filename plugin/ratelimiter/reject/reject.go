@@ -60,24 +60,12 @@ func (g *RateLimiterReject) IsEnable(cfg config.Configuration) bool {
 	}
 }
 
-// DoNothingBucket 空实现的bucket
-type DoNothingBucket struct {
-}
-
-// GetQuota 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
-func (d *DoNothingBucket) GetQuota() (*ratelimiter.QuotaResult, error) {
-	return &ratelimiter.QuotaResult{Code: model.QuotaResultOk}, nil
-}
-
-// Release 释放配额（仅对于并发数限流有用）
-func (d *DoNothingBucket) Release() {
-
-}
-
 // InitQuota 初始化并创建限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
-func (g *RateLimiterReject) InitQuota(criteria *ratelimiter.InitCriteria) (ratelimiter.QuotaBucket, error) {
-	return &DoNothingBucket{}, nil
+func (g *RateLimiterReject) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
+	return &QuotaBucketReject{
+		bucket: NewRemoteAwareQpsBucket(criteria),
+	}
 }
 
 // init 注册插件

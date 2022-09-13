@@ -171,6 +171,7 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 	cfg.GetGlobal().GetSystem().GetDiscoverCluster().SetNamespace(config.ServerNamespace)
 	cfg.GetGlobal().GetSystem().GetDiscoverCluster().SetService(config.ServerDiscoverService)
 	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
+	cfg.GetConsumer().GetLocalCache().SetPersistEnable(true)
 	cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg.GetGlobal().GetAPI().SetTimeout(3 * time.Second)
 	defer util.DeleteDir(util.BackupDir)

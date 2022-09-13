@@ -4,11 +4,9 @@
       "id": "rd0001",
       "service": "RuleDeleteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "ruleDeleted"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "ruleDeleted"
       },
       "resource": "QPS",
       "type": "LOCAL",

@@ -18,18 +18,12 @@
 package quota
 
 import (
-	"fmt"
+	"github.com/modern-go/reflect2"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/golang/protobuf/ptypes/duration"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/uuid"
-	"github.com/modern-go/reflect2"
-
-	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -65,16 +59,15 @@ type FlowQuotaAssistant struct {
 	asyncRateLimitConnector AsyncRateLimitConnector
 	// 任务列表
 	taskValues model.TaskValues
-	// 通过配置获取的远程集群标识
-	remoteClusterByConfig config.ServerClusterConfig
 	// 用来控制最大窗口数量的配置项
 	windowCount        int32
 	maxWindowSize      int32
 	windowCountLogCtrl uint64
 	// 超时淘汰周期
 	purgeIntervalMilli int64
-	// 本地配置的限流规则
-	localRules map[model.ServiceKey]model.ServiceRule
+
+	remoteNamespace string
+	remoteService   string
 }
 
 // AsyncRateLimitConnector 异步限流连接器
@@ -143,75 +136,11 @@ func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration,
 	f.maxWindowSize = int32(cfg.GetProvider().GetRateLimit().GetMaxWindowSize())
 	f.windowCountLogCtrl = 0
 	f.purgeIntervalMilli = model.ToMilliSeconds(cfg.GetProvider().GetRateLimit().GetPurgeInterval())
+	f.remoteNamespace = cfg.GetProvider().GetRateLimit().GetLimiterNamespace()
+	f.remoteService = cfg.GetProvider().GetRateLimit().GetLimiterService()
 	f.mutex = &sync.Mutex{}
 	f.svcToWindowSet = &sync.Map{}
-	localRules := cfg.GetProvider().GetRateLimit().GetRules()
-	if len(localRules) > 0 {
-		if f.localRules, err = rateLimitRuleConversion(localRules); err != nil {
-			return err
-		}
-	}
 	return nil
-}
-
-// rateLimitRuleConversion 获取配额分配窗口集合
-func rateLimitRuleConversion(rules []config.RateLimitRule) (map[model.ServiceKey]model.ServiceRule, error) {
-	svcRules := make(map[model.ServiceKey]*namingpb.RateLimit)
-	for _, rule := range rules {
-		svcKey := model.ServiceKey{
-			Namespace: rule.Namespace,
-			Service:   rule.Service,
-		}
-		totalRule, ok := svcRules[svcKey]
-		if !ok {
-			totalRule = &namingpb.RateLimit{}
-			svcRules[svcKey] = totalRule
-		}
-		namingRule := &namingpb.Rule{
-			Id:        &wrappers.StringValue{Value: uuid.New().String()},
-			Service:   &wrappers.StringValue{Value: rule.Service},
-			Namespace: &wrappers.StringValue{Value: rule.Namespace},
-			Resource:  namingpb.Rule_QPS,
-			Type:      namingpb.Rule_LOCAL,
-			Amounts: []*namingpb.Amount{{
-				MaxAmount:     &wrappers.UInt32Value{Value: uint32(rule.MaxAmount)},
-				ValidDuration: &duration.Duration{Seconds: int64(rule.ValidDuration / time.Second)},
-			}},
-			Action: &wrappers.StringValue{Value: config.DefaultRejectRateLimiter},
-		}
-		if len(rule.Labels) > 0 {
-			namingRule.Labels = make(map[string]*namingpb.MatchString)
-			for key, matcher := range rule.Labels {
-				var matcherType = namingpb.MatchString_EXACT
-				if strings.ToUpper(matcher.Type) ==
-					namingpb.MatchString_MatchStringType_name[int32(namingpb.MatchString_REGEX)] {
-					matcherType = namingpb.MatchString_REGEX
-				}
-				namingRule.Labels[key] = &namingpb.MatchString{
-					Type:  matcherType,
-					Value: &wrappers.StringValue{Value: matcher.Value},
-				}
-			}
-		}
-		totalRule.Rules = append(totalRule.Rules, namingRule)
-	}
-	values := make(map[model.ServiceKey]model.ServiceRule, len(svcRules))
-	for svcKey, totalRule := range svcRules {
-		respInProto := &namingpb.DiscoverResponse{
-			Type:      namingpb.DiscoverResponse_RATE_LIMIT,
-			RateLimit: totalRule,
-			Service: &namingpb.Service{
-				Name:      &wrappers.StringValue{Value: svcKey.Service},
-				Namespace: &wrappers.StringValue{Value: svcKey.Namespace},
-			},
-		}
-		svcRule := pb.NewServiceRuleInProto(respInProto)
-		if err := svcRule.ValidateAndBuildCache(); err != nil {
-			return nil, fmt.Errorf("fail to validate config local rule, err is %v", err)
-		}
-		values[svcKey] = svcRule
-	}
-	return values, nil
 }
 
 // DeleteRateLimitWindowSet 删除窗口集合
@@ -310,44 +239,40 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 			Code: model.QuotaResultOk,
 			Info: Disabled,
 		}
-		return model.NewQuotaFuture(
-			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
-			model.WithQuotaFutureResp(resp),
-			model.WithQuotaFutureDeadline(clock.GetClock().Now()),
-			model.WithQuotaFutureHooks(f.reportRateLimitGauga)), nil
+		return model.QuotaFutureWithResponse(resp), nil
 	}
-	window, err := f.lookupRateLimitWindow(commonRequest)
+	windows, err := f.lookupRateLimitWindow(commonRequest)
 	if err != nil {
 		return nil, err
 	}
-	if nil == window {
+	if len(windows) == 0 {
 		// 没有限流规则，直接放通
 		resp := &model.QuotaResponse{
 			Code: model.QuotaResultOk,
 			Info: RuleNotExists,
 		}
-		gauge := &RateLimitGauge{
-			EmptyInstanceGauge: model.EmptyInstanceGauge{},
-			Window:             nil,
-			Labels:             commonRequest.Labels,
-			Namespace:          commonRequest.DstService.Namespace,
-			Service:            commonRequest.DstService.Service,
-			Type:               QuotaGranted,
-		}
-		f.engine.SyncReportStat(model.RateLimitStat, gauge)
-		return model.NewQuotaFuture(
-			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
-			model.WithQuotaFutureResp(resp),
-			model.WithQuotaFutureDeadline(clock.GetClock().Now()),
-			model.WithQuotaFutureHooks(f.reportRateLimitGauga)), nil
+		return model.QuotaFutureWithResponse(resp), nil
 	}
-	window.Init()
-	return window.AllocateQuota(commonRequest)
+	var maxWaitMs int64 = 0
+	for _, window := range windows {
+		window.Init()
+		quotaResult := window.AllocateQuota(commonRequest)
+		if quotaResult.Code == model.QuotaResultLimited {
+			return model.QuotaFutureWithResponse(quotaResult), nil
+		}
+		if quotaResult.WaitMs > maxWaitMs {
+			maxWaitMs = quotaResult.WaitMs
+		}
+	}
+	return model.QuotaFutureWithResponse(&model.QuotaResponse{
+		Code:   model.QuotaResultOk,
+		WaitMs: maxWaitMs,
+	}), nil
 }
 
 // lookupRateLimitWindow 计算限流窗口
 func (f *FlowQuotaAssistant) lookupRateLimitWindow(
-	commonRequest *data.CommonRateLimitRequest) (*RateLimitWindow, error) {
+	commonRequest *data.CommonRateLimitRequest) ([]*RateLimitWindow, error) {
 	var err error
 	// 1. 并发获取被调服务信息和限流配置，服务不存在，返回错误
 	if err = f.engine.SyncGetResources(commonRequest); err != nil {
@@ -360,111 +285,201 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 		}
 	}
 	// 2. 寻找匹配的规则
-	var svcRule model.ServiceRule
-	svcRule = commonRequest.RateLimitRule
-	var rule *namingpb.Rule
-	var hasContent bool
-	hasContent, rule, err = lookupRule(svcRule, commonRequest.Labels)
-	if err != nil {
-		return nil, err
-	}
-	if !hasContent {
-		// 远程规则没有内容，则匹配本地规则
-		svcRule = f.localRules[commonRequest.DstService]
-		_, rule, err = lookupRule(svcRule, commonRequest.Labels)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if nil == rule {
+	rules := lookupRules(commonRequest.RateLimitRule, commonRequest.Method, commonRequest.Arguments)
+	if len(rules) == 0 {
 		return nil, nil
 	}
-	commonRequest.Criteria.DstRule = rule
-	// 2.获取已有的QuotaWindow
-	labelStr := commonRequest.FormatLabelToStr(rule)
-	windowSet, window := f.GetRateLimitWindow(commonRequest.DstService, rule, labelStr)
-	if nil != window {
-		// 已经存在限流窗口，则直接分配
-		return window, nil
-	}
-
-	// 检查是否达到最大限流窗口数量
-	nowWindowCount := f.GetWindowCount()
-	log.GetBaseLogger().Tracef("RateLimit nowWindowCount:%d %d", nowWindowCount, f.maxWindowSize)
-	if nowWindowCount >= f.maxWindowSize {
-		count := atomic.LoadUint64(&f.windowCountLogCtrl)
-		if count%10000 == 0 {
-			log.GetBaseLogger().Infof("RateLimit reach maxWindowSize nowCount:%d maxCount:%d",
-				nowWindowCount, f.maxWindowSize)
+	windows := make([]*RateLimitWindow, 0, len(rules))
+	for _, rule := range rules {
+		// 2.获取已有的QuotaWindow
+		labelStr, regexSpread := FormatLabelToStr(commonRequest, rule)
+		windowSet, window := f.GetRateLimitWindow(commonRequest.DstService, rule, labelStr)
+		if nil != window {
+			// 已经存在限流窗口，则直接分配
+			windows = append(windows, window)
+		} else {
+			// 3.创建限流窗口
+			window = windowSet.AddRateLimitWindow(commonRequest, rule, labelStr, regexSpread)
+			windows = append(windows, window)
 		}
-		atomic.AddUint64(&f.windowCountLogCtrl, 1)
-		return nil, nil
 	}
-	// 3.创建限流窗口
-	return windowSet.AddRateLimitWindow(commonRequest, rule, labelStr)
+	return windows, nil
 }
 
-func (f *FlowQuotaAssistant) reportRateLimitGauga(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
-	stat := &model.RateLimitGauge{
-		EmptyInstanceGauge: model.EmptyInstanceGauge{},
-		Namespace:          req.GetNamespace(),
-		Service:            req.GetService(),
-		Result:             resp.Code,
-		Labels:             req.GetLabels(),
+func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache model.RuleCache) bool {
+	if pb.IsMatchAllValue(matchString) {
+		return true
 	}
+	matchType := matchString.GetType()
+	matchValue := matchString.GetValue().GetValue()
 
-	f.engine.SyncReportStat(model.RateLimitStat, stat)
+	switch matchType {
+	case namingpb.MatchString_EXACT:
+		return value == matchValue
+	case namingpb.MatchString_REGEX:
+		regexObj, err := ruleCache.GetRegexMatcher(matchValue)
+		if nil != err {
+			log.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
+				matchValue, value, err)
+			return false
+		}
+		m, err := regexObj.FindStringMatch(value)
+		if err != nil {
+			log.GetBaseLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
+				matchValue, value, err)
+			return false
+		}
+		if m == nil || m.String() == "" {
+			return false
+		}
+		return true
+	case namingpb.MatchString_NOT_EQUALS:
+		return value != matchValue
+	case namingpb.MatchString_IN:
+		tokens := strings.Split(matchValue, ",")
+		for _, token := range tokens {
+			if token == value {
+				return true
+			}
+		}
+		return false
+	case namingpb.MatchString_NOT_IN:
+		tokens := strings.Split(matchValue, ",")
+		for _, token := range tokens {
+			if token == value {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // lookupRule 寻址规则
-func lookupRule(svcRule model.ServiceRule, labels map[string]string) (bool, *namingpb.Rule, error) {
-	if reflect2.IsNil(svcRule) {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map[string]string) []*namingpb.Rule {
+	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
-		return false, nil, nil
-	}
-	if reflect2.IsNil(svcRule.GetValue()) {
-		// 没有配置限流规则
-		return false, nil, nil
+		return nil
 	}
 	validateErr := svcRule.GetValidateError()
 	if nil != validateErr {
-		return true, nil, model.NewSDKError(model.ErrCodeInvalidRule, validateErr,
-			"invalid rateLimit rule, please check rule for (namespace=%s, service=%s)",
-			svcRule.GetNamespace(), svcRule.GetService())
+		return nil
 	}
 	ruleCache := svcRule.GetRuleCache()
 	rateLimiting := svcRule.GetValue().(*namingpb.RateLimit)
-	return true, matchRuleByLabels(labels, rateLimiting, ruleCache), nil
-}
-
-// matchRuleByLabels通过业务标签来匹配规则
-func matchRuleByLabels(
-	labels map[string]string, ruleSet *namingpb.RateLimit, ruleCache model.RuleCache) *namingpb.Rule {
-	if len(ruleSet.Rules) == 0 {
+	rulesList := rateLimiting.Rules
+	if len(rulesList) == 0 {
 		return nil
 	}
-	for _, rule := range ruleSet.Rules {
+	matchRules := make([]*namingpb.Rule, 0)
+	for _, rule := range rulesList {
 		if nil != rule.GetDisable() && rule.GetDisable().GetValue() {
 			// 规则被停用
 			continue
 		}
-		if len(rule.Labels) == 0 {
-			// 没有业务标签，代表全匹配
-			return rule
+		if len(rule.Amounts) == 0 {
+			continue
 		}
-		var allLabelsMatched = true
-		for labelKey, labelValue := range rule.Labels {
-			if labelKey == pb.MatchAll {
+		methodMatcher := rule.Method
+		if nil != methodMatcher {
+			matchMethod := matchStringValue(methodMatcher, method, ruleCache)
+			if !matchMethod {
 				continue
 			}
-			if !matchLabels(labelKey, labelValue, labels, ruleCache) {
-				allLabelsMatched = false
-				break
+		}
+		argumentMatchers := rule.Arguments
+		matched := true
+		if len(argumentMatchers) > 0 {
+			for _, argumentMatcher := range argumentMatchers {
+				stringStringMap := arguments[int(argumentMatcher.Type)]
+				if len(stringStringMap) == 0 {
+					matched = false
+					break
+				}
+				labelValue, ok := getLabelValue(argumentMatcher, stringStringMap)
+				if !ok {
+					matched = false
+				} else {
+					matched = matchStringValue(argumentMatcher.GetValue(), labelValue, ruleCache)
+				}
+				if !matched {
+					break
+				}
 			}
 		}
-		if allLabelsMatched {
-			return rule
+		if matched {
+			matchRules = append(matchRules, rule)
 		}
 	}
-	return nil
+	return matchRules
+}
+
+// FormatLabelToStr 格式化字符串
+func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *namingpb.Rule) (string, bool) {
+	methodMatcher := rule.GetMethod()
+	regexCombine := rule.GetRegexCombine().GetValue()
+	methodValue := ""
+	var regexSpread bool
+	if nil != methodMatcher && !pb.IsMatchAllValue(methodMatcher) {
+		if regexCombine && methodMatcher.GetType() != namingpb.MatchString_EXACT {
+			methodValue = methodMatcher.GetValue().GetValue()
+		} else {
+			methodValue = request.Method
+			if methodMatcher.GetType() != namingpb.MatchString_EXACT {
+				regexSpread = true
+			}
+		}
+	}
+	argumentsList := rule.GetArguments()
+	var tmpList []string
+	for _, argumentMatcher := range argumentsList {
+		var labelValue string
+		valueMatcher := argumentMatcher.GetValue()
+		if regexCombine && valueMatcher.GetType() != namingpb.MatchString_EXACT {
+			labelValue = valueMatcher.GetValue().GetValue()
+		} else {
+			stringStringMap := request.Arguments[int(argumentMatcher.GetType())]
+			labelValue, _ = getLabelValue(argumentMatcher, stringStringMap)
+			if valueMatcher.GetType() != namingpb.MatchString_EXACT {
+				regexSpread = true
+			}
+		}
+		labelEntry := getLabelEntry(argumentMatcher, labelValue)
+		if len(labelEntry) > 0 {
+			tmpList = append(tmpList, labelEntry)
+		}
+	}
+	sort.Strings(tmpList)
+	return methodValue + config.DefaultMapKVTupleSeparator + strings.Join(tmpList, config.DefaultMapKVTupleSeparator), regexSpread
+}
+
+func getLabelValue(matchArgument *namingpb.MatchArgument, stringStringMap map[string]string) (string, bool) {
+	switch matchArgument.GetType() {
+	case namingpb.MatchArgument_CUSTOM, namingpb.MatchArgument_HEADER, namingpb.MatchArgument_QUERY, namingpb.MatchArgument_CALLER_SERVICE:
+		value, ok := stringStringMap[matchArgument.GetKey()]
+		return value, ok
+	case namingpb.MatchArgument_METHOD, namingpb.MatchArgument_CALLER_IP:
+		var value string
+		var ok bool
+		for _, v := range stringStringMap {
+			value = v
+			ok = true
+			break
+		}
+		return value, ok
+	default:
+		value, ok := stringStringMap[matchArgument.GetKey()]
+		return value, ok
+	}
+}
+
+func getLabelEntry(matchArgument *namingpb.MatchArgument, labelValue string) string {
+	switch matchArgument.GetType() {
+	case namingpb.MatchArgument_CUSTOM, namingpb.MatchArgument_HEADER, namingpb.MatchArgument_QUERY, namingpb.MatchArgument_CALLER_SERVICE:
+		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + matchArgument.GetKey() + config.DefaultMapKeyValueSeparator + labelValue
+	case namingpb.MatchArgument_METHOD, namingpb.MatchArgument_CALLER_IP:
+		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + labelValue
+	default:
+		return ""
+	}
 }

@@ -63,16 +63,14 @@ var (
 		NetworkFailSvcName:     namespaceTest,
 	}
 	mockDiscoverAddress = fmt.Sprintf("%s:%d", discoverHost, discoverPort)
-	rateLimitHost       = int2ip(rateLimitHostInt)
+	rateLimitHost       = "9.134.5.52"
 )
 
 const (
-	discoverHost = "127.0.0.1"
-	discoverPort = 10083
-	// rateLimitHostInt      = 159780726
-	rateLimitHostInt      = 2130706433
-	rateLimitPort         = 18081
-	rateLimitHttpPort     = 18080
+	discoverHost          = "127.0.0.1"
+	discoverPort          = 10083
+	rateLimitPort         = 8101
+	rateLimitHttpPort     = 8100
 	mockRateLimitHost     = "127.0.0.1"
 	mockRateLimitPort     = 10077
 	NotExistRateLimitPort = 10090
@@ -118,7 +116,6 @@ func int2ip(nn uint32) string {
 
 // SetUpSuite 启动测试套程序
 func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
-	util.DeleteDir(util.BackupDir)
 	cr.grpcServer, cr.grpcListener, cr.mockServer = util.SetupMockDiscover(discoverHost, discoverPort)
 	log.Printf("discover-server listening on %s\n", mockDiscoverAddress)
 	go func() {
@@ -204,11 +201,14 @@ func registerServices(mockServer mock.NamingServer) map[string]*namingpb.Service
 
 // 单次获取限流配额
 func doSingleGetQuota(
-	c *check.C, limitAPI api.LimitAPI, svcName string, labels map[string]string) *model.QuotaResponse {
+	c *check.C, limitAPI api.LimitAPI, svcName string, method string, labels map[string]string) *model.QuotaResponse {
 	quotaReq := api.NewQuotaRequest()
 	quotaReq.SetNamespace(namespaceTest)
 	quotaReq.SetService(svcName)
-	quotaReq.SetLabels(labels)
+	quotaReq.SetMethod(method)
+	for k, v := range labels {
+		quotaReq.AddArgument(model.BuildCustomArgument(k, v))
+	}
 	future, err := limitAPI.GetQuota(quotaReq)
 	c.Assert(err, check.IsNil)
 	return future.Get()

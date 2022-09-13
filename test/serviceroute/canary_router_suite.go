@@ -33,7 +33,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -57,8 +56,6 @@ const (
 type CanaryTestingSuite struct {
 	mockServer   mock.NamingServer
 	grpcServer   *grpc.Server
-	mockMonitor  mock.MonitorServer
-	grpcMonitor  *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
 	testService  *namingpb.Service
@@ -112,23 +109,11 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
-	t.mockMonitor, t.grpcMonitor, _, err = util.SetupMonitor(t.mockServer, model.ServiceKey{
-		Namespace: config.ServerNamespace,
-		Service:   config.ServerMonitorService,
-	}, util.RegisteredInstance{
-		IP:      canaryMonitorIPAddr,
-		Port:    canaryMonitorPort,
-		Healthy: true,
-	})
-	if err != nil {
-		log.Fatalf("fail to setup monitor, err %v", err)
-	}
 }
 
 // TearDownSuite 结束测试套程序
 func (t *CanaryTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
-	t.grpcMonitor.Stop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
@@ -143,11 +128,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", canaryIPAddress, canaryPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterCanary})
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
-	c.Assert(err, check.IsNil)
 
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -213,20 +193,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal01(c *check.C) {
 		c.Assert(v.GetWeight() != 0, check.Equals, true)
 		c.Assert(v.GetId() == v1Inst.GetId(), check.Equals, true)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {
-			recordKey{
-				RouteStatus: "Normal",
-				RetCode:     "Success",
-			}: 102},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryNormal02 正常逻辑不带金丝雀标签
@@ -239,10 +205,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal02(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", canaryIPAddress, canaryPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterCanary})
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -284,19 +246,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal02(c *check.C) {
 		instance := resp.GetInstances()[0]
 		c.Assert(instance.GetId() != v1Inst.GetId(), check.Equals, true)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryNormal03 服务不启用金丝雀
@@ -309,10 +258,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal03(c *check.C) {
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", canaryIPAddress, canaryPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterCanary})
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -342,7 +287,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal03(c *check.C) {
 		c.Assert(v.IsIsolated(), check.Equals, false)
 		c.Assert(v.GetWeight() != 0, check.Equals, true)
 	}
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // CircuitBreakerInstance Circuit Breaker Instance
@@ -477,10 +421,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -536,18 +476,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	CircuitBreakerInstance(tarIns2, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns2.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 101},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -566,18 +494,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 		c.Assert(v.GetCircuitBreakerStatus(), check.NotNil)
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "DegradeToNotCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -590,19 +506,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	for _, v := range instMap[OtherCanaryInstance] {
 		CircuitBreakerInstance(v, consumer, c)
 	}
-	time.Sleep(time.Second * 2)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "DegradeToNotMatchCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 	time.Sleep(time.Second * 5)
 	for _, v := range instMap[OtherCanaryInstance] {
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
@@ -616,19 +519,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, CanaryInstance)
 	}
 
-	time.Sleep(time.Second * 25)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "LimitedCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 	log.Printf("len(instMap[CanaryInstance]): %v", len(instMap[CanaryInstance]))
 	for _, v := range instMap[CanaryInstance] {
 		CloseCbInstance(v, consumer, c)
@@ -641,7 +531,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	for i := 0; i < 3; i++ {
 		checkGetInstancesByCanaryType(consumer, 2, CanaryInstance, c)
 	}
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryException02 异常测试， 服务启用金丝雀路由，测试不带金丝雀标签, 有1个目标金丝雀实例， 2个正常实例， 1个其他版本金丝实例
@@ -661,10 +550,6 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -710,18 +595,6 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	CircuitBreakerInstance(tarIns2, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns2.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 101},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -745,19 +618,6 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 	for _, v := range instMap[OtherCanaryInstance] {
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 	}
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "DegradeToCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
-
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
 		c.Assert(err, check.IsNil)
@@ -765,19 +625,6 @@ func (t *CanaryTestingSuite) TestCanaryException02(c *check.C) {
 		instance := resp.GetInstances()[0]
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, NormalInstance)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "LimitedNoCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryException03 异常测试， 服务启用金丝雀路由，测试带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
@@ -796,10 +643,6 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -830,18 +673,6 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	CircuitBreakerInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -853,19 +684,6 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 	}
 	time.Sleep(time.Second * 22)
 	CloseCbInstance(tarIns, consumer, c)
-	time.Sleep(time.Second * 2)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "DegradeToNotCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 	time.Sleep(time.Second * 5)
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -874,19 +692,6 @@ func (t *CanaryTestingSuite) TestCanaryException03(c *check.C) {
 		instance := resp.GetInstances()[0]
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, CanaryInstance)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryException04 异常测试， 服务启用金丝雀路由，测试不带带金丝雀标签, 有1个目标金丝雀实例， 1个正常实例
@@ -905,10 +710,6 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -937,18 +738,6 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	CircuitBreakerInstance(tarIns, consumer, c)
 	time.Sleep(time.Second * 5)
 	c.Assert(tarIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -960,19 +749,6 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 	}
 	time.Sleep(time.Second * 22)
 	CloseCbInstance(tarIns, consumer, c)
-	time.Sleep(time.Second * 2)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "DegradeToCanary",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 	time.Sleep(time.Second * 5)
 	for i := 0; i < 100; i++ {
 		resp, err := consumer.GetOneInstance(getInstancesReq)
@@ -981,19 +757,6 @@ func (t *CanaryTestingSuite) TestCanaryException04(c *check.C) {
 		instance := resp.GetInstances()[0]
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, NormalInstance)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 100},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // TestCanaryNormal04 测试canary切换到normal
@@ -1025,10 +788,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 		[]string{fmt.Sprintf("%s:%d", canaryIPAddress, canaryPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterSetDivision,
 		config.DefaultServiceRouterCanary})
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -1093,31 +852,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 		c.Assert(v.GetWeight() != 0, check.Equals, true)
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, CanaryInstance)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace:    canaryNamespace,
-			Service:      canaryService,
-			Plugin:       config.DefaultServiceRouterCanary,
-			SrcNamespace: canaryNamespace,
-			SrcService:   canaryService,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 22},
-		routerKey{
-			Namespace:    canaryNamespace,
-			Service:      canaryService,
-			Plugin:       config.DefaultServiceRouterSetDivision,
-			SrcNamespace: canaryNamespace,
-			SrcService:   canaryService,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 22},
-	}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 func (t *CanaryTestingSuite) addInstance(region, zone, campus string, health bool, metaData map[string]string) {
@@ -1162,10 +896,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 		[]string{fmt.Sprintf("%s:%d", canaryIPAddress, canaryPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterNearbyBased,
 		config.DefaultServiceRouterCanary})
-	cfg.GetGlobal().GetStatReporter().SetChain([]string{config.DefaultServiceRouteReporter})
-	cfg.GetGlobal().GetStatReporter().SetEnable(true)
-	err := cfg.GetGlobal().GetStatReporter().SetPluginConfig(config.DefaultServiceRouteReporter,
-		&serviceroute.Config{ReportInterval: model.ToDurationPtr(1 * time.Second)})
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -1219,18 +949,6 @@ func (t *CanaryTestingSuite) TestCanaryNormal05(c *check.C) {
 		c.Assert(v.GetWeight() != 0, check.Equals, true)
 		c.Assert(CheckInstanceHasCanaryMeta(v, "isCanary"), check.Equals, CanaryInstance)
 	}
-	time.Sleep(2 * time.Second)
-	// 测试monitor接收的数据对不对
-	checkRouteRecord(monitorDataToMap(t.mockMonitor.GetServiceRouteRecords()), map[routerKey]map[recordKey]uint32{
-		routerKey{
-			Namespace: canaryNamespace,
-			Service:   canaryService,
-			Plugin:    config.DefaultServiceRouterCanary,
-		}: {recordKey{
-			RouteStatus: "Normal",
-			RetCode:     "Success",
-		}: 202}}, c)
-	t.mockMonitor.SetServiceRouteRecords(nil)
 }
 
 // DeleteBackUpDir 删除备份目录

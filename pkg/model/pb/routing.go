@@ -18,9 +18,6 @@
 package pb
 
 import (
-	"fmt"
-
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/modern-go/reflect2"
 
@@ -67,28 +64,6 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Route, ruleCache model.RuleCache) error {
 	if len(routes) == 0 {
 		return nil
-	}
-	for _, route := range routes {
-		sources := route.GetSources()
-		if len(sources) > 0 {
-			for _, source := range sources {
-				if err := buildCacheFromMatcher(source.GetMetadata(), ruleCache); err != nil {
-					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(source)
-					return fmt.Errorf("fail to validate %s source route, error is %v, route text is\n%s",
-						direction, err, routeTxt)
-				}
-			}
-		}
-		destinations := route.GetDestinations()
-		if len(destinations) > 0 {
-			for _, destination := range destinations {
-				if err := buildCacheFromMatcher(destination.GetMetadata(), ruleCache); err != nil {
-					routeTxt, _ := (&jsonpb.Marshaler{}).MarshalToString(destination)
-					return fmt.Errorf("fail to validate %s destination route, error is %v, route text is\n%s",
-						direction, err, routeTxt)
-				}
-			}
-		}
 	}
 	return nil
 }

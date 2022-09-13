@@ -100,9 +100,7 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
-	t.provider, err = api.NewProviderAPIByConfig(cfg)
+	t.provider, err = api.NewProviderAPIByAddress(fmt.Sprintf("%s:%d", providerIPAddress, providerPort))
 	c.Assert(err, check.IsNil)
 	time.Sleep(2 * time.Second)
 }
@@ -117,7 +115,6 @@ func (t *ProviderTestingSuite) TearDownSuite(c *check.C) {
 // TestInitProviderAPIByDefault 测试以无文件默认配置初始化providerAPI
 func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 	log.Printf("Start TestInitProviderAPIByDefault")
-	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", providerIPAddress, providerPort)})
 	enableStat := false
 	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
@@ -129,21 +126,18 @@ func (t *ProviderTestingSuite) TestInitProviderAPIByDefault(c *check.C) {
 
 // TestProviderNormal 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderNormal(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderNormal")
 	t.testProvider(c, false)
 }
 
 // TestProviderTimeout 测试ProviderAPI的三个功能，register，heartbeat，deregister
 func (t *ProviderTestingSuite) TestProviderTimeout(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	log.Printf("Start TestProviderTimeout")
 	t.testProvider(c, true)
 }
 
 // 通用的provider接口测试函数
 func (t *ProviderTestingSuite) testProvider(c *check.C, timeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.mockServer.MakeOperationTimeout(mock.OperationRegistry, timeout)
 	t.mockServer.MakeOperationTimeout(mock.OperationHeartbeat, timeout)
 	t.mockServer.MakeOperationTimeout(mock.OperationDeRegistry, timeout)

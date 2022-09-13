@@ -18,23 +18,23 @@
 package flow
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"time"
 )
 
 // AsyncGetQuota 同步获取配额信息
 func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFutureImpl, error) {
 	commonRequest := data.PoolGetCommonRateLimitRequest()
 	commonRequest.InitByGetQuotaRequest(request, e.configuration)
-	startTime := clock.GetClock().Now()
+	startTime := model.CurrentMillisecond()
 	future, err := e.flowQuotaAssistant.GetQuota(commonRequest)
-	consumeTime := clock.GetClock().Now().Sub(startTime)
+	consumeTime := model.CurrentMillisecond() - startTime
 	if err != nil {
-		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), consumeTime)
+		(&commonRequest.CallResult).SetFail(model.GetErrorCodeFromError(err), time.Duration(consumeTime)*time.Millisecond)
 	} else {
-		(&commonRequest.CallResult).SetDelay(consumeTime)
+		(&commonRequest.CallResult).SetDelay(time.Duration(consumeTime) * time.Millisecond)
 	}
-	e.syncRateLimitReportAndFinalize(commonRequest)
+	e.syncRateLimitReportAndFinalize(commonRequest, future.GetImmediately())
 	return future, err
 }

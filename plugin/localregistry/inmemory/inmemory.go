@@ -67,6 +67,7 @@ type LocalCache struct {
 	connector              serverconnector.ServerConnector
 	serviceRefreshInterval time.Duration
 	serviceExpireTime      time.Duration
+	persistEnable          bool
 	persistDir             string
 	persistTasks           *sync.Map
 	persistTaskChan        chan struct{}
@@ -157,6 +158,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.servicesMutex = &sync.RWMutex{}
 	g.serviceRefreshInterval = ctx.Config.GetConsumer().GetLocalCache().GetServiceRefreshInterval()
 	g.serviceExpireTime = ctx.Config.GetConsumer().GetLocalCache().GetServiceExpireTime()
+	g.persistEnable = ctx.Config.GetConsumer().GetLocalCache().IsPersistEnable()
 	g.persistDir = model.ReplaceHomeVar(ctx.Config.GetConsumer().GetLocalCache().GetPersistDir())
 	log.GetBaseLogger().Infof("LocalCache Real persistDir:%s", g.persistDir)
 	g.persistTasks = &sync.Map{}
@@ -219,7 +221,9 @@ func (g *LocalCache) logServiceMap() {
 // Start 启动插件
 func (g *LocalCache) Start() error {
 	g.loadCacheFromFiles()
-	go g.eliminateExpiredCache()
+	if g.persistEnable {
+		go g.eliminateExpiredCache()
+	}
 	go g.logServiceMap()
 	return nil
 }
@@ -296,11 +300,13 @@ func (g *LocalCache) deleteService(svcKey *model.ServiceEventKey, oldValue inter
 	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
 	g.deleteServiceFromSet(svcKey)
-	svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
-	g.persistTasks.Store(svcCacheFile, &persistTask{
-		op:       deleteCache,
-		protoMsg: nil,
-	})
+	if g.persistEnable {
+		svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
+		g.persistTasks.Store(svcCacheFile, &persistTask{
+			op:       deleteCache,
+			protoMsg: nil,
+		})
+	}
 }
 
 // 服务实例是否已经更新
@@ -725,11 +731,13 @@ func (g *LocalCache) deleteRule(svcKey *model.ServiceEventKey, oldValue interfac
 	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
 	g.deleteServiceFromSet(svcKey)
-	cacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
-	g.persistTasks.Store(cacheFile, &persistTask{
-		op:       deleteCache,
-		protoMsg: nil,
-	})
+	if g.persistEnable {
+		cacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
+		g.persistTasks.Store(cacheFile, &persistTask{
+			op:       deleteCache,
+			protoMsg: nil,
+		})
+	}
 }
 
 // 处理当之前缓存值为空的场景
@@ -1105,10 +1113,12 @@ func (g *LocalCache) eliminateExpiredCache() {
 
 // PersistMessage 对PB缓存进行持久化
 func (g *LocalCache) PersistMessage(file string, message proto.Message) error {
-	g.persistTasks.Store(file, &persistTask{
-		op:       addCache,
-		protoMsg: message,
-	})
+	if g.persistEnable {
+		g.persistTasks.Store(file, &persistTask{
+			op:       addCache,
+			protoMsg: message,
+		})
+	}
 	return nil
 }
 

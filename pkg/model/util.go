@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/ptypes/duration"
 	"hash/fnv"
 	"net"
 	"os"
@@ -291,4 +292,18 @@ func SortMap(values map[string]string, keys []string) ([]string, int) {
 // ToNetIP 将uint32类型转化为ipv4地址
 func ToNetIP(val uint32) net.IP {
 	return net.IPv4(byte(val>>24), byte(val>>16&0xFF), byte(val>>8)&0xFF, byte(val&0xFF))
+}
+
+// ConvertDuration converts to golang duration and logs errors
+func ConvertDuration(d *duration.Duration) (time.Duration, error) {
+	if d == nil {
+		return 0, nil
+	}
+	return d.AsDuration(), nil
+}
+
+// ProtoDurationToMS pb时间段转毫秒
+func ProtoDurationToMS(dur *duration.Duration) int64 {
+	timeDuration, _ := ConvertDuration(dur)
+	return int64(timeDuration / time.Millisecond)
 }

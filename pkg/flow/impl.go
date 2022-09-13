@@ -122,13 +122,13 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if err != nil {
 		return err
 	}
+	// 加载全局上下文
+	flowEngine.globalCtx = globalCtx
 	// 初始化限流缓存
 	flowEngine.flowQuotaAssistant = &quota.FlowQuotaAssistant{}
 	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); err != nil {
 		return err
 	}
-	// 加载全局上下文
-	flowEngine.globalCtx = globalCtx
 	// 启动健康探测
 	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
 	disableHealthCheck := when == config.HealthCheckNever

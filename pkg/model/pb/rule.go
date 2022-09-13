@@ -18,10 +18,8 @@
 package pb
 
 import (
-	"fmt"
 	"sync/atomic"
 
-	regexp "github.com/dlclark/regexp2"
 	"github.com/golang/protobuf/proto"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -88,38 +86,6 @@ func (s *ServiceRuleInProto) ValidateAndBuildCache() error {
 		// 缓存规则解释失败异常
 		s.validateError = err
 		return err
-	}
-	return nil
-}
-
-const MatchAll = "*"
-
-// buildCacheFromMatcher 通过metadata来构建缓存.
-func buildCacheFromMatcher(metadata map[string]*namingpb.MatchString, ruleCache model.RuleCache) error {
-	if len(metadata) == 0 {
-		return nil
-	}
-	for _, metaValue := range metadata {
-		valueRawStr := metaValue.GetValue().GetValue()
-		if valueRawStr == MatchAll {
-			continue
-		}
-		// 如果是 variable 类型，但是value 是空的，此时无法通过 value 获取环境变量，报错
-		if metaValue.ValueType == namingpb.MatchString_VARIABLE && valueRawStr == "" {
-			return fmt.Errorf("value of variable type can not be empty")
-		}
-		if metaValue.Type != namingpb.MatchString_REGEX || metaValue.ValueType != namingpb.MatchString_TEXT {
-			continue
-		}
-		// 如果是正则匹配类型，并且 value 是 text 模式，事先校验正则表达式是否合法
-		if pattern := ruleCache.GetRegexMatcher(valueRawStr); nil != pattern {
-			continue
-		}
-		regexValue, err := regexp.Compile(valueRawStr, regexp.RE2)
-		if err != nil {
-			return fmt.Errorf("invalid regex expression %s, error is %v", valueRawStr, err)
-		}
-		ruleCache.PutRegexMatcher(valueRawStr, regexValue)
 	}
 	return nil
 }

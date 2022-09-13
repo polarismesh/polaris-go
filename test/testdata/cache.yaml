@@ -18,8 +18,9 @@ global:
     enable: false
 consumer:
   localCache:
-    serviceExpireTime: 10s
+    serviceExpireTime: 5s
     serviceRefreshInterval: 1s
+    persistEnable: true
     persistDir: testdata/backup
     type: inmemory
     persistMaxWriteRetry: 0

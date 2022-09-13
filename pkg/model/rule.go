@@ -18,6 +18,8 @@
 package model
 
 import (
+	"fmt"
+	"sync"
 	"time"
 
 	regexp "github.com/dlclark/regexp2"
@@ -68,9 +70,7 @@ type ServiceRule interface {
 // RuleCache 服务规则缓存.
 type RuleCache interface {
 	// 通过字面值获取表达式对象
-	GetRegexMatcher(message string) *regexp.Regexp
-	// 设置表达式对象, 非线程安全
-	PutRegexMatcher(message string, pattern *regexp.Regexp)
+	GetRegexMatcher(message string) (*regexp.Regexp, error)
 	// 获取消息缓存
 	GetMessageCache(message proto.Message) interface{}
 	// 设置消息缓存
@@ -87,18 +87,32 @@ func NewRuleCache() RuleCache {
 
 // ruleCache 路由规则缓存实现.
 type ruleCache struct {
+	mutex         sync.RWMutex
 	regexMatchers map[string]*regexp.Regexp
 	messageCaches map[proto.Message]interface{}
 }
 
 // GetRegexMatcher 通过字面值获取表达式对象.
-func (r *ruleCache) GetRegexMatcher(message string) *regexp.Regexp {
-	return r.regexMatchers[message]
-}
-
-// PutRegexMatcher 设置表达式对象, 非线程安全.
-func (r *ruleCache) PutRegexMatcher(message string, pattern *regexp.Regexp) {
-	r.regexMatchers[message] = pattern
+func (r *ruleCache) GetRegexMatcher(message string) (*regexp.Regexp, error) {
+	r.mutex.RLock()
+	regexObj, ok := r.regexMatchers[message]
+	r.mutex.RUnlock()
+	if ok {
+		return regexObj, nil
+	}
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	regexObj, ok = r.regexMatchers[message]
+	if ok {
+		return regexObj, nil
+	}
+	var err error
+	regexObj, err = regexp.Compile(message, regexp.RE2)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex expression %s, error is %v", message, err)
+	}
+	r.regexMatchers[message] = regexObj
+	return regexObj, nil
 }
 
 // GetMessageCache 获取hash值.

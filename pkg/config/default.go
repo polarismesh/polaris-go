@@ -213,6 +213,10 @@ const (
 	DefaultRateLimitPurgeInterval = 1 * time.Minute
 	// DefaultConfigConnector 默认的注册中心连接器插件.
 	DefaultConfigConnector string = "polaris"
+	// DefaultLimiterNamespace 默认的限流服务
+	DefaultLimiterNamespace string = "Polaris"
+	// DefaultLimiterService 默认的限流服务
+	DefaultLimiterService string = "polaris.limiter"
 )
 
 // 默认的就近路由配置.

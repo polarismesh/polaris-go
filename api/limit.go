@@ -25,16 +25,29 @@ import (
 
 // QuotaRequest 配额查询请求
 type QuotaRequest interface {
+
 	// SetNamespace 设置命名空间
 	SetNamespace(string)
+
 	// SetService 设置服务名
 	SetService(string)
-	// SetCluster 设置集群名
-	SetCluster(string)
+
 	// SetLabels 设置业务标签信息
+	// Deprecated: please use AddArgument instead
 	SetLabels(map[string]string)
+
+	// SetMethod set method
+	SetMethod(method string)
+
+	// AddArgument add the match argument
+	AddArgument(argument model.Argument)
+
+	// SetToken set token to aquire
+	SetToken(uint32)
+
 	// SetTimeout 设置单次请求超时时间
 	SetTimeout(timeout time.Duration)
+
 	// SetRetryCount 设置最大重试次数
 	SetRetryCount(retryCount int)
 }
@@ -48,8 +61,10 @@ func NewQuotaRequest() QuotaRequest {
 type QuotaFuture interface {
 	// Done 标识分配是否结束
 	Done() <-chan struct{}
-	// Get 获取分配结果
+	// Get 等待一段时间后，获取分配结果，用于匀速排队
 	Get() *model.QuotaResponse
+	// GetImmediately 立刻获取分配结果，不等待
+	GetImmediately() *model.QuotaResponse
 	// Release 释放资源，仅用于并发数限流的场景
 	Release()
 }

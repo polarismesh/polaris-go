@@ -41,31 +41,31 @@ import (
 
 // ResponseCallBack 应答回调函数
 type ResponseCallBack interface {
-	// 应答回调函数
+	// OnInitResponse 应答回调函数
 	OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, curTimeMilli int64)
-	// 应答回调函数
+	// OnReportResponse 应答回调函数
 	OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64)
 }
 
 // RateLimitMsgSender 限流消息同步器
 type RateLimitMsgSender interface {
-	// 是否已经初始化
+	// HasInitialized 是否已经初始化
 	HasInitialized(svcKey model.ServiceKey, labels string) bool
-	// 发送初始化请求
+	// SendInitRequest 发送初始化请求
 	SendInitRequest(request *rlimitV2.RateLimitInitRequest, callback ResponseCallBack)
-	// 发送上报请求
+	// SendReportRequest 发送上报请求
 	SendReportRequest(request *rlimitV2.ClientRateLimitReportRequest) error
-	// 同步时间
+	// AdjustTime 同步时间
 	AdjustTime() int64
 }
 
 // AsyncRateLimitConnector 异步限流连接器
 type AsyncRateLimitConnector interface {
-	// 初始化限流控制信息
+	// GetMessageSender 初始化限流控制信息
 	GetMessageSender(svcKey model.ServiceKey, hashValue uint64) (RateLimitMsgSender, error)
-	// 销毁
+	// Destroy 销毁
 	Destroy()
-	// 流数量
+	// StreamCount 流数量
 	StreamCount() int
 }
 

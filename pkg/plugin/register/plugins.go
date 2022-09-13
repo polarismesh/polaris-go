@@ -65,12 +65,6 @@ import (
 	// prometheus 插件
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/prometheus"
 
-	// tencent 插件
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/monitor"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/ratelimit"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceinfo"
-	_ "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/serviceroute"
-
 	// 注册 report 插件
 	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/clientid"
 	_ "github.com/polarismesh/polaris-go/plugin/reporthandler/location"

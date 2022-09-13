@@ -119,9 +119,7 @@ func HasRegex(rule *namingpb.Rule) bool {
 
 // AddRateLimitWindow 添加限流窗口
 func (rs *RateLimitWindowSet) AddRateLimitWindow(
-	commonRequest *data.CommonRateLimitRequest, rule *namingpb.Rule, flatLabels string) (*RateLimitWindow, error) {
-	// 判断是否正则扩散
-	hasRegex := HasRegex(rule)
+	commonRequest *data.CommonRateLimitRequest, rule *namingpb.Rule, flatLabels string, regexSpread bool) *RateLimitWindow {
 	rs.updateMutex.Lock()
 	defer rs.updateMutex.Unlock()
 	container := rs.windowByRule[rule.GetRevision().GetValue()]
@@ -130,26 +128,22 @@ func (rs *RateLimitWindowSet) AddRateLimitWindow(
 		rs.windowByRule[rule.GetRevision().GetValue()] = container
 	}
 	var window *RateLimitWindow
-	if hasRegex {
+	if regexSpread {
 		window = container.WindowByLabel[flatLabels]
 	} else {
 		window = container.MainWindow
 	}
 	if nil != window {
-		return window, nil
+		return window
 	}
-	var err error
-	window, err = NewRateLimitWindow(rs, rule, commonRequest, flatLabels)
-	if err != nil {
-		return nil, err
-	}
-	if hasRegex {
+	window = NewRateLimitWindow(rs, rule, commonRequest, flatLabels)
+	if regexSpread {
 		container.WindowByLabel[flatLabels] = window
 	} else {
 		container.MainWindow = window
 	}
 	rs.flowAssistant.AddWindowCount()
-	return window, nil
+	return window
 }
 
 // OnWindowExpired 窗口过期
@@ -225,12 +219,6 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 func (rs *RateLimitWindowSet) deleteWindow(window *RateLimitWindow) {
 	window.SetStatus(Deleted)
 	rs.flowAssistant.DelWindowCount()
-	// 旧有的窗口被删除了，那么进行一次上报
-	rs.flowAssistant.engine.SyncReportStat(model.RateLimitStat, &RateLimitGauge{
-		EmptyInstanceGauge: model.EmptyInstanceGauge{},
-		Window:             window,
-		Type:               WindowDeleted,
-	})
 }
 
 // WindowContainer 窗口容器
@@ -278,38 +266,6 @@ type RemoteSyncParam struct {
 	model.ControlParam
 }
 
-// UsageInfo 配额使用信息
-type UsageInfo struct {
-	// 配额使用时间
-	CurTimeMilli int64
-	// 配额使用详情
-	Passed map[int64]uint32
-	// 限流情况
-	Limited map[int64]uint32
-}
-
-// RemoteQuotaResult 远程下发配额
-type RemoteQuotaResult struct {
-	Left            int64
-	ClientCount     uint32
-	ServerTimeMilli int64
-	DurationMill    int64
-}
-
-// RemoteAwareBucket 远程配额分配的令牌桶
-type RemoteAwareBucket interface {
-	// 父接口，执行用户配额分配操作
-	model.QuotaAllocator
-	// 设置通过限流服务端获取的远程配额
-	SetRemoteQuota(*RemoteQuotaResult)
-	// 获取已经分配的配额
-	GetQuotaUsed(curTimeMilli int64) *UsageInfo
-	// 获取TokenBuckets
-	GetTokenBuckets() TokenBuckets
-	// 更新时间间隔
-	UpdateTimeDiff(timeDiff int64)
-}
-
 // RateLimitWindow 限流窗口
 type RateLimitWindow struct {
 	// 配额窗口集合
@@ -341,8 +297,6 @@ type RateLimitWindow struct {
 	syncParam RemoteSyncParam
 	// 流量整形算法桶
 	trafficShapingBucket ratelimiter.QuotaBucket
-	// 执行正式分配的令牌桶
-	allocatingBucket RemoteAwareBucket
 	// 限流插件
 	rateLimiter ratelimiter.ServiceRateLimiter
 	// 初始化后指定的限流模式（本地或远程）
@@ -351,6 +305,8 @@ type RateLimitWindow struct {
 	remoteCluster model.ServiceKey
 	// 窗口状态
 	status int64
+	// 与服务端的时间差
+	timeDiff int64
 }
 
 // 超过多长时间后进行淘汰，淘汰后需要重新init
@@ -381,7 +337,7 @@ func getMaxDuration(rule *namingpb.Rule) time.Duration {
 
 // NewRateLimitWindow 创建限流窗口
 func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
-	commonRequest *data.CommonRateLimitRequest, labels string) (*RateLimitWindow, error) {
+	commonRequest *data.CommonRateLimitRequest, labels string) *RateLimitWindow {
 	window := &RateLimitWindow{}
 	window.WindowSet = windowSet
 	window.SvcKey.Service = rule.GetService().GetValue()
@@ -390,18 +346,16 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	window.uniqueKey, window.hashValue = window.buildQuotaHashValue()
 	window.Rule = rule
 	window.expireDuration = getExpireDuration(rule)
-
+	if rule.GetType() == namingpb.Rule_GLOBAL {
+		window.remoteCluster.Namespace = windowSet.flowAssistant.remoteNamespace
+		window.remoteCluster.Service = windowSet.flowAssistant.remoteService
+	}
 	window.syncParam.ControlParam = commonRequest.ControlParam
 
 	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, rule.GetAction().GetValue())
 	// 初始化流量整形窗口
-	var err error
-	criteria := &commonRequest.Criteria
-	window.trafficShapingBucket, err = window.rateLimiter.InitQuota(criteria)
-	if err != nil {
-		return nil, err
-	}
-	window.allocatingBucket = NewRemoteAwareQpsBucket(window)
+	window.trafficShapingBucket = window.rateLimiter.InitQuota(
+		&ratelimiter.InitCriteria{DstRule: rule, WindowKey: window.uniqueKey})
 
 	window.status = Created
 	window.lastQuotaAccessNano = time.Now().UnixNano()
@@ -417,10 +371,24 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 			EventObject: window,
 		}
 		for _, h := range handlers {
-			h.Callback(eventObj)
+			_ = h.Callback(eventObj)
 		}
 	}
-	return window, nil
+	return window
+}
+
+// toServerTimeMilli 客户端时间转为服务端时间
+func (r *RateLimitWindow) toServerTimeMilli(timeMilli int64) int64 {
+	timeDiff := atomic.LoadInt64(&r.timeDiff)
+	return timeMilli + timeDiff
+}
+
+// UpdateTimeDiff 更新时间间隔
+func (r *RateLimitWindow) UpdateTimeDiff(timeDiff int64) {
+	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
+	if lastTimeDiff != timeDiff {
+		log.GetBaseLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
+	}
 }
 
 // buildRemoteConfigMode 构建限流模式及集群
@@ -430,8 +398,10 @@ func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, r
 		r.configMode = model.ConfigQuotaLocalMode
 		return
 	}
-	r.remoteCluster.Namespace = rule.GetCluster().GetNamespace().GetValue()
-	r.remoteCluster.Service = rule.GetCluster().GetService().GetValue()
+	if len(rule.GetCluster().GetNamespace().GetValue()) > 0 && len(rule.GetCluster().GetService().GetValue()) > 0 {
+		r.remoteCluster.Namespace = rule.GetCluster().GetNamespace().GetValue()
+		r.remoteCluster.Service = rule.GetCluster().GetService().GetValue()
+	}
 	if len(r.remoteCluster.Namespace) == 0 || len(r.remoteCluster.Service) == 0 {
 		r.configMode = model.ConfigQuotaLocalMode
 	} else {
@@ -460,39 +430,6 @@ func createBehavior(supplier plugin.Supplier, behaviorName string) ratelimiter.S
 	// 因为构造缓存时候已经校验过，所以这里可以直接忽略错误
 	plug, _ := supplier.GetPlugin(common.TypeRateLimiter, behaviorName)
 	return plug.(ratelimiter.ServiceRateLimiter)
-}
-
-// matchLabels 校验输入的元数据是否符合规则
-func matchLabels(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
-	labels map[string]string, ruleCache model.RuleCache) bool {
-	ruleMetaValueStr := ruleMetaValue.GetValue().GetValue()
-	if ruleMetaValueStr == pb.MatchAll {
-		return true
-	}
-	if len(labels) == 0 {
-		return false
-	}
-	var value string
-	var ok bool
-	if value, ok = labels[ruleMetaKey]; !ok {
-		// 集成的路由规则不包含这个key，就不匹配
-		return false
-	}
-	switch ruleMetaValue.Type {
-	case namingpb.MatchString_REGEX:
-		regexObj := ruleCache.GetRegexMatcher(ruleMetaValueStr)
-		m, err := regexObj.FindStringMatch(value)
-		if err != nil {
-			log.GetBaseLogger().Errorf("regex match labels error. ruleMetaValueStr: %s, value: %s, errors: %s", ruleMetaValueStr, value, err)
-			return false
-		}
-		if m == nil || m.String() == "" {
-			return false
-		}
-		return true
-	default:
-		return value == ruleMetaValueStr
-	}
 }
 
 // contextKey 上下文的键类型
@@ -553,12 +490,12 @@ func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
 	initReq.Target.Labels = r.Labels
 
 	quotaMode := rlimitV2.QuotaMode(r.Rule.GetAmountMode())
-	tokenBuckets := r.allocatingBucket.GetTokenBuckets()
+	tokenBuckets := r.trafficShapingBucket.GetAmountInfos()
 	for _, tokenBucket := range tokenBuckets {
 		quotaTotal := &rlimitV2.QuotaTotal{
 			Mode:      quotaMode,
-			Duration:  tokenBucket.validDurationSecond,
-			MaxAmount: tokenBucket.ruleTokenAmount,
+			Duration:  tokenBucket.ValidDuration,
+			MaxAmount: tokenBucket.MaxAmount,
 		}
 		initReq.Totals = append(initReq.Totals, quotaTotal)
 	}
@@ -589,13 +526,15 @@ func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportReques
 		Labels:    r.Labels,
 		QuotaUsed: make(map[time.Duration]*rlimitV2.QuotaSum),
 	}
-	curTimeMilli := model.CurrentMillisecond()
-	usageInfo := r.allocatingBucket.GetQuotaUsed(curTimeMilli)
+	curTimeMilli := r.toServerTimeMilli(model.CurrentMillisecond())
+	usageInfo := r.trafficShapingBucket.GetQuotaUsed(curTimeMilli)
 	reportReq.Timestamp = usageInfo.CurTimeMilli
-	for durationMilli, passed := range usageInfo.Passed {
-		reportReq.QuotaUsed[time.Duration(durationMilli)*time.Millisecond] = &rlimitV2.QuotaSum{
-			Used:    passed,
-			Limited: usageInfo.Limited[durationMilli],
+	if len(usageInfo.Passed) > 0 {
+		for durationMilli, passed := range usageInfo.Passed {
+			reportReq.QuotaUsed[time.Duration(durationMilli)*time.Millisecond] = &rlimitV2.QuotaSum{
+				Used:    passed,
+				Limited: usageInfo.Limited[durationMilli],
+			}
 		}
 	}
 	return reportReq
@@ -617,53 +556,12 @@ func (r *RateLimitWindow) CasStatus(oldStatus int64, status int64) bool {
 }
 
 // AllocateQuota 分配配额
-func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitRequest) (*model.QuotaFutureImpl, error) {
+func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitRequest) *model.QuotaResponse {
 	nowMilli := model.CurrentMillisecond()
 	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
-	shapingResult, err := r.trafficShapingBucket.GetQuota()
-	if err != nil {
-		return nil, err
-	}
-	deadline := time.Unix(0, nowMilli*1e6)
-	if shapingResult.Code == model.QuotaResultLimited {
-		// 如果结果是拒绝了分配，那么进行一次上报
-		// TODO：检查是否上报了充足信息
-		mode := r.Rule.GetType()
-		var limitType LimitMode
-		if mode == namingpb.Rule_GLOBAL {
-			limitType = LimitGlobalMode
-		} else {
-			limitType = LimitLocalMode
-		}
-
-		gauge := &RateLimitGauge{
-			EmptyInstanceGauge: model.EmptyInstanceGauge{},
-			Window:             r,
-			Type:               TrafficShapingLimited,
-			LimitModeType:      limitType,
-		}
-		_ = r.Engine().SyncReportStat(model.RateLimitStat, gauge)
-
-		resp := &model.QuotaResponse{
-			Code: model.QuotaResultLimited,
-			Info: shapingResult.Info,
-		}
-
-		return model.NewQuotaFuture(
-			model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
-			model.WithQuotaFutureResp(resp),
-			model.WithQuotaFutureDeadline(deadline),
-			model.WithQuotaFutureHooks(r.reportRateLimitGauga)), nil
-	}
-	if shapingResult.QueueTime > 0 {
-		deadlineMilli := nowMilli + model.ToMilliSeconds(shapingResult.QueueTime)
-		deadline = time.Unix(0, deadlineMilli*1e6)
-	}
-	return model.NewQuotaFuture(
-		model.WithQuotaFutureReq(data.ConvertToQuotaRequest(commonRequest)),
-		model.WithQuotaFutureDeadline(deadline),
-		model.WithQuotaFutureQuotaAllocator(r.allocatingBucket),
-		model.WithQuotaFutureHooks(r.reportRateLimitGauga)), nil
+	// 获取服务端时间
+	curTimeMs := r.toServerTimeMilli(nowMilli)
+	return r.trafficShapingBucket.GetQuota(curTimeMs, commonRequest.Token)
 }
 
 // GetLastAccessTimeMilli 获取最近访问时间
@@ -674,16 +572,4 @@ func (r *RateLimitWindow) GetLastAccessTimeMilli() int64 {
 // Expired 是否已经过期
 func (r *RateLimitWindow) Expired(nowMilli int64) bool {
 	return nowMilli-r.GetLastAccessTimeMilli() > model.ToMilliSeconds(r.expireDuration)
-}
-
-func (r *RateLimitWindow) reportRateLimitGauga(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
-	stat := &model.RateLimitGauge{
-		EmptyInstanceGauge: model.EmptyInstanceGauge{},
-		Namespace:          req.GetNamespace(),
-		Service:            req.GetService(),
-		Result:             resp.Code,
-		Labels:             req.GetLabels(),
-	}
-
-	r.Engine().SyncReportStat(model.RateLimitStat, stat)
 }

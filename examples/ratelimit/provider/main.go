@@ -70,11 +70,16 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
-		quotaReq.SetLabels(convertHeaders(r.Header))
+		quotaReq.SetMethod("/echo")
+		headers := convertHeaders(r.Header)
+		for k, v := range headers {
+			quotaReq.AddArgument(model.BuildHeaderArgument(k, v))
+		}
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)
 
-		log.Printf("[info] get quota req : ns=%s, svc=%s, labels=%v", quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetLabels())
+		log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
+			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 		resp, err := svr.limiter.GetQuota(quotaReq)
 
 		log.Printf("[info] get quota resp : code=%d, info=%s", resp.Get().Code, resp.Get().Info)
@@ -187,11 +192,7 @@ func getLocalHost(serverAddr string) (string, error) {
 func convertHeaders(header map[string][]string) map[string]string {
 	meta := make(map[string]string)
 	for k, v := range header {
-		if strings.ToLower(k) == "user-id" {
-			meta[strings.ToLower(k)] = v[0]
-		}
+		meta[strings.ToLower(k)] = v[0]
 	}
-
-	meta["method"] = "/echo"
 	return meta
 }

@@ -4,11 +4,9 @@
       "id": "nf0001",
       "service": "NetworkFailTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "fail4xx"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "fail4xx"
       },
       "resource": "QPS",
       "type": "GLOBAL",
@@ -29,11 +27,9 @@
       "id": "nf0002",
       "service": "NetworkFailTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "initReturnDelay"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "initReturnDelay"
       },
       "resource": "QPS",
       "type": "GLOBAL",
@@ -54,11 +50,9 @@
       "id": "nf0003",
       "service": "NetworkFailTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "reportDelay"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "reportDelay"
       },
       "resource": "QPS",
       "type": "GLOBAL",
@@ -79,11 +73,9 @@
       "id": "nf0004",
       "service": "NetworkFailTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "serverConnectFail"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "serverConnectFail"
       },
       "resource": "QPS",
       "type": "GLOBAL",

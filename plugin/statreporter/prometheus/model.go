@@ -264,11 +264,11 @@ var (
 		},
 		CalleeMethod: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return val.Labels["method"]
+			return val.Method
 		},
 		CallerLabels: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return formatLabelsToStr(val.Labels)
+			return formatLabelsToStr(val.Arguments)
 		},
 	}
 
@@ -304,15 +304,15 @@ var (
 	}
 )
 
-func formatLabelsToStr(labels map[string]string) string {
-	if len(labels) == 0 {
+func formatLabelsToStr(arguments []model.Argument) string {
+	if len(arguments) == 0 {
 		return ""
 	}
 
-	s := make([]string, 0, len(labels))
+	s := make([]string, 0, len(arguments))
 
-	for k, v := range labels {
-		s = append(s, fmt.Sprintf("%s:%s", k, v))
+	for _, argument := range arguments {
+		s = append(s, argument.String())
 	}
 
 	return strings.Join(s, "|")

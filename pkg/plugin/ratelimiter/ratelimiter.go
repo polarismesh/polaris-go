@@ -18,49 +18,31 @@
 package ratelimiter
 
 import (
-	"time"
-
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// InitCriteria 配额查询相关的信息
-type InitCriteria struct {
-	DstRule *namingpb.Rule
-}
-
-// AmountDuration 单个配额
-type AmountDuration struct {
-	AmountUsed    uint32
-	ValidDuration time.Duration
+// ServiceRateLimiter 服务限流处理插件接口
+type ServiceRateLimiter interface {
+	plugin.Plugin
+	// InitQuota 初始化并创建令牌桶/漏桶
+	// 主流程会在首次调用，以及规则对象变更的时候，调用该方法
+	InitQuota(criteria *InitCriteria) QuotaBucket
 }
 
 // QuotaBucket 配额池
 type QuotaBucket interface {
 	// GetQuota 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
-	GetQuota() (*QuotaResult, error)
+	GetQuota(curTimeMs int64, token uint32) *model.QuotaResponse
 	// Release 释放配额（仅对于并发数限流有用）
 	Release()
-}
-
-// QuotaResult 配额分配的结果
-type QuotaResult struct {
-	// 分配的结果码
-	Code model.QuotaResultCode
-	// 分配的提示信息
-	Info string
-	// 排队时间，标识多长时间后可以有新配额供应
-	QueueTime time.Duration
-}
-
-// ServiceRateLimiter 服务限流处理插件接口
-type ServiceRateLimiter interface {
-	plugin.Plugin
-	// 初始化并创建令牌桶/漏桶
-	// 主流程会在首次调用，以及规则对象变更的时候，调用该方法
-	InitQuota(criteria *InitCriteria) (QuotaBucket, error)
+	// OnRemoteUpdate 远程配额更新
+	OnRemoteUpdate(RemoteQuotaResult)
+	// GetQuotaUsed 拉取本地使用配额情况以供上报
+	GetQuotaUsed(curTimeMilli int64) UsageInfo
+	// GetAmountInfos 获取规则的限流阈值信息
+	GetAmountInfos() []AmountInfo
 }
 
 // init 初始化
