@@ -42,7 +42,7 @@ type QuotaRequest interface {
 	// AddArgument add the match argument
 	AddArgument(argument model.Argument)
 
-	// SetToken set token to aquire
+	// SetToken set token to acquire
 	SetToken(uint32)
 
 	// SetTimeout 设置单次请求超时时间
