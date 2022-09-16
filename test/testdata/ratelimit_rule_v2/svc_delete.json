@@ -4,11 +4,9 @@
       "id": "sd0001",
       "service": "ServiceDeleteTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "svcDeleted"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "svcDeleted"
       },
       "resource": "QPS",
       "type": "LOCAL",

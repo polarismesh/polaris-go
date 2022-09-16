@@ -163,11 +163,7 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 			switch ruleMetaValue.Type {
 			case namingpb.MatchString_REGEX:
 				var matchExp *regexp.Regexp
-				if ruleMetaValue.ValueType == namingpb.MatchString_TEXT {
-					matchExp = ruleCache.GetRegexMatcher(rawMetaValue)
-				} else {
-					matchExp, err = regexp.Compile(rawMetaValue, regexp.RE2)
-				}
+				matchExp, err = regexp.Compile(rawMetaValue, regexp.RE2)
 				if err != nil {
 					return false, rawMetaValue, err
 				}
@@ -353,15 +349,9 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 		case namingpb.MatchString_REGEX:
 			// 对于正则表达式，则可能匹配到多个value，
 			// 需要把服务下面的所有的meta value都拿出来比较
-			var regexObj *regexp.Regexp
-			if ruleMetaValue.ValueType == namingpb.MatchString_TEXT {
-				regexObj = ruleCache.GetRegexMatcher(ruleMetaValueStr)
-			} else {
-				var err error
-				regexObj, err = regexp.Compile(ruleMetaValueStr, regexp.RE2)
-				if err != nil {
-					return nil, false, ruleMetaValueStr, err
-				}
+			regexObj, err := ruleCache.GetRegexMatcher(ruleMetaValueStr)
+			if err != nil {
+				return nil, false, ruleMetaValueStr, err
 			}
 			// 校验从上一个路由插件继承下来的规则是否符合该目标规则
 			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, regexObj) {

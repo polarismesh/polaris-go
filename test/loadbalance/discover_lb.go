@@ -130,7 +130,7 @@ func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
 	})
 	fmt.Println(Instances)
 	t.mockServer.RegisterServiceInstances(service, Instances)
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", lbIPAddr, lbPort)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()

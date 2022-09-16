@@ -4,11 +4,9 @@
       "id": "rc0001",
       "service": "RuleChangeTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "disable"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "disable"
       },
       "resource": "QPS",
       "type": "LOCAL",
@@ -25,11 +23,9 @@
       "id": "rc0002",
       "service": "RuleChangeTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "amountChange"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "amountChange"
       },
       "resource": "QPS",
       "type": "GLOBAL",
@@ -37,7 +33,7 @@
       "amount_mode": "GLOBAL_TOTAL",
       "amounts": [
         {
-          "maxAmount": 100,
+          "maxAmount": 20,
           "validDuration": "1s"
         }
       ],
@@ -50,11 +46,9 @@
       "id": "rc0003",
       "service": "RuleChangeTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "labelChange"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "labelChange"
       },
       "resource": "QPS",
       "type": "GLOBAL",
@@ -75,11 +69,9 @@
       "id": "rc0004",
       "service": "RuleChangeTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "ruleDeleted"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "ruleDeleted"
       },
       "resource": "QPS",
       "type": "GLOBAL",

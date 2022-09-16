@@ -19,13 +19,12 @@ package log
 
 import (
 	"fmt"
+	"github.com/polarismesh/polaris-go/pkg/model"
 	"log"
 	"sync/atomic"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/modern-go/reflect2"
-
-	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (

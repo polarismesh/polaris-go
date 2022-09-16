@@ -4,16 +4,20 @@
       "id": "l0001",
       "service": "LocalTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "method": {
-          "type": "EXACT",
-          "value": "query"
-        },
-        "uin": {
-          "type": "EXACT",
-          "value": "007"
-        }
+      "method":  {
+        "type": "EXACT",
+        "value": "query"
       },
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "uin",
+          "value": {
+            "type": "EXACT",
+            "value": "007"
+          }
+        }
+      ],
       "resource": "QPS",
       "type": "LOCAL",
       "action": "reject",
@@ -33,12 +37,16 @@
       "id": "l0002",
       "service": "LocalTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "appId": {
-          "type": "REGEX",
-          "value": ".+"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "appId",
+          "value":  {
+            "type": "REGEX",
+            "value": ".+"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "LOCAL",
       "action": "reject",
@@ -55,12 +63,16 @@
       "id": "l0003",
       "service": "LocalTestSvcV2",
       "namespace": "Test",
-      "labels": {
-        "test_uin": {
-          "type": "REGEX",
-          "value": ".+"
+      "arguments": [
+        {
+          "type": "CUSTOM",
+          "key": "test_uin",
+          "value":  {
+            "type": "REGEX",
+            "value": ".+"
+          }
         }
-      },
+      ],
       "resource": "QPS",
       "type": "LOCAL",
       "action": "reject",

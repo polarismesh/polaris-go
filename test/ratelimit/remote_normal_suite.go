@@ -84,8 +84,8 @@ func (rt *RemoteNormalTestingSuite) TestRemoteTwoDuration(c *check.C) {
 				case <-ctx.Done():
 					return
 				default:
-					resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName,
-						map[string]string{labelMethod: "query", labelUin: "007"})
+					resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName, "query",
+						map[string]string{labelUin: "007"})
 					atomic.AddInt64(&calledCount, 1)
 					codeChan <- IndexResult{
 						index: idx,
@@ -169,7 +169,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexV2(c *check.C) {
 					return
 				default:
 					for _, appId := range appIds {
-						resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName,
+						resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName, "",
 							map[string]string{labelAppId: appId})
 						atomic.AddInt64(&calledCount, 1)
 						codeChan <- IndexResult{
@@ -259,7 +259,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteRegexCombineV2(c *check.C) {
 					return
 				default:
 					for _, appId := range appIds {
-						resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName,
+						resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName, "",
 							map[string]string{labelTestUin: appId})
 						atomic.AddInt64(&calledCount, 1)
 						codeChan <- IndexResult{
@@ -334,7 +334,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 				case <-ctx.Done():
 					return
 				default:
-					resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName,
+					resp := doSingleGetQuota(c, limitAPI, RemoteTestSvcName, "",
 						map[string]string{"appIdShare": "appShare"})
 					atomic.AddInt64(&calledCount, 1)
 					curTime := model.CurrentMillisecond()
@@ -345,7 +345,7 @@ func (rt *RemoteNormalTestingSuite) TestRemoteShareEqually(c *check.C) {
 							code:  resp.Code,
 						}
 					}
-					time.Sleep(5 * time.Millisecond)
+					time.Sleep(10 * time.Millisecond)
 				}
 			}
 		}(i)

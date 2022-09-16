@@ -20,7 +20,6 @@ package model
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -32,15 +31,17 @@ type QuotaRequestImpl struct {
 	namespace string
 	// 必选，服务名
 	service string
-	// 可选，集群metadata信息
-	cluster string
+	// 可选，方法
+	method string
 	// 可选，业务标签信息
-	labels map[string]string
+	arguments []Argument
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置
 	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
+	// 可选，获取的配额数
+	Token uint32
 }
 
 // GetService 获取服务名.
@@ -63,24 +64,51 @@ func (q *QuotaRequestImpl) SetNamespace(namespace string) {
 	q.namespace = namespace
 }
 
-// GetCluster 获取集群.
-func (q *QuotaRequestImpl) GetCluster() string {
-	return q.cluster
+// SetMethod set method
+func (q *QuotaRequestImpl) SetMethod(method string) {
+	q.method = method
 }
 
-// SetCluster 设置集群.
-func (q *QuotaRequestImpl) SetCluster(cluster string) {
-	q.cluster = cluster
+// SetToken set token
+func (q *QuotaRequestImpl) SetToken(token uint32) {
+	q.Token = token
+}
+
+// GetToken get token
+func (q *QuotaRequestImpl) GetToken() uint32 {
+	return q.Token
 }
 
 // SetLabels 设置业务标签.
 func (q *QuotaRequestImpl) SetLabels(labels map[string]string) {
-	q.labels = labels
+	if len(labels) == 0 {
+		return
+	}
+	for labelKey, labelValue := range labels {
+		q.arguments = append(q.arguments, BuildArgumentFromLabel(labelKey, labelValue))
+	}
 }
 
 // GetLabels 获取业务标签.
 func (q *QuotaRequestImpl) GetLabels() map[string]string {
-	return q.labels
+	labels := make(map[string]string, len(q.arguments))
+	for _, argument := range q.arguments {
+		argument.ToLabels(labels)
+	}
+	return labels
+}
+
+func (q *QuotaRequestImpl) GetMethod() string {
+	return q.method
+}
+
+// AddArgument add the match argument
+func (q *QuotaRequestImpl) AddArgument(argument Argument) {
+	q.arguments = append(q.arguments, argument)
+}
+
+func (q *QuotaRequestImpl) Arguments() []Argument {
+	return q.arguments
 }
 
 // SetTimeout 设置单次查询超时时间.
@@ -134,134 +162,50 @@ type QuotaResponse struct {
 	Code QuotaResultCode
 	// 配额分配的结果提示信息
 	Info string
+	// 需要等待的时间段
+	WaitMs int64
 }
-
-// QuotaAllocator 配额分配器，执行配额分配及回收.
-type QuotaAllocator interface {
-	// Allocate 执行配额分配操作
-	Allocate() *QuotaResponse
-	// Release 执行配额回收操作
-	Release()
-}
-
-// quotaFutureOption 配额分配器的配置选项.
-type quotaFutureOption func(f *QuotaFutureImpl)
-
-// WithQuotaFutureReq .
-func WithQuotaFutureReq(req *QuotaRequestImpl) quotaFutureOption {
-	return func(f *QuotaFutureImpl) {
-		f.req = req
-	}
-}
-
-// WithQuotaFutureResp .Response.
-func WithQuotaFutureResp(resp *QuotaResponse) quotaFutureOption {
-	return func(f *QuotaFutureImpl) {
-		f.resp = resp
-	}
-}
-
-// WithQuotaFutureDeadline .deadline.
-func WithQuotaFutureDeadline(deadline time.Time) quotaFutureOption {
-	return func(f *QuotaFutureImpl) {
-		var cancel context.CancelFunc
-		f.deadlineCtx, cancel = context.WithDeadline(context.Background(), deadline)
-		f.cancel = cancel
-	}
-}
-
-// WithQuotaFutureQuotaAllocator .quotaAllocator.
-func WithQuotaFutureQuotaAllocator(allocator QuotaAllocator) quotaFutureOption {
-	return func(f *QuotaFutureImpl) {
-		f.allocator = allocator
-	}
-}
-
-// WithQuotaFutureHooks .hooks.
-func WithQuotaFutureHooks(hooks ...finishHook) quotaFutureOption {
-	return func(f *QuotaFutureImpl) {
-		f.hooks = hooks
-	}
-}
-
-// NewQuotaFuture 创建分配future 可以直接传入.
-func NewQuotaFuture(options ...quotaFutureOption) *QuotaFutureImpl {
-	future := &QuotaFutureImpl{}
-
-	for i := range options {
-		options[i](future)
-	}
-
-	if nil != future.resp {
-		// 已经有结果，则直接结束context
-		future.cancel()
-		future.cancel = nil
-	}
-	if nil == future.allocator {
-		future.released = true
-	}
-	return future
-}
-
-type finishHook func(req *QuotaRequestImpl, res *QuotaResponse)
 
 // QuotaFutureImpl 异步获取配额的future.
 type QuotaFutureImpl struct {
-	mutex       sync.Mutex
-	req         *QuotaRequestImpl
 	resp        *QuotaResponse
-	released    bool
 	deadlineCtx context.Context
-	allocator   QuotaAllocator
 	cancel      context.CancelFunc
-	hooks       []finishHook
+}
+
+func QuotaFutureWithResponse(resp *QuotaResponse) *QuotaFutureImpl {
+	var deadlineCtx context.Context
+	var cancel context.CancelFunc
+	if resp.WaitMs > 0 {
+		deadlineCtx, cancel = context.WithTimeout(context.Background(), time.Duration(resp.WaitMs)*time.Millisecond)
+	}
+	return &QuotaFutureImpl{
+		resp: resp, deadlineCtx: deadlineCtx, cancel: cancel}
 }
 
 // Done 分配是否结束.
 func (q *QuotaFutureImpl) Done() <-chan struct{} {
+	if nil != q.deadlineCtx {
+		return nil
+	}
 	return q.deadlineCtx.Done()
+}
+
+func (q *QuotaFutureImpl) GetImmediately() *QuotaResponse {
+	return q.resp
 }
 
 // Get 获取分配结果.
 func (q *QuotaFutureImpl) Get() *QuotaResponse {
-	if nil == q {
-		return nil
+	if nil != q.deadlineCtx {
+		<-q.deadlineCtx.Done()
 	}
-	if nil != q.resp {
-		return q.resp
-	}
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-	if nil != q.resp {
-		return q.resp
-	}
-	<-q.deadlineCtx.Done()
-	q.resp = q.allocator.Allocate()
-	if q.cancel != nil {
-		q.cancel()
-	}
-
-	if q.hooks != nil {
-		for i := range q.hooks {
-			q.hooks[i](q.req, q.resp)
-		}
-	}
-
+	q.resp.WaitMs = 0
 	return q.resp
 }
 
 // Release 释放资源，仅用于并发数限流的场景.
 func (q *QuotaFutureImpl) Release() {
-	if q.released {
-		return
-	}
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-	if q.released {
-		return
-	}
-	q.allocator.Release()
-	q.released = true
 }
 
 const (

@@ -18,17 +18,13 @@
 package data
 
 import (
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
-	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 )
 
@@ -546,11 +542,12 @@ func (cr *CommonRuleRequest) GetControlParam() *model.ControlParam {
 
 // CommonRateLimitRequest 通用限流接口的请求体
 type CommonRateLimitRequest struct {
+	QuotaRequest  *model.QuotaRequestImpl
 	DstService    model.ServiceKey
-	Cluster       string
-	Labels        map[string]string
+	Token         uint32
+	Method        string
+	Arguments     map[int]map[string]string
 	RateLimitRule model.ServiceRule
-	Criteria      ratelimiter.InitCriteria
 	Trigger       model.NotifyTrigger
 	ControlParam  model.ControlParam
 	CallResult    model.APICallResult
@@ -558,31 +555,38 @@ type CommonRateLimitRequest struct {
 
 // clearValues 清理请求体
 func (cl *CommonRateLimitRequest) clearValues() {
-	cl.Criteria.DstRule = nil
+	cl.QuotaRequest = nil
 	cl.Trigger.Clear()
-	cl.Cluster = ""
-	cl.Labels = nil
+	cl.Method = ""
+	cl.Token = 0
+	cl.Arguments = nil
 }
 
-func ConvertToQuotaRequest(cl *CommonRateLimitRequest) *model.QuotaRequestImpl {
-
-	ret := &model.QuotaRequestImpl{}
-
-	ret.SetNamespace(cl.DstService.Namespace)
-	ret.SetService(cl.DstService.Service)
-	ret.SetLabels(cl.Labels)
-	ret.SetCluster(cl.Cluster)
-
-	return ret
+func parseArguments(arguments []model.Argument) map[int]map[string]string {
+	argumentMap := make(map[int]map[string]string, 0)
+	if len(arguments) == 0 {
+		return argumentMap
+	}
+	for _, argument := range arguments {
+		stringMatchArgumentMap := argumentMap[argument.ArgumentType()]
+		if nil == stringMatchArgumentMap {
+			stringMatchArgumentMap = make(map[string]string)
+			argumentMap[argument.ArgumentType()] = stringMatchArgumentMap
+		}
+		stringMatchArgumentMap[argument.Key()] = argument.Value()
+	}
+	return argumentMap
 }
 
 // InitByGetQuotaRequest 初始化配额获取请求
 func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequestImpl, cfg config.Configuration) {
 	cl.clearValues()
+	cl.QuotaRequest = request
 	cl.DstService.Namespace = request.GetNamespace()
 	cl.DstService.Service = request.GetService()
-	cl.Cluster = request.GetCluster()
-	cl.Labels = request.GetLabels()
+	cl.Token = request.GetToken()
+	cl.Method = request.GetMethod()
+	cl.Arguments = parseArguments(request.Arguments())
 	cl.Trigger.EnableDstRateLimit = true
 	cl.CallResult.APIName = model.ApiGetQuota
 	cl.CallResult.RetStatus = model.RetSuccess
@@ -598,6 +602,9 @@ func (cl *CommonRateLimitRequest) InitByGetQuotaRequest(request *model.QuotaRequ
 	}
 	if cl.ControlParam.Timeout > time.Millisecond*500 {
 		cl.ControlParam.Timeout = time.Millisecond * 500
+	}
+	if cl.Token == 0 {
+		cl.Token = 1
 	}
 }
 
@@ -649,26 +656,6 @@ func (cl *CommonRateLimitRequest) GetControlParam() *model.ControlParam {
 // SetServices 设置网格规则
 func (cl *CommonRateLimitRequest) SetServices(mc model.Services) {
 	// do nothing
-}
-
-// FormatLabelToStr 格式化字符串
-func (cl *CommonRateLimitRequest) FormatLabelToStr(rule *namingpb.Rule) string {
-	if len(cl.Labels) == 0 {
-		return ""
-	}
-	var tmpList []string
-	ruleLabels := rule.GetLabels()
-	regexCombine := rule.GetRegexCombine().GetValue()
-	for ruleKey, ruleValue := range ruleLabels {
-		if ruleValue.GetType() == namingpb.MatchString_REGEX && regexCombine {
-			tmpList = append(tmpList, ruleKey+config.DefaultMapKeyValueSeparator+ruleValue.GetValue().GetValue())
-		} else {
-			tmpList = append(tmpList, ruleKey+config.DefaultMapKeyValueSeparator+cl.Labels[ruleKey])
-		}
-	}
-	sort.Strings(tmpList)
-	s := strings.Join(tmpList, config.DefaultMapKVTupleSeparator)
-	return s
 }
 
 // CommonServiceCallResultRequest 公共服务调用结果请求

@@ -24,7 +24,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/user"
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -50,8 +49,8 @@ const (
 	cacheSVC               = "cacheSVC"
 	cacheIP                = "127.0.0.1"
 	cachePort              = 8028
-	serviceExpireDuration  = 15 * time.Second
-	serviceRefreshDuration = 2 * time.Second
+	serviceExpireDuration  = 5 * time.Second
+	serviceRefreshDuration = 1 * time.Second
 )
 
 var (
@@ -134,17 +133,15 @@ func (t *CacheTestingSuite) testCacheCompareOriginal(cfg config.Configuration, c
 	consumerAPI := api.NewConsumerAPIByContext(sdkCtx)
 	defer consumerAPI.Destroy()
 	request := &api.GetInstancesRequest{}
-	request.FlowID = 1111
 	request.Namespace = cacheNS
 	request.Service = cacheSVC
-	request.Timeout = model.ToDurationPtr(200 * time.Millisecond)
 	origSvcInstances, err := consumerAPI.GetInstances(request)
 	c.Assert(err, check.IsNil)
 	fmt.Printf("Instance get time: %v, count is %d\n", time.Now(), len(origSvcInstances.Instances))
+	time.Sleep(3 * time.Second)
+	t.checkPersist(origSvcInstances.Instances, c)
 	expireTime := time.Now().Add(serviceExpireDuration)
-	time.Sleep(config.DefaultMinServiceExpireTime + 3*time.Second)
-	c.Assert(t.checkPersist(origSvcInstances.Instances), check.Equals, true)
-	time.Sleep(expireTime.Sub(time.Now()) + 25*time.Second)
+	time.Sleep(expireTime.Sub(time.Now()) + 10*time.Second)
 	fmt.Printf("check backupFile %s, time %v\n", backupFile, time.Now())
 	c.Assert(util.FileExist(backupFile), check.Equals, false)
 	return origSvcInstances
@@ -167,7 +164,6 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	request.Namespace = cacheNS
 	request.Service = cacheSVC
 	request.SkipRouteFilter = true
-	request.Timeout = model.ToDurationPtr(200 * time.Millisecond)
 	cachedSvcInstances, err := consumerAPI1.GetInstances(request)
 	c.Assert(err, check.IsNil)
 	fmt.Printf("Instance get before refresh, time: %v, count is %d\n", time.Now(), len(cachedSvcInstances.GetInstances()))
@@ -191,7 +187,7 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 			break
 		}
 	}
-	c.Assert(t.checkPersist(refreshSvcInstances.Instances), check.Equals, true)
+	t.checkPersist(refreshSvcInstances.Instances, c)
 }
 
 // TestCacheExpireAndPersist 测试过程
@@ -271,20 +267,12 @@ func tryOpenFile(backupFile string) (*os.File, error) {
 }
 
 // 检测是否由缓存
-func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
+func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance, c *check.C) {
 	startTime := time.Now()
 	fmt.Printf("start to checkPersist, %v\n", startTime)
-	if !util.FileExist(backupFile) {
-		log.Printf("Fail to checkPersist because %s not found, startTime: %v\n", backupFile, startTime)
-		return false
-	}
+	c.Assert(util.FileExist(backupFile), check.Equals, true)
 	backupJson, err := tryOpenFile(backupFile)
-	if err != nil {
-		log.Printf("Fail to checkPersist because %s can not be open for %v, startTime: %v\n",
-			backupFile, err, startTime)
-		backupJson.Close()
-		return false
-	}
+	c.Assert(err, check.IsNil)
 	svcResp := &namingpb.DiscoverResponse{}
 	jsonpb.Unmarshal(backupJson, svcResp)
 	backupJson.Close()
@@ -293,14 +281,10 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance) bool {
 	}, nil, nil)
 	svcInsts.CacheLoaded = 1
 	insts := svcInsts.GetInstances()
-	if !util.SameInstances(origInsts, insts) {
-		fmt.Printf("Fail to checkPersist because instances different, startTime: %v\n", startTime)
-		return false
-	}
+	util.SameInstances(origInsts, insts)
 	backupContent, _ := ioutil.ReadFile(backupFile)
 	ioutil.WriteFile(backupFileCp, backupContent, 0644)
 	fmt.Printf("finish checkPersist, startTime: %v\n", startTime)
-	return true
 }
 
 // 查看备份文件是否存在
@@ -441,43 +425,6 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 	c.Assert(len(instancesResult.GetInstances()), check.Equals, 1)
 	c.Assert(instancesResult.Instances[0].GetMetadata()["protocol"], check.Equals, "grpc")
 	time.Sleep(time.Second * 1)
-}
-
-// TestFileCachePwd 测试埋点不同缓存文件的路径不同
-func (t *CacheTestingSuite) TestFileCachePwd(c *check.C) {
-	t.FileCachePwdFunc(c)
-}
-
-// FileCachePwdFunc 测试埋点不同缓存文件的路径不同
-func (t *CacheTestingSuite) FileCachePwdFunc(c *check.C) {
-	current, err := user.Current()
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
-	homeDir := current.HomeDir
-	fmt.Printf("Home Directory: %s\n", homeDir)
-	defer util.DeleteDir(fmt.Sprintf("%s/polaris/backup", homeDir))
-
-	cfg := api.NewConfiguration()
-	cfg.GetGlobal().GetServerConnector().SetAddresses([]string{fmt.Sprintf("%s:%d", cacheIP,
-		cachePort)})
-	consumer, err := api.NewConsumerAPIByConfig(cfg)
-	c.Assert(err, check.IsNil)
-	defer consumer.Destroy()
-
-	req := &api.GetOneInstanceRequest{}
-	req.Namespace = cacheNS
-	req.Service = cacheSVC
-	result, err := consumer.GetOneInstance(req)
-	c.Assert(err, check.IsNil)
-	_ = result
-	time.Sleep(time.Second * 3)
-	// fmt.Println(runtime.GOOS)
-
-	var filePath = fmt.Sprintf("%s/polaris/backup/svc#%s#%s#instance.json", homeDir, cacheNS, cacheSVC)
-	_, err = os.Open(filePath)
-	fmt.Println(err)
-	c.Assert(err, check.IsNil)
 }
 
 // TestFileCacheAvailableTime 测试缓存文件有效时间

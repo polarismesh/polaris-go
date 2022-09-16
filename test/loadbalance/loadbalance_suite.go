@@ -37,7 +37,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"
-	monitorpb "github.com/polarismesh/polaris-go/plugin/statreporter/tencent/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -93,12 +92,6 @@ type LBTestingSuite struct {
 	idInstanceWeights map[instanceKey]int
 	idInstanceCalls   map[instanceKey]int
 	mockServer        mock.NamingServer
-
-	// monitor
-	monitorServer   mock.MonitorServer
-	monitorToken    string
-	grpcMonitor     *grpc.Server
-	monitorListener net.Listener
 }
 
 var (
@@ -120,7 +113,6 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	shopPort := lbPort
 	var err error
 	t.grpcServer = grpc.NewServer(grpcOptions...)
-	t.grpcMonitor = grpc.NewServer(grpcOptions...)
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
@@ -138,23 +130,6 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	}
 	t.mockServer.RegisterService(lbHealthyService)
 	lbHealthyInstances = t.mockServer.GenTestInstances(lbHealthyService, 10)
-
-	t.monitorServer = mock.NewMonitorServer()
-	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
-	t.mockServer.RegisterServerInstance(lbMonitorIP, lbMonitorPort, config.ServerMonitorService, t.monitorToken, true)
-	t.mockServer.RegisterRouteRule(&namingpb.Service{
-		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
-		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
-		t.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
-	monitorpb.RegisterGrpcAPIServer(t.grpcMonitor, t.monitorServer)
-	t.monitorListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", lbMonitorIP, lbMonitorPort))
-	if err != nil {
-		log.Fatal(fmt.Sprintf("error listening monitor %v", err))
-	}
-	log.Printf("moniator server listening on %s:%d\n", lbMonitorIP, lbMonitorPort)
-	go func() {
-		t.grpcMonitor.Serve(t.monitorListener)
-	}()
 
 	// 部分实例不健康的服务
 	serviceToken = uuid.New().String()
@@ -191,7 +166,6 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 // TearDownSuite 清理模拟桩服务器 SetUpSuite 结束测试套程序
 func (t *LBTestingSuite) TearDownSuite(c *check.C) {
 	t.grpcServer.Stop()
-	t.grpcMonitor.Stop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}
@@ -201,10 +175,7 @@ func (t *LBTestingSuite) TearDownSuite(c *check.C) {
 // 通用负载均衡测试逻辑
 func (t *LBTestingSuite) testLoadBalance(c *check.C, service string, lbType string) {
 	defer util.DeleteDir(util.BackupDir)
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
-	cfg.Consumer.Loadbalancer.Type = lbType
-	consumer, err := api.NewConsumerAPIByConfig(cfg)
+	consumer, err := api.NewConsumerAPIByAddress(fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	request := &api.GetInstancesRequest{}
@@ -219,6 +190,7 @@ func (t *LBTestingSuite) testLoadBalance(c *check.C, service string, lbType stri
 	oneRequest.FlowID = 1111
 	oneRequest.Namespace = lbNamespace
 	oneRequest.Service = service
+	oneRequest.LbPolicy = lbType
 	oneRequest.Timeout = model.ToDurationPtr(2 * time.Second)
 	for i := 0; i < 100000; i++ {
 		oneRequest.HashKey = []byte(uuid.New().String())
@@ -242,12 +214,11 @@ func (t *LBTestingSuite) testLoadBalance(c *check.C, service string, lbType stri
 		}
 	}
 	totalDiff := calDiff(t.idInstanceWeights, t.idInstanceCalls, instanceKey{})
-	fmt.Printf("total diff is %v\n", totalDiff)
-	totalStdDev := calStdDev(t.idInstanceWeights, t.idInstanceCalls, instanceKey{})
-	fmt.Printf("total stdDev is %.4f\n", totalStdDev)
 	factor := lbTypeToFactor[lbType]
-	c.Assert(totalDiff < factor.totalDiff, check.Equals, true)
-	//c.Assert(totalStdDev < factor.stdDev, check.Equals, true)
+	fmt.Printf("total diff is %.4f, fator diff is %.4f\n", totalDiff, factor.totalDiff)
+	totalStdDev := calStdDev(t.idInstanceWeights, t.idInstanceCalls, instanceKey{})
+	fmt.Printf("total stdDev is %.4f, factor stddev is %.4f\n", totalStdDev, factor.stdDev)
+	c.Assert(int(totalDiff*10) <= int(factor.totalDiff*10), check.Equals, true)
 }
 
 // func (t *LBTestingSuite) checkLoadBalanceReport(loadbalancer string, service string, c *check.C) {
@@ -363,8 +334,7 @@ func (t *LBTestingSuite) TestAllFailLoadBalanceL5RingHash(c *check.C) {
 func (t *LBTestingSuite) TestDirectLoadBalance(c *check.C) {
 	log.Printf("Start TestDirectLoadBalance")
 	defer util.DeleteDir(util.BackupDir)
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", lbIPAddr, lbPort)})
 	sdkCtx, err := api.InitContextByConfig(cfg)
 	defer sdkCtx.Destroy()
 	c.Assert(err, check.IsNil)
@@ -457,10 +427,7 @@ func (t *LBTestingSuite) testForeverNodeForHashSameContext(c *check.C, service s
 	log.Printf("TestForeverNodeHash for same context, lbType %s", lbType)
 	var addr string
 	defer util.DeleteDir(util.BackupDir)
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
-	cfg.Consumer.Loadbalancer.Type = lbType
-	consumer, err := api.NewConsumerAPIByConfig(cfg)
+	consumer, err := api.NewConsumerAPIByAddress(fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	request := &api.GetInstancesRequest{}
@@ -479,9 +446,7 @@ func (t *LBTestingSuite) testForeverNodeForHashSameContext(c *check.C, service s
 // 构建节点的权重信息
 func (t *LBTestingSuite) buildNodeWeights(c *check.C, service string) {
 	defer util.DeleteDir(util.BackupDir)
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
-	consumer, err := api.NewConsumerAPIByConfig(cfg)
+	consumer, err := api.NewConsumerAPIByAddress(fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	request := &api.GetInstancesRequest{}
@@ -498,8 +463,7 @@ func (t *LBTestingSuite) buildNodeWeights(c *check.C, service string) {
 func (t *LBTestingSuite) doLoadBalanceOnce(
 	c *check.C, service string, lbType string, replicate int, consumer api.ConsumerAPI, vnode int) []string {
 	if nil == consumer {
-		cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-		c.Assert(err, check.IsNil)
+		cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", lbIPAddr, lbPort)})
 		cfg.Consumer.Loadbalancer.Type = lbType
 		cfg.Consumer.ServiceRouter.SetChain([]string{config.DefaultServiceRouterFilterOnly})
 		if vnode > 0 {
@@ -507,6 +471,7 @@ func (t *LBTestingSuite) doLoadBalanceOnce(
 				VnodeCount: vnode,
 			})
 		}
+		var err error
 		consumer, err = api.NewConsumerAPIByConfig(cfg)
 		c.Assert(err, check.IsNil)
 		defer func() {
@@ -518,6 +483,7 @@ func (t *LBTestingSuite) doLoadBalanceOnce(
 	oneRequest.FlowID = 1111
 	oneRequest.Namespace = lbNamespace
 	oneRequest.Service = service
+	oneRequest.LbPolicy = lbType
 	oneRequest.ReplicateCount = replicate
 	oneRequest.Timeout = model.ToDurationPtr(2 * time.Second)
 	oneRequest.HashKey = []byte("abcdefgh")
@@ -616,9 +582,7 @@ func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
 // TestUserChooseLBAlgorithm 测试用户选择负载均衡算法
 func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	log.Printf("Start TestUserChooseLBAlgorithm")
-	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
-	c.Assert(err, check.IsNil)
-	consumer, err := api.NewConsumerAPIByConfig(cfg)
+	consumer, err := api.NewConsumerAPIByAddress(fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	request := &api.GetOneInstanceRequest{}

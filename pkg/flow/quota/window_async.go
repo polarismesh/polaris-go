@@ -18,6 +18,7 @@
 package quota
 
 import (
+	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -38,7 +39,7 @@ func (r *RateLimitWindow) DoAsyncRemoteInit() error {
 		return err
 	}
 	timeDiff := sender.AdjustTime()
-	r.allocatingBucket.UpdateTimeDiff(timeDiff)
+	r.UpdateTimeDiff(timeDiff)
 
 	request := r.InitializeRequest()
 	sender.SendInitRequest(request, r)
@@ -63,7 +64,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	}
 
 	timeDiff := sender.AdjustTime()
-	r.allocatingBucket.UpdateTimeDiff(timeDiff)
+	r.UpdateTimeDiff(timeDiff)
 
 	request := r.acquireRequest()
 	err = sender.SendReportRequest(request)
@@ -80,20 +81,22 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 func (r *RateLimitWindow) OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
 	r.SetStatus(Initialized)
 	log.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
-	r.allocatingBucket.SetRemoteQuota(&RemoteQuotaResult{
+	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
 		Left:            counter.GetLeft(),
 		ClientCount:     counter.GetClientCount(),
 		ServerTimeMilli: srvTimeMilli,
+		ClientTimeMilli: r.toServerTimeMilli(model.CurrentMillisecond()),
 		DurationMill:    model.ToMilliSeconds(duration),
 	})
 }
 
 // OnReportResponse 应答回调函数
 func (r *RateLimitWindow) OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64) {
-	r.allocatingBucket.SetRemoteQuota(&RemoteQuotaResult{
+	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
 		Left:            counter.GetLeft(),
 		ClientCount:     counter.GetClientCount(),
 		ServerTimeMilli: curTimeMilli,
+		ClientTimeMilli: r.toServerTimeMilli(model.CurrentMillisecond()),
 		DurationMill:    model.ToMilliSeconds(duration),
 	})
 }

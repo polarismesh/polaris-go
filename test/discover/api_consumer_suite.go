@@ -129,7 +129,6 @@ func (t *ConsumerTestingSuite) TearDownSuite(c *check.C) {
 // TestInitConsumerConfigByFile 测试初始化消费者配置文件
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByFile")
-	defer util.DeleteDir(util.BackupDir)
 	ctx, err := api.InitContextByFile("testdata/consumer.yaml")
 	c.Assert(err, check.IsNil)
 	ctx.Destroy()
@@ -138,7 +137,6 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 // TestInitConsumerConfigByDefault 测试以无文件默认配置初始化消费者api
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByDefault")
-	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration([]string{"127.0.0.1:8008"})
 	enableStat := false
 	cfg.Global.StatReporter.Enable = &enableStat
@@ -175,7 +173,6 @@ func (t *ConsumerTestingSuite) TestGetInstancesTimeout(c *check.C) {
 
 // 测试获取多个服务实例
 func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
 		sdkContext, err := api.InitContextByFile("testdata/consumer.yaml")
 		sdkContext.GetConfig().GetConsumer().GetLocalCache().SetStartUseFileCache(false)
@@ -229,7 +226,6 @@ func (t *ConsumerTestingSuite) testGetInstances(c *check.C, mockTimeout bool) {
 
 // 测试获取单个服务实例
 func (t *ConsumerTestingSuite) testGetOneInstance(c *check.C, mockTimeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
 		consumer, err := api.NewConsumerAPIByFile("testdata/consumer.yaml")
 		defer consumer.Destroy()
@@ -273,7 +269,6 @@ func (t *ConsumerTestingSuite) TestGetAllInstanceTimeout(c *check.C) {
 
 // 测试获取全量服务实例
 func (t *ConsumerTestingSuite) testGetAllInstance(c *check.C, mockTimeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
 		consumer, err := api.NewConsumerAPIByFile("testdata/consumer.yaml")
 		c.Assert(err, check.IsNil)
@@ -303,7 +298,6 @@ func (t *ConsumerTestingSuite) testGetAllInstance(c *check.C, mockTimeout bool) 
 // TestSideCarUpdateServiceCallResult 测试获取单个实例后，NewServiceCallResult调用查找instance，上报调用结果
 func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 	log.Printf("Start TestSideCarUpdateServiceCallResult")
-	util.DeleteDir(util.BackupDir)
 	t.mockServer.MakeOperationTimeout(mock.OperationDiscoverInstance, false)
 	t.mockServer.MakeOperationTimeout(mock.OperationDiscoverRouting, false)
 	consumer, err := api.NewConsumerAPIByFile("testdata/consumer.yaml")
@@ -355,7 +349,6 @@ func (t *ConsumerTestingSuite) TestSideCarUpdateServiceCallResult(c *check.C) {
 
 // 测试以错误的参数请求实例
 func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
 		consumer, err := api.NewConsumerAPIByFile("testdata/consumer.yaml")
 		c.Assert(err, check.IsNil)
@@ -428,7 +421,6 @@ func (t *ConsumerTestingSuite) buildServiceRoutes() {
 
 // 获取路由规则的测试
 func (t *ConsumerTestingSuite) testGetRouteRule(c *check.C, mockTimeout bool) {
-	defer util.DeleteDir(util.BackupDir)
 	t.runWithMockTimeout(mockTimeout, func() {
 		t.buildServiceRoutes()
 		defer t.mockServer.DeregisterRouteRule(t.testService)
@@ -465,7 +457,6 @@ const (
 // TestMultiGet 测试多协程同时获取多个服务，看看会不会出现服务信息串了的问题
 func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 	log.Printf("Start TestMultiGet")
-	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -506,7 +497,6 @@ func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 // TestConsumerInit .
 func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 	log.Printf("Start TestConsumerInit")
-	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort)})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
@@ -572,7 +562,6 @@ const reliableConsumerService = "reliableSvc1"
 // TestMultiGetWhenUpdate 测试多协程获取服务，且当时服务有大量实例正在上线
 func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 	log.Printf("Start TestMultiGetWhenUpdate")
-	defer util.DeleteDir(util.BackupDir)
 	cfg := config.NewDefaultConfiguration(
 		[]string{fmt.Sprintf("%s:%d", consumerIPAddress, consumerPort)})
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterRuleBased,

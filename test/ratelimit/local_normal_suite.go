@@ -74,8 +74,8 @@ func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
 				case <-ctx.Done():
 					return
 				default:
-					resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName,
-						map[string]string{labelMethod: "query", labelUin: "007"})
+					resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName, "query",
+						map[string]string{labelUin: "007"})
 					atomic.AddInt64(&calledCount, 1)
 					codeChan <- resp.Code
 				}
@@ -155,7 +155,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 					case <-ctx.Done():
 						return
 					default:
-						resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName,
+						resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName, "",
 							map[string]string{labelAppId: thisAppId})
 						atomic.AddInt64(&calledCount, 1)
 						codeChan <- AppIdResult{
@@ -245,7 +245,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 					case <-ctx.Done():
 						return
 					default:
-						resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName,
+						resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName, "",
 							map[string]string{labelTestUin: thisAppId})
 						atomic.AddInt64(&calledCount, 1)
 						codeChan <- resp.Code

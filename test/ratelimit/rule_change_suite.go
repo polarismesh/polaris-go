@@ -54,10 +54,8 @@ func (rt *RuleChangeTestingSuite) TearDownSuite(c *check.C) {
 
 // 测试规则被屏蔽
 func (rt *RuleChangeTestingSuite) TestRuleDisabledV2(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	maxQps := 10000
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer limitAPI.Destroy()
@@ -65,7 +63,7 @@ func (rt *RuleChangeTestingSuite) TestRuleDisabledV2(c *check.C) {
 	var passedCount int
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "disable"})
+			c, limitAPI, RuleChangeSvcName, "disable", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -82,7 +80,7 @@ func (rt *RuleChangeTestingSuite) TestRuleDisabledV2(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "disable"})
+			c, limitAPI, RuleChangeSvcName, "disable", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -98,7 +96,7 @@ func (rt *RuleChangeTestingSuite) TestRuleDisabledV2(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "disable"})
+			c, limitAPI, RuleChangeSvcName, "disable", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -109,10 +107,8 @@ func (rt *RuleChangeTestingSuite) TestRuleDisabledV2(c *check.C) {
 
 // 测试限流配额发生变更
 func (rt *RuleChangeTestingSuite) TestAmountChangedV2(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
-	maxQps := 1000
+	maxQps := 100
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer limitAPI.Destroy()
@@ -120,7 +116,7 @@ func (rt *RuleChangeTestingSuite) TestAmountChangedV2(c *check.C) {
 	var passedCount int
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "amountChange"})
+			c, limitAPI, RuleChangeSvcName, "amountChange", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -128,7 +124,7 @@ func (rt *RuleChangeTestingSuite) TestAmountChangedV2(c *check.C) {
 			// 等待初始化结束
 			time.Sleep(80 * time.Millisecond)
 		} else {
-			time.Sleep(500 * time.Microsecond)
+			time.Sleep(6 * time.Millisecond)
 		}
 	}
 	fmt.Printf("0.passedCount is %v\n", passedCount)
@@ -143,7 +139,7 @@ func (rt *RuleChangeTestingSuite) TestAmountChangedV2(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "amountChange"})
+			c, limitAPI, RuleChangeSvcName, "amountChange", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -160,10 +156,8 @@ func (rt *RuleChangeTestingSuite) TestAmountChangedV2(c *check.C) {
 
 // 测试限流标签发生变更
 func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	maxQps := 1000
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer limitAPI.Destroy()
@@ -171,7 +165,7 @@ func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
 	var passedCount int
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "labelChange"})
+			c, limitAPI, RuleChangeSvcName, "labelChange", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -199,7 +193,7 @@ func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "labelChange", labelAppId: "changedApp"})
+			c, limitAPI, RuleChangeSvcName, "labelChange", map[string]string{labelAppId: "changedApp"})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -216,7 +210,7 @@ func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleChangeSvcName, map[string]string{labelMethod: "labelChange"})
+			c, limitAPI, RuleChangeSvcName, "labelChange", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -228,10 +222,8 @@ func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
 
 // 测试规则被删除
 func (rt *RuleChangeTestingSuite) TestRuleDeleted(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
 	maxQps := 1000
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-	cfg.GetConsumer().GetLocalCache().SetPersistDir(util.BackupDir)
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer limitAPI.Destroy()
@@ -239,7 +231,7 @@ func (rt *RuleChangeTestingSuite) TestRuleDeleted(c *check.C) {
 	var passedCount int
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleDeletedSvcName, map[string]string{labelMethod: "ruleDeleted"})
+			c, limitAPI, RuleDeletedSvcName, "ruleDeleted", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -258,7 +250,7 @@ func (rt *RuleChangeTestingSuite) TestRuleDeleted(c *check.C) {
 	passedCount = 0
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, RuleDeletedSvcName, map[string]string{labelMethod: "ruleDeleted"})
+			c, limitAPI, RuleDeletedSvcName, "ruleDeleted", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}
@@ -281,7 +273,7 @@ func (rt *RuleChangeTestingSuite) TestServiceDeleted(c *check.C) {
 	var passedCount int
 	for i := 0; i < maxQps; i++ {
 		resp := doSingleGetQuota(
-			c, limitAPI, SvcDeletedSvcName, map[string]string{labelMethod: "svcDeleted"})
+			c, limitAPI, SvcDeletedSvcName, "svcDeleted", map[string]string{})
 		if resp.Code == api.QuotaResultOk {
 			passedCount++
 		}

@@ -762,8 +762,9 @@ type RateLimitGauge struct {
 	EmptyInstanceGauge
 	Namespace string
 	Service   string
+	Method    string
+	Arguments []Argument
 	Result    QuotaResultCode
-	Labels    map[string]string
 }
 
 // CircuitBreakGauge Circuit Break Gauge

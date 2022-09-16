@@ -39,10 +39,22 @@ func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstan
 }
 
 // syncRateLimitReportAndFinalize 结果上报及归还限流请求对象
-func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest) {
+func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest, resp *model.QuotaResponse) {
 	// 调用api的结果上报
 	e.reportAPIStat(&commonRequest.CallResult)
+	e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
 	data.PoolPutCommonRateLimitRequest(commonRequest)
+}
+
+func (e *Engine) reportRateLimitGauge(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
+	stat := &model.RateLimitGauge{
+		EmptyInstanceGauge: model.EmptyInstanceGauge{},
+		Namespace:          req.GetNamespace(),
+		Service:            req.GetService(),
+		Result:             resp.Code,
+		Arguments:          req.Arguments(),
+	}
+	e.SyncReportStat(model.RateLimitStat, stat)
 }
 
 // syncRuleReportAndFinalize 结果上报及归还请求实例规则对象

@@ -42,6 +42,8 @@ type LocalCacheConfigImpl struct {
 	// consumer.localCache.type
 	// 本地缓存类型，默认inmemory，可修改成具体的缓存插件名
 	Type string `yaml:"type" json:"type"`
+	// 是否启用本地缓存
+	PersistEnable bool `yaml:"persistEnable" json:"persistEnable"`
 	// consumer.localCache.persistMaxWriteRetry
 	PersistMaxWriteRetry int `yaml:"persistMaxWriteRetry" json:"persistMaxWriteRetry"`
 	// consumer.localCache.persistReadRetry
@@ -85,6 +87,17 @@ func (l *LocalCacheConfigImpl) GetServiceRefreshInterval() time.Duration {
 // SetServiceRefreshInterval 设置服务定时刷新间隔.
 func (l *LocalCacheConfigImpl) SetServiceRefreshInterval(interval time.Duration) {
 	l.ServiceRefreshInterval = &interval
+}
+
+// IsPersistEnable consumer.localCache.persistEnable
+// 是否启用本地缓存
+func (l *LocalCacheConfigImpl) IsPersistEnable() bool {
+	return l.PersistEnable
+}
+
+// SetPersistEnable 设置是否启用本地缓存
+func (l *LocalCacheConfigImpl) SetPersistEnable(enable bool) {
+	l.PersistEnable = enable
 }
 
 // GetPersistDir consumer.localCache.persist.path

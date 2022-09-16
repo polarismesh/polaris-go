@@ -65,7 +65,7 @@ func (rt *WindowExpireTestingSuite) TestUinExpiredLocal(c *check.C) {
 		for i := 0; i < maxSize; i++ {
 			key := fmt.Sprintf("user-%d", i)
 			resp := doSingleGetQuota(
-				c, limitAPI, WindowExpireSvcName, map[string]string{labelUin: key})
+				c, limitAPI, WindowExpireSvcName, "", map[string]string{labelUin: key})
 			if resp.Code == api.QuotaResultOk {
 				userIdToQps[key] = userIdToQps[key] + 1
 			}
@@ -90,7 +90,7 @@ func (rt *WindowExpireTestingSuite) TestUinExpiredLocal(c *check.C) {
 		for i := maxSize - 1; i >= 0; i-- {
 			key := fmt.Sprintf("user-%d", i)
 			resp := doSingleGetQuota(
-				c, limitAPI, WindowExpireSvcName, map[string]string{labelUin: key})
+				c, limitAPI, WindowExpireSvcName, "", map[string]string{labelUin: key})
 			if resp.Code == api.QuotaResultOk {
 				userIdToQps[key] = userIdToQps[key] + 1
 			}
@@ -127,7 +127,7 @@ func (rt *WindowExpireTestingSuite) TestUinExpiredRemote(c *check.C) {
 		for i := 0; i < maxSize; i++ {
 			key := fmt.Sprintf("user-%d", i)
 			resp := doSingleGetQuota(
-				c, limitAPI, WindowExpireSvcName, map[string]string{labelAppId: "remote", labelUin: key})
+				c, limitAPI, WindowExpireSvcName, "", map[string]string{labelAppId: "remote", labelUin: key})
 			if resp.Code == api.QuotaResultOk {
 				userIdToQps[key] = userIdToQps[key] + 1
 			}
