@@ -122,7 +122,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	resp, err := svr.provider.Register(registerRequest)
+	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
