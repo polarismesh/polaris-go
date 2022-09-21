@@ -19,12 +19,13 @@ package serviceroute
 
 import (
 	"fmt"
+	"log"
+	"net"
+
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
-	"log"
-	"net"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
