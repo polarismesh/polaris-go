@@ -16,7 +16,7 @@ warningCode = 0
 [rule.increment-decrement]
 [rule.line-length-limit]
     severity = "error"
-    arguments= [140]
+    arguments= [185]
 [rule.var-naming]
 [rule.var-declaration]
 [rule.package-comments]

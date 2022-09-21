@@ -18,18 +18,20 @@
 package reject
 
 import (
+	"math"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/common"
-	"math"
-	"sort"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // NewRemoteAwareQpsBucket 创建QPS远程限流窗口
