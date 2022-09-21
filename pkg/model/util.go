@@ -19,7 +19,6 @@ package model
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/ptypes/duration"
 	"hash/fnv"
 	"net"
 	"os"
@@ -29,6 +28,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/mitchellh/go-homedir"
 )
 
