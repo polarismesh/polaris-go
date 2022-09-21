@@ -92,7 +92,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	resp, err := svr.provider.Register(registerRequest)
+	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
@@ -103,7 +103,7 @@ func runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGSEGV, syscall.SIGUSR1,
+		syscall.SIGSEGV,
 	}...)
 
 	for s := range ch {

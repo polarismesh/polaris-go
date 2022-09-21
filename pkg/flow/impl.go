@@ -25,6 +25,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
+	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -80,7 +81,7 @@ type Engine struct {
 	// 配置中心门面类
 	configFileService *configuration.ConfigFileService
 	// 注册状态管理器
-	registerStates *registerStates
+	registerStates *registerstate.RegisterStateManager
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -169,7 +170,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 
 	// 初始注册状态管理器
-	flowEngine.registerStates = &registerStates{states: make(map[string]*registerState)}
+	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval())
 
 	return nil
 }
@@ -329,7 +330,7 @@ func (e *Engine) Destroy() error {
 	if e.configFileService != nil {
 		e.configFileService.Destroy()
 	}
-	e.registerStates.destroy()
+	e.registerStates.Destroy()
 	return nil
 }
 

@@ -85,17 +85,17 @@ type ProviderAPI interface {
 	// RegisterInstance
 	// minimum supported version of polaris-server is v1.10.0
 	RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
+	// Deprecated: Use RegisterInstance instead.
 	// Register
 	// 同步注册服务，服务注册成功后会填充instance中的InstanceID字段
 	// 用户可保持该instance对象用于反注册和心跳上报
-	// Deprecated: Use RegisterInstance instead.
 	Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
 	// Deregister
 	// 同步反注册服务
 	Deregister(instance *InstanceDeRegisterRequest) error
+	// Deprecated: Use RegisterInstance instead.
 	// Heartbeat
 	// 心跳上报
-	// Deprecated: Use RegisterInstance instead.
 	Heartbeat(instance *InstanceHeartbeatRequest) error
 	// Destroy
 	// 销毁API，销毁后无法再进行调用
