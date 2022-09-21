@@ -18,13 +18,13 @@
 package quota
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
 // DoAsyncRemoteInit 异步处理发送init
