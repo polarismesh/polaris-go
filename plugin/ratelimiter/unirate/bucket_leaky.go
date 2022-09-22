@@ -19,13 +19,14 @@ package unirate
 
 import (
 	"fmt"
+	"math"
+	"sync/atomic"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
-	"math"
-	"sync/atomic"
-	"time"
 )
 
 // LeakyBucket 远程配额分配的算法桶

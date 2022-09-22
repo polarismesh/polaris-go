@@ -18,11 +18,12 @@
 package quota
 
 import (
-	"github.com/modern-go/reflect2"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"

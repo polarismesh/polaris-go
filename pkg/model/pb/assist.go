@@ -19,7 +19,6 @@ package pb
 
 import (
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 
+	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"

@@ -18,8 +18,9 @@
 package ratelimiter
 
 import (
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"time"
+
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 // InitCriteria 配额查询相关的信息

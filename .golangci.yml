@@ -76,14 +76,14 @@ linters-settings:
       - name: atomic
       - name: line-length-limit
         severity: error
-        arguments: [140]
+        arguments: [195]
       - name: unhandled-error
         arguments : ["fmt.Printf", "myFunction"]
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.
     # Default: 60
-    lines: 110
+    lines: 120
     # Checks the number of statements in a function.
     # If lower than 0, disable the check.
     # Default: 40

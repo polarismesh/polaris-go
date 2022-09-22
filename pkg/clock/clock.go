@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package clock provides a global clock.
 package clock
 
 import (
