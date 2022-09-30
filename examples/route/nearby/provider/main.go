@@ -114,6 +114,7 @@ func (svr *PolarisProvider) runWebServer() {
 	svr.port = ln.Addr().(*net.TCPAddr).Port
 
 	go func() {
+		log.Printf("[INFO] start http server, listen port is %v", svr.port)
 		if err := http.Serve(ln, nil); err != nil {
 			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 		}
