@@ -10,3 +10,5 @@ test/other/other_test_suit.go
 *.log
 
 /vendor/
+
+.vscode/
