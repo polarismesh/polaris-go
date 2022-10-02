@@ -65,10 +65,10 @@ Run the built **consumer** executable
 
 ```
 # linux/mac
-./provider
+./consumer
 
 # windows
-./provider.exe
+./consumer.exe
 ```
 
 

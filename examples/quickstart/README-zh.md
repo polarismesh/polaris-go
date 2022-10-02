@@ -18,7 +18,7 @@ cd ./provider
 go build -o provider
 
 # windows
-cd ./consumer
+cd ./provider
 go build -o provider.exe
 ```
 
@@ -65,10 +65,10 @@ global:
 
 ```
 # linux/mac运行命令
-./provider
+./consumer
 
 # windows运行命令
-./provider.exe
+./consumer.exe
 ```
 
 
