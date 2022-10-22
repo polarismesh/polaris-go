@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package api is the core API of polaris-go, which provides the basic functions of service discovery and.
 package api
 
 import (

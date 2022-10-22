@@ -507,7 +507,7 @@ func (dns *Msg) polarisPack() ([]*bytes.Buffer, error)  {
 		_ = dns.MsgHdr.Copy(h)
 		h.Ancount = RRCountRecord[i]
 		ctrlRR := PackageCtrlRR{
-			Hdr: RRHeader{
+			Hdr: RR_Header{
 				Name:     PackCtrlRRName,
 				Rrtype:   TypePackCtrl,
 				Class:    1101,

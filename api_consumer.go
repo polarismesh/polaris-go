@@ -63,7 +63,7 @@ func (c *consumerAPI) WatchService(req *WatchServiceRequest) (*model.WatchServic
 	return c.rawAPI.WatchService((*api.WatchServiceRequest)(req))
 }
 
-// GetServicesByBusiness 根据业务同步获取批量服务
+// GetServices 根据业务同步获取批量服务
 func (c *consumerAPI) GetServices(req *GetServicesRequest) (*model.ServicesResponse, error) {
 	return c.rawAPI.GetServices((*api.GetServicesRequest)(req))
 }

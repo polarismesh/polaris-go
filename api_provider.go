@@ -46,20 +46,17 @@ func (p *providerAPI) Register(instance *InstanceRegisterRequest) (*model.Instan
 	return p.rawAPI.Register((*api.InstanceRegisterRequest)(instance))
 }
 
-// Deregister
-// 同步反注册服务
+// Deregister synchronize the anti registration service
 func (p *providerAPI) Deregister(instance *InstanceDeRegisterRequest) error {
 	return p.rawAPI.Deregister((*api.InstanceDeRegisterRequest)(instance))
 }
 
-// Heartbeat
-// 心跳上报
+// Heartbeat the heartbeat report
 func (p *providerAPI) Heartbeat(instance *InstanceHeartbeatRequest) error {
 	return p.rawAPI.Heartbeat((*api.InstanceHeartbeatRequest)(instance))
 }
 
-// Destroy
-// 销毁API，销毁后无法再进行调用
+// Destroy the api is destroyed and cannot be called again
 func (p *providerAPI) Destroy() {
 	p.rawAPI.Destroy()
 }

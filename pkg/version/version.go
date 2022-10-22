@@ -15,11 +15,12 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package version provides version information for the polaris-go project.
 package version
 
 var (
-	// Version 当前版本号
+	// Version current version number
 	Version = "v1.0.0"
-	// ClientType 客户端类型
+	// ClientType client type
 	ClientType = "polaris-go"
 )

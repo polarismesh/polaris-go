@@ -19,6 +19,7 @@ warningCode = 0
     arguments= [180]
 [rule.var-naming]
     severity = "warning"
+    disable = true
     arguments = [["ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url"], ["VM"]]
 [rule.var-declaration]
 [rule.package-comments]
