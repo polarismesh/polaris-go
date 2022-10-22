@@ -772,12 +772,18 @@ type CircuitBreakGauge struct {
 	EmptyInstanceGauge
 	ChangeInstance Instance
 	Method         string
-	CBStatus       CircuitBreakerStatus
+	PreCBStatus    CircuitBreakerStatus
+	NextCBStatus   CircuitBreakerStatus
 }
 
-// GetCircuitBreakerStatus 获取变化前的熔断状态
-func (cbg *CircuitBreakGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
-	return cbg.CBStatus
+// GetPreCircuitBreakerStatus 获取变化前的熔断状态
+func (cbg *CircuitBreakGauge) GetPreCircuitBreakerStatus() CircuitBreakerStatus {
+	return cbg.PreCBStatus
+}
+
+// GetNextCircuitBreakerStatus 获取变化后的熔断状态
+func (cbg *CircuitBreakGauge) GetNextCircuitBreakerStatus() CircuitBreakerStatus {
+	return cbg.NextCBStatus
 }
 
 // GetCalledInstance 获取状态发生改变的实例

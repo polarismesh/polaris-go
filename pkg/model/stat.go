@@ -64,6 +64,31 @@ const (
 	RouteStat
 )
 
+func DescMetricType(t MetricType) string {
+	switch t {
+	case SDKAPIStat:
+		return "SDKAPIStat"
+	case ServiceStat:
+		return "ServiceStat"
+	case InstanceStat:
+		return "InstanceStat"
+	case SDKCfgStat:
+		return "SDKCfgStat"
+	case CircuitBreakStat:
+		return "CircuitBreakStat"
+	case PluginAPIStat:
+		return "PluginAPIStat"
+	case LoadBalanceStat:
+		return "LoadBalanceStat"
+	case RateLimitStat:
+		return "RateLimitStat"
+	case RouteStat:
+		return "RouteStat"
+	default:
+		return "Unknown"
+	}
+}
+
 var metricTypes = HashSet{}
 
 // ValidMetircType 检测是不是合法的统计类型.
