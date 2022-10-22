@@ -161,14 +161,14 @@ var (
 	CircuitBreakerOpen = metricDesc{
 		Name:       MetricsNameCircuitBreakerOpen,
 		Help:       "total of opened circuit breaker",
-		MetricType: TypeForCounterVec,
+		MetricType: TypeForGaugeVec,
 		LabelNames: GetLabels(CircuitBreakerGaugeLabelOrder),
 	}
 
 	CircuitBreakerHalfOpen = metricDesc{
 		Name:       MetricsNameCircuitBreakerHalfOpen,
 		Help:       "total of half-open circuit breaker",
-		MetricType: TypeForCounterVec,
+		MetricType: TypeForGaugeVec,
 		LabelNames: GetLabels(CircuitBreakerGaugeLabelOrder),
 	}
 )
