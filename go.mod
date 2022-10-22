@@ -22,14 +22,13 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/spaolacci/murmur3 v1.1.0
-	github.com/stretchr/testify v1.7.0
-	go.uber.org/zap v1.21.0
-	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
-	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect
-	google.golang.org/genproto v0.0.0-20220504150022-98cd25cafc72 // indirect
-	google.golang.org/grpc v1.46.2
-	google.golang.org/protobuf v1.28.0
-	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
+	github.com/stretchr/testify v1.8.0
+	go.uber.org/zap v1.23.0
+	golang.org/x/net v0.1.0
+	google.golang.org/genproto v0.0.0-20221018160656-63c7b68cfc55 // indirect
+	google.golang.org/grpc v1.50.1
+	google.golang.org/protobuf v1.28.1
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )

@@ -11,16 +11,17 @@ linters:
   enable:
 #    - deadcode
 #    - errcheck
-#    - funlen
-#    - gocritic
-#    - gofmt
+    - funlen
+    - gocritic
+    - gocyclo
+    - gofmt
     - goimports
-#    - gosimple
+    - gosimple
     - govet
     - godot
 #    - ineffassign
     - misspell
-#    - revive
+    - revive
 #    - staticcheck
 #    - structcheck
     - typecheck
@@ -78,7 +79,31 @@ linters-settings:
         severity: error
         arguments: [195]
       - name: unhandled-error
-        arguments : ["fmt.Printf", "myFunction"]
+        arguments : ["fmt.Printf", "myFunction", "builder.WriteString","buf.WriteByte","buf.WriteRune","buf.WriteString","buf.WriteTo","buf.Write","fmt.Println","iteratorInstancesProc","buffer.Write","buffer.WriteString","h.Write"]
+        severity: warning
+      - name: var-naming
+        severity: warning
+        disabled: false
+        arguments:
+          - [ "ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url" ] # AllowList
+          - [ "VM" ] # DenyList
+      - name: string-format
+        severity: warning
+        disabled: false
+        arguments:
+          - - 'core.WriteError[1].Message'
+            - '/^([^A-Z]|$)/'
+            - must not start with a capital letter
+          - - 'fmt.Errorf[0]'
+            - '/(^|[^\.!?])$/'
+            - must not end in punctuation
+          - - panic
+            - '/^[^\n]*$/'
+            - must not contain line breaks
+      - name: function-result-limit
+        severity: warning
+        disabled: false
+        arguments: [ 4 ]
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.
@@ -89,6 +114,38 @@ linters-settings:
     # Default: 40
     statements: 40
   goconst:
+    # Minimal length of string constant.
+    # Default: 3
+    min-len: 2
+    # Minimum occurrences of constant string count to trigger issue.
+    # Default: 3
+    # For subsequent optimization, the value is reduced.
+    min-occurrences: 3
     # Ignore test files.
     # Default: false
     ignore-tests: true
+    # Look for existing constants matching the values.
+    # Default: true
+    match-constant: false
+    # Search also for duplicated numbers.
+    # Default: false
+    numbers: true
+    # Minimum value, only works with goconst.numbers
+    # Default: 3
+    min: 3
+    # Maximum value, only works with goconst.numbers
+    # Default: 3
+    max: 3
+    # Ignore when constant is not used as function argument.
+    # Default: true
+    ignore-calls: false
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+      - assignOp
+      - appendAssign
+      - singleCaseSwitch
+  gocyclo:
+    # Minimal code complexity to report.
+    # Default: 30 (but we recommend 10-20)
+    min-complexity: 10
