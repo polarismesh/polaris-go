@@ -1,6 +1,6 @@
 module github.com/polarismesh/polaris-go-active-healthcheck
 
-go 1.17
+go 1.18
 
 require github.com/polarismesh/polaris-go v1.2.0-beta.3
 
