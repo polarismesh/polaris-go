@@ -2,6 +2,14 @@
 run:
   issues-exit-code: 1 #Default
   tests: true #Default
+  skip-dirs: # 设置要忽略的目录
+    - test
+    - .*~
+    - api/swagger/docs
+  skip-files: # 设置不需要检查的go源码文件，支持正则匹配
+    - ".*.my.go$"
+    - ".*.pb.go$"
+    - _test.go
 
 linters:
   # Disable everything by default so upgrades to not include new "default
@@ -77,15 +85,15 @@ linters-settings:
       - name: atomic
       - name: line-length-limit
         severity: error
-        arguments: [195]
+        arguments: [180]
       - name: unhandled-error
-        arguments : ["fmt.Printf", "myFunction", "builder.WriteString","buf.WriteByte","buf.WriteRune","buf.WriteString","buf.WriteTo","buf.Write","fmt.Println","iteratorInstancesProc","buffer.Write","buffer.WriteString","h.Write"]
+        arguments : ["fmt.Printf", "myFunction", "builder.WriteString","buf.WriteByte","buf.WriteRune","buf.WriteString","buf.WriteTo","buf.Write","fmt.Println","iteratorInstancesProc","buffer.Write","buffer.WriteString","h.Write","fmt.Fprintf","io.WriteString","e.reportAPIStat","f.Close"]
         severity: warning
       - name: var-naming
         severity: warning
-        disabled: false
+        disabled: true
         arguments:
-          - [ "ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url" ] # AllowList
+          - [ "ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url","maxQps","ErrorCodeRpcError","ErrorCodeRpcTimeout","Ttl"] # AllowList
           - [ "VM" ] # DenyList
       - name: string-format
         severity: warning
@@ -112,7 +120,7 @@ linters-settings:
     # Checks the number of statements in a function.
     # If lower than 0, disable the check.
     # Default: 40
-    statements: 40
+    statements: -1
   goconst:
     # Minimal length of string constant.
     # Default: 3
@@ -145,7 +153,17 @@ linters-settings:
       - assignOp
       - appendAssign
       - singleCaseSwitch
+      - badCall
+      - underef
   gocyclo:
     # Minimal code complexity to report.
     # Default: 30 (but we recommend 10-20)
-    min-complexity: 10
+    min-complexity: 30
+  gosimple:
+    # Select the Go version to target.
+    # Default: 1.13
+    # Deprecated: use the global `run.go` instead.
+    go: "1.15"
+    # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
+    # Default: ["*"]
+    checks: ["all","-S1001","-S1000","-S1025"]

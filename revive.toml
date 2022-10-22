@@ -16,7 +16,7 @@ warningCode = 0
 [rule.increment-decrement]
 [rule.line-length-limit]
     severity = "error"
-    arguments= [195]
+    arguments= [180]
 [rule.var-naming]
     severity = "warning"
     arguments = [["ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url"], ["VM"]]

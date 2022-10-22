@@ -78,12 +78,12 @@ func (f Features) PrintableName(wantFeatures []bool) string {
 
 // partialString writes features specified by 'wantFeatures' to the provided
 // bytes.Buffer.
-func (f Features) partialString(b *bytes.Buffer, wantFeatures []bool, sep, delim string) {
+func (f Features) partialString(buf *bytes.Buffer, wantFeatures []bool, sep, delim string) {
 	for i, sf := range wantFeatures {
 		if sf {
 			switch FeatureIndex(i) {
 			case MaxConcurrentCallsIndex:
-				b.WriteString(fmt.Sprintf("Callers%v%v%v", sep, f.MaxConcurrentCalls, delim))
+				buf.WriteString(fmt.Sprintf("Callers%v%v%v", sep, f.MaxConcurrentCalls, delim))
 			default:
 				log.Fatalf("Unknown feature index %v. maxFeatureIndex is %v", i, MaxFeatureIndex)
 			}
@@ -264,7 +264,7 @@ func (s *Stats) computeLatencies(result *BenchResults) {
 		MinValue:       minDuration,
 	})
 	for _, d := range s.hw.durations {
-		s.hw.histogram.Add(int64(d))
+		_ = s.hw.histogram.Add(int64(d))
 	}
 	result.Data.Fiftieth = s.hw.durations[max(s.hw.histogram.Count*int64(50)/100-1, 0)]
 	result.Data.Ninetieth = s.hw.durations[max(s.hw.histogram.Count*int64(90)/100-1, 0)]
@@ -274,33 +274,33 @@ func (s *Stats) computeLatencies(result *BenchResults) {
 
 // dump returns a printable version.
 func (s *Stats) dump(result *BenchResults) {
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	// This prints the run mode and all features of the bench on a line.
-	b.WriteString(fmt.Sprintf("%s-%s:\n", result.TestOperation, result.Features.String()))
+	buf.WriteString(fmt.Sprintf("%s-%s:\n", result.TestOperation, result.Features.String()))
 	unit := s.hw.unit
 	tUnit := fmt.Sprintf("%v", unit)[1:] // stores one of s, ms, μs, ns
 
 	if l := result.Data.Fiftieth; l != 0 {
-		b.WriteString(fmt.Sprintf("50_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
+		buf.WriteString(fmt.Sprintf("50_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
 	}
 	if l := result.Data.Ninetieth; l != 0 {
-		b.WriteString(fmt.Sprintf("90_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
+		buf.WriteString(fmt.Sprintf("90_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
 	}
 	if l := result.Data.NinetyNinth; l != 0 {
-		b.WriteString(fmt.Sprintf("99_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
+		buf.WriteString(fmt.Sprintf("99_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
 	}
 	if l := result.Data.Average; l != 0 {
-		b.WriteString(fmt.Sprintf("Avg_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
+		buf.WriteString(fmt.Sprintf("Avg_Latency: %s%s\t", strconv.FormatFloat(float64(l)/float64(unit), 'f', 4, 64), tUnit))
 	}
-	b.WriteString(fmt.Sprintf("Bytes/op: %v\t", result.Data.AllocedBytes))
-	b.WriteString(fmt.Sprintf("Allocs/op: %v\t\n", result.Data.Allocs))
+	buf.WriteString(fmt.Sprintf("Bytes/op: %v\t", result.Data.AllocedBytes))
+	buf.WriteString(fmt.Sprintf("Allocs/op: %v\t\n", result.Data.Allocs))
 
 	// This prints the histogram stats for the latency.
 	if s.hw.histogram == nil {
-		b.WriteString("Histogram (empty)\n")
+		buf.WriteString("Histogram (empty)\n")
 	} else {
-		b.WriteString(fmt.Sprintf("Histogram (unit: %s)\n", tUnit))
-		s.hw.histogram.PrintWithUnit(&b, float64(unit))
+		buf.WriteString(fmt.Sprintf("Histogram (unit: %s)\n", tUnit))
+		s.hw.histogram.PrintWithUnit(&buf, float64(unit))
 	}
 
 	// Print throughput data.
@@ -313,9 +313,9 @@ func (s *Stats) dump(result *BenchResults) {
 		resp = result.Data.TotalOps
 	}
 	seconds := result.Features.BenchTime.Seconds()
-	b.WriteString(fmt.Sprintf("Number of requests per second:  %v\tRequest\n", req/uint64(seconds)))
-	b.WriteString(fmt.Sprintf("Number of responses per second: %v\tResponse\n", resp/uint64(seconds)))
-	fmt.Println(b.String())
+	buf.WriteString(fmt.Sprintf("Number of requests per second:  %v\tRequest\n", req/uint64(seconds)))
+	buf.WriteString(fmt.Sprintf("Number of responses per second: %v\tResponse\n", resp/uint64(seconds)))
+	fmt.Println(buf.String())
 }
 
 // max

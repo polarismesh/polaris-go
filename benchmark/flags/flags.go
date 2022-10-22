@@ -90,14 +90,14 @@ func (dsv *durationSliceValue) Set(s string) error {
 
 // String implements the flag.Value interface.
 func (dsv *durationSliceValue) String() string {
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	for i, d := range *dsv {
 		if i > 0 {
-			b.WriteRune(',')
+			buf.WriteRune(',')
 		}
-		b.WriteString(d.String())
+		buf.WriteString(d.String())
 	}
-	return b.String()
+	return buf.String()
 }
 
 type intSliceValue []int
@@ -128,12 +128,12 @@ func (isv *intSliceValue) Set(s string) error {
 
 // String implements the flag.Value interface.
 func (isv *intSliceValue) String() string {
-	var b bytes.Buffer
+	var buf bytes.Buffer
 	for i, n := range *isv {
 		if i > 0 {
-			b.WriteRune(',')
+			buf.WriteRune(',')
 		}
-		b.WriteString(strconv.Itoa(n))
+		buf.WriteString(strconv.Itoa(n))
 	}
-	return b.String()
+	return buf.String()
 }

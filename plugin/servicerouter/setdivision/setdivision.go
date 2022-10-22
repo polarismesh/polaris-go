@@ -178,7 +178,10 @@ func (g *SetEnableFilter) sourceSet(routeInfo *servicerouter.RouteInfo, setName 
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
-func (g *SetEnableFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
+func (g *SetEnableFilter) GetFilteredInstances(
+	routeInfo *servicerouter.RouteInfo,
+	clusters model.ServiceClusters,
+	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	// 判断是否启用destination set的匹配，如果匹配
 	if routeInfo.DestService != nil {
 		dstMetaData := routeInfo.DestService.GetMetadata()

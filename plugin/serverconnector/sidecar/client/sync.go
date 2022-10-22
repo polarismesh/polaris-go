@@ -36,12 +36,12 @@ func (c *Connector) SyncExchange(m *dns.Msg) (*RspData, time.Duration, error) {
 
 	t := time.Now()
 	// write with the appropriate write timeout
-	co.SetWriteDeadline(t.Add(c.getTimeoutForRequest(c.writeTimeout())))
+	_ = co.SetWriteDeadline(t.Add(c.getTimeoutForRequest(c.writeTimeout())))
 	if err = co.WriteMsg(m); err != nil {
 		return nil, 0, model.NewSDKError(model.ErrCodeNetworkError, err, err.Error())
 	}
 
-	co.SetReadDeadline(time.Now().Add(c.getTimeoutForRequest(c.readTimeout())))
+	_ = co.SetReadDeadline(time.Now().Add(c.getTimeoutForRequest(c.readTimeout())))
 	rspData, err := c.syncReadLogicMsg(m.Id, co)
 	if err != nil {
 		return nil, 0, model.NewSDKError(model.ErrCodeNetworkError, err, err.Error())

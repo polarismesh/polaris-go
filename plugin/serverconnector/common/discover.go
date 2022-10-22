@@ -199,7 +199,7 @@ func (g *DiscoverConnector) scheduleRetry(task *serviceUpdateTask) {
 			log.GetBaseLogger().Infof("%s, context done, exit retry", g.ServiceConnector.GetSDKContextID())
 			return
 		case <-task.retryDeadline:
-			g.addFirstTask(task)
+			_ = g.addFirstTask(task)
 			log.GetBaseLogger().Infof("retry: success schedule task %s", task.ServiceEventKey)
 		}
 	}

@@ -95,7 +95,7 @@ func (c *Connection) closeConnection(force bool) bool {
 	curRef := atomic.LoadInt32(&c.ref)
 	if (force || curRef <= 0) && !c.closed {
 		c.closed = true
-		c.Conn.Close()
+		_ = c.Conn.Close()
 		log.GetNetworkLogger().Infof("connection %v: close, curRef is %d", c.ConnID, curRef)
 	}
 	return c.closed

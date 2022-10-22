@@ -346,6 +346,7 @@ func GetContainerNameEnvList() []string {
 	for i, c := range containerNameEnvs {
 		res[i] = c
 	}
+	copy(res, containerNameEnvs)
 	return res
 }
 

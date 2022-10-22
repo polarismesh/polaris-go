@@ -44,15 +44,15 @@ type InstanceProperties struct {
 
 // String ToString方法
 func (i InstanceProperties) String() string {
-	propBuilder := strings.Builder{}
+	buffer := strings.Builder{}
 	if len(i.Properties) == 0 {
-		propBuilder.WriteString("<nil>")
+		buffer.WriteString("<nil>")
 	} else {
 		for key, value := range i.Properties {
-			propBuilder.WriteString(fmt.Sprintf("%s:%s", key, value))
+			buffer.WriteString(fmt.Sprintf("%s:%s", key, value))
 		}
 	}
-	return fmt.Sprintf("{ID: %s, Properties: %s}", i.ID, propBuilder.String())
+	return fmt.Sprintf("{ID: %s, Properties: %s}", i.ID, buffer.String())
 }
 
 // ServiceUpdateRequest 服务更新请求体
@@ -63,18 +63,18 @@ type ServiceUpdateRequest struct {
 
 // String ToString方法
 func (s ServiceUpdateRequest) String() string {
-	propBuilder := strings.Builder{}
+	builder := strings.Builder{}
 	if len(s.Properties) == 0 {
-		propBuilder.WriteString("<nil>")
+		builder.WriteString("<nil>")
 	} else {
 		for i, value := range s.Properties {
 			if i > 0 {
-				propBuilder.WriteString(", ")
+				builder.WriteString(", ")
 			}
-			propBuilder.WriteString(fmt.Sprintf("%s", value))
+			builder.WriteString(fmt.Sprintf("%s", value))
 		}
 	}
-	return fmt.Sprintf("{Service: %s, Namespace: %s, Properties: %s}", s.Service, s.Namespace, propBuilder.String())
+	return fmt.Sprintf("{Service: %s, Namespace: %s, Properties: %s}", s.Service, s.Namespace, builder.String())
 }
 
 // InstancesRegistry 实例缓存

@@ -178,8 +178,10 @@ func InitContextByStream(buf []byte) (SDKContext, error) {
 
 // checkLoggersDir 检查日志目录是否可写
 func checkLoggersDir() error {
-	var errs error
-	var err error
+	var (
+		errs error
+		err  error
+	)
 	if l, ok := log.GetBaseLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
 		err = model.EnsureAndVerifyDir(l.GetLogDir())
 		if err != nil {
@@ -242,8 +244,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	startTime := time.Now()
 	globalCtx := model.NewValueContext()
 	globalCtx.SetValue(model.ContextKeyTakeEffectTime, startTime)
-	logErr := checkLoggersDir()
-	if nil != logErr {
+	if logErr := checkLoggersDir(); nil != logErr {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, logErr, "logger init error")
 	}
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
@@ -267,8 +268,8 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		PodName:  getPodName(),
 		HostName: getHostName(),
 	}
-	log.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, CONTAINER: "+
-		"%s, HOSTNAME:%s-------", version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
+	log.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, CONTAINER: "+"%s, HOSTNAME:%s-------",
+		version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
 
 	globalCtx.SetValue(model.ContextKeyToken, token)
 	plugManager := plugin.NewPluginManager()
@@ -280,12 +281,12 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	initCtx := plugin.InitContext{Config: cfg, Plugins: plugManager, ValueCtx: globalCtx, ConnManager: connManager,
 		SDKContextID: token.UID}
 	engine := &flow.Engine{}
-	var finalErrs error
 	// 初始化插件链
 	err = plugManager.InitPlugins(initCtx, common.LoadedPluginTypes, engine, func() error {
 		// 初始化流程引擎
 		return flow.InitFlowEngine(engine, initCtx)
 	})
+	var finalErrs error
 	if err != nil {
 		finalErrs = multierror.Append(finalErrs, err)
 	}
@@ -293,20 +294,17 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if terr != nil {
 		finalErrs = multierror.Append(finalErrs, model.NewSDKError(model.ErrCodeAPIInvalidConfig, terr,
 			"fail to marshal input config"))
-	} else {
-		log.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
 	}
+	log.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
 	if finalErrs != nil {
 		return nil, finalErrs
 	}
 	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
 	// 启动所有插件
-	err = plugManager.StartPlugins()
-	if err != nil {
+	if err = plugManager.StartPlugins(); err != nil {
 		return nil, err
 	}
-	err = engine.Start()
-	if err != nil {
+	if err = engine.Start(); err != nil {
 		return nil, err
 	}
 	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
@@ -315,8 +313,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		ctx.Destroy()
 		return nil, err
 	}
-	endTime := time.Now()
-	globalCtx.SetValue(model.ContextKeyFinishInitTime, endTime)
+	globalCtx.SetValue(model.ContextKeyFinishInitTime, time.Now())
 	log.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
 }

@@ -151,7 +151,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 			break
 		}
 		err = jsonpb.Unmarshal(cacheJson, message)
-		cacheJson.Close()
+		_ = cacheJson.Close()
 		if err != nil {
 			lastErr = multierror.Prefix(err, "Fail to unmarshal file cache: ")
 			time.Sleep(cph.retryInterval)
@@ -246,7 +246,7 @@ func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error 
 		return model.NewSDKError(model.ErrCodeDiskError, nil, "unable to write all bytes to file %s", tempFileName)
 	}
 	if err = cph.closeTmpFile(tmpFile, cacheFile); err != nil {
-		os.Remove(tempFileName)
+		_ = os.Remove(tempFileName)
 		return err
 	}
 	return nil
@@ -255,7 +255,7 @@ func (cph *CachePersistHandler) doWriteFile(cacheFile string, msg []byte) error 
 // 关闭文件
 func (cph *CachePersistHandler) closeTmpFile(tmpFile *os.File, cacheFile string) error {
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return model.NewSDKError(model.ErrCodeDiskError, err, "fail to sync file %s", tmpFile.Name())
 	}
 	if err := tmpFile.Close(); err != nil {

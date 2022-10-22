@@ -110,11 +110,11 @@ func NewContinuum(
 		pct := float64(weight) / float64(maxWeight)
 		limit := int(math.Floor(pct * float64(vnodeCount)))
 		for i := 0; i < limit; i++ {
-			hashKeyBuilder := strings.Builder{}
-			hashKeyBuilder.Grow(len(realInstance.GetId()))
-			hashKeyBuilder.WriteString(realInstance.GetId())
-			hashKeyBuilder.WriteString(strconv.Itoa(i))
-			hashKey := hashKeyBuilder.String()
+			builder := strings.Builder{}
+			builder.Grow(len(realInstance.GetId()))
+			builder.WriteString(realInstance.GetId())
+			builder.WriteString(strconv.Itoa(i))
+			hashKey := builder.String()
 			var hashValue uint64
 			if hashValue, err = hashFunc([]byte(hashKey), 0); err != nil {
 				return nil, err

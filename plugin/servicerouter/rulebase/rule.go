@@ -82,7 +82,10 @@ func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, cl
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
-func (g *RuleBasedInstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
+func (g *RuleBasedInstancesFilter) GetFilteredInstances(
+	routeInfo *servicerouter.RouteInfo,
+	clusters model.ServiceClusters,
+	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	var dstFilteredInstances, sourceFilteredInstances *model.Cluster
 	var dstRoutes, sourceRoutes []*namingpb.Route
 	var filteredInstances *model.Cluster

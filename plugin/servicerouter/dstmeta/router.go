@@ -62,7 +62,10 @@ func (g *InstancesFilter) Destroy() error {
 }
 
 // GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
-func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
+func (g *InstancesFilter) GetFilteredInstances(
+	routeInfo *servicerouter.RouteInfo,
+	clusters model.ServiceClusters,
+	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	dstMetadata := routeInfo.DestService.GetMetadata()
 	targetCluster := g.getTargetCluster(clusters, withinCluster, dstMetadata)
 
