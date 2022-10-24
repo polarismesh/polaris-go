@@ -215,7 +215,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 			if allocatedPerSecond < 5 {
 				continue
 			}
-			c.Assert(allocatedPerSecond >= 95 && allocatedPerSecond <= 100, check.Equals, true)
+			c.Assert(allocatedPerSecond >= 95 && allocatedPerSecond <= 200, check.Equals, true)
 		}
 	}
 }

@@ -413,7 +413,7 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 
 	req1 := &api.GetInstancesRequest{}
 	req1.Namespace = "Test"
-	req1.Service = fmt.Sprintf("TestCacheFile")
+	req1.Service = "TestCacheFile"
 	req1.SourceService = &model.ServiceInfo{
 		Service:   "TestCacheFile",
 		Namespace: "Test",

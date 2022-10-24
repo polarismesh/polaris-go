@@ -280,7 +280,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 		if cachedStatus == CacheChanged || cachedStatus == CacheNotExists {
 			log.GetBaseLogger().Infof("OnServiceUpdate: cache %s is pending to update", *svcEventKey)
 			svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcEventKey)
-			s.registry.PersistMessage(svcCacheFile, message)
+			_ = s.registry.PersistMessage(svcCacheFile, message)
 			cacheValue := s.Handler.MessageToCacheValue(cachedValue, message, s.svcLocalValue, false)
 			s.SetValue(cacheValue)
 			postCacheUpdated := s.Handler.PostCacheUpdated

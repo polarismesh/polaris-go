@@ -51,7 +51,7 @@ const (
 type Config struct {
 	RequestVolumeThreshold int `yaml:"requestVolumeThreshold" json:"requestVolumeThreshold"`
 	ErrorRatePercent       int `yaml:"errorRatePercent" json:"errorRatePercent"`
-	// Deprecated, 请使用ErrorRatePercent
+	// Deprecated: 请使用ErrorRatePercent
 	ErrorRateThreshold   float64        `yaml:"errorRateThreshold" json:"errorRateThreshold"`
 	MetricStatTimeWindow *time.Duration `yaml:"metricStatTimeWindow" json:"metricStatTimeWindow"`
 	MetricNumBuckets     int            `yaml:"metricNumBuckets" json:"metricNumBuckets"`

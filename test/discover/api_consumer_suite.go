@@ -112,7 +112,7 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
-		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
+		log.Fatalf("error listening appserver %v", err)
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {

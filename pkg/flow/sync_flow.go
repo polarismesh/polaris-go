@@ -35,14 +35,14 @@ import (
 // syncInstancesReportAndFinalize 结果上报及归还请求实例请求对象
 func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstancesRequest) {
 	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonInstancesRequest(commonRequest)
 }
 
 // syncRateLimitReportAndFinalize 结果上报及归还限流请求对象
 func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest, resp *model.QuotaResponse) {
 	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 	e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
@@ -55,29 +55,29 @@ func (e *Engine) reportRateLimitGauge(req *model.QuotaRequestImpl, resp *model.Q
 		Result:             resp.Code,
 		Arguments:          req.Arguments(),
 	}
-	e.SyncReportStat(model.RateLimitStat, stat)
+	_ = e.SyncReportStat(model.RateLimitStat, stat)
 }
 
 // syncRuleReportAndFinalize 结果上报及归还请求实例规则对象
 func (e *Engine) syncRuleReportAndFinalize(commonRequest *data.CommonRuleRequest) {
 	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonRuleRequest(commonRequest)
 }
 
 func (e *Engine) syncServicesAndFinalize(commonRequest *data.ServicesRequest) {
 	// 调用api的结果上报
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutServicesRequest(commonRequest)
 }
 
 func (e *Engine) syncServiceCallResultReportAndFinalize(commonRequest *data.CommonServiceCallResultRequest) {
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 	data.PoolPutCommonServiceCallResultRequest(commonRequest)
 }
 
 func (e *Engine) syncConsumerInitCallServiceAndFinalize(commonRequest *data.ConsumerInitCallServiceResultRequest) {
-	e.reportAPIStat(&commonRequest.CallResult)
+	_ = e.reportAPIStat(&commonRequest.CallResult)
 }
 
 // SyncGetOneInstance 同步获取服务实例
@@ -207,7 +207,7 @@ func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime ti
 	apiRes.RetStatus = model.RetFail
 	for _, v := range errs {
 		apiRes.RetCode = v.ErrorCode()
-		e.reportAPIStat(apiRes)
+		_ = e.reportAPIStat(apiRes)
 	}
 	apiRes.SetDelay(origDelay)
 	apiRes.RetCode = origRetCode

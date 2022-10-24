@@ -2,6 +2,14 @@
 run:
   issues-exit-code: 1 #Default
   tests: true #Default
+  skip-dirs: # 设置要忽略的目录
+    - test
+    - .*~
+    - api/swagger/docs
+  skip-files: # 设置不需要检查的go源码文件，支持正则匹配
+    - ".*.my.go$"
+    - ".*.pb.go$"
+    - _test.go
 
 linters:
   # Disable everything by default so upgrades to not include new "default
@@ -11,16 +19,17 @@ linters:
   enable:
 #    - deadcode
 #    - errcheck
-#    - funlen
-#    - gocritic
-#    - gofmt
+    - funlen
+    - gocritic
+    - gocyclo
+    - gofmt
     - goimports
-#    - gosimple
+    - gosimple
     - govet
     - godot
 #    - ineffassign
     - misspell
-#    - revive
+    - revive
 #    - staticcheck
 #    - structcheck
     - typecheck
@@ -76,9 +85,33 @@ linters-settings:
       - name: atomic
       - name: line-length-limit
         severity: error
-        arguments: [195]
+        arguments: [180]
       - name: unhandled-error
-        arguments : ["fmt.Printf", "myFunction"]
+        arguments : ["fmt.Printf", "myFunction", "builder.WriteString","buf.WriteByte","buf.WriteRune","buf.WriteString","buf.WriteTo","buf.Write","fmt.Println","iteratorInstancesProc","buffer.Write","buffer.WriteString","h.Write","fmt.Fprintf","io.WriteString","e.reportAPIStat","f.Close"]
+        severity: warning
+      - name: var-naming
+        severity: warning
+        disabled: true
+        arguments:
+          - [ "ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url","maxQps","ErrorCodeRpcError","ErrorCodeRpcTimeout","Ttl"] # AllowList
+          - [ "VM" ] # DenyList
+      - name: string-format
+        severity: warning
+        disabled: false
+        arguments:
+          - - 'core.WriteError[1].Message'
+            - '/^([^A-Z]|$)/'
+            - must not start with a capital letter
+          - - 'fmt.Errorf[0]'
+            - '/(^|[^\.!?])$/'
+            - must not end in punctuation
+          - - panic
+            - '/^[^\n]*$/'
+            - must not contain line breaks
+      - name: function-result-limit
+        severity: warning
+        disabled: false
+        arguments: [ 4 ]
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.
@@ -87,8 +120,50 @@ linters-settings:
     # Checks the number of statements in a function.
     # If lower than 0, disable the check.
     # Default: 40
-    statements: 40
+    statements: -1
   goconst:
+    # Minimal length of string constant.
+    # Default: 3
+    min-len: 2
+    # Minimum occurrences of constant string count to trigger issue.
+    # Default: 3
+    # For subsequent optimization, the value is reduced.
+    min-occurrences: 3
     # Ignore test files.
     # Default: false
     ignore-tests: true
+    # Look for existing constants matching the values.
+    # Default: true
+    match-constant: false
+    # Search also for duplicated numbers.
+    # Default: false
+    numbers: true
+    # Minimum value, only works with goconst.numbers
+    # Default: 3
+    min: 3
+    # Maximum value, only works with goconst.numbers
+    # Default: 3
+    max: 3
+    # Ignore when constant is not used as function argument.
+    # Default: true
+    ignore-calls: false
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+      - assignOp
+      - appendAssign
+      - singleCaseSwitch
+      - badCall
+      - underef
+  gocyclo:
+    # Minimal code complexity to report.
+    # Default: 30 (but we recommend 10-20)
+    min-complexity: 30
+  gosimple:
+    # Select the Go version to target.
+    # Default: 1.13
+    # Deprecated: use the global `run.go` instead.
+    go: "1.15"
+    # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
+    # Default: ["*"]
+    checks: ["all","-S1001","-S1000","-S1025"]

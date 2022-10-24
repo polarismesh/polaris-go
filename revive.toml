@@ -16,8 +16,11 @@ warningCode = 0
 [rule.increment-decrement]
 [rule.line-length-limit]
     severity = "error"
-    arguments= [195]
+    arguments= [180]
 [rule.var-naming]
+    severity = "warning"
+    disable = true
+    arguments = [["ID","URL","IP","HTTP","JSON","API","UID","Id","Api","Uid","Http","Json","Ip","Url"], ["VM"]]
 [rule.var-declaration]
 [rule.package-comments]
 [rule.range]
@@ -31,3 +34,6 @@ warningCode = 0
 [rule.unused-parameter]
 [rule.unreachable-code]
 [rule.redefines-builtin-id]
+[rule.waitgroup-by-value]
+    severity = "warning"
+    disable = false

@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package network provides network related functions.
 package network
 
 import (
@@ -44,28 +45,28 @@ var (
 	}
 )
 
-// ClosableConn 可关闭连接对象
+// ClosableConn you can close the connection object
 type ClosableConn interface {
 	// Close 关闭并释放
 	Close() error
 }
 
-// Connection GRPC连接对象，含唯一连接ID
+// Connection GRPC connection object containing a unique connection ID
 type Connection struct {
 	ConnID
-	// 连接实体
+	// Conn connect the entity of grpc connection
 	Conn ClosableConn
-	// 是否关闭
+	// closed whether to shut down
 	closed bool
-	// 引用数
+	// reference number
 	ref int32
-	// 是否已经开始销毁，0未开始，1开始
+	// Is the destruction started? 0 not started, 1 started
 	lazyDestroy uint32
-	// 申请锁
+	// to apply for the lock
 	mutex sync.Mutex
 }
 
-// IsAvailableConnection 连接是否可用
+// IsAvailableConnection whether the connection is available
 func IsAvailableConnection(conn *Connection) bool {
 	if nil == conn {
 		return false
@@ -73,7 +74,7 @@ func IsAvailableConnection(conn *Connection) bool {
 	return atomic.LoadUint32(&conn.lazyDestroy) == 0
 }
 
-// acquire 尝试占据连接，ref+1, 占据成功返回true，否则返回false
+// acquire Try to occupy the connection, ref+1, return true on success, false otherwise
 func (c *Connection) acquire(opKey string) bool {
 	if atomic.LoadUint32(&c.lazyDestroy) == 1 {
 		return false
@@ -88,36 +89,37 @@ func (c *Connection) acquire(opKey string) bool {
 	return true
 }
 
-// closeConnection 关闭连接
+// closeConnection close the connection
 func (c *Connection) closeConnection(force bool) bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	curRef := atomic.LoadInt32(&c.ref)
 	if (force || curRef <= 0) && !c.closed {
 		c.closed = true
-		c.Conn.Close()
+		_ = c.Conn.Close()
 		log.GetNetworkLogger().Infof("connection %v: close, curRef is %d", c.ConnID, curRef)
 	}
 	return c.closed
 }
 
+// ForceClose forcibly close the connection
 func (c *Connection) ForceClose() bool {
 	return c.closeConnection(true)
 }
 
-// lazyClose 懒回收
+// lazyClose lazy collection
 func (c *Connection) lazyClose(force bool) {
 	atomic.StoreUint32(&c.lazyDestroy, 1)
 	curRef := atomic.LoadInt32(&c.ref)
 	log.GetNetworkLogger().Tracef("connection %v: lazyClose, curRef is %d", c.ConnID, curRef)
 	if force || curRef <= 0 {
-		// 设置状态，不允许该连接再继续分配
+		// Set the status to disallow the connection to be allocated
 		c.closeConnection(force)
 		return
 	}
 }
 
-// Release 释放连接
+// Release the connection release
 func (c *Connection) Release(opKey string) {
 	nextValue := atomic.AddInt32(&c.ref, -1)
 	log.GetNetworkLogger().Tracef(
@@ -130,14 +132,14 @@ func (c *Connection) Release(opKey string) {
 	if closed {
 		return
 	}
-	// 懒关闭短连接
+	// lazy closing short connections
 	if DefaultServerServiceToConnectionControl[c.ConnID.Service.ClusterType] == ConnectionShort &&
 		IsAvailableConnection(c) {
 		c.lazyClose(false)
 	}
 }
 
-// ToGRPCConn 转换成GRPC连接
+// ToGRPCConn convert to a grpc connection
 func ToGRPCConn(conn ClosableConn) *grpc.ClientConn {
 	return conn.(*grpc.ClientConn)
 }

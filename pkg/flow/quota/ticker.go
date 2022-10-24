@@ -80,7 +80,7 @@ func (r *RemoteQuotaCallBack) Process(
 	case Deleted:
 		break
 	case Initializing:
-		rateLimitWindow.DoAsyncRemoteInit()
+		_ = rateLimitWindow.DoAsyncRemoteInit()
 	default:
 		if err := rateLimitWindow.DoAsyncRemoteAcquire(); err != nil {
 			rateLimitWindow.SetStatus(Initializing)

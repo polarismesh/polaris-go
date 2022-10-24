@@ -47,15 +47,12 @@ type ProviderAPI interface {
 	// 用户可保持该instance对象用于反注册和心跳上报
 	// Deprecated: Use RegisterInstance instead.
 	Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
-	// Deregister
-	// 同步反注册服务
+	// Deregister synchronize the anti registration service
 	Deregister(instance *InstanceDeRegisterRequest) error
-	// Heartbeat
-	// 心跳上报
+	// Heartbeat the heartbeat report
 	// Deprecated: Use RegisterInstance instead.
 	Heartbeat(instance *InstanceHeartbeatRequest) error
-	// Destroy
-	// 销毁API，销毁后无法再进行调用
+	// Destroy the api is destroyed and cannot be called again
 	Destroy()
 }
 

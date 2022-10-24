@@ -96,7 +96,7 @@ func (t *SetDivisionTestingSuite) SetUpSuite(c *check.C) {
 	t.grpcListener, err = net.Listen(
 		"tcp", fmt.Sprintf("%s:%d", setDivisionServerIPAddr, setDivisionServerPort))
 	if err != nil {
-		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
+		log.Fatalf("error listening appserver %v", err)
 	}
 	log.Printf("appserver listening on %s:%d\n", setDivisionServerIPAddr, setDivisionServerPort)
 	go func() {

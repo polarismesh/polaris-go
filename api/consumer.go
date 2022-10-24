@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	// RetSuccess 调用成功
+	// RetSuccess the call is successful
 	RetSuccess = model.RetSuccess
-	// RetFail 调用失败
+	// RetFail call fails
 	RetFail = model.RetFail
 )
 

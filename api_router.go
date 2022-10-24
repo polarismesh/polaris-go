@@ -49,7 +49,7 @@ func (r *routerAPI) ProcessLoadBalance(request *ProcessLoadBalanceRequest) (*mod
 	return r.sdkCtx.GetEngine().ProcessLoadBalance(&request.ProcessLoadBalanceRequest)
 }
 
-// SDKContext 获取SDK上下文
+// SDKContext getting the sdk context
 func (r *routerAPI) SDKContext() api.SDKContext {
 	return r.sdkCtx
 }

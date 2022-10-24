@@ -35,8 +35,8 @@ const (
 const (
 	// year68 is the year represented by "68", which is used in RFC3597.
 	year68 = 1 << 31 // For RFC1982 (Serial Arithmetic) calculations in 32 bits.
-	// defaultTtl is the default TTL value to use when none is given in the message.
-	defaultTtl = 3600 // Default internal TTL.
+	// defaultTTL is the default TTL value to use when none is given in the message.
+	defaultTTL = 3600 // Default internal TTL.
 
 	// MinMsgSize UDP最小包长度
 	MinMsgSize = 512

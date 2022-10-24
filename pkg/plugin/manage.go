@@ -258,7 +258,7 @@ func (m *manager) StartPlugins() error {
 	if err != nil && len(startedPlugins) > 0 {
 		// 回滚所有插件
 		for idValue := range startedPlugins {
-			m.idToPlugins[idValue.(int32)].Destroy()
+			_ = m.idToPlugins[idValue.(int32)].Destroy()
 		}
 	}
 	return err
@@ -468,7 +468,7 @@ func (b *PluginBase) Start() error {
 // NewPluginBase 创建pluginbase
 func NewPluginBase(ctx *InitContext) *PluginBase {
 	res := &PluginBase{}
-	res.Init(ctx)
+	_ = res.Init(ctx)
 	return res
 }
 

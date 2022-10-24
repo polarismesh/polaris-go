@@ -86,7 +86,7 @@ func (g *Detector) doTCPDetect(address string) bool {
 		log.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
 	return true
 }
 

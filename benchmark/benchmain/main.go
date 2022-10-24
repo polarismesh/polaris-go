@@ -273,7 +273,7 @@ func after(opts *benchOpts, data []stats.BenchResults) {
 			fmt.Fprintf(os.Stderr, "testing: can't write heap profile %s: %s\n", opts.memProfile, err)
 			os.Exit(2)
 		}
-		f.Close()
+		_ = f.Close()
 	}
 	if opts.mutexProfile != "" {
 		writeProfTo("mutex", opts.mutexProfile)
@@ -284,8 +284,8 @@ func after(opts *benchOpts, data []stats.BenchResults) {
 			log.Fatalf("testing: can't write benchmark result %s: %s\n", opts.benchmarkResultFile, err)
 		}
 		dataEncoder := gob.NewEncoder(f)
-		dataEncoder.Encode(data)
-		f.Close()
+		_ = dataEncoder.Encode(data)
+		_ = f.Close()
 	}
 }
 

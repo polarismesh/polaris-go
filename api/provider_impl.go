@@ -28,6 +28,9 @@ type providerAPI struct {
 	context SDKContext
 }
 
+// RegisterInstance after the service is successfully registered,
+// the Instance ID field in Instance is filled
+// minimum supported version of polaris-server is v1.10.0
 func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
 	if err := checkAvailable(c); err != nil {
 		return nil, err
