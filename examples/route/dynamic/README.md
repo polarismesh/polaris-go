@@ -76,10 +76,10 @@ Run the built **consumer** executable
 
 ```
 # linux/mac
-./consumer --selfNamespace={selfName} --selfService=EchoConsumer
+./consumer
 
 # windows
-./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
+./consumer.exe
 ```
 
 ### Verify
@@ -87,7 +87,7 @@ Run the built **consumer** executable
 Realize the route to different service instances by setting the value of the request header **env**
 
 ```
-curl -H 'env: pre' http://127.0.0.1:18080/echo
+curl http://127.0.0.1:18080/echo?env=pre
 
 Hello, I'm RouteEchoServer Provider, My metadata's : env=pre, host : x.x.x.x:x
 ```

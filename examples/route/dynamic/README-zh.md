@@ -58,16 +58,16 @@ global:
 
 ```
 # linux/mac运行命令
-./provider --metadata="env=dev" > provider-20000.log 2>&1 &
-./provider --metadata="env=test" > provider-20001.log 2>&1 &
-./provider --metadata="env=pre" > provider-20002.log 2>&1 &
-./provider --metadata="env=prod" > provider-20003.log 2>&1 &
+./provider --port="20000" --metadata="env=dev" > provider-20000.log 2>&1 &
+./provider --port="20001" --metadata="env=test" > provider-20001.log 2>&1 &
+./provider --port="20002" --metadata="env=pre" > provider-20002.log 2>&1 &
+./provider --port="20003" --metadata="env=prod" > provider-20003.log 2>&1 &
 
 # windows运行命令
-./provider.exe --metadata="env=dev" > provider-20000.log
-./provider.exe --metadata="env=test" > provider-20001.log
-./provider.exe --metadata="env=pre" > provider-20002.log
-./provider.exe --metadata="env=prod" > provider-20003.log
+./provider.exe  --port="20000" --metadata="env=dev" > provider-20000.log
+./provider.exe  --port="20001" --metadata="env=test" > provider-20001.log
+./provider.exe  --port="20002" --metadata="env=pre" > provider-20002.log
+./provider.exe  --port="20003" --metadata="env=prod" > provider-20003.log
 ```
 
 运行构建出的**consumer**可执行文件
@@ -76,10 +76,10 @@ global:
 
 ```
 # linux/mac运行命令
-./consumer --selfNamespace={selfName} --selfService=EchoConsumer
+./consumer
 
 # windows运行命令
-./consumer.exe --selfNamespace={selfName} --selfService=EchoConsumer
+./consumer.exe
 ```
 
 ### 验证
@@ -87,7 +87,7 @@ global:
 通过设置请求头参数***env***的值，实现路由到不同的服务实例
 
 ```
-curl -H 'env: pre' http://127.0.0.1:18080/echo
+curl http://127.0.0.1:18080/echo?env=pre
 
 Hello, I'm RouteEchoServer Provider, My metadata's : env=pre, host : x.x.x.x:x
 ```

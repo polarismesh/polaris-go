@@ -89,6 +89,22 @@ func (svr *PolarisProvider) Run() {
 	runMainLoop()
 }
 
+func (svr *PolarisProvider) registerService() {
+	log.Printf("start to invoke register operation")
+	registerRequest := &polaris.InstanceRegisterRequest{}
+	registerRequest.Service = service
+	registerRequest.Namespace = namespace
+	registerRequest.Host = host
+	registerRequest.Port = svr.port
+	registerRequest.ServiceToken = token
+	registerRequest.Metadata = convertMetadatas()
+	resp, err := svr.provider.RegisterInstance(registerRequest)
+	if nil != err {
+		log.Fatalf("fail to register instance, err is %v", err)
+	}
+	log.Printf("register response: instanceId %s", resp.InstanceID)
+}
+
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -110,22 +126,6 @@ func (svr *PolarisProvider) runWebServer() {
 		}
 	}()
 
-}
-
-func (svr *PolarisProvider) registerService() {
-	log.Printf("start to invoke register operation")
-	registerRequest := &polaris.InstanceRegisterRequest{}
-	registerRequest.Service = service
-	registerRequest.Namespace = namespace
-	registerRequest.Host = host
-	registerRequest.Port = svr.port
-	registerRequest.ServiceToken = token
-	registerRequest.Metadata = convertMetadatas()
-	resp, err := svr.provider.RegisterInstance(registerRequest)
-	if nil != err {
-		log.Fatalf("fail to register instance, err is %v", err)
-	}
-	log.Printf("register response: instanceId %s", resp.InstanceID)
 }
 
 func runMainLoop() {
