@@ -24,7 +24,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -123,13 +122,6 @@ func (p *PrometheusHandler) registerMetrics() error {
 
 // ReportStat 上报采集指标到 prometheus，这里只针对部分 model.InstanceGauge 的实现做处理
 func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal model.InstanceGauge) error {
-	defer func() {
-		if err := recover(); err != nil {
-			log.GetBaseLogger().Errorf("[StatReporter][Prometheus] do report panic", zap.String("metric-type", model.DescMetricType(metricsType)),
-				zap.Any("metricsVal", metricsVal))
-		}
-	}()
-
 	switch metricsType {
 	case model.ServiceStat:
 		val, ok := metricsVal.(*model.ServiceCallResult)
@@ -234,7 +226,7 @@ func (p *PrometheusHandler) handleCircuitBreakGauge(metricsType model.MetricType
 	open := p.metricVecCaches[MetricsNameCircuitBreakerOpen].(*prometheus.GaugeVec)
 
 	// 计算完之后的熔断状态
-	status := val.GetNextCircuitBreakerStatus().GetStatus()
+	status := val.GetCircuitBreakerStatus().GetStatus()
 	if status == model.Open {
 		open.With(labels).Inc()
 	} else {
