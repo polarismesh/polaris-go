@@ -1,7 +1,7 @@
 global:
   serverConnector:
     addresses:
-      - 9.134.5.52:8091
+      - 127.0.0.1:8091
   statReporter:
     enable: true
     chain:
