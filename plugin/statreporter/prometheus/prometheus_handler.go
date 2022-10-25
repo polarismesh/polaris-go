@@ -223,21 +223,22 @@ func (p *PrometheusHandler) handleRateLimitGauge(metricsType model.MetricType, v
 func (p *PrometheusHandler) handleCircuitBreakGauge(metricsType model.MetricType, val *model.CircuitBreakGauge) {
 	labels := p.convertCircuitBreakGaugeToLabels(val)
 
-	open := p.metricVecCaches[MetricsNameCircuitBreakerOpen].(*prometheus.CounterVec)
+	open := p.metricVecCaches[MetricsNameCircuitBreakerOpen].(*prometheus.GaugeVec)
 
+	// 计算完之后的熔断状态
 	status := val.GetCircuitBreakerStatus().GetStatus()
 	if status == model.Open {
 		open.With(labels).Inc()
 	} else {
-		open.With(labels).Add(-1)
+		open.With(labels).Dec()
 	}
 
-	halfOpen := p.metricVecCaches[MetricsNameCircuitBreakerHalfOpen].(*prometheus.CounterVec)
+	halfOpen := p.metricVecCaches[MetricsNameCircuitBreakerHalfOpen].(*prometheus.GaugeVec)
 
 	if status == model.HalfOpen {
 		halfOpen.With(labels).Inc()
 	} else {
-		halfOpen.With(labels).Add(-1)
+		halfOpen.With(labels).Dec()
 	}
 }
 

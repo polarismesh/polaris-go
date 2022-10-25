@@ -775,7 +775,7 @@ type CircuitBreakGauge struct {
 	CBStatus       CircuitBreakerStatus
 }
 
-// GetCircuitBreakerStatus 获取变化前的熔断状态
+// GetCircuitBreakerStatus 获取当前实例熔断状态
 func (cbg *CircuitBreakGauge) GetCircuitBreakerStatus() CircuitBreakerStatus {
 	return cbg.CBStatus
 }

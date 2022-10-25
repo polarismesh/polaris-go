@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -37,6 +38,7 @@ var (
 	selfNamespace string
 	selfService   string
 	port          int64
+	token         string
 )
 
 func initArgs() {
@@ -45,18 +47,42 @@ func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
+	flag.StringVar(&token, "token", "", "token")
 }
 
 // PolarisConsumer .
 type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
 	router    polaris.RouterAPI
+	provider  polaris.ProviderAPI
 	namespace string
 	service   string
 }
 
 // Run .
 func (svr *PolarisConsumer) Run() {
+	if selfService != "" && selfNamespace != "" {
+		tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
+		if nil != err {
+			panic(fmt.Errorf("error occur while fetching localhost: %v", err))
+		}
+		req := &polaris.InstanceRegisterRequest{}
+		req.Namespace = selfNamespace
+		req.Service = selfService
+		log.Printf("start to invoke register operation")
+		registerRequest := &polaris.InstanceRegisterRequest{}
+		registerRequest.Service = service
+		registerRequest.Namespace = namespace
+		registerRequest.Host = tmpHost
+		registerRequest.Port = int(port)
+		registerRequest.ServiceToken = token
+		resp, err := svr.provider.RegisterInstance(registerRequest)
+		if nil != err {
+			log.Fatalf("fail to register instance, err is %v", err)
+		}
+		log.Printf("register response: instanceId %s", resp.InstanceID)
+	}
+
 	svr.runWebServer()
 }
 
@@ -155,6 +181,7 @@ func main() {
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
 		router:    polaris.NewRouterAPIByContext(sdkCtx),
+		provider:  polaris.NewProviderAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
 	}
@@ -176,4 +203,17 @@ func convertQuery(rawQuery string) map[string]string {
 		}
 	}
 	return meta
+}
+
+func getLocalHost(serverAddr string) (string, error) {
+	conn, err := net.Dial("tcp", serverAddr)
+	if nil != err {
+		return "", err
+	}
+	localAddr := conn.LocalAddr().String()
+	colonIdx := strings.LastIndex(localAddr, ":")
+	if colonIdx > 0 {
+		return localAddr[:colonIdx], nil
+	}
+	return localAddr, nil
 }
