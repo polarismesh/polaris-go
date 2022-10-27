@@ -54,7 +54,7 @@ func (svr *PolarisConsumer) Run() {
 }
 
 func (svr *PolarisConsumer) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/circuit", func(rw http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 10; i++ {
 			log.Printf("start to invoke getOneInstance operation")
 			getOneRequest := &polaris.GetOneInstanceRequest{}
@@ -75,7 +75,7 @@ func (svr *PolarisConsumer) runWebServer() {
 
 			start := time.Now()
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
-			if err != nil {
+			if err != nil || resp.StatusCode != 200 {
 				delay := time.Now().Sub(start)
 				callRet := &polaris.ServiceCallResult{}
 				callRet.CalledInstance = instance
