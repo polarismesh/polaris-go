@@ -1,5 +1,5 @@
 /**
- * Tencent is pleased to support the open source community by making Polaris available.
+ * Tencent is pleased to support the open source community by making polaris-go available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
  *
@@ -36,7 +36,9 @@ const (
 )
 
 var configFileRepos []*ConfigFileRepo
+
 var startCheckVersionOnce = new(sync.Once)
+
 var stopCheckVersionTask context.CancelFunc
 
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
@@ -58,7 +60,6 @@ type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetada
 func NewConfigFileRepo(metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigFileRepo, error) {
-
 	repo := &ConfigFileRepo{
 		connector:          connector,
 		configuration:      configuration,

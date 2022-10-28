@@ -384,12 +384,12 @@ func SplitInstances(consumer api.ConsumerAPI, canaryVal string) map[int][]model.
 	return RetMap
 }
 
-func checkGetInstancesByCanaryType(consumer api.ConsumerAPI, instSize int, CType int, c *check.C) {
+func checkGetInstancesByCanaryType(consumer api.ConsumerAPI, instSize int, cType int, c *check.C) {
 	getInstancesReq1 := &api.GetInstancesRequest{}
 	getInstancesReq1.FlowID = 1
 	getInstancesReq1.Namespace = canaryNamespace
 	getInstancesReq1.Service = canaryService
-	if CType == CanaryInstance {
+	if cType == CanaryInstance {
 		getInstancesReq1.Canary = "useV1"
 	}
 	resp, err := consumer.GetInstances(getInstancesReq1)
@@ -398,7 +398,7 @@ func checkGetInstancesByCanaryType(consumer api.ConsumerAPI, instSize int, CType
 	for _, v := range resp.GetInstances() {
 		c.Assert(v.IsIsolated(), check.Equals, false)
 		c.Assert(v.GetWeight() != 0, check.Equals, true)
-		c.Assert(CheckInstanceHasCanaryMeta(v, "useV1"), check.Equals, CType)
+		c.Assert(CheckInstanceHasCanaryMeta(v, "useV1"), check.Equals, cType)
 	}
 }
 

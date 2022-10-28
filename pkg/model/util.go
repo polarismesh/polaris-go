@@ -219,9 +219,7 @@ func ReplaceHomeVar(path string) string {
 
 // PathExist 查看文件路径是否存在
 func PathExist(path string) bool {
-	_, err := os.Stat(path)
-	if err != nil {
-
+	if _, err := os.Stat(path); err != nil {
 		return os.IsExist(err)
 	}
 	return true

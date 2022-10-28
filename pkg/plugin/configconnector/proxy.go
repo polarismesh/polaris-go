@@ -31,8 +31,8 @@ type Proxy struct {
 }
 
 // SetRealPlugin set real plugin
-func (p *Proxy) SetRealPlugin(plugin plugin.Plugin, engine model.Engine) {
-	p.ConfigConnector = plugin.(ConfigConnector)
+func (p *Proxy) SetRealPlugin(pg plugin.Plugin, engine model.Engine) {
+	p.ConfigConnector = pg.(ConfigConnector)
 	p.engine = engine
 }
 

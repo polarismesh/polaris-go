@@ -38,7 +38,7 @@ type RateLimitConfigImpl struct {
 	// LimiterNamespace 限流服务的命名空间
 	LimiterNamespace string `yaml:"limiterNamespace" json:"limiterNamespace"`
 	// LimiterService 限流服务的服务名
-	LimiterService string `yaml:"limiterService" json:"limiterService		"`
+	LimiterService string `yaml:"limiterService" json:"limiterService"`
 }
 
 // IsEnable 是否启用限流能力.

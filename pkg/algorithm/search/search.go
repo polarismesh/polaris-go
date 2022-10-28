@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package search .
 package search
 
 // SearchableSlice 可搜索的数组
