@@ -26,7 +26,6 @@ import (
 	. "gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
 	"github.com/polarismesh/polaris-go/test/ratelimit"
@@ -61,11 +60,11 @@ func init() {
 	// 缓存持久化测试
 	Suite(&stability.CacheTestingSuite{})
 	// 熔断测试
-	Suite(&circuitbreak.CircuitBreakSuite{})
+	// Suite(&circuitbreak.CircuitBreakSuite{})
 	// 健康探测测试
-	Suite(&circuitbreak.HealthCheckTestingSuite{})
+	// Suite(&circuitbreak.HealthCheckTestingSuite{})
 	// 持久探测测试
-	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
+	// Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
 	// 就近路由接入测试
 	Suite(&serviceroute.NearbyTestingSuite{})
 	// 服务定时更新测试
