@@ -54,7 +54,7 @@ var newCacheInstNums = []int{6, 10, 8, 5}
 
 var testServices = make([]*namingpb.Service, 4, 4)
 
-// 缓存持久化测试套件
+// CacheFastUpdateSuite 缓存持久化测试套件
 type CacheFastUpdateSuite struct {
 	grpcServer           *grpc.Server
 	grpcListener         net.Listener
@@ -63,7 +63,7 @@ type CacheFastUpdateSuite struct {
 	healthCheckInstances []model.Instance
 }
 
-// 初始化测试套件
+// SetUpSuite 初始化测试套件
 func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 

@@ -96,11 +96,7 @@ func (c *Connector) Init(ctx *plugin.InitContext) {
 
 // IsEnable enable
 func (c *Connector) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return true
-	} else {
-		return false
-	}
+	return cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent
 }
 
 // 原子增加DnsID

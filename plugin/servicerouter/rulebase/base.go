@@ -359,7 +359,6 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			}
 			var hasMatchedValue bool
 			for value, composedValue := range metaValues {
-
 				m, err := regexObj.FindStringMatch(value)
 				if err != nil {
 					log.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, errors: %s", ruleMetaValueStr, value, err)

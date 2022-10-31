@@ -341,8 +341,7 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 	}
 	if len(e.reporterChain) > 0 {
 		for _, reporter := range e.reporterChain {
-			err := reporter.ReportStat(typ, stat)
-			if err != nil {
+			if err := reporter.ReportStat(typ, stat); err != nil {
 				return err
 			}
 		}

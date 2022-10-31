@@ -133,7 +133,6 @@ func (h *ReportHandler) updateLocation(location *model.Location, lastErr model.S
 
 // 等待地域信息就绪
 func (h *ReportHandler) waitLocationInfo(event *common.PluginEvent) error {
-
 	if h.locationProvider == nil {
 		return nil
 	}

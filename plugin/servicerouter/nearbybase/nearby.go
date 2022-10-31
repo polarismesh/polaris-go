@@ -318,7 +318,7 @@ func (g *NearbyBasedInstancesFilter) misMatchError(location *model.Location, out
 // 等待地域信息就绪
 func (g *NearbyBasedInstancesFilter) waitLocationInfo(event *common.PluginEvent) error {
 	if !g.cfg.StrictNearby {
-		g.valueCtx.WaitLocationInfo(nil, model.LocationInit)
+		g.valueCtx.WaitLocationInfo(context.TODO(), model.LocationInit)
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), g.locationReadyTimeout)

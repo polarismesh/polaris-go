@@ -364,7 +364,9 @@ func (e *Engine) doSyncRegister(instance *model.InstanceRegisterRequest, header 
 		},
 		RetStatus: model.RetSuccess,
 	}
-	defer e.reportAPIStat(apiCallResult)
+	defer func() {
+		_ = e.reportAPIStat(apiCallResult)
+	}()
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
 	// 方法开始时间
@@ -399,7 +401,9 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 		},
 		RetStatus: model.RetSuccess,
 	}
-	defer e.reportAPIStat(apiCallResult)
+	defer func() {
+		_ = e.reportAPIStat(apiCallResult)
+	}()
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
 	// 方法开始时间
@@ -427,7 +431,9 @@ func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 		},
 		RetStatus: model.RetSuccess,
 	}
-	defer e.reportAPIStat(apiCallResult)
+	defer func() {
+		_ = e.reportAPIStat(apiCallResult)
+	}()
 	param := &model.ControlParam{}
 	data.BuildControlParam(instance, e.configuration, param)
 	// 方法开始时间

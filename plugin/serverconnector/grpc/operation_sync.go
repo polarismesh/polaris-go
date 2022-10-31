@@ -89,9 +89,8 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 		}
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 		return nil, model.NewSDKError(model.ErrCodeServerUserError, nil, errMsg)
-	} else {
-		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	}
+	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	resp := &model.InstanceRegisterResponse{InstanceID: pbResp.GetInstance().GetId().GetValue(),
 		Existed: namingpb.ExistedResource == pbResp.GetCode().GetValue()}
 	return resp, nil
@@ -150,9 +149,8 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 		}
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 		return model.NewSDKError(model.ErrCodeServerUserError, nil, errMsg)
-	} else {
-		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	}
+	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	return nil
 }
 
@@ -209,9 +207,8 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 		}
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 		return model.NewSDKErrorWithServerInfo(model.ErrCodeServerUserError, nil, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), errMsg)
-	} else {
-		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	}
+	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	return nil
 }
 
@@ -294,9 +291,8 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 		}
 		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 		return nil, model.NewSDKError(model.ErrCodeServerUserError, nil, errMsg)
-	} else {
-		g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	}
+	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	// 持久化本地信息
 	if nil != req.PersistHandler {
 		if err = req.PersistHandler(pbResp); err != nil {

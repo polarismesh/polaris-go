@@ -65,7 +65,6 @@ func (g *CanaryRouterFilter) Destroy() error {
 // GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
-
 	// enableCanary := clusters.IsCanaryEnabled()
 	// if !enableCanary {
 	//	result := servicerouter.PoolGetRouteResult(g.valueCtx)
@@ -73,9 +72,13 @@ func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.Route
 	//	result.OutputCluster = cls
 	//	return result, nil
 	// }
-	canary := routeInfo.Canary
-	var result *servicerouter.RouteResult
-	var err error
+
+	var (
+		canary = routeInfo.Canary
+		result *servicerouter.RouteResult
+		err    error
+	)
+
 	if canary != "" {
 		result, err = g.canaryFilter(canary, clusters, withinCluster)
 	} else {
@@ -91,10 +94,9 @@ func (g *CanaryRouterFilter) GetFilteredInstances(routeInfo *servicerouter.Route
 		result.OutputCluster.HasLimitedInstances = true
 		result.Status = servicerouter.DegradeToFilterOnly
 		return result, nil
-	} else {
-		routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
-		return result, nil
 	}
+	routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+	return result, nil
 }
 
 // 带金丝雀标签的处理过滤

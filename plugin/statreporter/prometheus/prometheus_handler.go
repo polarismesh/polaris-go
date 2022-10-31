@@ -144,7 +144,6 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 
 // runInnerMetricsWebServer 启动用于 prometheus 主动拉取的 http-server，如果端口设置为负数，则不启用
 func (p *PrometheusHandler) runInnerMetricsWebServer() {
-
 	if p.port < 0 {
 		return
 	}
@@ -190,7 +189,7 @@ func (p *PrometheusHandler) handleServiceGauge(metricsType model.MetricType, val
 
 	delay := val.GetDelay()
 	if delay != nil {
-		data := float64((*delay).Milliseconds())
+		data := float64(delay.Milliseconds())
 
 		timeout := p.metricVecCaches[MetricsNameUpstreamRequestTimeout].(*prometheus.GaugeVec)
 		timeout.With(labels).Add(data)
