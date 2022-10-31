@@ -37,23 +37,27 @@ import (
 
 // RegisterInstance 同步注册服务
 func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error) {
-	var err error
-	if err = g.waitDiscoverReady(); err != nil {
+	if err := g.waitDiscoverReady(); err != nil {
 		return nil, err
 	}
-	opKey := connector.OpKeyRegisterInstance
-	startTime := clock.GetClock().Now()
-	// 获取server连接
-	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	var (
+		opKey     = connector.OpKeyRegisterInstance
+		startTime = clock.GetClock().Now()
+		// 获取server连接
+		conn, err = g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	)
 	if err != nil {
 		return nil, connector.NetworkError(g.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
 			fmt.Sprintf("fail to get connection, opKey %s", opKey))
 	}
 	// 释放server连接
 	defer conn.Release(opKey)
-	namingClient := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
-	reqID := connector.NextRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeaderContext(*req.Timeout, connector.AppendHeaderWithReqId(header, reqID))
+	var (
+		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		reqID        = connector.NextRegisterInstanceReqID()
+		ctx, cancel  = connector.CreateHeaderContext(*req.Timeout, connector.AppendHeaderWithReqId(header, reqID))
+	)
+
 	if cancel != nil {
 		defer cancel()
 	}
@@ -98,22 +102,25 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 
 // DeregisterInstance 同步反注册服务
 func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) error {
-	var err error
-	if err = g.waitDiscoverReady(); err != nil {
+	if err := g.waitDiscoverReady(); err != nil {
 		return err
 	}
-	opKey := connector.OpKeyDeregisterInstance
-	startTime := clock.GetClock().Now()
-	// 获取server连接
-	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	var (
+		opKey     = connector.OpKeyDeregisterInstance
+		startTime = clock.GetClock().Now()
+		// 获取server连接
+		conn, err = g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	)
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
 	// 释放server连接
 	defer conn.Release(opKey)
-	namingClient := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
-	reqID := connector.NextDeRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+	var (
+		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		reqID        = connector.NextDeRegisterInstanceReqID()
+		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+	)
 	if cancel != nil {
 		defer cancel()
 	}
@@ -156,22 +163,25 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 
 // Heartbeat 心跳上报
 func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
-	var err error
-	if err = g.waitDiscoverReady(); err != nil {
+	if err := g.waitDiscoverReady(); err != nil {
 		return err
 	}
-	opKey := connector.OpKeyInstanceHeartbeat
-	startTime := clock.GetClock().Now()
-	// 获取心跳server连接
-	conn, err := g.connManager.GetConnection(opKey, config.HealthCheckCluster)
+	var (
+		opKey     = connector.OpKeyInstanceHeartbeat
+		startTime = clock.GetClock().Now()
+		// 获取心跳server连接
+		conn, err = g.connManager.GetConnection(opKey, config.HealthCheckCluster)
+	)
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
 	// 释放server连接
 	defer conn.Release(opKey)
-	namingClient := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
-	reqID := connector.NextHeartbeatReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+	var (
+		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		reqID        = connector.NextHeartbeatReqID()
+		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+	)
 	if cancel != nil {
 		defer cancel()
 	}
@@ -239,22 +249,25 @@ func (g *Connector) waitDiscoverReady() error {
 // 异常场景：当sdk已经退出过程中，则返回error
 // 异常场景：当服务端不可用或者上报失败，则返回error，调用者需进行重试
 func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportClientResponse, error) {
-	var err error
-	if err = g.waitDiscoverReady(); err != nil {
+	if err := g.waitDiscoverReady(); err != nil {
 		return nil, err
 	}
-	opKey := connector.OpKeyReportClient
-	startTime := clock.GetClock().Now()
-	// 获取server连接
-	conn, err := g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	var (
+		opKey     = connector.OpKeyReportClient
+		startTime = clock.GetClock().Now()
+		// 获取server连接
+		conn, err = g.connManager.GetConnection(opKey, config.DiscoverCluster)
+	)
 	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeNetworkError, err, fmt.Sprintf("fail to get connection, opKey %s", opKey))
 	}
 	// 释放server连接
 	defer conn.Release(opKey)
-	namingClient := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
-	reqID := connector.NextReportClientReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(req.Timeout, reqID)
+	var (
+		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		reqID        = connector.NextReportClientReqID()
+		ctx, cancel  = connector.CreateHeaderContextWithReqId(req.Timeout, reqID)
+	)
 	if cancel != nil {
 		defer cancel()
 	}
