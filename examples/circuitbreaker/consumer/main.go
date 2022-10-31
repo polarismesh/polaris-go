@@ -75,7 +75,8 @@ func (svr *PolarisConsumer) runWebServer() {
 
 			start := time.Now()
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
-			if err != nil || resp.StatusCode != 200 {
+			if err != nil || resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
 				delay := time.Now().Sub(start)
 				callRet := &polaris.ServiceCallResult{}
 				callRet.CalledInstance = instance

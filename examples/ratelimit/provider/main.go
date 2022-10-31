@@ -132,7 +132,21 @@ func (svr *PolarisProvider) registerService() {
 	log.Printf("register response: instanceId %s", resp.InstanceID)
 }
 
-func runMainLoop() {
+func (svr *PolarisProvider) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
+	deregisterRequest.Service = service
+	deregisterRequest.Namespace = namespace
+	deregisterRequest.Host = svr.host
+	deregisterRequest.Port = svr.port
+	deregisterRequest.ServiceToken = token
+	if err := svr.provider.Deregister(deregisterRequest); err != nil {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister successfully.")
+}
+
+func (svr *PolarisProvider) runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
@@ -176,7 +190,7 @@ func main() {
 
 	svr.Run()
 
-	runMainLoop()
+	svr.runMainLoop()
 }
 
 func getLocalHost(serverAddr string) (string, error) {
