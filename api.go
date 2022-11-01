@@ -111,13 +111,13 @@ type QuotaFuture api.QuotaFuture
 // LimitAPI 限流相关的API相关接口.
 type LimitAPI interface {
 	api.SDKOwner
-	// GetQuota 获取限流配额，一次接口只获取一个配额
+	// GetQuota the interface obtains only one quota at a time
 	GetQuota(request QuotaRequest) (QuotaFuture, error)
-	// Destroy 销毁API，销毁后无法再进行调用
+	// Destroy the api is destroyed and cannot be called again
 	Destroy()
 }
 
-// NewQuotaRequest 创建配额查询请求.
+// NewQuotaRequest example create a quota query request.
 func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
@@ -125,14 +125,14 @@ func NewQuotaRequest() QuotaRequest {
 // ConfigFile config
 type ConfigFile model.ConfigFile
 
-// ConfigAPI 配置文件的 API.
+// ConfigAPI api for configuration files.
 type ConfigAPI interface {
 	api.SDKOwner
-	// GetConfigFile 获取配置文件
+	// GetConfigFile obtaining the configuration file
 	GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
 }
 
-// RouterAPI 路由API方法
+// RouterAPI routing api methods
 type RouterAPI interface {
 	api.SDKOwner
 	// ProcessRouters process routers to filter instances
