@@ -75,7 +75,11 @@ func (svr *PolarisConsumer) runWebServer() {
 
 			start := time.Now()
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
-			if err != nil {
+			if resp != nil {
+				defer resp.Body.Close()
+			}
+
+			if err != nil || resp.StatusCode != http.StatusOK {
 				delay := time.Now().Sub(start)
 				callRet := &polaris.ServiceCallResult{}
 				callRet.CalledInstance = instance
@@ -96,8 +100,6 @@ func (svr *PolarisConsumer) runWebServer() {
 				_, _ = rw.Write([]byte("\n"))
 				continue
 			}
-
-			defer resp.Body.Close()
 
 			data, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
