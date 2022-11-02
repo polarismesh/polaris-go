@@ -141,7 +141,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 				EventObject: result.OutputCluster,
 			}
 			for _, h := range handlers {
-				h.Callback(eventObj)
+				_ = h.Callback(eventObj)
 			}
 		}
 	}

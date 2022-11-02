@@ -363,7 +363,7 @@ func makeFuncSync(bf stats.Features) (rpcCallFunc, rpcCleanupFunc) {
 		result := ctx.data[1].(*api.ServiceCallResult)
 		result.CalledInstance = instance
 		result.RetStatus = model.RetSuccess
-		tc.UpdateServiceCallResult(result)
+		_ = tc.UpdateServiceCallResult(result)
 	}, cleanup
 }
 

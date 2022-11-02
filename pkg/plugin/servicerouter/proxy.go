@@ -93,7 +93,7 @@ func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 		gauge.Status = res.Status
 	}
 
-	p.engine.SyncReportStat(model.RouteStat, gauge)
+	_ = p.engine.SyncReportStat(model.RouteStat, gauge)
 	poolPutRouteStat(gauge)
 }
 

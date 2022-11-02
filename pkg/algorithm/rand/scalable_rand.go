@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package rand random digit
 package rand
 
 import (
