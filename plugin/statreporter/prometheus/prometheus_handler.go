@@ -125,12 +125,12 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 	switch metricsType {
 	case model.ServiceStat:
 		val, ok := metricsVal.(*model.ServiceCallResult)
-		if ok {
+		if ok && val != nil {
 			p.handleServiceGauge(metricsType, val)
 		}
 	case model.RateLimitStat:
 		val, ok := metricsVal.(*model.RateLimitGauge)
-		if ok {
+		if ok && val != nil {
 			p.handleRateLimitGauge(metricsType, val)
 		}
 	case model.CircuitBreakStat:
