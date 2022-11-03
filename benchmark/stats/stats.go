@@ -132,13 +132,13 @@ type RunData struct {
 
 type durationSlice []time.Duration
 
-// Len
+// Len .
 func (a durationSlice) Len() int { return len(a) }
 
-// Swap
+// Swap .
 func (a durationSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
-// Less
+// Less .
 func (a durationSlice) Less(i, j int) bool { return a[i] < a[j] }
 
 // Stats is a helper for gathering statistics about individual benchmark runs.

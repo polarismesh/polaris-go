@@ -235,7 +235,7 @@ func (rr *PolarisHeaderRR) PackData(buff *bytes.Buffer) (int, error) {
 }
 
 // UnPackData 反序列化RR data
-func (rr *PolarisHeaderRR) UnPackData(msg []byte, off int) (int, error) {
+func (rr *PolarisHeaderRR) UnPackData(_ []byte, off int) (int, error) {
 	return off, nil
 }
 
@@ -259,11 +259,11 @@ func (rr *LocationRR) Header() *RR_Header {
 // PackData 序列化 RR data
 func (rr *LocationRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
-	bytes, err := proto.Marshal(rr.SideCar)
+	marshal, err := proto.Marshal(rr.SideCar)
 	if err != nil {
 		return 0, err
 	}
-	_, err = buff.Write(bytes)
+	_, err = buff.Write(marshal)
 	if err != nil {
 		return 0, err
 	}
@@ -332,11 +332,11 @@ func (rr *DetailErrInfoRR) Header() *RR_Header {
 func (rr *DetailErrInfoRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 
-	bytes, err := proto.Marshal(rr.ErrInfo)
+	marshal, err := proto.Marshal(rr.ErrInfo)
 	if err != nil {
 		return 0, err
 	}
-	_, err = buff.Write(bytes)
+	_, err = buff.Write(marshal)
 	if err != nil {
 		return 0, err
 	}
@@ -346,11 +346,11 @@ func (rr *DetailErrInfoRR) PackData(buff *bytes.Buffer) (int, error) {
 // UnPackData 反序列化RR data
 func (rr *DetailErrInfoRR) UnPackData(msg []byte, off int) (int, error) {
 	length := rr.Hdr.Rdlength
-	bytes := msg[off : off+int(length)]
+	b := msg[off : off+int(length)]
 	off += int(length)
 
 	rr.ErrInfo = new(sidecarPb.DetailErrInfo)
-	err := proto.Unmarshal(bytes, rr.ErrInfo)
+	err := proto.Unmarshal(b, rr.ErrInfo)
 	if err != nil {
 		return off, err
 	}
@@ -378,11 +378,11 @@ func (rr *ResponseRR) Header() *RR_Header {
 func (rr *ResponseRR) PackData(buff *bytes.Buffer) (int, error) {
 	oldLen := buff.Len()
 
-	bytes, err := proto.Marshal(rr.Response)
+	marshal, err := proto.Marshal(rr.Response)
 	if err != nil {
 		return 0, err
 	}
-	_, err = buff.Write(bytes)
+	_, err = buff.Write(marshal)
 	if err != nil {
 		return 0, err
 	}

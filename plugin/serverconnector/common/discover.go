@@ -811,7 +811,7 @@ func (g *DiscoverConnector) processUpdateTask(
 
 // Destroy 销毁插件，可用于释放资源
 func (g *DiscoverConnector) Destroy() error {
-	g.RunContext.Destroy()
+	_ = g.RunContext.Destroy()
 	return nil
 }
 

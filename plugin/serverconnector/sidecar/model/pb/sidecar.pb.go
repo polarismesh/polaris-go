@@ -6,9 +6,11 @@
 Package pb is a generated protocol buffer package.
 
 It is generated from these files:
+
 	sidecar.proto
 
 It has these top-level messages:
+
 	GetOneInstanceRequest
 	GetOneInstanceResponse
 	Response

@@ -287,9 +287,6 @@ func (n *namingServer) SetMethodInterval(interval time.Duration) {
 // RegisterInstance 注册实例
 func (n *namingServer) RegisterInstance(ctx context.Context,
 	req *namingpb.Instance) (*namingpb.Response, error) {
-	//
-	//
-	//
 	fmt.Printf("%v, RegisterInstance in server, %v\n", time.Now(), req)
 	if n.skipRequest(OperationRegistry) {
 		time.Sleep(syncWaitTime)
@@ -340,9 +337,6 @@ func (n *namingServer) RegisterInstance(ctx context.Context,
 // DeregisterInstance 反注册实例
 func (n *namingServer) DeregisterInstance(ctx context.Context,
 	req *namingpb.Instance) (*namingpb.Response, error) {
-	//
-	//
-	//
 	fmt.Printf("%v, DeregisterInstance in server, %v\n", time.Now(), req)
 	if n.skipRequest(OperationDeRegistry) {
 		time.Sleep(syncWaitTime)
@@ -524,9 +518,7 @@ func (n *namingServer) RegisterAssistant(req *namingpb.DiscoverRequest) {
 		if len(busis) == 3 {
 
 		}
-
 	}
-
 }
 
 // Discover 服务实例发现

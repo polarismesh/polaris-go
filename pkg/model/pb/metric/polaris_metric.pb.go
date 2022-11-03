@@ -6,11 +6,13 @@
 Package metric is a generated protocol buffer package.
 
 It is generated from these files:
+
 	polaris_metric.proto
 	polaris_metric_api.proto
 	polaris_ratelimit.proto
 
 It has these top-level messages:
+
 	MetricDimension
 	MetricKey
 	MetricInitRequest
@@ -23,10 +25,13 @@ It has these top-level messages:
 */
 package metric
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
+import (
+	"fmt"
+	"math"
+
+	"github.com/golang/protobuf/proto"
+	google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

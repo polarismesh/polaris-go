@@ -52,7 +52,7 @@ func (p *LocationProvider) Init(ctx *plugin.InitContext) error {
 	p.PluginBase = plugin.NewPluginBase(ctx)
 
 	if ctx.Config.GetGlobal().GetLocation().GetProvider() == p.Name() {
-		loc, err := getQCloudLocatoin()
+		loc, err := getQCloudLocation()
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func (p *LocationProvider) GetLocation() (*model.Location, error) {
 	return p.locCache, nil
 }
 
-func getQCloudLocatoin() (*model.Location, error) {
+func getQCloudLocation() (*model.Location, error) {
 	log.GetBaseLogger().Infof("start to get location metadata in qcloud")
 
 	locCache := &model.Location{
@@ -112,17 +112,21 @@ func getQCloudLocatoin() (*model.Location, error) {
 }
 
 func sendRequest(typ string) (string, error) {
-	reqAPI := fmt.Sprintf(qCloudApi, typ)
-	resp, err := http.Get(reqAPI)
+	var (
+		reqAPI    = fmt.Sprintf(qCloudApi, typ)
+		resp, err = http.Get(reqAPI)
+		val       []byte
+	)
+
 	if err != nil {
 		return "", err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	val, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
+	if val, err = ioutil.ReadAll(resp.Body); err != nil {
 		return "", err
 	}
 

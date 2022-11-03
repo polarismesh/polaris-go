@@ -38,8 +38,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 	"github.com/polarismesh/polaris-go/pkg/version"
+
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
 const (

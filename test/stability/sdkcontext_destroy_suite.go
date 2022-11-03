@@ -65,7 +65,7 @@ func parseRoutines(stack string) (int, int) {
 		if !strings.HasPrefix(rawLine, "goroutine") {
 			continue
 		}
-		if strings.Index(rawLine, lumberJackPrefix) > -1 {
+		if strings.Contains(rawLine, lumberJackPrefix) {
 			lumberjackCount++
 		} else {
 			normalCount++
