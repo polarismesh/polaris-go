@@ -6,20 +6,25 @@
 Package metric is a generated protocol buffer package.
 
 It is generated from these files:
+
 	polaris_ratelimit.proto
 
 It has these top-level messages:
+
 	RateLimitRequest
 	RateLimitResponse
 	Limiter
 */
 package metric
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
-import google_protobuf1 "github.com/golang/protobuf/ptypes/duration"
+import (
+	"fmt"
+	"math"
+
+	"github.com/golang/protobuf/proto"
+	google_protobuf1 "github.com/golang/protobuf/ptypes/duration"
+	google_protobuf "github.com/golang/protobuf/ptypes/wrappers"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

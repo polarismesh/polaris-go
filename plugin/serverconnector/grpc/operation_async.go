@@ -108,8 +108,8 @@ func (g *Connector) createDiscoverClient(reqID string,
 
 // Destroy 销毁插件，可用于释放资源
 func (g *Connector) Destroy() error {
-	g.RunContext.Destroy()
-	g.discoverConnector.Destroy()
+	_ = g.RunContext.Destroy()
+	_ = g.discoverConnector.Destroy()
 	g.connManager.Destroy()
 	return nil
 }

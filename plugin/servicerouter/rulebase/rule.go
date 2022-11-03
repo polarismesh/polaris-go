@@ -190,7 +190,10 @@ func getErrorRegexText(regexErrors map[string]string) string {
 	if len(regexErrors) == 0 {
 		return "{}"
 	}
-	res, _ := json.Marshal(regexErrors)
+	res, err := json.Marshal(regexErrors)
+	if err != nil {
+		return "{}"
+	}
 	return string(res)
 }
 

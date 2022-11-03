@@ -53,11 +53,7 @@ func (g *RateLimiterReject) Destroy() error {
 
 // IsEnable enable
 func (g *RateLimiterReject) IsEnable(cfg config.Configuration) bool {
-	if cfg.GetGlobal().GetSystem().GetMode() == model.ModeWithAgent {
-		return false
-	} else {
-		return true
-	}
+	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
 // InitQuota 初始化并创建限流窗口

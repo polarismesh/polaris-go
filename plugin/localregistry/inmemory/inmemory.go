@@ -508,9 +508,11 @@ func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler Cach
 		createHandlers := g.plugins.GetEventSubscribers(common.OnServiceLocalValueCreated)
 		if len(createHandlers) > 0 {
 			event := &common.PluginEvent{
-				EventType: common.OnServiceLocalValueCreated, EventObject: actualSvcObject.svcLocalValue}
+				EventType:   common.OnServiceLocalValueCreated,
+				EventObject: actualSvcObject.svcLocalValue,
+			}
 			for _, h := range createHandlers {
-				h.Callback(event)
+				_ = h.Callback(event)
 			}
 		}
 	}
@@ -1088,9 +1090,11 @@ func (g *LocalCache) eliminateExpiredCache() {
 				deleteHandlers := g.plugins.GetEventSubscribers(common.OnServiceDeleted)
 				if len(deleteHandlers) > 0 && !reflect2.IsNil(oldValue) {
 					event := &common.PluginEvent{
-						EventType: common.OnServiceDeleted, EventObject: eventObject}
+						EventType:   common.OnServiceDeleted,
+						EventObject: eventObject,
+					}
 					for _, handler := range deleteHandlers {
-						handler.Callback(event)
+						_ = handler.Callback(event)
 					}
 				}
 				return true

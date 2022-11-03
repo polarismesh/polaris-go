@@ -58,7 +58,7 @@ func init() {
 	Suite(&discover.ProviderTestingSuite{})
 	// 负载均衡测试
 	Suite(&loadbalance.LBTestingSuite{})
-	//缓存持久化测试
+	// 缓存持久化测试
 	Suite(&stability.CacheTestingSuite{})
 	// 熔断测试
 	Suite(&circuitbreak.CircuitBreakSuite{})
@@ -86,7 +86,7 @@ func init() {
 	Suite(&stability.ServerFailOverSuite{})
 	// 消息订阅 测试
 	Suite(&subscribe.EventSubscribeSuit{})
-	//金丝雀路由测试
+	// 金丝雀路由测试
 	Suite(&serviceroute.CanaryTestingSuite{})
 	// 内部服务结构测试
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
@@ -94,8 +94,8 @@ func init() {
 	Suite(&ratelimit.LocalNormalTestingSuite{})
 	// ReportClient相关测试用例
 	Suite(&reporthandler.ReporthandlerTestingSuite{})
-	//// 限流规则变更用例测试
-	//Suite(&ratelimit.RuleChangeTestingSuite{})
-	//// 基础远程限流用例测试
-	//Suite(&ratelimit.RemoteNormalTestingSuite{})
+	// // 限流规则变更用例测试
+	// Suite(&ratelimit.RuleChangeTestingSuite{})
+	// // 基础远程限流用例测试
+	// Suite(&ratelimit.RemoteNormalTestingSuite{})
 }

@@ -235,7 +235,7 @@ func (s *CacheObject) notifyServiceAdded(value interface{}) {
 		event := &common.PluginEvent{
 			EventType: common.OnServiceAdded, EventObject: value}
 		for _, handler := range addHandlers {
-			handler.Callback(event)
+			_ = handler.Callback(event)
 		}
 	}
 }
@@ -266,7 +266,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 				dEvent := &common.PluginEvent{
 					EventType: common.OnServiceDeleted, EventObject: eventObject}
 				for _, handler := range deleteHandlers {
-					handler.Callback(dEvent)
+					_ = handler.Callback(dEvent)
 				}
 			}
 			svcDeleted = true
@@ -298,7 +298,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 			if cachedStatus == CacheChanged && len(updateHandlers) > 0 {
 				uEvent := &common.PluginEvent{EventType: common.OnServiceUpdated, EventObject: eventObject}
 				for _, handler := range updateHandlers {
-					handler.Callback(uEvent)
+					_ = handler.Callback(uEvent)
 				}
 			}
 		} else if cachedStatus == CacheEmptyButNoData {

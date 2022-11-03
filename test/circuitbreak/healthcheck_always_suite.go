@@ -95,6 +95,7 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
+		_ = util.DeleteDir(util.BackupDir)
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)

@@ -24,7 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// AsyncGetQuota 同步获取配额信息
+// AsyncGetQuota 异步获取配额信息
 func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFutureImpl, error) {
 	commonRequest := data.PoolGetCommonRateLimitRequest()
 	commonRequest.InitByGetQuotaRequest(request, e.configuration)

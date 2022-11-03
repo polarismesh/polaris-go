@@ -626,7 +626,6 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 		}
 	}
 	c.Assert(allSame, check.Equals, true)
-
 }
 
 // 测试获取备份节点

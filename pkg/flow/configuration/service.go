@@ -1,5 +1,5 @@
 /**
- * Tencent is pleased to support the open source community by making Polaris available.
+ * Tencent is pleased to support the open source community by making polaris-go available.
  *
  * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
  *
@@ -34,12 +34,12 @@ type ConfigFileService struct {
 }
 
 var configFileService *ConfigFileService
+
 var once = new(sync.Once)
 
 // NewConfigFileService 创建配置中心服务
 func NewConfigFileService(connector configconnector.ConfigConnector,
 	configuration config.Configuration) *ConfigFileService {
-
 	once.Do(func() {
 		configFileService = &ConfigFileService{
 			connector:         connector,
