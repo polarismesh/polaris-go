@@ -135,7 +135,7 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 		}
 	case model.CircuitBreakStat:
 		val, ok := metricsVal.(*model.CircuitBreakGauge)
-		if ok {
+		if ok && val != nil {
 			p.handleCircuitBreakGauge(metricsType, val)
 		}
 	}
