@@ -26,6 +26,8 @@ type ProcessRoutersRequest struct {
 	Routers []string
 	// SourceService indicate the source service to match the route rule, optional.
 	SourceService ServiceInfo
+	// Arguments traffic labels
+	Arguments []Argument
 	// DstInstances indicate the destination instances resolved from discovery, required.
 	// Two implementations to ServiceInstances:
 	// 1. InstancesResponse, returned from ConsumerAPI.GetAllInstances.
@@ -46,6 +48,15 @@ type ProcessRoutersRequest struct {
 func (p *ProcessRoutersRequest) GetResponse() *InstancesResponse {
 	return &p.response
 }
+
+// AddArgument add one traffic label
+func (p *ProcessRoutersRequest) AddArguments(arg ...Argument) {
+	if len(p.Arguments) == 0 {
+		p.Arguments = make([]Argument, 0, 4)
+	}
+	p.Arguments = append(p.Arguments, arg...)
+}
+
 
 // Validate validate the request object
 func (p *ProcessRoutersRequest) Validate() error {

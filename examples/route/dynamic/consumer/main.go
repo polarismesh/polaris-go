@@ -30,6 +30,7 @@ import (
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -104,7 +105,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		routerRequest.DstInstances = instancesResp
 		routerRequest.SourceService.Service = selfService
 		routerRequest.SourceService.Namespace = selfNamespace
-		routerRequest.SourceService.Metadata = convertQuery(r.URL.RawQuery)
+		routerRequest.AddArguments(convertQuery(r.URL.RawQuery)...)
 		routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
 		if nil != err {
 			log.Printf("[error] fail to processRouters, err is %v", err)
@@ -190,19 +191,19 @@ func main() {
 
 }
 
-func convertQuery(rawQuery string) map[string]string {
-	meta := make(map[string]string)
+func convertQuery(rawQuery string) []model.Argument {
+	arguments := make([]model.Argument, 0, 4)
 	if len(rawQuery) == 0 {
-		return meta
+		return arguments
 	}
 	tokens := strings.Split(rawQuery, "&")
 	if len(tokens) > 0 {
 		for _, token := range tokens {
 			values := strings.Split(token, "=")
-			meta[values[0]] = values[1]
+			arguments = append(arguments, model.BuildQueryArgument(values[0], values[1]))
 		}
 	}
-	return meta
+	return arguments
 }
 
 func getLocalHost(serverAddr string) (string, error) {

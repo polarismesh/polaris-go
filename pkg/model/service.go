@@ -247,6 +247,8 @@ type GetOneInstanceRequest struct {
 	HashValue uint64
 	// 主调方服务信息
 	SourceService *ServiceInfo
+	// 路由标签参数
+	Arguments []Argument
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置
 	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration
@@ -311,6 +313,14 @@ func (g *GetOneInstanceRequest) GetCanary() string {
 // SetCanary .
 func (g *GetOneInstanceRequest) SetCanary(canary string) {
 	g.Canary = canary
+}
+
+// AddArguments .
+func (g *GetOneInstanceRequest) AddArguments(argumet ...Argument) {
+	if len(g.Arguments) == 0 {
+		g.Arguments = make([]Argument, 0, 4)
+	}
+	g.Arguments = append(g.Arguments, argumet...)
 }
 
 // Validate 校验获取单个服务实例请求对象
@@ -406,6 +416,8 @@ type GetInstancesRequest struct {
 	Metadata map[string]string
 	// 主调方服务信息，只用于路由规则匹配
 	SourceService *ServiceInfo
+	// 路由标签参数
+	Arguments []Argument
 	// 可选，是否包含被熔断的服务实例，默认false
 	// Deprecated: 已弃用，1.0版本后会正式去掉，需要返回全量IP直接设置SkipRouteFilter=true
 	IncludeCircuitBreakInstances bool
@@ -473,6 +485,14 @@ func (g *GetInstancesRequest) GetCanary() string {
 // SetCanary .
 func (g *GetInstancesRequest) SetCanary(canary string) {
 	g.Canary = canary
+}
+
+// AddArguments .
+func (g *GetInstancesRequest) AddArguments(argumet ...Argument) {
+	if len(g.Arguments) == 0 {
+		g.Arguments = make([]Argument, 0, 4)
+	}
+	g.Arguments = append(g.Arguments, argumet...)
 }
 
 // Validate 校验获取全部服务实例请求对象
@@ -602,6 +622,11 @@ type ServiceInfo struct {
 	Metadata map[string]string
 }
 
+// AddArgument 添加本次流量标签参数
+func (i *ServiceInfo) AddArgument(arg Argument) {
+	arg.ToLabels(i.Metadata)
+}
+
 // GetService 获取服务名
 func (i *ServiceInfo) GetService() string {
 	return i.Service
@@ -615,6 +640,17 @@ func (i *ServiceInfo) GetNamespace() string {
 // GetMetadata 获取元数据信息
 func (i *ServiceInfo) GetMetadata() map[string]string {
 	return i.Metadata
+}
+
+func (i *ServiceInfo) GetArguments() []Argument {
+
+	ret := make([]Argument, 0, len(i.Metadata))
+
+	for labelKey, labelValue := range i.Metadata {
+		ret = append(ret, BuildArgumentFromLabel(labelKey, labelValue))
+	}
+
+	return ret
 }
 
 // String 格式化输出内容

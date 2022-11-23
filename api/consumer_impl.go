@@ -42,6 +42,7 @@ func (c *consumerAPI) GetOneInstance(req *GetOneInstanceRequest) (*model.OneInst
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+	req.convert()
 	return c.context.GetEngine().SyncGetOneInstance(&req.GetOneInstanceRequest)
 }
 
@@ -53,6 +54,7 @@ func (c *consumerAPI) GetInstances(req *GetInstancesRequest) (*model.InstancesRe
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+	req.convert()
 	return c.context.GetEngine().SyncGetInstances(&req.GetInstancesRequest)
 }
 

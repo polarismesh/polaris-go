@@ -20,6 +20,7 @@ package rulebase
 import (
 	"os"
 	"sort"
+	"strings"
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/modern-go/reflect2"
@@ -174,10 +175,27 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 				if m == nil || m.String() == "" {
 					allMetaMatched = false
 				}
-			default:
-				// 精确匹配
-				if srcMetaValue != rawMetaValue {
-					allMetaMatched = false
+			case namingpb.MatchString_NOT_EQUALS:
+				allMetaMatched = srcMetaValue != rawMetaValue
+			case namingpb.MatchString_EXACT:
+				allMetaMatched = srcMetaValue == rawMetaValue
+			case namingpb.MatchString_IN:
+				find := false
+				tokens := strings.Split(rawMetaValue, ",")
+				for _, token := range tokens {
+					if token == srcMetaValue {
+						find = true
+						break
+					}
+				}
+				allMetaMatched = find
+			case namingpb.MatchString_NOT_IN:
+				tokens := strings.Split(rawMetaValue, ",")
+				for _, token := range tokens {
+					if token == srcMetaValue {
+						allMetaMatched = false
+						break
+					}
 				}
 			}
 		} else {

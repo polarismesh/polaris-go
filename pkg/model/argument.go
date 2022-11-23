@@ -29,6 +29,8 @@ const (
 	ArgumentTypeQuery
 	ArgumentTypeCallerService
 	ArgumentTypeCallerIP
+	ArgumentTypePath
+	ArgumentTypeCookie
 )
 
 var argumentTypeToName = map[int]string{
@@ -38,6 +40,8 @@ var argumentTypeToName = map[int]string{
 	ArgumentTypeQuery:         "QUERY",
 	ArgumentTypeCallerService: "CALLER_SERVICE",
 	ArgumentTypeCallerIP:      "CALLER_IP",
+	ArgumentTypePath:          "PATH",
+	ArgumentTypeCookie:        "COOKIE",
 }
 
 const (
@@ -46,9 +50,11 @@ const (
 	LabelKeyQuery         = "$query."
 	LabelKeyCallerService = "$caller_service."
 	LabelKeyCallerIp      = "$caller_ip"
+	LabelKeyPath          = "$path"
+	LabelKeyCookie        = "$cookie."
 )
 
-// Argument 限流参数
+// Argument 限流/路由参数
 type Argument struct {
 	argumentType int
 
@@ -119,12 +125,30 @@ func BuildCallerIPArgument(callerIP string) Argument {
 	}
 }
 
+func BuildPathArgument(path string) Argument {
+	return Argument{
+		argumentType: ArgumentTypePath,
+		value:        path,
+	}
+}
+
+func BuildCookieArgument(key, value string) Argument {
+	return Argument{
+		argumentType: ArgumentTypeCookie,
+		key:          key,
+		value:        value,
+	}
+}
+
 func BuildArgumentFromLabel(labelKey string, labelValue string) Argument {
 	if labelKey == LabelKeyMethod {
 		return BuildMethodArgument(labelValue)
 	}
 	if labelKey == LabelKeyCallerIp {
 		return BuildCallerIPArgument(labelValue)
+	}
+	if labelKey == LabelKeyPath {
+		return BuildPathArgument(labelValue)
 	}
 	if strings.HasPrefix(labelKey, LabelKeyHeader) {
 		return BuildHeaderArgument(labelKey[len(LabelKeyHeader):], labelValue)
@@ -134,6 +158,9 @@ func BuildArgumentFromLabel(labelKey string, labelValue string) Argument {
 	}
 	if strings.HasPrefix(labelKey, LabelKeyCallerService) {
 		return BuildCallerServiceArgument(labelKey[len(LabelKeyCallerService):], labelValue)
+	}
+	if strings.HasPrefix(labelKey, LabelKeyCookie) {
+		return BuildCookieArgument(labelKey[len(LabelKeyCookie):], labelValue)
 	}
 	return BuildCustomArgument(labelKey, labelValue)
 }
@@ -152,5 +179,9 @@ func (a Argument) ToLabels(labels map[string]string) {
 		labels[LabelKeyCallerService+a.key] = a.value
 	case ArgumentTypeCustom:
 		labels[a.key] = a.value
+	case ArgumentTypePath:
+		labels[LabelKeyPath] = a.value
+	case ArgumentTypeCookie:
+		labels[LabelKeyCookie+a.key] = a.value
 	}
 }

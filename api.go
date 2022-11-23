@@ -146,6 +146,22 @@ type ProcessRoutersRequest struct {
 	model.ProcessRoutersRequest
 }
 
+
+func (r *ProcessRoutersRequest) convert() {
+	if len(r.Arguments) == 0 {
+		return
+	}
+
+	if len(r.SourceService.Metadata) == 0 {
+		r.SourceService.Metadata = map[string]string{}
+	}
+
+	for i := range r.Arguments {
+		arg := r.Arguments[i]
+		arg.ToLabels(r.SourceService.Metadata)
+	}
+}
+
 // ProcessLoadBalanceRequest process load balancer to get the target instances
 type ProcessLoadBalanceRequest struct {
 	model.ProcessLoadBalanceRequest

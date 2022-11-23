@@ -47,9 +47,48 @@ type GetOneInstanceRequest struct {
 	model.GetOneInstanceRequest
 }
 
+
+func (r *GetOneInstanceRequest) convert() {
+	if len(r.Arguments) == 0 {
+		return
+	}
+
+	serviceInfo := r.SourceService
+	if serviceInfo == nil {
+		r.SourceService = &model.ServiceInfo{
+			Metadata: map[string]string{},
+		}
+		serviceInfo = r.SourceService
+	}
+
+	for i := range r.Arguments {
+		arg := r.Arguments[i]
+		arg.ToLabels(serviceInfo.Metadata)
+	}
+}
+
 // GetInstancesRequest 获取多个服务的请求对象
 type GetInstancesRequest struct {
 	model.GetInstancesRequest
+}
+
+func (r *GetInstancesRequest) convert() {
+	if len(r.Arguments) == 0 {
+		return
+	}
+
+	serviceInfo := r.SourceService
+	if serviceInfo == nil {
+		r.SourceService = &model.ServiceInfo{
+			Metadata: map[string]string{},
+		}
+		serviceInfo = r.SourceService
+	}
+
+	for i := range r.Arguments {
+		arg := r.Arguments[i]
+		arg.ToLabels(serviceInfo.Metadata)
+	}
 }
 
 // GetAllInstancesRequest 获取服务下所有实例的请求对象
