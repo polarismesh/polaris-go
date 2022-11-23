@@ -642,17 +642,6 @@ func (i *ServiceInfo) GetMetadata() map[string]string {
 	return i.Metadata
 }
 
-func (i *ServiceInfo) GetArguments() []Argument {
-
-	ret := make([]Argument, 0, len(i.Metadata))
-
-	for labelKey, labelValue := range i.Metadata {
-		ret = append(ret, BuildArgumentFromLabel(labelKey, labelValue))
-	}
-
-	return ret
-}
-
 // String 格式化输出内容
 func (i ServiceInfo) String() string {
 	return ToStringService(&i, true)
