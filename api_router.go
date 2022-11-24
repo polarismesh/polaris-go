@@ -35,6 +35,7 @@ func (r *routerAPI) ProcessRouters(request *ProcessRoutersRequest) (*model.Insta
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
+	request.convert()
 	return r.sdkCtx.GetEngine().ProcessRouters(&request.ProcessRoutersRequest)
 }
 
