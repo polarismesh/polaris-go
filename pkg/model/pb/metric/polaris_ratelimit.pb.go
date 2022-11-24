@@ -6,9 +6,11 @@
 Package metric is a generated protocol buffer package.
 
 It is generated from these files:
+
 	polaris_ratelimit.proto
 
 It has these top-level messages:
+
 	RateLimitRequest
 	RateLimitResponse
 	Limiter

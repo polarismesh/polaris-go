@@ -36,7 +36,9 @@ const (
 )
 
 var configFileRepos []*ConfigFileRepo
+
 var startCheckVersionOnce = new(sync.Once)
+
 var stopCheckVersionTask context.CancelFunc
 
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据

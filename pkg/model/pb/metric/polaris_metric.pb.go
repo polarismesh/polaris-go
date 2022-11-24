@@ -6,11 +6,13 @@
 Package metric is a generated protocol buffer package.
 
 It is generated from these files:
+
 	polaris_metric.proto
 	polaris_metric_api.proto
 	polaris_ratelimit.proto
 
 It has these top-level messages:
+
 	MetricDimension
 	MetricKey
 	MetricInitRequest

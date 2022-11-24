@@ -47,7 +47,6 @@ type GetOneInstanceRequest struct {
 	model.GetOneInstanceRequest
 }
 
-
 func (r *GetOneInstanceRequest) convert() {
 	if len(r.Arguments) == 0 {
 		return

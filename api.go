@@ -146,7 +146,6 @@ type ProcessRoutersRequest struct {
 	model.ProcessRoutersRequest
 }
 
-
 func (r *ProcessRoutersRequest) convert() {
 	if len(r.Arguments) == 0 {
 		return

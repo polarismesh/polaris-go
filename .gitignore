@@ -12,3 +12,6 @@ test/other/other_test_suit.go
 /vendor/
 
 .vscode/
+
+style_tool/
+goimports-reviser

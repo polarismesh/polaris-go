@@ -57,7 +57,6 @@ func (p *ProcessRoutersRequest) AddArguments(arg ...Argument) {
 	p.Arguments = append(p.Arguments, arg...)
 }
 
-
 // Validate validate the request object
 func (p *ProcessRoutersRequest) Validate() error {
 	if nil == p {

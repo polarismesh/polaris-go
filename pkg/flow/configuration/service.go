@@ -34,6 +34,7 @@ type ConfigFileService struct {
 }
 
 var configFileService *ConfigFileService
+
 var once = new(sync.Once)
 
 // NewConfigFileService 创建配置中心服务
