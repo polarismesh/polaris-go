@@ -209,11 +209,10 @@ type StatReporterConfig interface {
 // LocationConfig SDK获取自身当前地理位置配置.
 type LocationConfig interface {
 	BaseConfig
-	PluginConfig
 	// GetProvider 获取地理位置的提供者插件名称
-	GetProvider() string
-	// SetProvider 设置地理位置的提供者插件名称
-	SetProvider(string)
+	GetProviders() []*LocationProviderConfigImpl
+
+	GetProvider(typ string) *LocationProviderConfigImpl
 }
 
 // ServerConnectorConfig 与名字服务服务端的连接配置.

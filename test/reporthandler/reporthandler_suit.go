@@ -64,7 +64,6 @@ func (t *ReporthandlerTestingSuite) TestHandlerClientReport(c *check.C) {
 
 	cfg, err := config.LoadConfigurationByFile("testdata/consumer.yaml")
 	c.Assert(err, check.IsNil)
-	cfg.GetGlobal().GetLocation().SetProvider("env")
 	sdkCtx, err := api.InitContextByConfig(cfg)
 	c.Assert(err, check.IsNil)
 
