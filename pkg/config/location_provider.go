@@ -14,6 +14,20 @@ type LocationProviderConfigImpl struct {
 	Address string `yaml:"address" json:"address"`
 }
 
+func (l LocationProviderConfigImpl) GetType() string {
+	return l.Type
+}
+
+func (l LocationProviderConfigImpl) GetOptions() map[string]interface{} {
+	return map[string]interface{}{
+		"region":  l.Region,
+		"zone":    l.Zone,
+		"campus":  l.Campus,
+		"address": l.Address,
+		"name":    l.Name,
+	}
+}
+
 func (l LocationProviderConfigImpl) Verify() error {
 	if l.Type == "" {
 		return errors.New("type is empty")

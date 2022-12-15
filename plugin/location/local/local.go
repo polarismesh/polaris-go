@@ -47,14 +47,15 @@ func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
 
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderLocal)
 
-	var sdkErr model.SDKError
+	options := provider.GetOptions()
+
 	p.locCache = &model.Location{
-		Region: getValue(provider.Region),
-		Zone:   getValue(provider.Zone),
-		Campus: getValue(provider.Campus),
+		Region: getValue(options["region"].(string)),
+		Zone:   getValue(options["zone"].(string)),
+		Campus: getValue(options["campus"].(string)),
 	}
 
-	return sdkErr
+	return nil
 }
 
 // Name 插件名称
