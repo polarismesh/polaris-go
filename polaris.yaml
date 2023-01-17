@@ -103,6 +103,7 @@ global:
     #默认值：stat2Monitor(将信息上报至monitor服务)
     chain:
       - prometheus
+      - pushgateway
     #描述：统计上报插件配置
     plugin:
       prometheus:
@@ -116,6 +117,17 @@ global:
         #如果设置为负数，则不会开启默认的http-server
         #如果设置为0，则随机选择一个可用端口进行启动 http-server
         metricPort: 28080
+      # pushgateway:
+      #   #描述: 设置 pushgateway 的地址
+      #   #类型:string
+      #   #默认 127.0.0.1:9091
+      #   address: 127.0.0.1:9091
+      #   #描述:设置metric数据推送到pushgateway的执行周期
+      #   #类型:string
+      #   #格式:^\d+(ms|s|m|h)$
+      #   #范围:[1m:...]
+      #   #默认值:10m
+      #   pushInterval: 10s
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location: 
     provider: 
