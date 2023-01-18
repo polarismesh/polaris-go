@@ -20,12 +20,13 @@ package pushgateway
 import (
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/push"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
-	"github.com/prometheus/client_golang/prometheus/push"
 )
 
 const (

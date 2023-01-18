@@ -35,7 +35,7 @@ cd ../
 
 ls -lstrh
 
-find . -name "*.go" -type f | grep -v .pb.go|grep -v test/tools/tools.go | grep -v ./pkg/plugin/register/plugins.go | xargs -I {} goimports-reviser -rm-unused -format {} -project-name github.com/polarismesh/polaris-go
+find . -name "*.go" -type f | grep -v .pb.go|grep -v test/tools/tools.go | grep -v ./pkg/plugin/register/plugins.go | grep -v ./plugin_register_generate.go | xargs -I {} goimports-reviser -rm-unused -format {} -project-name github.com/polarismesh/polaris-go
 
 # 处理 go 代码格式化
 go fmt ./...
