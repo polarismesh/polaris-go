@@ -80,6 +80,7 @@ func (s *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	}
 	s.handler = handler
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
+	s.cfg = cfgValue.(*Config)
 	if cfgValue != nil {
 		s.runPushMetrics(cfgValue.(*Config).PushInterval)
 	}
