@@ -230,7 +230,13 @@ var (
 
 		// 主调方相关信息
 		CallerLabels: func(args interface{}) string {
-			return NilValue
+			val := args.(*model.ServiceCallResult)
+			labels := val.SourceService.Metadata
+			var ret []string
+			for k, v := range labels {
+				ret = append(ret, fmt.Sprintf("%s=%s", k, v))
+			}
+			return strings.Join(ret, ",")
 		},
 		CallerNamespace: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)

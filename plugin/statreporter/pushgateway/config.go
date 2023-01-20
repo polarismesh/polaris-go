@@ -26,12 +26,7 @@ func init() {
 	plugin.RegisterConfigurablePlugin(&PushgatewayReporter{}, &Config{})
 }
 
-const (
-	defaultReportInterval = 1 * time.Minute
-	defaultMetricPort     = 28080
-)
-
-// Config prometheus 的配置
+// Config pushgateway 的配置
 type Config struct {
 	Address      string        `yaml:"address"`
 	PushInterval time.Duration `yaml:"pushInterval"`
