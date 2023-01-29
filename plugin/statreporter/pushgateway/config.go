@@ -40,7 +40,7 @@ func (c *Config) Verify() error {
 // SetDefault Setting defaults
 func (c *Config) SetDefault() {
 	if len(c.Address) == 0 {
-		c.Address = "127.0.0.1:9090"
+		c.Address = "127.0.0.1:9091"
 	}
 	if c.PushInterval == 0 {
 		c.PushInterval = 10 * time.Second

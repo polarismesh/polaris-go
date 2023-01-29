@@ -48,6 +48,7 @@ func (c *Config) Verify() error {
 func (c *Config) SetDefault() {
 	if c.PortStr == "" {
 		c.Port = defaultMetricPort
+		return
 	}
 
 	port, _ := strconv.ParseInt(c.PortStr, 10, 64)
