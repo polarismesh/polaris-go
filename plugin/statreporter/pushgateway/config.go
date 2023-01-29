@@ -14,29 +14,22 @@
 // specific language governing permissionsr and limitations under the License.
 //
 
-package prometheus
+package pushgateway
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 )
 
 func init() {
-	plugin.RegisterConfigurablePlugin(&PrometheusReporter{}, &Config{})
+	plugin.RegisterConfigurablePlugin(&PushgatewayReporter{}, &Config{})
 }
 
-const (
-	defaultReportInterval = 1 * time.Minute
-	defaultMetricPort     = 28080
-)
-
-// Config prometheus 的配置
+// Config pushgateway 的配置
 type Config struct {
-	IP      string `yaml:"metricHost"`
-	PortStr string `yaml:"metricPort"`
-	Port    int    `yaml:"-"`
+	Address      string        `yaml:"address"`
+	PushInterval time.Duration `yaml:"pushInterval"`
 }
 
 // Verify verify config
@@ -46,11 +39,10 @@ func (c *Config) Verify() error {
 
 // SetDefault Setting defaults
 func (c *Config) SetDefault() {
-	if c.PortStr == "" {
-		c.Port = defaultMetricPort
-		return
+	if len(c.Address) == 0 {
+		c.Address = "127.0.0.1:9091"
 	}
-
-	port, _ := strconv.ParseInt(c.PortStr, 10, 64)
-	c.Port = int(port)
+	if c.PushInterval == 0 {
+		c.PushInterval = 10 * time.Second
+	}
 }

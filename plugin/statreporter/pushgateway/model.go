@@ -14,7 +14,7 @@
 // specific language governing permissionsr and limitations under the License.
 //
 
-package prometheus
+package pushgateway
 
 import (
 	"fmt"

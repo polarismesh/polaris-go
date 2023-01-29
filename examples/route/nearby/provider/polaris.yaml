@@ -9,3 +9,14 @@ global:
     # POLARIS_INSTANCE_ZONE: 设置 zone 信息, 例如 ap-guangzhou
     # POLARIS_INSTANCE_CAMPUS: 设置 IDC 信息, 例如 ap-guangzhou-3
     provider: env
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+      # - pushgateway
+    plugin:
+      prometheus:
+        metricPort: 0
+      # pushgateway:
+      #   address: 127.0.0.1:9091
+      #   pushInterval: 10s

@@ -60,6 +60,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/rulebase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/setdivision"
 	_ "github.com/polarismesh/polaris-go/plugin/statreporter/prometheus"
+	_ "github.com/polarismesh/polaris-go/plugin/statreporter/pushgateway"
 	_ "github.com/polarismesh/polaris-go/plugin/subscribe/localchannel"
 	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/ratedelay"
 )

@@ -26,7 +26,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
-
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
 )
 
