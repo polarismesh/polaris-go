@@ -49,6 +49,8 @@ global:
     #范围:[1s:...]
     #默认值:1s
     retryInterval: 1s
+    #描述:客户端绑定的网卡地址
+    bindIf: 
   #描述:对接polaris server的相关配置
   serverConnector:
     #描述:访问server的连接协议，SDK会根据协议名称会加载对应的插件
