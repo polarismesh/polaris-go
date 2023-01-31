@@ -19,7 +19,7 @@ package remoteservice
 
 import (
 	"context"
-	location2 "github.com/polarismesh/polaris-go/plugin/location"
+
 	"google.golang.org/grpc"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -32,12 +32,12 @@ const (
 	locationProviderName string = "remoteService"
 )
 
-func New(ctx *plugin.InitContext) (location2.LocationPlugin, error) {
+func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{}
 	return impl, impl.Init(ctx)
 }
 
-// LocationProviderImpl 通过grpc服务获取
+// LocationProviderImpl 通过gRPC服务获取
 type LocationProviderImpl struct {
 	address  string
 	clientIp string
@@ -49,7 +49,7 @@ func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
 
 	p.clientIp = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderName)
-	p.address = provider.Address
+	p.address, _ = provider.GetOptions()["target"].(string)
 	return nil
 }
 
@@ -60,7 +60,6 @@ func (p *LocationProviderImpl) Name() string {
 
 // GetLocation 获取地理位置信息
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
-
 	coon, err := grpc.Dial(p.address)
 	if err != nil {
 		log.GetBaseLogger().Errorf("grpc connect error %+v", err)
@@ -84,9 +83,4 @@ func convertToLocation(rsp *proto.LocationResponse) *model.Location {
 		Zone:   rsp.Zone,
 		Campus: rsp.Campus,
 	}
-}
-
-// GetPriority 获取优先级
-func (p *LocationProviderImpl) GetPriority() int {
-	return location2.PriorityRemoteService
 }

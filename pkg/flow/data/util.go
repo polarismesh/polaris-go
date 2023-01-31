@@ -32,7 +32,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/pkg/plugin/reporthandler"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
@@ -172,26 +171,6 @@ func GetLoadBalancerByLbType(lbType string, supplier plugin.Supplier) (loadbalan
 		return nil, err
 	}
 	return targetPlugin.(loadbalancer.LoadBalancer), nil
-}
-
-// GetReportChain 获取ReportClient处理链
-func GetReportChain(cfg config.Configuration, supplier plugin.Supplier) (*reporthandler.ReportHandlerChain, error) {
-	chain := &reporthandler.ReportHandlerChain{
-		Chain: make([]reporthandler.ReportHandler, 0),
-	}
-
-	pluginNames := supplier.GetPluginsByType(common.TypeReportHandler)
-
-	for i := range pluginNames {
-		name := pluginNames[i]
-		p, err := supplier.GetPlugin(common.TypeReportHandler, name)
-		if err != nil {
-			return nil, err
-		}
-		chain.Chain = append(chain.Chain, p.(reporthandler.ReportHandler))
-	}
-
-	return chain, nil
 }
 
 // SingleInvoke 同步调用的通用方法定义

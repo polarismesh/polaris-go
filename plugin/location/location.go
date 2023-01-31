@@ -1,3 +1,20 @@
+/**
+ * Tencent is pleased to support the open source community by making polaris-go available.
+ *
+ * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
+ *
+ * Licensed under the BSD 3-Clause License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed
+ * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
+
 package location
 
 import (
@@ -14,8 +31,19 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/location/remoteservice"
 )
 
+// LocationPlugin location provider plugin
+type LocationPlugin interface {
+	// Init init plugin
+	Init(ctx *plugin.InitContext) error
+	// GetLocation get location
+	GetLocation() (*model.Location, error)
+	// Name plugin name
+	Name() string
+}
+
 const (
-	PriorityLocal = iota
+	_ = iota
+	PriorityLocal
 	PriorityRemoteHttp
 	PriorityRemoteService
 )
@@ -52,14 +80,12 @@ func init() {
 // Provider 从环境变量获取地域信息
 type Provider struct {
 	*plugin.PluginBase
-	pluginChains LocationPlugins
+	pluginChains []LocationPlugin
 }
 
 // Init 初始化插件
 func (p *Provider) Init(ctx *plugin.InitContext) error {
-	log.GetBaseLogger().Infof("start use env location provider")
 	p.PluginBase = plugin.NewPluginBase(ctx)
-
 	providers := ctx.Config.GetGlobal().GetLocation().GetProviders()
 	p.pluginChains = make([]LocationPlugin, 0, len(providers))
 	for _, provider := range providers {
@@ -91,12 +117,15 @@ func (p *Provider) Init(ctx *plugin.InitContext) error {
 		}
 	}
 	// 根据优先级对插件进行排序
-	sort.Sort(p.pluginChains)
+	sort.Slice(p.pluginChains, func(i, j int) bool {
+		return priority[p.pluginChains[i].Name()] < priority[p.pluginChains[j].Name()]
+	})
 	return nil
 }
 
 // Destroy 销毁插件，可用于释放资源
 func (p *Provider) Destroy() error {
+	p.pluginChains = []LocationPlugin{}
 	return p.PluginBase.Destroy()
 }
 

@@ -51,7 +51,7 @@ func (l Location) String() string {
 
 // IsEmpty 位置信息是否为空
 func (l *Location) IsEmpty() bool {
-	return l.Zone == "" || l.Region == "" || l.Campus == ""
+	return l.Zone == "" && l.Region == "" && l.Campus == ""
 }
 
 // ClusterKey 集群缓存KEY对象

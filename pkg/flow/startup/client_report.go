@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/uuid"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -29,8 +30,8 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
-	"github.com/polarismesh/polaris-go/pkg/plugin/reporthandler"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
@@ -45,7 +46,7 @@ func NewReportClientCallBack(
 	if callback.registry, err = data.GetRegistry(cfg, supplier); err != nil {
 		return nil, err
 	}
-	if callback.reportChain, err = data.GetReportChain(cfg, supplier); err != nil {
+	if callback.reporterChain, err = data.GetStatReporterChain(cfg, supplier); err != nil {
 		return nil, err
 	}
 	callback.configuration = cfg
@@ -62,7 +63,7 @@ type ReportClientCallBack struct {
 	configuration config.Configuration
 	globalCtx     model.ValueContext
 	interval      time.Duration
-	reportChain   *reporthandler.ReportHandlerChain
+	reporterChain []statreporter.StatReporter
 }
 
 const (
@@ -79,13 +80,12 @@ func (r *ReportClientCallBack) loadLocalClientReportResult() {
 		log.GetBaseLogger().Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
 		return
 	}
-
-	client := resp.Client
-
-	for i := range r.reportChain.Chain {
-		handler := r.reportChain.Chain[i]
-		handler.InitLocal(client)
-	}
+	location := resp.GetClient().GetLocation()
+	r.updateLocation(&model.Location{
+		Region: location.GetRegion().GetValue(),
+		Zone:   location.GetZone().GetValue(),
+		Campus: location.GetCampus().GetValue(),
+	}, nil)
 }
 
 // reportClientRequest 客户端上报的请求
@@ -102,6 +102,20 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	if len(clientHost) > 0 {
 		reportClientReq.Host = clientHost
 	}
+
+	infos := make([]model.StatInfo, 0, len(r.reporterChain))
+
+	// 收集当前的所有metric插件链的元信息
+	for i := range r.reporterChain {
+		stat := r.reporterChain[i].Info()
+		if stat.Empty() {
+			continue
+		}
+		infos = append(infos, stat)
+	}
+
+	reportClientReq.StatInfos = infos
+	reportClientReq.ID = uuid.NewString()
 	return reportClientReq
 }
 
@@ -117,30 +131,39 @@ func (r *ReportClientCallBack) Process(
 		return model.TERMINATE
 	}
 
-	for i := range r.reportChain.Chain {
-		handler := r.reportChain.Chain[i]
-		handler.HandleRequest(reportClientReq)
-	}
-
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		// 发生错误也要重试，直到获取到地域信息为止
-		for i := range r.reportChain.Chain {
-			handler := r.reportChain.Chain[i]
-			handler.HandleResponse(reportClientResp, err)
-		}
 		return model.CONTINUE
 	}
 
-	for i := range r.reportChain.Chain {
-		handler := r.reportChain.Chain[i]
-		handler.HandleResponse(reportClientResp, nil)
-	}
+	r.updateLocation(&model.Location{
+		Region: reportClientResp.Region,
+		Zone:   reportClientResp.Zone,
+		Campus: reportClientResp.Campus,
+	}, nil)
 	return model.CONTINUE
 }
 
 // OnTaskEvent 任务事件回调
 func (r *ReportClientCallBack) OnTaskEvent(event model.TaskEvent) {
 
+}
+
+// updateLocation 更新区域属性
+func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr model.SDKError) {
+	// 如果SDK设置了本地获取 location，则忽略 ReportClient 的数据
+	if len(r.configuration.GetGlobal().GetLocation().GetProviders()) != 0 {
+		return
+	}
+
+	if nil != location {
+		// 已获取到客户端的地域信息，更新到全局上下文
+		log.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
+			location.Region, location.Zone, location.Campus)
+	}
+	if r.globalCtx.SetCurrentLocation(location, lastErr) {
+		log.GetBaseLogger().Infof("client area info is ready")
+	}
 }

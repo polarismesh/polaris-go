@@ -36,6 +36,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/plugin/location"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
@@ -171,6 +172,8 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始注册状态管理器
 	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval())
+	// 获取SDK自身所在地理位置信息
+	flowEngine.loadLocation()
 
 	return nil
 }
@@ -357,4 +360,28 @@ func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 // reportSvcStat 上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
+}
+
+// loadLocation 上报服务数据
+func (e *Engine) loadLocation() {
+	providerName := e.configuration.GetGlobal().GetLocation().GetProviders()
+	if len(providerName) == 0 {
+		return
+	}
+	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
+	if err != nil {
+		log.GetBaseLogger().Errorf("get location provider plugin fail, error:%v", err)
+		return
+	}
+	loc, err := locationProvider.(location.Provider).GetLocation()
+	if err != nil {
+		log.GetBaseLogger().Errorf("location provider get location fail, error:%v", err)
+		return
+	}
+
+	e.globalCtx.SetCurrentLocation(&model.Location{
+		Region: loc.Region,
+		Zone:   loc.Zone,
+		Campus: loc.Campus,
+	}, nil)
 }
