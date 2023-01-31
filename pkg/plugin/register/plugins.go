@@ -28,7 +28,6 @@ import (
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	_ "github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcheck"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/errorcount"
@@ -53,6 +52,5 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/nearbybase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/rulebase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/setdivision"
-	_ "github.com/polarismesh/polaris-go/plugin/subscribe/localchannel"
 	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/ratedelay"
 )
