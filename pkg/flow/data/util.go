@@ -32,9 +32,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 )
 
 // GetServerConnector 加载连接器插件

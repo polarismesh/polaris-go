@@ -37,9 +37,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/location"
+	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
 )
 

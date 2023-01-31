@@ -30,8 +30,8 @@ import (
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
-	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
