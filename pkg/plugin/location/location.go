@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package cmdb
+package location
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -23,23 +23,19 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-type Proxy struct {
-	LocationProvider
-	engine model.Engine
+const (
+	ProviderName string = "chain"
+)
+
+// Provider Location 实例地址位置获取插件
+type Provider interface {
+	plugin.Plugin
+
+	// GetLocation 获取实例地理位置信息
+	GetLocation() (*model.Location, error)
 }
 
-// SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
-	p.LocationProvider = plug.(LocationProvider)
-	p.engine = engine
-}
-
-// GetLocation 获取实例地理位置信息
-func (p *Proxy) GetLocation() (*model.Location, error) {
-	return p.LocationProvider.GetLocation()
-}
-
-// init 注册proxy
+// init 初始化
 func init() {
-	plugin.RegisterPluginProxy(common.TypeLocationProvider, &Proxy{})
+	plugin.RegisterPluginInterface(common.TypeLocationProvider, new(Provider))
 }

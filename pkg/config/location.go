@@ -17,53 +17,42 @@
 
 package config
 
-import "github.com/polarismesh/polaris-go/pkg/plugin/common"
-
 // LocationConfigImpl 地理位置配置.
 type LocationConfigImpl struct {
-	Provider string `yaml:"provider" json:"provider"`
-	// 插件相关配置
-	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+	Providers []*LocationProviderConfigImpl `yaml:"providers" json:"providers"`
 }
 
-// GetProvider 获取地理位置的提供者插件名称.
-func (a *LocationConfigImpl) GetProvider() string {
-	return a.Provider
+// GetProviders 获取所有的provider
+func (a *LocationConfigImpl) GetProviders() []*LocationProviderConfigImpl {
+	return a.Providers
 }
 
-// SetProvider 设置地理位置的提供者插件名称.
-func (a *LocationConfigImpl) SetProvider(provider string) {
-	a.Provider = provider
-}
-
-// Init 配置初始化.
-func (a *LocationConfigImpl) Init() {
-	a.Plugin = PluginConfigs{}
-	a.Plugin.Init(common.TypeLocationProvider)
-}
-
-// GetPluginConfig consumer.loadbalancer.plugin.
-func (a *LocationConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
-	cfgValue, ok := a.Plugin[pluginName]
-	if !ok {
-		return nil
+// GetProvider 根据类型获取对应的provider
+func (a *LocationConfigImpl) GetProvider(providerType string) *LocationProviderConfigImpl {
+	for _, provider := range a.Providers {
+		if provider.Type == providerType {
+			return provider
+		}
 	}
-	return cfgValue.(BaseConfig)
+	return nil
 }
 
-// SetPluginConfig 输出插件具体配置.
-func (a *LocationConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
-	return a.Plugin.SetPluginConfig(common.TypeLocationProvider, pluginName, value)
+// Init 初始化
+func (a *LocationConfigImpl) Init() error {
+	return nil
 }
 
 // Verify 检验LocalCacheConfig配置.
 func (a *LocationConfigImpl) Verify() error {
+	for _, provider := range a.Providers {
+		if err := provider.Verify(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // SetDefault 设置LocalCacheConfig配置的默认值.
 func (a *LocationConfigImpl) SetDefault() {
-	if len(a.Provider) == 0 {
-		a.Provider = DefaultLocationProvider
-	}
+
 }
