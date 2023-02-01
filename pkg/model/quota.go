@@ -192,9 +192,6 @@ func (q *QuotaFutureImpl) Done() <-chan struct{} {
 }
 
 func (q *QuotaFutureImpl) GetImmediately() *QuotaResponse {
-	if q == nil {
-		return nil	
-	}
 	return q.resp
 }
 
