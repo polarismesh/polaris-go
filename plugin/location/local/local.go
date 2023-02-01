@@ -18,13 +18,9 @@
 package local
 
 import (
-	"bytes"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	location2 "github.com/polarismesh/polaris-go/plugin/location"
-	"os"
-	"regexp"
 )
 
 const (
@@ -36,7 +32,7 @@ type LocationProviderImpl struct {
 	locCache *model.Location
 }
 
-func New(ctx *plugin.InitContext) (location2.LocationPlugin, error) {
+func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{}
 	return impl, impl.Init(ctx)
 }
@@ -46,13 +42,16 @@ func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
 	log.GetBaseLogger().Infof("start use env location provider")
 
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderLocal)
-
 	options := provider.GetOptions()
 
+	region, _ := options["region"].(string)
+	zone, _ := options["zone"].(string)
+	campus, _ := options["campus"].(string)
+
 	p.locCache = &model.Location{
-		Region: getValue(options["region"].(string)),
-		Zone:   getValue(options["zone"].(string)),
-		Campus: getValue(options["campus"].(string)),
+		Region: region,
+		Zone:   zone,
+		Campus: campus,
 	}
 
 	return nil
@@ -66,22 +65,4 @@ func (p *LocationProviderImpl) Name() string {
 // GetLocation 获取地理位置信息
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	return p.locCache, nil
-}
-
-// GetPriority 获取优先级
-func (p *LocationProviderImpl) GetPriority() int {
-	return location2.PriorityLocal
-}
-
-func getValue(str string) string {
-	r, _ := regexp.Compile("\\${(.+)}")
-
-	data := []byte(str)
-	for _, match := range r.FindAllSubmatch(data, -1) {
-		key := os.Getenv(string(match[1]))
-		if key != "" {
-			data = bytes.Replace(data, match[0], []byte(key), 1)
-		}
-	}
-	return string(data)
 }

@@ -14,73 +14,52 @@
 // specific language governing permissionsr and limitations under the License.
 //
 
-package prometheus
+package pushgateway
 
 import (
 	"fmt"
-	"net"
 	"net/http"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"github.com/polarismesh/polaris-go/plugin/statreporter/prometheus/addons"
+	"github.com/polarismesh/polaris-go/plugin/metrics/pushgateway/addons"
 )
 
-// PrometheusHandler handler for prometheus
-type PrometheusHandler struct {
+// PushgatewayHandler handler for prometheus
+type PushgatewayHandler struct {
 	// prometheus的metrics注册
 	registry *prometheus.Registry
 	// metrics的 http handler
-	handler http.Handler
-	cfg     *Config
-	//
+	handler         http.Handler
+	cfg             *Config
 	metricVecCaches map[string]prometheus.Collector
-	ln              net.Listener
 	bindIP          string
-	port            int
 }
 
-func newHandler(ctx *plugin.InitContext) (*PrometheusHandler, error) {
-	p := &PrometheusHandler{}
+func newHandler(ctx *plugin.InitContext) (*PushgatewayHandler, error) {
+	p := &PushgatewayHandler{}
 	return p, p.init(ctx)
 }
 
-func (p *PrometheusHandler) init(ctx *plugin.InitContext) error {
+func (p *PushgatewayHandler) init(ctx *plugin.InitContext) error {
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
 	if cfgValue != nil {
 		p.cfg = cfgValue.(*Config)
 	}
-
+	p.bindIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	p.metricVecCaches = make(map[string]prometheus.Collector)
 	p.registry = prometheus.NewRegistry()
 	if err := p.registerMetrics(); err != nil {
 		return err
 	}
 
-	p.bindIP = p.cfg.IP
-	if p.bindIP == "" {
-		p.bindIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
-	}
-	p.port = p.cfg.Port
-
-	p.handler = &metricsHttpHandler{
-		promeHttpHandler: promhttp.HandlerFor(p.registry, promhttp.HandlerOpts{}),
-		lock:             &sync.RWMutex{},
-	}
-
-	if ctx.Config.GetGlobal().GetStatReporter().IsEnable() {
-		p.runInnerMetricsWebServer()
-	}
-
 	return nil
 }
 
-func (p *PrometheusHandler) registerMetrics() error {
+func (p *PushgatewayHandler) registerMetrics() error {
 	for _, desc := range metrcisDesces {
 		var collector prometheus.Collector
 		switch desc.MetricType {
@@ -121,7 +100,7 @@ func (p *PrometheusHandler) registerMetrics() error {
 }
 
 // ReportStat 上报采集指标到 prometheus，这里只针对部分 model.InstanceGauge 的实现做处理
-func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal model.InstanceGauge) error {
+func (p *PushgatewayHandler) ReportStat(metricsType model.MetricType, metricsVal model.InstanceGauge) error {
 	switch metricsType {
 	case model.ServiceStat:
 		val, ok := metricsVal.(*model.ServiceCallResult)
@@ -142,41 +121,7 @@ func (p *PrometheusHandler) ReportStat(metricsType model.MetricType, metricsVal 
 	return nil
 }
 
-// runInnerMetricsWebServer 启动用于 prometheus 主动拉取的 http-server，如果端口设置为负数，则不启用
-func (p *PrometheusHandler) runInnerMetricsWebServer() {
-	if p.port < 0 {
-		return
-	}
-
-	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.bindIP, p.cfg.Port))
-	if err != nil {
-		log.GetBaseLogger().Errorf("start metrics http-server fail: %v", err)
-		p.port = -1
-		return
-	}
-
-	p.ln = ln
-	p.port = ln.Addr().(*net.TCPAddr).Port
-
-	go func() {
-		log.GetBaseLogger().Infof("start metrics http-server address : %s", fmt.Sprintf("%s:%d", p.bindIP, p.port))
-		if err := http.Serve(ln, p.GetHttpHandler()); err != nil {
-			log.GetBaseLogger().Errorf("start metrics http-server fail : %s", err)
-			return
-		}
-	}()
-}
-
-func (p *PrometheusHandler) exportSuccess() bool {
-	return p.port > 0
-}
-
-// GetHttpHandler 获取 handler
-func (p *PrometheusHandler) GetHttpHandler() http.Handler {
-	return p.handler
-}
-
-func (p *PrometheusHandler) handleServiceGauge(metricsType model.MetricType, val *model.ServiceCallResult) {
+func (p *PushgatewayHandler) handleServiceGauge(metricsType model.MetricType, val *model.ServiceCallResult) {
 	labels := p.convertInsGaugeToLabels(val)
 
 	total := p.metricVecCaches[MetricsNameUpstreamRequestTotal].(*prometheus.CounterVec)
@@ -202,7 +147,7 @@ func (p *PrometheusHandler) handleServiceGauge(metricsType model.MetricType, val
 	}
 }
 
-func (p *PrometheusHandler) handleRateLimitGauge(metricsType model.MetricType, val *model.RateLimitGauge) {
+func (p *PushgatewayHandler) handleRateLimitGauge(metricsType model.MetricType, val *model.RateLimitGauge) {
 	labels := p.convertRateLimitGaugeToLabels(val)
 
 	total := p.metricVecCaches[MetricsNameRateLimitRequestTotal].(*prometheus.CounterVec)
@@ -219,7 +164,7 @@ func (p *PrometheusHandler) handleRateLimitGauge(metricsType model.MetricType, v
 	}
 }
 
-func (p *PrometheusHandler) handleCircuitBreakGauge(metricsType model.MetricType, val *model.CircuitBreakGauge) {
+func (p *PushgatewayHandler) handleCircuitBreakGauge(metricsType model.MetricType, val *model.CircuitBreakGauge) {
 	labels := p.convertCircuitBreakGaugeToLabels(val)
 
 	open := p.metricVecCaches[MetricsNameCircuitBreakerOpen].(*prometheus.GaugeVec)
@@ -241,7 +186,7 @@ func (p *PrometheusHandler) handleCircuitBreakGauge(metricsType model.MetricType
 	}
 }
 
-func (p *PrometheusHandler) convertInsGaugeToLabels(val *model.ServiceCallResult) map[string]string {
+func (p *PushgatewayHandler) convertInsGaugeToLabels(val *model.ServiceCallResult) map[string]string {
 	labels := make(map[string]string)
 
 	for label, supplier := range InstanceGaugeLabelOrder {
@@ -252,7 +197,7 @@ func (p *PrometheusHandler) convertInsGaugeToLabels(val *model.ServiceCallResult
 	return labels
 }
 
-func (p *PrometheusHandler) convertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string {
+func (p *PushgatewayHandler) convertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string {
 	labels := make(map[string]string)
 
 	for label, supplier := range RateLimitGaugeLabelOrder {
@@ -261,7 +206,7 @@ func (p *PrometheusHandler) convertRateLimitGaugeToLabels(val *model.RateLimitGa
 	return labels
 }
 
-func (p *PrometheusHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
+func (p *PushgatewayHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
 	labels := make(map[string]string)
 
 	for label, supplier := range CircuitBreakerGaugeLabelOrder {
@@ -271,11 +216,6 @@ func (p *PrometheusHandler) convertCircuitBreakGaugeToLabels(val *model.CircuitB
 }
 
 // Close the prometheus handler
-func (p *PrometheusHandler) Close() error {
-	if p.ln != nil {
-		if err := p.ln.Close(); err != nil {
-			return err
-		}
-	}
+func (p *PushgatewayHandler) Close() error {
 	return nil
 }

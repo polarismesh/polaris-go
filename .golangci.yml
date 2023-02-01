@@ -96,7 +96,7 @@ linters-settings:
       - name: atomic
       - name: line-length-limit
         severity: error
-        arguments: [ 380 ]
+        arguments: [ 480 ]
       - name: unhandled-error
         severity: warning
         disabled: true

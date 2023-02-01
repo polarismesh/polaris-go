@@ -21,6 +21,7 @@ package api
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -260,6 +261,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
+	getSelfIP(cfg)
 	token := model.SDKToken{
 		IP:       cfg.GetGlobal().GetAPI().GetBindIP(),
 		PID:      int32(os.Getpid()),
@@ -317,6 +319,26 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	globalCtx.SetValue(model.ContextKeyFinishInitTime, time.Now())
 	log.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
+}
+
+// getSelfIP 获取SDK自身的IP
+func getSelfIP(cfg config.Configuration) {
+	bindIP := cfg.GetGlobal().GetAPI().GetBindIP()
+	bindIntf := cfg.GetGlobal().GetAPI().GetBindIntf()
+	if len(bindIP) != 0 || len(bindIntf) != 0 {
+		return
+	}
+
+	address := cfg.GetGlobal().GetServerConnector().GetAddresses()
+	if len(address) == 0 {
+		return
+	}
+
+	conn, _ := net.Dial("tcp", address[0])
+	if conn != nil {
+		cfg.GetGlobal().GetAPI().SetBindIP(conn.LocalAddr().String())
+		_ = conn.Close()
+	}
 }
 
 // onContextInitialized 在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作

@@ -38,6 +38,8 @@ const (
 	ContextKeyTakeEffectTime = "SDKTakeEffectTime"
 	// ContextKeyFinishInitTime sdkContext创建结束时间
 	ContextKeyFinishInitTime = "SDKFinishInitTime"
+	// ContextKeySelfIP sdk bind ip
+	ContextKeySelfIP = "__sdk_bind_ip__"
 )
 
 // SDKToken sdkContext的唯一标识

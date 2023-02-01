@@ -18,6 +18,10 @@
 package flow
 
 import (
+	"errors"
+	"sync"
+	"time"
+
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -36,10 +40,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/plugin/location"
+	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/statreporter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/subscribe"
 )
 
 // Engine 编排调度引擎，API相关逻辑在这里执行
@@ -77,7 +81,7 @@ type Engine struct {
 	// 熔断插件链
 	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
 	// 修改消息订阅插件链
-	subscribe subscribe.Subscribe
+	subscribe *subscribeChannel
 	// 配置中心门面类
 	configFileService *configuration.ConfigFileService
 	// 注册状态管理器
@@ -150,14 +154,9 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
-	// 加载消息订阅插件
-	pluginName := cfg.GetConsumer().GetSubScribe().GetType()
-	p, err := flowEngine.plugins.GetPlugin(common.TypeSubScribe, pluginName)
-	if err != nil {
-		return err
+	flowEngine.subscribe = &subscribeChannel{
+		registerServices: []model.ServiceKey{},
 	}
-	sP := p.(subscribe.Subscribe)
-	flowEngine.subscribe = sP
 	callbackHandler := common.PluginEventHandler{
 		Callback: flowEngine.ServiceEventCallback,
 	}
@@ -171,6 +170,8 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始注册状态管理器
 	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval())
+	// 获取SDK自身所在地理位置信息
+	flowEngine.loadLocation()
 
 	return nil
 }
@@ -207,38 +208,30 @@ func (e *Engine) PluginSupplier() plugin.Supplier {
 
 // WatchService watch service
 func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServiceResponse, error) {
-	if e.subscribe != nil {
-		allInsReq := &model.GetAllInstancesRequest{}
-		allInsReq.Namespace = req.Key.Namespace
-		allInsReq.Service = req.Key.Service
-		allInsRsp, err := e.SyncGetAllInstances(allInsReq)
-		if err != nil {
-			return nil, err
-		}
-		v, err := e.subscribe.WatchService(req.Key)
-		if err != nil {
-			log.GetBaseLogger().Errorf("watch service %s %s error:%s", req.Key.Namespace, req.Key.Service,
-				err.Error())
-			return nil, err
-		}
-		svcEventKey := &model.ServiceEventKey{
-			ServiceKey: req.Key,
-			Type:       model.EventInstances,
-		}
-		err = e.registry.WatchService(svcEventKey)
-		if err != nil {
-			return nil, err
-		}
-		watchResp := &model.WatchServiceResponse{}
-		if e.subscribe.Name() == config.SubscribeLocalChannel {
-			watchResp.EventChannel = v.(chan model.SubScribeEvent)
-		} else {
-			watchResp.EventChannel = nil
-		}
-		watchResp.GetAllInstancesResp = allInsRsp
-		return watchResp, nil
+	allInsReq := &model.GetAllInstancesRequest{}
+	allInsReq.Namespace = req.Key.Namespace
+	allInsReq.Service = req.Key.Service
+	allInsRsp, err := e.SyncGetAllInstances(allInsReq)
+	if err != nil {
+		return nil, err
 	}
-	return nil, model.NewSDKError(model.ErrCodeInternalError, nil, "engine subscribe is nil")
+	ch, err := e.subscribe.WatchService(req.Key)
+	if err != nil {
+		log.GetBaseLogger().Errorf("watch service %s %s error:%s", req.Key.Namespace, req.Key.Service,
+			err.Error())
+		return nil, err
+	}
+	svcEventKey := &model.ServiceEventKey{
+		ServiceKey: req.Key,
+		Type:       model.EventInstances,
+	}
+	if err := e.registry.WatchService(svcEventKey); err != nil {
+		return nil, err
+	}
+	watchResp := &model.WatchServiceResponse{}
+	watchResp.EventChannel = ch
+	watchResp.GetAllInstancesResp = allInsRsp
+	return watchResp, nil
 }
 
 // GetContext 获取上下文
@@ -251,8 +244,7 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {
 		err := e.subscribe.DoSubScribe(event)
 		if err != nil {
-			log.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe name:%s error:%s",
-				e.subscribe.Name(), err.Error())
+			log.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe error:%s", err.Error())
 		}
 	}
 	return nil
@@ -357,4 +349,93 @@ func (e *Engine) reportAPIStat(result *model.APICallResult) error {
 // reportSvcStat 上报服务数据
 func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 	return e.SyncReportStat(model.ServiceStat, result)
+}
+
+// loadLocation 上报服务数据
+func (e *Engine) loadLocation() {
+	providerName := e.configuration.GetGlobal().GetLocation().GetProviders()
+	if len(providerName) == 0 {
+		return
+	}
+	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
+	if err != nil {
+		log.GetBaseLogger().Errorf("get location provider plugin fail, error:%v", err)
+		return
+	}
+	loc, err := locationProvider.(location.Provider).GetLocation()
+	if err != nil {
+		log.GetBaseLogger().Errorf("location provider get location fail, error:%v", err)
+		return
+	}
+
+	e.globalCtx.SetCurrentLocation(&model.Location{
+		Region: loc.Region,
+		Zone:   loc.Zone,
+		Campus: loc.Campus,
+	}, nil)
+}
+
+func pushToBufferChannel(event model.SubScribeEvent, ch chan model.SubScribeEvent) error {
+	select {
+	case ch <- event:
+		return nil
+	default:
+		return errors.New("buffer full")
+	}
+}
+
+type subscribeChannel struct {
+	registerServices []model.ServiceKey
+	eventChannelMap  map[model.ServiceKey]chan model.SubScribeEvent
+	lock             sync.RWMutex
+}
+
+// DoSubScribe is called when a new subscription is created
+func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
+	if event.EventType != common.OnServiceUpdated {
+		return nil
+	}
+	serviceEvent := event.EventObject.(*common.ServiceEventObject)
+	if serviceEvent.SvcEventKey.Type != model.EventInstances {
+		return nil
+	}
+	insEvent := &model.InstanceEvent{}
+	insEvent.AddEvent = data.CheckAddInstances(serviceEvent)
+	insEvent.UpdateEvent = data.CheckUpdateInstances(serviceEvent)
+	insEvent.DeleteEvent = data.CheckDeleteInstances(serviceEvent)
+	s.lock.RLock()
+	channel, ok := s.eventChannelMap[serviceEvent.SvcEventKey.ServiceKey]
+	s.lock.RUnlock()
+	if !ok {
+		log.GetBaseLogger().Debugf("%s %s not watch", serviceEvent.SvcEventKey.ServiceKey.Namespace,
+			serviceEvent.SvcEventKey.ServiceKey.Service)
+		return nil
+	}
+	var err error
+	for i := 0; i < 2; i++ {
+		err = pushToBufferChannel(insEvent, channel)
+		if err == nil {
+			break
+		} else {
+			time.Sleep(time.Millisecond * 10)
+		}
+	}
+	if err != nil {
+		log.GetBaseLogger().Errorf("DoSubScribe %s %s pushToBufferChannel err:%s",
+			serviceEvent.SvcEventKey.ServiceKey.Namespace, serviceEvent.SvcEventKey.ServiceKey.Service, err.Error())
+	}
+	return err
+}
+
+// WatchService is called when a new service is added
+func (s *subscribeChannel) WatchService(key model.ServiceKey) (<-chan model.SubScribeEvent, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	value, ok := s.eventChannelMap[key]
+	if !ok {
+		ch := make(chan model.SubScribeEvent, 32)
+		s.eventChannelMap[key] = ch
+		return ch, nil
+	}
+	return value, nil
 }

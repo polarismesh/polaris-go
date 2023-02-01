@@ -18,7 +18,6 @@
 package remotehttp
 
 import (
-	location2 "github.com/polarismesh/polaris-go/plugin/location"
 	"io"
 	"net/http"
 
@@ -31,7 +30,7 @@ const (
 	locationProviderName string = "remoteHttp"
 )
 
-func New(ctx *plugin.InitContext) (location2.LocationPlugin, error) {
+func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{}
 	return impl, impl.Init(ctx)
 }
@@ -46,11 +45,16 @@ func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
 	log.GetBaseLogger().Infof("start remoteHttp location provider")
 
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderName)
+	options := provider.GetOptions()
+
+	region, _ := options["region"].(string)
+	zone, _ := options["zone"].(string)
+	campus, _ := options["campus"].(string)
 
 	p.address = &model.Location{
-		Region: provider.Region,
-		Zone:   provider.Zone,
-		Campus: provider.Campus,
+		Region: region,
+		Zone:   zone,
+		Campus: campus,
 	}
 
 	return nil
@@ -63,10 +67,9 @@ func (p *LocationProviderImpl) Name() string {
 
 // GetLocation 获取地理位置信息
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
-
-	region := getResponse(p.address.Region)
-	campus := getResponse(p.address.Campus)
-	zone := getResponse(p.address.Zone)
+	region := getResponse(p.address.Region, "region")
+	zone := getResponse(p.address.Zone, "zone")
+	campus := getResponse(p.address.Campus, "campus")
 
 	if region == "" && campus == "" && zone == "" {
 		log.GetBaseLogger().Errorf("get location from remote http error: %v", "all location is empty")
@@ -82,23 +85,18 @@ func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	return loc, nil
 }
 
-func getResponse(url string) string {
+func getResponse(url, label string) string {
 	res, err := http.Get(url)
 	if err != nil {
-		log.GetBaseLogger().Errorf("get location from remote http error: %v", err)
+		log.GetBaseLogger().Errorf("get %s from remote http error: %v", label, err)
 		return ""
 	}
 	defer res.Body.Close()
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.GetBaseLogger().Errorf("read location from remote http error: %v", err)
+		log.GetBaseLogger().Errorf("read %s from remote http error: %v", label, err)
 		return ""
 	}
 
 	return string(resBody)
-}
-
-// GetPriority 获取优先级
-func (p *LocationProviderImpl) GetPriority() int {
-	return location2.PriorityRemoteHttp
 }

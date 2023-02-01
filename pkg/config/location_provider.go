@@ -1,17 +1,29 @@
+/**
+ * Tencent is pleased to support the open source community by making polaris-go available.
+ *
+ * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
+ *
+ * Licensed under the BSD 3-Clause License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed
+ * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
+
 package config
 
 import (
 	"errors"
-	"fmt"
 )
 
 type LocationProviderConfigImpl struct {
-	Name    string `yaml:"name" json:"name"`
-	Type    string `yaml:"type" json:"type"`
-	Region  string `yaml:"region" json:"region"`
-	Zone    string `yaml:"zone" json:"zone"`
-	Campus  string `yaml:"campus" json:"campus"`
-	Address string `yaml:"address" json:"address"`
+	Type    string                 `yaml:"type" json:"type"`
+	Options map[string]interface{} `yaml:"options" json:"options"`
 }
 
 func (l LocationProviderConfigImpl) GetType() string {
@@ -19,29 +31,12 @@ func (l LocationProviderConfigImpl) GetType() string {
 }
 
 func (l LocationProviderConfigImpl) GetOptions() map[string]interface{} {
-	return map[string]interface{}{
-		"region":  l.Region,
-		"zone":    l.Zone,
-		"campus":  l.Campus,
-		"address": l.Address,
-		"name":    l.Name,
-	}
+	return l.Options
 }
 
 func (l LocationProviderConfigImpl) Verify() error {
 	if l.Type == "" {
 		return errors.New("type is empty")
-	}
-
-	switch l.Type {
-	case "local", "remoteHttp":
-		if l.Region == "" || l.Zone == "" || l.Campus == "" {
-			return errors.New(fmt.Sprintf("type is %s, region, zone, campus must be set", l.Type))
-		}
-	case "remoteService":
-		if l.Address == "" {
-			return errors.New(fmt.Sprintf("type is %s, address must be set", l.Type))
-		}
 	}
 	return nil
 }
