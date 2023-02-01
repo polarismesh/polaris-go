@@ -99,13 +99,15 @@ func (s *PrometheusReporter) Info() model.StatInfo {
 
 // Destroy .销毁插件.
 func (s *PrometheusReporter) Destroy() error {
-	err := s.PluginBase.Destroy()
-	if err != nil {
-		return err
+	if s.PluginBase != nil {
+		if err := s.PluginBase.Destroy(); err != nil {
+			return err
+		}
 	}
-	err = s.RunContext.Destroy()
-	if err != nil {
-		return err
+	if s.RunContext != nil {
+		if err := s.RunContext.Destroy(); err != nil {
+			return err
+		}
 	}
 
 	if s.handler != nil {

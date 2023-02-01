@@ -18,6 +18,7 @@
 package pushgateway
 
 import (
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/push"
@@ -57,6 +58,7 @@ type PushgatewayReporter struct {
 	// prometheus的metrics注册
 	handler *PushgatewayHandler
 	ticker  *time.Ticker
+	once    sync.Once
 }
 
 // Type 插件类型.
@@ -82,14 +84,14 @@ func (s *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	s.handler = handler
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
 	s.cfg = cfgValue.(*Config)
-	if cfgValue != nil {
-		s.runPushMetrics(cfgValue.(*Config).PushInterval)
-	}
 	return nil
 }
 
 // ReportStat 报告统计数据.
 func (s *PushgatewayReporter) ReportStat(metricType model.MetricType, metricsVal model.InstanceGauge) error {
+	s.once.Do(func() {
+		s.runPushMetrics(s.cfg.PushInterval)
+	})
 	return s.handler.ReportStat(metricType, metricsVal)
 }
 
@@ -100,11 +102,15 @@ func (s *PushgatewayReporter) Info() model.StatInfo {
 
 // Destroy .销毁插件.
 func (s *PushgatewayReporter) Destroy() error {
-	if err := s.PluginBase.Destroy(); err != nil {
-		return err
+	if s.PluginBase != nil {
+		if err := s.PluginBase.Destroy(); err != nil {
+			return err
+		}
 	}
-	if err := s.RunContext.Destroy(); err != nil {
-		return err
+	if s.RunContext != nil {
+		if err := s.RunContext.Destroy(); err != nil {
+			return err
+		}
 	}
 	if s.ticker != nil {
 		s.ticker.Stop()

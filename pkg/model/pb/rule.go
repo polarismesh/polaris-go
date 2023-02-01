@@ -57,16 +57,25 @@ type ServiceRuleInProto struct {
 
 // NewServiceRuleInProto 创建路由规则配置对象.
 func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto {
-	value := &ServiceRuleInProto{}
+	value := NewServiceRuleInProtoWithInitializeStatus(resp, true)
 	if nil == resp {
 		value.initialized = false
+	}
+	return value
+}
+
+// NewServiceRuleInProtoWithInitializeStatus 创建路由规则配置对象.
+func NewServiceRuleInProtoWithInitializeStatus(resp *namingpb.DiscoverResponse, initialized bool) *ServiceRuleInProto {
+	value := &ServiceRuleInProto{}
+	if nil == resp {
+		value.initialized = initialized
 		return value
 	}
 	value.ServiceKey = &model.ServiceKey{
 		Namespace: resp.Service.Namespace.GetValue(),
 		Service:   resp.Service.Name.GetValue(),
 	}
-	value.initialized = true
+	value.initialized = initialized
 	value.eventType = GetEventType(resp.GetType())
 	value.assistant = eventTypeToAssistant[value.eventType]
 	value.ruleValue, value.revision = value.assistant.ParseRuleValue(resp)

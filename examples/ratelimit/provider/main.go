@@ -27,6 +27,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -82,9 +83,14 @@ func (svr *PolarisProvider) runWebServer() {
 
 		log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
 			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
+		start := time.Now()
 		resp, err := svr.limiter.GetQuota(quotaReq)
-
-		log.Printf("[info] get quota resp : code=%d, info=%s", resp.Get().Code, resp.Get().Info)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
+			return
+		}
+		log.Printf("[info] %s get quota resp : code=%d, info=%s", time.Since(start).String(), resp.Get().Code, resp.Get().Info)
 
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
@@ -155,6 +161,7 @@ func (svr *PolarisProvider) runMainLoop() {
 
 	for s := range ch {
 		log.Printf("catch signal(%+v), stop servers", s)
+		svr.deregisterService()
 		return
 	}
 }

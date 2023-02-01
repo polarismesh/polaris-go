@@ -43,7 +43,9 @@ func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstan
 func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest, resp *model.QuotaResponse) {
 	// 调用api的结果上报
 	_ = e.reportAPIStat(&commonRequest.CallResult)
-	e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
+	if resp != nil {
+		e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
+	}
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
 

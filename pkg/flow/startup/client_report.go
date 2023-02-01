@@ -134,6 +134,7 @@ func (r *ReportClientCallBack) Process(
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
+		r.updateLocation(nil, err.(model.SDKError))
 		// 发生错误也要重试，直到获取到地域信息为止
 		return model.CONTINUE
 	}

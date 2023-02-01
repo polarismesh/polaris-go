@@ -194,8 +194,10 @@ func (m *manager) InitPlugins(
 	for _, typ := range types {
 		plugs, ok := pluginTypes[typ]
 		if !ok {
-			return m.cleanupWhenError(model.NewSDKError(model.ErrCodePluginError, nil,
-				"InitPlugins: invalid plugin type %v", typ))
+			err := model.NewSDKError(model.ErrCodePluginError, nil,
+				"InitPlugins: invalid plugin type %v", typ)
+			fmt.Printf("%+v %+v %+v", types, pluginTypes, err)
+			return m.cleanupWhenError(err)
 		}
 		plugInstances, ok := m.plugins[typ]
 		if !ok {
