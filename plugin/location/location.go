@@ -91,26 +91,26 @@ func (p *Provider) Init(ctx *plugin.InitContext) error {
 	for _, provider := range providers {
 		switch provider.Type {
 		case Local:
-			plugin, err := local.New(ctx)
+			localProvider, err := local.New(ctx)
 			if err != nil {
 				log.GetBaseLogger().Errorf("create local location plugin error: %v", err)
 				return err
 			}
-			p.pluginChains = append(p.pluginChains, plugin)
+			p.pluginChains = append(p.pluginChains, localProvider)
 		case RemoteHttp:
-			plugin, err := remotehttp.New(ctx)
+			remoteHttpProvider, err := remotehttp.New(ctx)
 			if err != nil {
 				log.GetBaseLogger().Errorf("create remoteHttp location plugin error: %v", err)
 				return err
 			}
-			p.pluginChains = append(p.pluginChains, plugin)
+			p.pluginChains = append(p.pluginChains, remoteHttpProvider)
 		case RemoteService:
-			plugin, err := remoteservice.New(ctx)
+			remoteServiceProvider, err := remoteservice.New(ctx)
 			if err != nil {
 				log.GetBaseLogger().Errorf("create remoteService location plugin error: %v", err)
 				return err
 			}
-			p.pluginChains = append(p.pluginChains, plugin)
+			p.pluginChains = append(p.pluginChains, remoteServiceProvider)
 		default:
 			log.GetBaseLogger().Errorf("unknown location provider type: %s", provider.Type)
 			return errors.New("unknown location provider type")
@@ -143,10 +143,10 @@ func (p *Provider) Name() string {
 func (p *Provider) GetLocation() (*model.Location, error) {
 	location := &model.Location{}
 
-	for _, plugin := range p.pluginChains {
-		tmp, err := plugin.GetLocation()
+	for _, item := range p.pluginChains {
+		tmp, err := item.GetLocation()
 		if err != nil {
-			log.GetBaseLogger().Errorf("get location from plugin %s error: %v", plugin.Name(), err)
+			log.GetBaseLogger().Errorf("get location from plugin %s error: %v", item.Name(), err)
 			continue
 		}
 		location = tmp

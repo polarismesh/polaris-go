@@ -38,8 +38,7 @@ func (a *LocationConfigImpl) GetProvider(providerType string) *LocationProviderC
 }
 
 // Init 初始化
-func (a *LocationConfigImpl) Init() error {
-	return nil
+func (a *LocationConfigImpl) Init() {
 }
 
 // Verify 检验LocalCacheConfig配置.

@@ -67,7 +67,6 @@ func (p *LocationProviderImpl) Name() string {
 
 // GetLocation 获取地理位置信息
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
-
 	region := getResponse(p.address.Region, "region")
 	zone := getResponse(p.address.Zone, "zone")
 	campus := getResponse(p.address.Campus, "campus")
