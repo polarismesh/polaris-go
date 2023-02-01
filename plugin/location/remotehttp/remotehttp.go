@@ -18,7 +18,6 @@
 package remotehttp
 
 import (
-	"io"
 	"io/ioutil"
 	"net/http"
 
