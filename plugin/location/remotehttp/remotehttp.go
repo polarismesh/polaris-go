@@ -19,6 +19,7 @@ package remotehttp
 
 import (
 	"io"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -91,8 +92,10 @@ func getResponse(url, label string) string {
 		log.GetBaseLogger().Errorf("get %s from remote http error: %v", label, err)
 		return ""
 	}
-	defer res.Body.Close()
-	resBody, err := io.ReadAll(res.Body)
+	defer func() {
+		_ = res.Body.Close()
+	}()
+	resBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		log.GetBaseLogger().Errorf("read %s from remote http error: %v", label, err)
 		return ""
