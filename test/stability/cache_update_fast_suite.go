@@ -153,14 +153,8 @@ func (t *CacheFastUpdateSuite) testCacheUpdate(c *check.C, failToUpdate bool) {
 	}
 	configuration.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 
-	// if !failToUpdate {
-	//	t.mockServer.MakeForceOperationTimeout(mock.OperationDiscoverInstance, true)
-	//	t.mockServer.MakeForceOperationTimeout(mock.OperationDiscoverRouting, true)
-	//	fmt.Printf("set timeout to true\n")
-	// }
 	configuration.Consumer.LocalCache.PersistDir = util.BackupDir
 	configuration.Consumer.LocalCache.ServiceRefreshInterval = model.ToDurationPtr(10 * time.Second)
-	// configuration.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 	sdkCtx, err := api.InitContextByConfig(configuration)
 	c.Assert(err, check.IsNil)
 	defer sdkCtx.Destroy()
@@ -168,19 +162,6 @@ func (t *CacheFastUpdateSuite) testCacheUpdate(c *check.C, failToUpdate bool) {
 	c.Assert(err, check.IsNil)
 	regPlug := registry.(localregistry.LocalRegistry)
 	if !failToUpdate {
-		// t.healthCheckInstances = regPlug.GetInstances(&model.ServiceKey{
-		//	Namespace: config.ServerNamespace,
-		//	Service:   config.ServerHeartBeatService,
-		// }, false, false).GetInstances()
-		// t.discoverInstances = regPlug.GetInstances(&model.ServiceKey{
-		//	Namespace: config.ServerNamespace,
-		//	Service:   config.ServerDiscoverService,
-		// }, false, false).GetInstances()
-		// t.mockServer.MakeForceOperationTimeout(mock.OperationDiscoverInstance, false)
-		// t.mockServer.MakeForceOperationTimeout(mock.OperationDiscoverRouting, false)
-		// fmt.Printf("health port %v\n", t.healthCheckInstances[0].GetPort())
-		// fmt.Printf("discover port %v\n", t.discoverInstances[0].GetPort())
-		// fmt.Printf("set timeout to false\n")
 		time.Sleep(3 * time.Second)
 	}
 	consumer := api.NewConsumerAPIByContext(sdkCtx)
@@ -190,7 +171,6 @@ func (t *CacheFastUpdateSuite) testCacheUpdate(c *check.C, failToUpdate bool) {
 			Service:   testCacheSvcs[i],
 		}, false, false)
 		c.Assert(svcInst.IsInitialized(), check.Equals, false)
-		// regPlug.LoadInstances(testCacheSvcs[i], testCacheNs, false)
 	}
 
 	if !failToUpdate {
@@ -207,11 +187,7 @@ func (t *CacheFastUpdateSuite) testCacheUpdate(c *check.C, failToUpdate bool) {
 		}
 		time.Sleep(time.Second * 3)
 	}
-	// if !failToUpdate {
-	//	//3s快速更新从缓存中加载的服务
-	//	log.Printf("waiting 3s to update loaded cache svc")
-	//	time.Sleep(3 * time.Second)
-	// }
+
 	t.checkServerRegistryInstanceSame(consumer, !failToUpdate, c)
 	for i := 0; i < 4; i++ {
 		t.mockServer.GenTestInstances(testServices[i], 2)
@@ -229,14 +205,14 @@ func (t *CacheFastUpdateSuite) checkServerRegistryInstanceSame(consumer api.Cons
 	request.FlowID = 1111
 	request.Timeout = model.ToDurationPtr(500 * time.Millisecond)
 	request.SkipRouteFilter = true
-	// t.mockServer.MakeOperationTimeout(mock.OperationDiscoverInstance, true)
 	for i := 0; i < 4; i++ {
 		var err error
 		var registryInsts model.ServiceInstances
 		request.Namespace = testCacheNs
 		request.Service = testCacheSvcs[i]
 		registryInsts, err = consumer.GetInstances(request)
-		c.Assert(err, check.IsNil)
+		// expectedResult == true, 则 failToUpdate == false，为可以正常连接，因此不能有 error 报错
+		c.Assert(err == nil, check.Equals, expectedResult)
 		cacheSvcKey := &model.ServiceKey{
 			Namespace: testCacheNs,
 			Service:   testCacheSvcs[i],
@@ -254,20 +230,5 @@ func (t *CacheFastUpdateSuite) checkServerRegistryInstanceSame(consumer api.Cons
 		log.Printf("requests for %s:%s is %d", cacheSvcKey.Namespace, cacheSvcKey.Service, n)
 		c.Assert(n > 0, check.Equals, expectedResult)
 	}
-	// if expectedResult {
-	//	request.Namespace = config.ServerNamespace
-	//	request.Service = config.ServerHeartBeatService
-	//	var resp *model.InstancesResponse
-	//	var err error
-	//	resp, err = consumer.GetInstances(request)
-	//	c.Assert(err, check.IsNil)
-	//	fmt.Printf("new health port %v\n", resp.GetInstances()[0].GetPort())
-	//	c.Assert(util.SameInstances(t.healthCheckInstances, resp.GetInstances()), check.Equals, false)
-	//	request.Service = config.ServerDiscoverService
-	//	resp, err = consumer.GetInstances(request)
-	//	c.Assert(err, check.IsNil)
-	//	c.Assert(util.SameInstances(t.discoverInstances, resp.GetInstances()), check.Equals, false)
-	//	fmt.Printf("new discover port %v\n", resp.GetInstances()[0].GetPort())
-	// }
 	t.mockServer.MakeOperationTimeout(mock.OperationDiscoverInstance, false)
 }
