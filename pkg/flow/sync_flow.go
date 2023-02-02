@@ -181,15 +181,14 @@ outLoop:
 			" serviceKey: %s, time consume is %v, retryTimes: %v", *dstService, consumedTime, retryTimes)
 		continue
 	}
-	// 超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
-	var success bool
-	if err == nil {
-		success, err = tryGetServiceValuesFromCache(e.registry, req)
-		if success {
-			log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
-				retryTimes, param.MaxRetry, *dstService)
-			return nil
-		}
+	// 超时过后，尝试使用从缓存中获取的信息
+	if success, err := tryGetServiceValuesFromCache(e.registry, req); success {
+		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
+			retryTimes, param.MaxRetry, *dstService)
+		return nil
+	} else {
+		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache fail %v",
+		retryTimes, param.MaxRetry, *dstService, err)
 	}
 	log.GetBaseLogger().Errorf("fail to get resource of %s for timeout, retryTimes: %d, total consumed time: %v,"+
 		" total sleep time: %v", *dstService, retryTimes, totalConsumedTime, totalSleepTime)
