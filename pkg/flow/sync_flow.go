@@ -159,11 +159,13 @@ outLoop:
 		sdkErrs := syncCtx.Errs()
 		if len(sdkErrs) > 0 {
 			e.reportCombinedErrs(req.GetCallResult(), consumedTime, sdkErrs)
-			rawErr := combineSDKErrors(sdkErrs)
-			log.GetBaseLogger().Errorf("error occur while processing GetInstances request,"+
-				" serviceKey: %s, time consume is %v, error is %s", *dstService, consumedTime, rawErr)
-			return model.NewSDKError(model.ErrCodeServerUserError, rawErr,
-				fmt.Sprintf("multierrs received for GetInstances request, serviceKey: %s", *dstService))
+			// 只要有一个错误就立刻返回，避免所以错误都抛出来干扰 开发者的判断。
+			for key, sdkErr := range sdkErrs {
+				log.GetBaseLogger().Errorf("error occur while processing GetInstances request,"+
+					" serviceKey: %s, time consume is %v, error is %s", *dstService, consumedTime, sdkErr)
+				return model.NewSDKError(model.ErrCodeServerUserError, sdkErr,
+					fmt.Sprintf("SDKError for %s, detail is %s", key, sdkErr))
+			}
 		}
 		if exceedTimeout {
 			// 只有网络错误才可以重试
