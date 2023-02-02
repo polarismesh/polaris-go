@@ -182,13 +182,15 @@ outLoop:
 		continue
 	}
 	// 超时过后，尝试使用从缓存中获取的信息
-	if success, err := tryGetServiceValuesFromCache(e.registry, req); success {
+	success, err2 := tryGetServiceValuesFromCache(e.registry, req)
+	if success {
 		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
 			retryTimes, param.MaxRetry, *dstService)
 		return nil
-	} else {
+	}
+	if err2 != nil {
 		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache fail %v",
-		retryTimes, param.MaxRetry, *dstService, err)
+			retryTimes, param.MaxRetry, *dstService, err)
 	}
 	log.GetBaseLogger().Errorf("fail to get resource of %s for timeout, retryTimes: %d, total consumed time: %v,"+
 		" total sleep time: %v", *dstService, retryTimes, totalConsumedTime, totalSleepTime)
