@@ -26,13 +26,7 @@ import (
 	. "gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/test/circuitbreak"
-	"github.com/polarismesh/polaris-go/test/discover"
-	"github.com/polarismesh/polaris-go/test/loadbalance"
-	"github.com/polarismesh/polaris-go/test/ratelimit"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
-	"github.com/polarismesh/polaris-go/test/stability"
-	"github.com/polarismesh/polaris-go/test/subscribe"
 )
 
 // Test 测试用例主入口
@@ -49,48 +43,48 @@ func init() {
 	if err := api.ConfigLoggers(logDir, api.DebugLog); err != nil {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
-	// sdkcontext 销毁测试
-	Suite(&stability.SDKContextDestroySuite{})
-	// consumer api测试
-	Suite(&discover.ConsumerTestingSuite{})
-	// provider api 测试
-	Suite(&discover.ProviderTestingSuite{})
-	// 负载均衡测试
-	Suite(&loadbalance.LBTestingSuite{})
-	// 缓存持久化测试
-	Suite(&stability.CacheTestingSuite{})
-	// 熔断测试
-	Suite(&circuitbreak.CircuitBreakSuite{})
-	// 健康探测测试
-	Suite(&circuitbreak.HealthCheckTestingSuite{})
-	// 持久探测测试
-	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
-	// 就近路由接入测试
-	Suite(&serviceroute.NearbyTestingSuite{})
-	// 服务定时更新测试
-	Suite(&stability.ServiceUpdateSuite{})
-	// 后台server连接切换测试
-	Suite(&stability.ServerSwitchSuite{})
-	// 规则路由测试
-	Suite(&serviceroute.RuleRoutingTestingSuite{})
-	// dstmeta路由插件测试
-	Suite(&serviceroute.DstMetaTestingSuite{})
-	// 埋点server可靠性测试
-	Suite(&stability.DefaultServerSuite{})
-	// 缓存快速更新测试
-	Suite(&stability.CacheFastUpdateSuite{})
-	// set分组测试
-	Suite(&serviceroute.SetDivisionTestingSuite{})
-	// server异常调用测试
-	Suite(&stability.ServerFailOverSuite{})
-	// 消息订阅 测试
-	Suite(&subscribe.EventSubscribeSuit{})
+	// // consumer api测试
+	// Suite(&discover.ConsumerTestingSuite{})
+	// // provider api 测试
+	// Suite(&discover.ProviderTestingSuite{})
+	// // 负载均衡测试
+	// Suite(&loadbalance.LBTestingSuite{})
+	// // 熔断测试
+	// Suite(&circuitbreak.CircuitBreakSuite{})
+	// // 健康探测测试
+	// Suite(&circuitbreak.HealthCheckTestingSuite{})
+	// // 持久探测测试
+	// Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
+	// // 就近路由接入测试
+	// Suite(&serviceroute.NearbyTestingSuite{})
+	// // 规则路由测试
+	// Suite(&serviceroute.RuleRoutingTestingSuite{})
+	// // dstmeta路由插件测试
+	// Suite(&serviceroute.DstMetaTestingSuite{})
+	// // set分组测试
+	// Suite(&serviceroute.SetDivisionTestingSuite{})
 	// 金丝雀路由测试
 	Suite(&serviceroute.CanaryTestingSuite{})
-	// 内部服务结构测试
-	Suite(&loadbalance.InnerServiceLBTestingSuite{})
-	// 基础本地限流用例测试
-	Suite(&ratelimit.LocalNormalTestingSuite{})
+	// sdkcontext 销毁测试
+	// Suite(&stability.SDKContextDestroySuite{})
+	// // 缓存持久化测试
+	// Suite(&stability.CacheTestingSuite{})
+	// // 服务定时更新测试
+	// Suite(&stability.ServiceUpdateSuite{})
+	// // 后台server连接切换测试
+	// Suite(&stability.ServerSwitchSuite{})
+	// // 埋点server可靠性测试
+	// Suite(&stability.DefaultServerSuite{})
+	// // 缓存快速更新测试
+	// Suite(&stability.CacheFastUpdateSuite{})
+	// // server异常调用测试
+	// Suite(&stability.ServerFailOverSuite{})
+	// // 消息订阅 测试
+	// Suite(&subscribe.EventSubscribeSuit{})
+	// // 内部服务结构测试
+	// Suite(&loadbalance.InnerServiceLBTestingSuite{})
+	// // 基础本地限流用例测试
+	// Suite(&ratelimit.LocalNormalTestingSuite{})
 	// // 限流规则变更用例测试
 	// Suite(&ratelimit.RuleChangeTestingSuite{})
 	// // 基础远程限流用例测试

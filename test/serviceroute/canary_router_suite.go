@@ -419,7 +419,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterCanary})
 	cfg.GetConsumer().GetCircuitBreaker().SetSleepWindow(time.Second * 20)
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
-	cfg.GetConsumer().GetCircuitBreaker().SetRecoverWindow(time.Second * 10)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
@@ -487,7 +486,8 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	}
 
 	for _, v := range instMap[NormalInstance] {
-		CircuitBreakerInstance(v, consumer, c)
+		ins := v
+		CircuitBreakerInstance(ins, consumer, c)
 	}
 	time.Sleep(time.Second * 5)
 
@@ -505,7 +505,8 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	}
 
 	for _, v := range instMap[OtherCanaryInstance] {
-		CircuitBreakerInstance(v, consumer, c)
+		ins := v
+		CircuitBreakerInstance(ins, consumer, c)
 	}
 	time.Sleep(time.Second * 5)
 	for _, v := range instMap[OtherCanaryInstance] {
@@ -520,12 +521,16 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 		c.Assert(CheckInstanceHasCanaryMeta(instance, "useV1"), check.Equals, CanaryInstance)
 	}
 
+	time.Sleep(time.Second * 20)
 	log.Printf("len(instMap[CanaryInstance]): %v", len(instMap[CanaryInstance]))
 	for _, v := range instMap[CanaryInstance] {
-		CloseCbInstance(v, consumer, c)
+		ins := v
+		fmt.Printf("[CanaryInstance] %+v", ins)
+		CloseCbInstance(ins, consumer, c)
 	}
 	time.Sleep(time.Second * 10)
 	for _, v := range instMap[CanaryInstance] {
+		fmt.Printf("[CanaryInstance] %+v", v)
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Close)
 	}
 	for i := 0; i < 3; i++ {

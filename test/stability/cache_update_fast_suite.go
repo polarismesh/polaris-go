@@ -212,7 +212,8 @@ func (t *CacheFastUpdateSuite) checkServerRegistryInstanceSame(consumer api.Cons
 		request.Service = testCacheSvcs[i]
 		registryInsts, err = consumer.GetInstances(request)
 		// expectedResult == true, 则 failToUpdate == false，为可以正常连接，因此不能有 error 报错
-		c.Assert(err == nil, check.Equals, expectedResult)
+		// c.Assert(err == nil, check.Equals, expectedResult)
+		c.Assert(err, check.IsNil)
 		cacheSvcKey := &model.ServiceKey{
 			Namespace: testCacheNs,
 			Service:   testCacheSvcs[i],

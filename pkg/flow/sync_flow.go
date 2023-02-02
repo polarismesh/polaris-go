@@ -161,19 +161,13 @@ outLoop:
 		sdkErrs := syncCtx.Errs()
 		if len(sdkErrs) > 0 {
 			e.reportCombinedErrs(req.GetCallResult(), consumedTime, sdkErrs)
-			rawErr := combineSDKErrors(sdkErrs)
-			log.GetBaseLogger().Errorf("error occur while processing GetInstances request,"+
-				" serviceKey: %s, time consume is %v, error is %s", *dstService, consumedTime, rawErr)
-			return model.NewSDKError(model.ErrCodeServerUserError, rawErr,
-				fmt.Sprintf("multierrs received for GetInstances request, serviceKey: %s", *dstService))
+			err = combineSDKErrors(sdkErrs)
+			break
 		}
 		if exceedTimeout {
 			// 只有网络错误才可以重试
 			time.Sleep(param.RetryInterval)
 			totalSleepTime += param.RetryInterval
-			// log.GetBaseLogger().Warnf("retry GetInstances for timeout, consume time %v,"+
-			//	" serviceKey: %s, retry times: %d",
-			//	consumedTime, *dstService, retryTimes)
 			continue
 		}
 		// 没有发生远程错误，直接走下一轮获取本地缓存
