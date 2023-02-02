@@ -412,8 +412,7 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 	}
 	var err error
 	for i := 0; i < 2; i++ {
-		err = pushToBufferChannel(insEvent, channel)
-		if err == nil {
+		if err = pushToBufferChannel(insEvent, channel); err == nil {
 			break
 		} else {
 			time.Sleep(time.Millisecond * 10)
@@ -432,7 +431,7 @@ func (s *subscribeChannel) WatchService(key model.ServiceKey) (<-chan model.SubS
 	defer s.lock.Unlock()
 	value, ok := s.eventChannelMap[key]
 	if !ok {
-		ch := make(chan model.SubScribeEvent, 32)
+		ch := make(chan model.SubScribeEvent, 64)
 		s.eventChannelMap[key] = ch
 		return ch, nil
 	}

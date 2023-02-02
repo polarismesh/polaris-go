@@ -322,11 +322,6 @@ consumer:
         #范围:(0:...]
         #默认值:10
         requestVolumeThreshold: 10
-  subscribe:
-    type: subscribeLocalChannel
-    plugin:
-      subscribeLocalChannel:
-        channelBufferSize: 50
 # 配置中心默认配置
 config:
   # 类型转化缓存的key数量
