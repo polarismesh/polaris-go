@@ -419,6 +419,7 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterCanary})
 	cfg.GetConsumer().GetCircuitBreaker().SetSleepWindow(time.Second * 20)
 	cfg.GetConsumer().GetCircuitBreaker().SetCheckPeriod(time.Second * 3)
+	cfg.GetConsumer().GetCircuitBreaker().SetRecoverWindow(time.Second * 3)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorCountConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 5)
 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
@@ -523,7 +524,6 @@ func (t *CanaryTestingSuite) TestCanaryException01(c *check.C) {
 	for _, v := range instMap[CanaryInstance] {
 		CloseCbInstance(v, consumer, c)
 	}
-	// CloseCbInstances(canaryNamespace, canaryService, consumer, c, 2000)
 	time.Sleep(time.Second * 3)
 	for _, v := range instMap[CanaryInstance] {
 		c.Assert(v.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Close)

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/google/uuid"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -115,7 +114,7 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	}
 
 	reportClientReq.StatInfos = infos
-	reportClientReq.ID = uuid.NewString()
+	reportClientReq.ID = r.globalCtx.GetClientId()
 	return reportClientReq
 }
 
