@@ -222,7 +222,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 
 // 测试本地正则合并匹配限流
 func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
-	// 2个线程跑20秒，看看每秒通过多少，以及总共通过多少
+	// 4个线程跑20秒，看看每秒通过多少，以及总共通过多少
 	workerCount := 2
 	appIds := []string{"app1", "app2"}
 	routineCount := workerCount * len(appIds)
@@ -231,10 +231,14 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	defer cancel()
 
-	codeChan := make(chan model.QuotaResultCode)
+	codeChan := make(chan model.QuotaResultCode, 10240)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer func() {
+		cancel()
+		close(codeChan)
+	}()
+
 	var calledCount int64
 	for _, appId := range appIds {
 		for i := 0; i < workerCount; i++ {
