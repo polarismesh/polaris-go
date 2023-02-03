@@ -18,7 +18,6 @@
 package register
 
 import (
-	// 注册插件类型以及具体插件实例
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
