@@ -1,8 +1,10 @@
-module github.com/polarismesh/polaris-go-configuration
+module github.com/polarismesh/polaris-go-watchinstance
 
 go 1.17
 
-require github.com/polarismesh/polaris-go v1.2.0-beta.3
+replace github.com/polarismesh/polaris-go => ../../
+
+require github.com/polarismesh/polaris-go v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -33,5 +35,3 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-replace github.com/polarismesh/polaris-go => ../../

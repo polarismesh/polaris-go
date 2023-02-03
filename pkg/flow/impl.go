@@ -156,6 +156,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 	flowEngine.subscribe = &subscribeChannel{
 		registerServices: []model.ServiceKey{},
+		eventChannelMap:  make(map[model.ServiceKey]chan model.SubScribeEvent),
 	}
 	callbackHandler := common.PluginEventHandler{
 		Callback: flowEngine.ServiceEventCallback,
@@ -170,9 +171,6 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始注册状态管理器
 	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval())
-	// 获取SDK自身所在地理位置信息
-	flowEngine.loadLocation()
-
 	return nil
 }
 
@@ -242,8 +240,7 @@ func (e *Engine) GetContext() model.ValueContext {
 // ServiceEventCallback serviceUpdate消息订阅回调
 func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {
-		err := e.subscribe.DoSubScribe(event)
-		if err != nil {
+		if err := e.subscribe.DoSubScribe(event); err != nil {
 			log.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe error:%s", err.Error())
 		}
 	}
@@ -252,6 +249,8 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 
 // Start 启动引擎
 func (e *Engine) Start() error {
+	// 获取SDK自身所在地理位置信息
+	e.loadLocation()
 	// 添加客户端定期上报任务
 	clientReportTaskValues, err := e.addClientReportTask()
 	if err != nil {
@@ -413,8 +412,7 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 	}
 	var err error
 	for i := 0; i < 2; i++ {
-		err = pushToBufferChannel(insEvent, channel)
-		if err == nil {
+		if err = pushToBufferChannel(insEvent, channel); err == nil {
 			break
 		} else {
 			time.Sleep(time.Millisecond * 10)
@@ -433,7 +431,7 @@ func (s *subscribeChannel) WatchService(key model.ServiceKey) (<-chan model.SubS
 	defer s.lock.Unlock()
 	value, ok := s.eventChannelMap[key]
 	if !ok {
-		ch := make(chan model.SubScribeEvent, 32)
+		ch := make(chan model.SubScribeEvent, 64)
 		s.eventChannelMap[key] = ch
 		return ch, nil
 	}

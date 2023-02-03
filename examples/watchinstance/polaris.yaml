@@ -1,0 +1,15 @@
+global:
+  serverConnector:
+    addresses:
+      - 127.0.0.1:8091
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+      # - pushgateway
+    plugin:
+      prometheus:
+        metricPort: 0
+      # pushgateway:
+      #   address: 127.0.0.1:9091
+      #   pushInterval: 10s

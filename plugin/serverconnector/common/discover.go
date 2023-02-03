@@ -436,15 +436,6 @@ func (s *StreamingClient) getSvcUpdateTasks(key *model.ServiceEventKey) (tasks [
 	return tasks
 }
 
-// 设置流关闭
-// func (s *StreamingClient) markEndStream() bool {
-//	endStreamOk := atomic.CompareAndSwapUint32(&s.endStream, 0, 1)
-//	if endStreamOk {
-//		log.GetBaseLogger().Debugf("stream %s mark end", s.reqID)
-//	}
-//	return endStreamOk
-// }
-
 // IsEndStream 设置流关闭
 func (s *StreamingClient) IsEndStream() bool {
 	return atomic.LoadUint32(&s.endStream) > 0
@@ -508,6 +499,9 @@ func (s *StreamingClient) receiveAndNotify() {
 						s.connector.reportCallStatus(s, updateTask, code, false)
 					}
 					s.connector.retryUpdateTask(updateTask, discoverErr, false)
+					_ = updateTask.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
+						Error: model.NewSDKError(model.ErrCode(code), discoverErr, ""),
+					})
 				}
 			}
 			// 出现了错误，退出收包协程
@@ -579,30 +573,6 @@ func (g *DiscoverConnector) checkStreamingClientAvailable(
 	}
 	streamingClient.pendingTasks[task.ServiceEventKey] = task
 	return true
-	//
-	// var available = false
-	// if !streamingClient.isEndStream() {
-	//	streamingClient.mutex.Lock()
-	//	if !streamingClient.isEndStream() {
-	//		taskType := atomic.LoadUint32(&task.longRun)
-	//		if taskType == firstTask || taskType == retryTask {
-	//			log.GetNetworkLogger().Infof("%s, checkStreamingClientAvailable: "+
-	//				"add first or retry task %s to streamingClient %s pendingTasks",
-	//				g.ServiceConnector.GetSDKContextID(), task, streamingClient.reqID)
-	//		}
-	//		origTask, ok := streamingClient.pendingTasks[task.ServiceEventKey]
-	//		if ok {
-	//			log.GetBaseLogger().Errorf("%s, checkStreamingClientAvailable:"+
-	//				" add exist task %s to client %s, whose msgSendTime is %s, lastUpdateTime is %s",
-	//				g.ServiceConnector.GetSDKContextID(), origTask, streamingClient.reqID,
-	//				atomicTimeToString(origTask.msgSendTime), atomicTimeToString(origTask.lastUpdateTime))
-	//		}
-	//		streamingClient.pendingTasks[task.ServiceEventKey] = task
-	//		available = true
-	//	}
-	//	streamingClient.mutex.Unlock()
-	// }
-	// return available
 }
 
 // 创建新的客户端数据流
@@ -647,6 +617,9 @@ finally:
 		sdkErr := model.NewSDKError(model.ErrCodeNetworkError, err,
 			"fail to GetInstances for %v, reqID %s", task.ServiceEventKey, streamingClient.reqID)
 		g.retryUpdateTask(task, sdkErr, false)
+		_ = task.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
+			Error: model.NewSDKError(model.ErrCodeInvalidServerResponse, sdkErr, ""),
+		})
 		return nil, sdkErr
 	}
 	return streamingClient, nil

@@ -18,12 +18,12 @@
 package register
 
 import (
-	// 注册插件类型以及具体插件实例
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/location"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
@@ -40,6 +40,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/weightedrandom"
 	_ "github.com/polarismesh/polaris-go/plugin/localregistry/inmemory"
+	_ "github.com/polarismesh/polaris-go/plugin/location"
 	_ "github.com/polarismesh/polaris-go/plugin/logger/zaplog"
 	_ "github.com/polarismesh/polaris-go/plugin/metrics/prometheus"
 	_ "github.com/polarismesh/polaris-go/plugin/metrics/pushgateway"

@@ -59,8 +59,6 @@ type ConsumerConfig interface {
 	GetCircuitBreaker() CircuitBreakerConfig
 	// GetHealthCheck get health check config
 	GetHealthCheck() HealthCheckConfig
-	// GetSubScribe get subscribe config
-	GetSubScribe() SubscribeConfig
 	// GetServiceSpecific 服务独立配置
 	GetServiceSpecific(namespace string, service string) ServiceSpecificConfig
 }
@@ -474,16 +472,6 @@ type HealthCheckConfig interface {
 	GetChain() []string
 	// SetChain set health checking chain
 	SetChain([]string)
-}
-
-// SubscribeConfig .订阅配置.
-type SubscribeConfig interface {
-	BaseConfig
-	PluginConfig
-	// GetType 获取插件
-	GetType() string
-	// SetType 设置插件
-	SetType(string)
 }
 
 // ServiceSpecificConfig 配置.

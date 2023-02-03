@@ -140,8 +140,8 @@ type CacheObject struct {
 	cachePersistentAvailable uint32
 	// 服务是否被订阅
 	serviceIsWatched uint32
-	// 服务推空保护
-	pushEmptyProtection bool
+	// 是否为远程服务端出现错误无法获取数据
+	hasRemoteError uint32
 }
 
 // NewCacheObject 创建缓存对象
@@ -250,6 +250,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 	err, svcEventKey := event.Error, &event.ServiceEventKey
 	// 更新标记为，表示该对象已经经过远程更新
 	atomic.StoreUint32(&s.hasRemoteUpdated, 1)
+	atomic.StoreUint32(&s.hasRemoteError, 0)
 	var svcDeleted bool
 	if err != nil {
 		// 收取消息有出错
@@ -272,6 +273,10 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 			svcDeleted = true
 		} else {
 			log.GetBaseLogger().Errorf("OnServiceUpdate: fail to update %s for err %v", *svcEventKey, err)
+			if err.ErrorCode() == model.ErrCodeInvalidServerResponse {
+				// 网络错误问题，这里塞入一个空的 value, 避免每次获取都需要等待
+				atomic.StoreUint32(&s.hasRemoteError, 1)
+			}
 		}
 	} else {
 		message := event.Value
@@ -368,24 +373,10 @@ func (s *CacheObject) GetRevision() string {
 }
 
 // SetValue 设置缓存对象
-func (s *CacheObject) SetValue(cacheValue model.RegistryValue) bool {
-	canSet := true
-	if cacheValue.GetType() == model.EventInstances && s.pushEmptyProtection {
-		canSet = !(len(cacheValue.(*pb.ServiceInstancesInProto).GetInstances()) == 0)
-	}
-
-	if !canSet {
-		log.GetBaseLogger().Warnf(
-			"CacheObject: value for %s is not updated, revision %s, pushEmptyProtection: %+v",
-			*s.serviceValueKey, cacheValue.GetRevision(), s.pushEmptyProtection)
-		return false
-	}
-
+func (s *CacheObject) SetValue(cacheValue model.RegistryValue) {
 	s.value.Store(cacheValue)
 	log.GetBaseLogger().Infof(
 		"CacheObject: value for %s is updated, revision %s", *s.serviceValueKey, cacheValue.GetRevision())
-
-	return true
 }
 
 // GetBusiness 获取业务类型

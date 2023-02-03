@@ -466,8 +466,6 @@ func (c *ConsumerConfigImpl) Init() {
 	c.Loadbalancer.Init()
 	c.HealthCheck = &HealthCheckConfigImpl{}
 	c.HealthCheck.Init()
-	c.Subscribe = &SubscribeImpl{}
-	c.Subscribe.Init()
 }
 
 // Verify 检验consumerConfig配置.
@@ -502,7 +500,6 @@ func (c *ConsumerConfigImpl) SetDefault() {
 	c.ServiceRouter.SetDefault()
 	c.CircuitBreaker.SetDefault()
 	c.HealthCheck.SetDefault()
-	c.Subscribe.SetDefault()
 }
 
 // Init 初始化整体配置对象.

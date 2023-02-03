@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/google/uuid"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -115,7 +114,7 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	}
 
 	reportClientReq.StatInfos = infos
-	reportClientReq.ID = uuid.NewString()
+	reportClientReq.ID = r.globalCtx.GetClientId()
 	return reportClientReq
 }
 
@@ -134,6 +133,7 @@ func (r *ReportClientCallBack) Process(
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
 		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
+		r.updateLocation(nil, err.(model.SDKError))
 		// 发生错误也要重试，直到获取到地域信息为止
 		return model.CONTINUE
 	}

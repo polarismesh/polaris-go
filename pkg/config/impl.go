@@ -98,7 +98,6 @@ type ConsumerConfigImpl struct {
 	Loadbalancer     *LoadBalancerConfigImpl   `yaml:"loadbalancer" json:"loadbalancer"`
 	CircuitBreaker   *CircuitBreakerConfigImpl `yaml:"circuitBreaker" json:"circuitBreaker"`
 	HealthCheck      *HealthCheckConfigImpl    `yaml:"healthCheck" json:"healthCheck"`
-	Subscribe        *SubscribeImpl            `yaml:"subscribe" json:"subscribe"`
 	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific" json:"servicesSpecific"`
 }
 
@@ -125,11 +124,6 @@ func (c *ConsumerConfigImpl) GetCircuitBreaker() CircuitBreakerConfig {
 // GetHealthCheck get health check config.
 func (c *ConsumerConfigImpl) GetHealthCheck() HealthCheckConfig {
 	return c.HealthCheck
-}
-
-// GetSubScribe 订阅配置.
-func (c *ConsumerConfigImpl) GetSubScribe() SubscribeConfig {
-	return c.Subscribe
 }
 
 // GetServiceSpecific 服务独立配置.

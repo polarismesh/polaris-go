@@ -43,7 +43,9 @@ func (e *Engine) syncInstancesReportAndFinalize(commonRequest *data.CommonInstan
 func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLimitRequest, resp *model.QuotaResponse) {
 	// 调用api的结果上报
 	_ = e.reportAPIStat(&commonRequest.CallResult)
-	e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
+	if resp != nil {
+		e.reportRateLimitGauge(commonRequest.QuotaRequest, resp)
+	}
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
 
@@ -159,19 +161,13 @@ outLoop:
 		sdkErrs := syncCtx.Errs()
 		if len(sdkErrs) > 0 {
 			e.reportCombinedErrs(req.GetCallResult(), consumedTime, sdkErrs)
-			rawErr := combineSDKErrors(sdkErrs)
-			log.GetBaseLogger().Errorf("error occur while processing GetInstances request,"+
-				" serviceKey: %s, time consume is %v, error is %s", *dstService, consumedTime, rawErr)
-			return model.NewSDKError(model.ErrCodeServerUserError, rawErr,
-				fmt.Sprintf("multierrs received for GetInstances request, serviceKey: %s", *dstService))
+			err = combineSDKErrors(sdkErrs)
+			break
 		}
 		if exceedTimeout {
 			// 只有网络错误才可以重试
 			time.Sleep(param.RetryInterval)
 			totalSleepTime += param.RetryInterval
-			// log.GetBaseLogger().Warnf("retry GetInstances for timeout, consume time %v,"+
-			//	" serviceKey: %s, retry times: %d",
-			//	consumedTime, *dstService, retryTimes)
 			continue
 		}
 		// 没有发生远程错误，直接走下一轮获取本地缓存
@@ -179,15 +175,16 @@ outLoop:
 			" serviceKey: %s, time consume is %v, retryTimes: %v", *dstService, consumedTime, retryTimes)
 		continue
 	}
-	// 超时过后，并且没有其他错误，那么尝试使用从缓存中获取的信息
-	var success bool
-	if err == nil {
-		success, err = tryGetServiceValuesFromCache(e.registry, req)
-		if success {
-			log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
-				retryTimes, param.MaxRetry, *dstService)
-			return nil
-		}
+	// 超时过后，尝试使用从缓存中获取的信息
+	success, err2 := tryGetServiceValuesFromCache(e.registry, req)
+	if success {
+		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
+			retryTimes, param.MaxRetry, *dstService)
+		return nil
+	}
+	if err2 != nil {
+		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache fail %v",
+			retryTimes, param.MaxRetry, *dstService, err)
 	}
 	log.GetBaseLogger().Errorf("fail to get resource of %s for timeout, retryTimes: %d, total consumed time: %v,"+
 		" total sleep time: %v", *dstService, retryTimes, totalConsumedTime, totalSleepTime)

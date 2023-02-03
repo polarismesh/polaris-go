@@ -328,7 +328,7 @@ func copy(src, dst string) (int64, error) {
 func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 	delErr := util.DeleteDir("./testdata/test_log/backup")
 	fmt.Println("delErr: ", delErr)
-	err1 := os.Mkdir("./testdata/test_log/backup", 644)
+	err1 := os.Mkdir("./testdata/test_log/backup", os.ModePerm)
 	c.Assert(err1, check.IsNil)
 	defer util.DeleteDir("./testdata/test_log/backup")
 	testService := &namingpb.Service{
@@ -430,7 +430,7 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 // TestFileCacheAvailableTime 测试缓存文件有效时间
 func (t *CacheTestingSuite) TestFileCacheAvailableTime(c *check.C) {
 	util.DeleteDir("./testdata/test_log/backup1")
-	err1 := os.Mkdir("./testdata/test_log/backup1", 644)
+	err1 := os.Mkdir("./testdata/test_log/backup1", os.ModePerm)
 	c.Assert(err1, check.IsNil)
 	defer util.DeleteDir("./testdata/test_log/backup1")
 	testService := &namingpb.Service{

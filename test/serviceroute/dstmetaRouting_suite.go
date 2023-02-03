@@ -156,6 +156,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 	cfg.GetConsumer().GetServiceRouter().SetChain([]string{config.DefaultServiceRouterDstMeta})
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
+	c.Assert(consumer, check.NotNil)
 	defer consumer.Destroy()
 	request := &api.GetInstancesRequest{}
 	request.Namespace = dstMetaNamespace

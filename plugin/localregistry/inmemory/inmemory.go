@@ -47,8 +47,9 @@ const (
 )
 
 var (
-	emptyInstance = pb.NewServiceInstancesInProto(nil, nil, nil, nil)
-	emptyRule     = pb.NewServiceRuleInProto(nil)
+	emptyInstance           = pb.NewServiceInstancesInProto(nil, nil, nil, nil)
+	emptyRule               = pb.NewServiceRuleInProto(nil)
+	emptyRuleInNetworkError = pb.NewServiceRuleInProtoWithInitializeStatus(nil, true)
 )
 
 var (
@@ -122,15 +123,6 @@ func (g *LocalCache) Destroy() error {
 	}
 	return nil
 }
-
-// //构建单个系统服务信息
-// func (g *LocalCache) buildServerService(cluster config.ServerClusterConfig, clsType config.ClusterType) {
-//	svcKey := config.ServiceClusterToServiceKey(cluster)
-//	g.serverServicesSet[svcKey] = clusterAndInterval{
-//		clsType:  clsType,
-//		interval: cluster.GetRefreshInterval(),
-//	}
-// }
 
 // 构建系统服务集合
 func (g *LocalCache) buildServerServiceSet(clsTypeToConfig map[config.ClusterType]config.ClusterService) {
@@ -255,16 +247,6 @@ func (g *LocalCache) GetInstances(svcKey *model.ServiceKey, includeCache bool,
 		return instances
 	}
 
-	// 如果该对象没有经过connector的更新，并且includeCache和isInternalRequest都为false，不返回缓存的值，返回emptyInstance
-	// if !includeCache && !isInternalRequest && atomic.LoadUint32(&cacheObj.hasRemoteUpdated) == 0 {
-	//	return emptyInstance
-	//	//_, isSystemSvc := g.serverServicesSet[*svcKey]
-	//	//if !isSystemSvc {
-	//	//	log.GetBaseLogger().Debugf("reject request for %s, because not remote updated\n", eventKey)
-	//	//	return emptyInstance
-	//	//}
-	//	//log.GetBaseLogger().Debugf("return not remote updated system service %s", eventKey)
-	// }
 	return emptyInstance
 }
 
@@ -454,9 +436,6 @@ func (g *LocalCache) toPluginValues(clsType config.ClusterType) *pb.SvcPluginVal
 // 实例更新后的处理动作
 func (g *LocalCache) postServiceInstanceUpdated(
 	svcKey *model.ServiceEventKey, cacheValue interface{}, preStatus CachedStatus) {
-	// if preStatus == CacheNotExists {
-	//	g.addServiceToSet(svcKey)
-	// }
 }
 
 // 创建服务缓存操作回调集合
@@ -672,6 +651,9 @@ func (g *LocalCache) GetServiceRule(svcEventKey *model.ServiceEventKey, includeC
 	cacheObj := value.(*CacheObject)
 	ruleValue := cacheObj.LoadValue(true)
 	if reflect2.IsNil(ruleValue) {
+		if atomic.LoadUint32(&cacheObj.hasRemoteError) > 0 {
+			return emptyRuleInNetworkError
+		}
 		return emptyRule
 	}
 
@@ -687,16 +669,6 @@ func (g *LocalCache) GetServiceRule(svcEventKey *model.ServiceEventKey, includeC
 		return ruleValue.(model.ServiceRule)
 	}
 
-	// 如果includeCache为false，并且这个对象没有经过远程更新，那么不返回缓存值
-	// if !includeCache && atomic.LoadUint32(&cacheObj.hasRemoteUpdated) == 0 {
-	//	return emptyRule
-	//	//_, isSystemSvc := g.serverServicesSet[svcEventKey.ServiceKey]
-	//	//if !isSystemSvc {
-	//	//	log.GetBaseLogger().Debugf("reject request for %s, because not remote updated\n", svcEventKey)
-	//	//	return emptyRule
-	//	//}
-	//	//log.GetBaseLogger().Debugf("return not remote updated system service %s", svcEventKey)
-	// }
 	return emptyRule
 }
 

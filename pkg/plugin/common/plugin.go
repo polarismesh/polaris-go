@@ -49,16 +49,10 @@ const (
 	TypeWeightAdjuster Type = 0x1007
 	// TypeStatReporter 统计上报扩展点
 	TypeStatReporter Type = 0x1008
-	// TypeAlarmReporter 告警扩展点
-	TypeAlarmReporter Type = 0x1009
 	// TypeRateLimiter 限流扩展点
 	TypeRateLimiter Type = 0x1010
-	// TypeSubScribe .
-	TypeSubScribe Type = 0x1011
 	// TypeLocationProvider 实例地理信息获取扩展点
 	TypeLocationProvider Type = 0x1012
-	// TypeReportHandler ReportClient 请求、响应处理器
-	TypeReportHandler Type = 0x1013
 	// TypeConfigConnector extend point of config file connector
 	TypeConfigConnector Type = 0x1014
 )
@@ -73,11 +67,8 @@ var typeToPresent = map[Type]string{
 	TypeCircuitBreaker:   "circuitBreaker",
 	TypeWeightAdjuster:   "weightAdjuster",
 	TypeStatReporter:     "statReporter",
-	TypeAlarmReporter:    "alarmReporter",
 	TypeRateLimiter:      "rateLimiter",
-	TypeSubScribe:        "subScribe",
 	TypeLocationProvider: "locationProvider",
-	TypeReportHandler:    "reportHandler",
 	TypeConfigConnector:  "configConnector",
 }
 
@@ -240,11 +231,8 @@ var LoadedPluginTypes = []Type{
 	TypeCircuitBreaker,
 	TypeWeightAdjuster,
 	TypeStatReporter,
-	TypeAlarmReporter,
 	TypeLocalRegistry,
 	TypeRateLimiter,
-	TypeSubScribe,
 	TypeLocationProvider,
-	TypeReportHandler,
 	TypeConfigConnector,
 }

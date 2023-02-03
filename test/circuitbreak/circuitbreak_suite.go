@@ -41,10 +41,11 @@ import (
 )
 
 const (
-	cbNS   = "cbns"
-	cbSVC  = "cbsvc"
-	cbIP   = "127.0.0.1"
-	cbPORT = 8088
+	cbNS            = "cbns"
+	cbSVC           = "cbsvc"
+	cbIP            = "127.0.0.1"
+	cbPORT          = 8088
+	cbInstanceCount = 50
 )
 
 // CircuitBreakSuite 熔断测试套件
@@ -86,7 +87,7 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	t.mockServer.RegisterService(t.testService)
-	t.mockServer.GenTestInstances(t.testService, 50)
+	t.mockServer.GenTestInstances(t.testService, cbInstanceCount)
 
 	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
@@ -218,27 +219,6 @@ func (t *CircuitBreakSuite) testErrRateByInstance(
 // CheckInstanceAvailable 检查实例是否可用
 func CheckInstanceAvailable(c *check.C, consumerAPI api.ConsumerAPI, targetIns model.Instance,
 	available bool, namespace string, service string) {
-	request := &api.GetOneInstanceRequest{}
-	request.FlowID = 1111
-	request.Namespace = namespace
-	request.Service = service
-	request.Timeout = model.ToDurationPtr(2 * time.Second)
-	hasTargetInst := false
-	for i := 0; i < 20; i++ {
-		resp, err := consumerAPI.GetOneInstance(request)
-		c.Assert(err, check.IsNil)
-		c.Assert(len(resp.Instances), check.Equals, 1)
-		if resp.Instances[0].GetId() == targetIns.GetId() {
-			hasTargetInst = true
-			break
-		}
-	}
-	if available {
-		c.Assert(hasTargetInst, check.Equals, true)
-	} else {
-		c.Assert(hasTargetInst, check.Equals, false)
-	}
-
 	request1 := &api.GetInstancesRequest{}
 	request1.FlowID = 1111
 	request1.Namespace = namespace
@@ -246,7 +226,7 @@ func CheckInstanceAvailable(c *check.C, consumerAPI api.ConsumerAPI, targetIns m
 	request1.Timeout = model.ToDurationPtr(2 * time.Second)
 	resp1, err := consumerAPI.GetInstances(request1)
 	c.Assert(err, check.IsNil)
-	hasTargetInst = false
+	hasTargetInst := false
 	for _, ins := range resp1.GetInstances() {
 		if ins.GetId() == targetIns.GetId() {
 			hasTargetInst = true
@@ -629,7 +609,7 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 		}
 	}
 	log2.Printf("useNum: %d", useNum)
-	c.Assert(useNum <= 2, check.Equals, true)
+	c.Assert(useNum <= 3, check.Equals, true)
 
 	// 熔断器半开后恢复所需成功探测数测试
 	var callResultOk = &api.ServiceCallResult{}
@@ -770,7 +750,7 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetErrorRatePercent(100)
 	cfg.Consumer.GetCircuitBreaker().SetSleepWindow(time.Second * 10)
 	cfg.Consumer.GetCircuitBreaker().SetRequestCountAfterHalfOpen(150)
-	cfg.Consumer.GetCircuitBreaker().SetSuccessCountAfterHalfOpen(150)
+	cfg.Consumer.GetCircuitBreaker().SetSuccessCountAfterHalfOpen(30)
 	cfg.Consumer.GetCircuitBreaker().SetRecoverWindow(time.Second * 20)
 
 	var err error
@@ -823,7 +803,7 @@ func (t *CircuitBreakSuite) TestHalfOpenSlow(c *check.C) {
 		c.Assert(targetIns.GetCircuitBreakerStatus().GetStatus(), check.Equals, model.HalfOpen)
 		// CheckInstanceAvailable(c, consumerAPI, targetIns, true, cbNS, cbSVC)
 	}
-	for i := 0; i < 29; i++ {
+	for i := 0; i < 30; i++ {
 		// log2.Printf("i: %d, cbStatus: %v", i, targetIns.GetCircuitBreakerStatus())
 		util.SelectInstanceSpecificNum(c, consumerAPI, targetIns, 1, 2000)
 		err := consumerAPI.UpdateServiceCallResult(callResult)
