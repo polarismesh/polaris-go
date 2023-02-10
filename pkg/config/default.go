@@ -242,7 +242,9 @@ const (
 	// DefaultServiceRouteReporter .
 	DefaultServiceRouteReporter string = "serviceRoute"
 	// DefaultStatReportEnabled .
-	DefaultStatReportEnabled bool = false
+	DefaultStatReportEnabled bool = true
+	// DefaultMetricsChain .
+	DefaultMetricsChain string = "prometheus"
 )
 
 const (

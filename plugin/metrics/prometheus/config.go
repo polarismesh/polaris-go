@@ -34,9 +34,12 @@ const (
 
 // Config prometheus 的配置
 type Config struct {
-	IP      string `yaml:"metricHost"`
-	PortStr string `yaml:"metricPort"`
-	Port    int    `yaml:"-"`
+	Type     string        `yaml:"type"`
+	IP       string        `yaml:"metricHost"`
+	PortStr  string        `yaml:"metricPort"`
+	port     int           `yaml:"-"`
+	Interval time.Duration `yaml:"interval"`
+	Address  string        `yaml:"address"`
 }
 
 // Verify verify config
@@ -46,11 +49,16 @@ func (c *Config) Verify() error {
 
 // SetDefault Setting defaults
 func (c *Config) SetDefault() {
+	if c.Type == "" {
+		c.Type = "pull"
+	}
 	if c.PortStr == "" {
-		c.Port = defaultMetricPort
+		c.port = defaultMetricPort
 		return
 	}
-
+	if c.Interval == 0 {
+		c.Interval = 15 * time.Second
+	}
 	port, _ := strconv.ParseInt(c.PortStr, 10, 64)
-	c.Port = int(port)
+	c.port = int(port)
 }

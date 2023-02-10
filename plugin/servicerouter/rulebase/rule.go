@@ -148,7 +148,7 @@ finally:
 		if ruleStatus == sourceRuleFail {
 			checkRule = routeInfo.SourceService.GetNamespace() + ":" + routeInfo.SourceService.GetService()
 		}
-		// 如果规则匹配失败, 返回错误
+		// 如果规则匹配失败, 返回空实例列表
 		notMatchedSrcText := getSourcesText(summary.notMatchedSources)
 		matchedSrcText := getSourcesText(summary.matchedSource)
 		invalidRegexSourceText := getSourcesText(summary.invalidRegexSources)
@@ -164,7 +164,8 @@ finally:
 			model.ToStringService(routeInfo.DestService, false), notMatchedSrcText, invalidRegexSourceText,
 			matchedSrcText, notMatchedDstText, invalidRegexDstText, weightZeroDstText, regexCompileErrText, checkRule)
 		log.GetBaseLogger().Errorf(errorText)
-		return nil, model.NewSDKError(model.ErrCodeRouteRuleNotMatch, nil, errorText)
+		result := servicerouter.PoolGetRouteResult(g.valueCtx)
+		return result, nil
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
