@@ -22,9 +22,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/plugin/metrics/prometheus/addons"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型.

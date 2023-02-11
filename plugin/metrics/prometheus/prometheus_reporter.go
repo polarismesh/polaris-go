@@ -25,15 +25,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/push"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/plugin/metrics/prometheus/addons"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/client_golang/prometheus/push"
 )
 
 const (
