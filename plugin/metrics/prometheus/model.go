@@ -236,6 +236,9 @@ var (
 		// 主调方相关信息
 		CallerLabels: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
+			if val.SourceService == nil || len(val.SourceService.Metadata) == 0 {
+				return ""
+			}
 			labels := val.SourceService.Metadata
 			var ret []string
 			for k, v := range labels {
