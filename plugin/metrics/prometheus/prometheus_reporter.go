@@ -110,6 +110,17 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		s.cfg = cfgValue.(*Config)
 	}
+	s.registry = prometheus.NewRegistry()
+
+	collectors, metricsVecCaches := buildMetrics()
+	s.metricVecCaches = metricsVecCaches
+	for i := range collectors {
+		collector := collectors[i]
+		if err := s.registry.Register(collector); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
