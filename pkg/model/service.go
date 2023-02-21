@@ -1217,6 +1217,8 @@ type InstanceRegisterRequest struct {
 	Timeout *time.Duration
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
+	// 可选，指定实例id
+	InstanceId string
 }
 
 // String 打印消息内容

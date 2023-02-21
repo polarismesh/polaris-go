@@ -27,7 +27,7 @@ import (
 // RegisterRequestToProto 将用户的API注册请求结构转换成为server端需要的proto结构
 func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance *namingpb.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
-		request.Port, request.ServiceToken, "")
+		request.Port, request.ServiceToken, request.InstanceId)
 	if nil != request.Protocol {
 		pbInstance.Protocol = &wrappers.StringValue{Value: *request.Protocol}
 	}
