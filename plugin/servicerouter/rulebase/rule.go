@@ -164,8 +164,7 @@ finally:
 			model.ToStringService(routeInfo.DestService, false), notMatchedSrcText, invalidRegexSourceText,
 			matchedSrcText, notMatchedDstText, invalidRegexDstText, weightZeroDstText, regexCompileErrText, checkRule)
 		log.GetBaseLogger().Errorf(errorText)
-		result := servicerouter.PoolGetRouteResult(g.valueCtx)
-		return result, nil
+		return nil, model.NewSDKError(model.ErrCodeRouteRuleNotMatch, nil, errorText)
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
