@@ -336,7 +336,12 @@ func getSelfIP(cfg config.Configuration) {
 
 	conn, _ := net.Dial("tcp", address[0])
 	if conn != nil {
-		cfg.GetGlobal().GetAPI().SetBindIP(conn.LocalAddr().String())
+		localAddr := conn.LocalAddr().String()
+		colonIdx := strings.LastIndex(localAddr, ":")
+		if colonIdx > 0 {
+			localAddr = localAddr[:colonIdx]
+		}
+		cfg.GetGlobal().GetAPI().SetBindIP(localAddr)
 		_ = conn.Close()
 	}
 }
