@@ -148,7 +148,7 @@ finally:
 		if ruleStatus == sourceRuleFail {
 			checkRule = routeInfo.SourceService.GetNamespace() + ":" + routeInfo.SourceService.GetService()
 		}
-		// 如果规则匹配失败, 返回空实例列表
+		// 如果规则匹配失败, 返回错误
 		notMatchedSrcText := getSourcesText(summary.notMatchedSources)
 		matchedSrcText := getSourcesText(summary.matchedSource)
 		invalidRegexSourceText := getSourcesText(summary.invalidRegexSources)
