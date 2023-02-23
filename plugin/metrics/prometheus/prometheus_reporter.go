@@ -39,10 +39,10 @@ import (
 
 const (
 	// PluginName is the name of the plugin.
-	PluginName      string = "prometheus"
-	_metricsPull    string = "pull"
-	_metricsPush    string = "push"
-	_defaultJobName        = "polaris-client"
+	PluginName      = "prometheus"
+	_metricsPull    = "pull"
+	_metricsPush    = "push"
+	_defaultJobName = "polaris-client"
 )
 
 var _ statreporter.StatReporter = (*PrometheusReporter)(nil)
@@ -258,8 +258,7 @@ func (s *PrometheusReporter) initPull() {
 
 	go func() {
 		handler := metricsHttpHandler{
-			promeHttpHandler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
-			lock:             &sync.RWMutex{},
+			handler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
 		}
 
 		log.GetBaseLogger().Infof("start metrics http-server address : %s", fmt.Sprintf("%s:%d", s.bindIP, s.pullPort))

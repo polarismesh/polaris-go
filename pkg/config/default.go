@@ -230,21 +230,21 @@ const (
 
 const (
 	// DefaultStatReporter .
-	DefaultStatReporter string = "stat2Monitor"
+	DefaultStatReporter = "stat2Monitor"
 	// DefaultCacheReporter .
-	DefaultCacheReporter string = "serviceCache"
+	DefaultCacheReporter = "serviceCache"
 	// DefaultPluginReporter .
-	DefaultPluginReporter string = "pluginInfo"
+	DefaultPluginReporter = "pluginInfo"
 	// DefaultLoadBalanceReporter .
-	DefaultLoadBalanceReporter string = "lbInfo"
+	DefaultLoadBalanceReporter = "lbInfo"
 	// DefaultRateLimitReporter .
-	DefaultRateLimitReporter string = "rateLimitRecord"
+	DefaultRateLimitReporter = "rateLimitRecord"
 	// DefaultServiceRouteReporter .
-	DefaultServiceRouteReporter string = "serviceRoute"
+	DefaultServiceRouteReporter = "serviceRoute"
 	// DefaultStatReportEnabled .
-	DefaultStatReportEnabled bool = true
+	DefaultStatReportEnabled = true
 	// DefaultMetricsChain .
-	DefaultMetricsChain string = "prometheus"
+	DefaultMetricsChain = "prometheus"
 )
 
 const (

@@ -369,15 +369,15 @@ func buildMetrics() ([]prometheus.Collector, map[string]prometheus.Collector) {
 }
 
 type metricsHttpHandler struct {
-	promeHttpHandler http.Handler
-	lock             *sync.RWMutex
+	handler http.Handler
+	lock    sync.RWMutex
 }
 
 // ServeHTTP 提供 prometheus http 服务.
 func (p *metricsHttpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
-	p.promeHttpHandler.ServeHTTP(writer, request)
+	p.handler.ServeHTTP(writer, request)
 }
 
 func convertInsGaugeToLabels(val *model.ServiceCallResult, bindIP string) map[string]string {
