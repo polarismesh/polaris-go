@@ -116,6 +116,8 @@ func (svr *PolarisProvider) deregisterService() {
 	deregisterRequest.Host = svr.host
 	deregisterRequest.Port = svr.port
 	deregisterRequest.ServiceToken = token
+	// 实例id不是必填，如果不填，服务端会默认生成一个唯一Id，否则当提供实例id时，需要保证实例id是唯一的
+	deregisterRequest.InstanceID = "instance-id-provided"
 	if err := svr.provider.Deregister(deregisterRequest); err != nil {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
