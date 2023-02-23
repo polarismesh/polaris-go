@@ -126,6 +126,7 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 				Host:         instance.Host,
 				Port:         instance.Port,
 				ServiceToken: instance.ServiceToken,
+				InstanceID:   instance.InstanceId,
 			}
 			if err := beat(hbReq); err != nil {
 				log.GetBaseLogger().Errorf("heartbeat failed {%s, %s, %s:%d}",
