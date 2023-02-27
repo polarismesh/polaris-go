@@ -72,7 +72,7 @@ func (s *StatReporterConfigImpl) SetDefault() {
 		s.Enable = &enable
 	}
 	if len(s.Chain) == 0 {
-		s.Chain = []string{}
+		s.Chain = []string{DefaultMetricsChain}
 	}
 	s.Plugin.SetDefault(common.TypeStatReporter)
 }

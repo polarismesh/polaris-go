@@ -18,9 +18,14 @@ package prometheus
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/plugin/metrics/prometheus/addons"
 )
 
 // MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型.
@@ -231,6 +236,9 @@ var (
 		// 主调方相关信息
 		CallerLabels: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
+			if val.SourceService == nil || len(val.SourceService.Metadata) == 0 {
+				return ""
+			}
 			labels := val.SourceService.Metadata
 			var ret []string
 			for k, v := range labels {
@@ -322,4 +330,77 @@ func formatLabelsToStr(arguments []model.Argument) string {
 	}
 
 	return strings.Join(s, "|")
+}
+
+func buildMetrics() ([]prometheus.Collector, map[string]prometheus.Collector) {
+	var (
+		metricVecCaches = map[string]prometheus.Collector{}
+		collectors      = make([]prometheus.Collector, 0, len(metrcisDesces))
+	)
+
+	for _, desc := range metrcisDesces {
+		var collector prometheus.Collector
+		switch desc.MetricType {
+		case TypeForGaugeVec:
+			collector = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
+		case TypeForCounterVec:
+			collector = prometheus.NewCounterVec(prometheus.CounterOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
+		case TypeForMaxGaugeVec:
+			collector = addons.NewMaxGaugeVec(prometheus.GaugeOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
+		case TypeForHistogramVec:
+			collector = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name: desc.Name,
+				Help: desc.Help,
+			}, desc.LabelNames)
+		}
+		collectors = append(collectors, collector)
+		metricVecCaches[desc.Name] = collector
+	}
+	return collectors, metricVecCaches
+}
+
+type metricsHttpHandler struct {
+	handler http.Handler
+	lock    sync.RWMutex
+}
+
+// ServeHTTP 提供 prometheus http 服务.
+func (p *metricsHttpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	p.handler.ServeHTTP(writer, request)
+}
+
+func convertInsGaugeToLabels(val *model.ServiceCallResult, bindIP string) map[string]string {
+	labels := make(map[string]string)
+	for label, supplier := range InstanceGaugeLabelOrder {
+		labels[label] = supplier(val)
+	}
+	labels[CallerIP] = bindIP
+	return labels
+}
+
+func convertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string {
+	labels := make(map[string]string)
+	for label, supplier := range RateLimitGaugeLabelOrder {
+		labels[label] = supplier(val)
+	}
+	return labels
+}
+
+func convertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
+	labels := make(map[string]string)
+	for label, supplier := range CircuitBreakerGaugeLabelOrder {
+		labels[label] = supplier(val)
+	}
+	return labels
 }

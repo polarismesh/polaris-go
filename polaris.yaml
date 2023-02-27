@@ -109,27 +109,32 @@ global:
     #描述：统计上报插件配置
     plugin:
       prometheus:
-        #描述: 设置 prometheus http-server 的监听IP
+        #描述: 设置 prometheus 指标上报模式
         #类型:string
+        #默认值:pull
+        #范围:pull|push
+        type: pull
+        #描述: 设置 prometheus http-server 的监听IP, 仅 type == pull 时生效
+        #类型:string
+        #默认值: ${global.api.bindIP}
         #默认使用SDK的绑定IP
         metricHost: 
-        #描述: 设置 prometheus http-server 的监听端口
+        #描述: 设置 prometheus http-server 的监听端口, 仅 type == pull 时生效
         #类型:int
         #默认值: 28080
         #如果设置为负数，则不会开启默认的http-server
         #如果设置为0，则随机选择一个可用端口进行启动 http-server
         metricPort: 28080
-      # pushgateway:
-      #   #描述: 设置 pushgateway 的地址
-      #   #类型:string
-      #   #默认 127.0.0.1:9091
-      #   address: 127.0.0.1:9091
-      #   #描述:设置metric数据推送到pushgateway的执行周期
-      #   #类型:string
-      #   #格式:^\d+(ms|s|m|h)$
-      #   #范围:[1m:...]
-      #   #默认值:10m
-      #   pushInterval: 10s
+        # #描述: 设置 pushgateway 的地址, 仅 type == push 时生效
+        # #类型:string
+        # #默认 ${global.serverConnector.addresses[0]}:9091
+        # address: 127.0.0.1:9091
+        # #描述:设置metric数据推送到pushgateway的执行周期, 仅 type == push 时生效
+        # #类型:string
+        # #格式:^\d+(ms|s|m|h)$
+        # #范围:[1m:...]
+        # #默认值:10m
+        # pushInterval: 10s
   # 地址提供插件，用于获取当前SDK所在的地域信息
   # location:
   #   providers:

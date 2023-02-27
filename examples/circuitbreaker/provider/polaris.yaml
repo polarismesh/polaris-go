@@ -9,7 +9,5 @@ global:
       # - pushgateway
     plugin:
       prometheus:
+        type: pull
         metricPort: 0
-      # pushgateway:
-      #   address: 127.0.0.1:9091
-      #   pushInterval: 10s
