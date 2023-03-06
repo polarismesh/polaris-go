@@ -100,7 +100,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
 	// 实例id不是必填，如果不填，服务端会默认生成一个唯一Id，否则当提供实例id时，需要保证实例id是唯一的
-	registerRequest.InstanceId = "instance-id-provided"
+	registerRequest.InstanceId = providedInstanceId(namespace, service, svr.host, svr.port)
 	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
@@ -117,7 +117,7 @@ func (svr *PolarisProvider) deregisterService() {
 	deregisterRequest.Port = svr.port
 	deregisterRequest.ServiceToken = token
 	// 实例id不是必填，如果注册时指定了实例id，则反注册时需要提供同样的id
-	deregisterRequest.InstanceID = "instance-id-provided"
+	deregisterRequest.InstanceID = providedInstanceId(namespace, service, svr.host, svr.port)
 	if err := svr.provider.Deregister(deregisterRequest); err != nil {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
@@ -177,4 +177,8 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+func providedInstanceId(namespace, service, host string, port int) string {
+	return fmt.Sprintf("%s#%s#%s#%d", namespace, service, host, port)
 }
