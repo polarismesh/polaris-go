@@ -1,5 +1,6 @@
 # polaris-go
 
+[![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg?token=EK9174H91T)](https://codecov.io/gh/polarismesh/polaris-go)
 [![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
