@@ -1,4 +1,4 @@
-# polaris-go
+# Polaris Go
 
 [![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg?token=EK9174H91T)](https://codecov.io/gh/polarismesh/polaris-go)
 [![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
@@ -9,9 +9,17 @@
 [English](./README.md) | 简体中文
 
 ---
-北极星polaris是一个支持多种开发语言、兼容主流开发框架的服务治理中心。polaris-go是北极星的Go语言嵌入式服务治理SDK
 
-## 概述
+README：
+
+- [介绍](#介绍)
+- [如何使用](#如何使用)
+- [使用示例](#使用示例)
+- [开发框架](#开发框架)
+
+## 介绍
+
+polaris-go是北极星的Go语言嵌入式服务治理SDK。北极星是一个支持多种开发语言、兼容主流开发框架的服务治理中心。
 
 polaris-go提供以下功能特性：
 
@@ -31,23 +39,32 @@ polaris-go提供以下功能特性：
 
   提供API接口供应用进行配额的检查及划扣，支持按服务级，以及接口级的限流策略。
 
-## 快速入门
-
-### 依赖引入
+## 如何使用
 
 polaris-go通过go mod进行管理，用户可以在go.mod文件中引入polaris-go的依赖
-
 
 ```go
 go get -u github.com/polarismesh/polaris-go
 ```
 
-### 使用API
-
 API的快速使用指南，可以参考：[QuickStart](examples/quickstart)
 
-## License
+## 使用示例
 
-The polaris-go is licensed under the BSD 3-Clause License. Copyright and license information can be found in the
-file [LICENSE](LICENSE)
+为了演示功能如何使用，polaris-go 项目包含了一个子模块polaris-examples。此模块中提供了演示用的 example ，您可以阅读对应的 example 工程下的 README-zh 文档，根据里面的步骤来体验。
 
+- [快速开始](https://github.com/polarismesh/polaris-go/tree/main/examples/quickstart)
+- [路由示例](https://github.com/polarismesh/polaris-go/tree/main/examples/route)
+- [熔断示例](https://github.com/polarismesh/polaris-go/tree/main/examples/circuitbreaker)
+- [限流示例](https://github.com/polarismesh/polaris-go/tree/main/examples/ratelimit)
+- [配置中心示例](https://github.com/polarismesh/polaris-go/tree/main/examples/configuration)
+
+## 开发框架
+
+通常，开发者使用开源或者自研的 HTTP 或者 RPC 框架开发分布式服务。北极星提供多个框架和北极星 SDK 的集成方案和实现。如果你在使用这些框架，不需要直接调用北极星 SDK，就可以使用北极星的服务治理功能。
+
+- Dubbo Go
+  - [registry, discovery and routing](https://github.com/apache/dubbo-go/tree/main/registry)
+  - [circuit breaker and rate limiter](https://github.com/apache/dubbo-go/tree/main/filter)
+- grpc-go
+  - [grpc-go-polaris](https://github.com/polarismesh/grpc-go-polaris)
