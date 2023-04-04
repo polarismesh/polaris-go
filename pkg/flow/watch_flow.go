@@ -85,7 +85,7 @@ func (w *WatchEngine) CancelWatch(watchId uint64) {
 	}
 }
 
-func (w *WatchEngine) NotifyAllInstances(
+func (w *WatchEngine) notifyAllInstances(
 	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	nextId := atomic.AddUint64(&w.indexSeed, 1)
 	svcInstances := w.registry.GetInstances(&request.ServiceKey, false, false)
@@ -115,7 +115,7 @@ func (w *WatchEngine) NotifyAllInstances(
 	return model.NewWatchAllInstancesResponse(nextId, instancesResponse, w.CancelWatch), nil
 }
 
-func (w *WatchEngine) WatchAllInstances(
+func (w *WatchEngine) longPullAllInstances(
 	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	nextId := atomic.AddUint64(&w.indexSeed, 1)
 	svcInstances := w.registry.GetInstances(&request.ServiceKey, false, false)
@@ -152,9 +152,16 @@ func (w *WatchEngine) WatchAllInstances(
 	return model.NewWatchAllInstancesResponse(nextId, instancesResponse, nil), nil
 }
 
+func (w *WatchEngine) WatchAllInstances(
+	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
+	if request.WatchMode == model.WatchModeNotify {
+		return w.notifyAllInstances(request)
+	}
+	return w.longPullAllInstances(request)
+}
+
 type NotifyUpdateContext struct {
 	id                uint64
-	mutex             sync.Mutex
 	svcEventKey       model.ServiceEventKey
 	instancesListener model.InstancesListener
 }
@@ -164,10 +171,10 @@ func (l *NotifyUpdateContext) ServiceEventKey() model.ServiceEventKey {
 }
 
 func (l *NotifyUpdateContext) OnRegistryValue(value model.RegistryValue) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-	instancesResponse := data.BuildInstancesResponse(l.svcEventKey.ServiceKey, nil, value.(model.ServiceInstances))
-	l.instancesListener.OnInstancesUpdate(instancesResponse)
+	go func() {
+		instancesResponse := data.BuildInstancesResponse(l.svcEventKey.ServiceKey, nil, value.(model.ServiceInstances))
+		l.instancesListener.OnInstancesUpdate(instancesResponse)
+	}()
 }
 
 func (l *NotifyUpdateContext) Cancel() {
