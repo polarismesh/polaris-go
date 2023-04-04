@@ -53,7 +53,11 @@ func NewWatchEngine(registry localregistry.LocalRegistry) *WatchEngine {
 // ServiceEventCallback serviceUpdate消息订阅回调
 func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 	var svcInstances model.ServiceInstances
-	eventObject := event.EventObject.(*common.ServiceEventObject)
+	var eventObject *common.ServiceEventObject
+	var ok bool
+	if eventObject, ok = event.EventObject.(*common.ServiceEventObject); !ok {
+		return nil
+	}
 	switch event.EventType {
 	case common.OnServiceAdded:
 		svcInstances = eventObject.NewValue.(model.ServiceInstances)
@@ -65,11 +69,13 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 		// do nothing
 	}
 	if svcInstances != nil {
-		w.rwMutex.RLock()
-		for _, lpCtx := range w.watchContexts {
-			lpCtx.OnRegistryValue(svcInstances)
-		}
-		w.rwMutex.RUnlock()
+		func() {
+			w.rwMutex.RLock()
+			defer w.rwMutex.RUnlock()
+			for _, lpCtx := range w.watchContexts {
+				lpCtx.OnRegistryValue(svcInstances)
+			}
+		}()
 	}
 	return nil
 }
