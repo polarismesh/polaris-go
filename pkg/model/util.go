@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+	"hash/crc64"
 	"hash/fnv"
 	"net"
 	"os"
@@ -304,4 +305,13 @@ func ConvertDuration(d *duration.Duration) (time.Duration, error) {
 func ProtoDurationToMS(dur *duration.Duration) int64 {
 	timeDuration, _ := ConvertDuration(dur)
 	return int64(timeDuration / time.Millisecond)
+}
+
+func GetCrc64Hash(value string) (uint64, error) {
+	h := crc64.New(crc64.MakeTable(crc64.ECMA))
+	_, err := h.Write([]byte(value))
+	if err != nil {
+		return 0, err
+	}
+	return h.Sum64(), nil
 }

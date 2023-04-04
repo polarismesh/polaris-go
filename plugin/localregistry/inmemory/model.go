@@ -29,7 +29,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	lrplug "github.com/polarismesh/polaris-go/plugin/localregistry/common"
@@ -52,22 +51,26 @@ type persistTask struct {
 type CachedStatus int
 
 const (
-	// CacheNotExists 缓存不存在
-	CacheNotExists CachedStatus = iota + 1
-	// CacheChanged 缓存已改变
+	// CacheAdded 缓存数据从无到有
+	CacheAdded CachedStatus = iota + 1
+	// CacheChanged 缓存已存在，发生了数据改变
 	CacheChanged
 	// CacheNotChanged 缓存未改变
 	CacheNotChanged
-	// CacheEmptyButNoData cache是空的，但是server没有返回data
-	CacheEmptyButNoData
+	// CacheEmptyButNotChanged 缓存不存在，但是server返回DataNotChanged
+	CacheEmptyButNotChanged
+	// CacheDeleted 服务数据已经被删除
+	CacheDeleted
 )
 
 var (
 	// CachedStatusToPresent 将缓存状态转换为present状态
 	CachedStatusToPresent = map[CachedStatus]string{
-		CacheNotExists:  "CacheNotExists",
-		CacheChanged:    "CacheChanged",
-		CacheNotChanged: "CacheNotChanged",
+		CacheAdded:              "CacheAdded",
+		CacheChanged:            "CacheChanged",
+		CacheNotChanged:         "CacheNotChanged",
+		CacheEmptyButNotChanged: "CacheEmptyButNotChanged",
+		CacheDeleted:            "CacheDeleted",
 	}
 )
 
@@ -110,8 +113,6 @@ type CacheHandlers struct {
 		svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue
 	// OnEventDeleted 缓存被删除
 	OnEventDeleted func(key *model.ServiceEventKey, cacheValue interface{})
-	// PostCacheUpdated 缓存更新的后续擦欧洲哦
-	PostCacheUpdated func(svcKey *model.ServiceEventKey, newCacheValue interface{}, preCacheStatus CachedStatus)
 }
 
 // CacheObject 缓存值的管理基类
@@ -134,12 +135,8 @@ type CacheObject struct {
 	hasRegistered uint32
 	// 标记这个服务对象是否已经删除了，防止connector收到多次服务不存在的消息，导致重复删除
 	hasDeleted uint32
-	// 是否已经触发服务新增回调
-	hasNotifyServiceAdded uint32
 	// 在没有经过远程更新的情况下是否直接可用
 	cachePersistentAvailable uint32
-	// 服务是否被订阅
-	serviceIsWatched uint32
 	// 是否为远程服务端出现错误无法获取数据
 	hasRemoteError uint32
 }
@@ -148,14 +145,13 @@ type CacheObject struct {
 func NewCacheObject(
 	handler CacheHandlers, registry *LocalCache, serviceValueKey *model.ServiceEventKey) *CacheObject {
 	res := &CacheObject{
-		serviceValueKey:  serviceValueKey,
-		registry:         registry,
-		Handler:          handler,
-		inValid:          0,
-		notifier:         common.NewNotifier(),
-		createTime:       clock.GetClock().Now(),
-		lastVisitTime:    clock.GetClock().Now().UnixNano(),
-		serviceIsWatched: 0,
+		serviceValueKey: serviceValueKey,
+		registry:        registry,
+		Handler:         handler,
+		inValid:         0,
+		notifier:        common.NewNotifier(),
+		createTime:      clock.GetClock().Now(),
+		lastVisitTime:   clock.GetClock().Now().UnixNano(),
 	}
 	if serviceValueKey.Type == model.EventInstances {
 		res.svcLocalValue = local.NewServiceLocalValue()
@@ -213,18 +209,6 @@ func (s *CacheObject) LoadValue(updateVisitTime bool) interface{} {
 	if reflect2.IsNil(value) {
 		return nil
 	}
-	if atomic.CompareAndSwapUint32(&s.hasNotifyServiceAdded, 0, 1) {
-		eventObject := &common.ServiceEventObject{
-			SvcEventKey: *s.serviceValueKey,
-			OldValue:    nil,
-			NewValue:    value,
-		}
-		// 如果是限流规则，计算diffinfo
-		if s.serviceValueKey.Type == model.EventRateLimiting {
-			eventObject.DiffInfo = calcRateLimitDiffInfo(nil, extractRateLimitFromCacheValue(value))
-		}
-		s.notifyServiceAdded(eventObject)
-	}
 	return value
 }
 
@@ -245,70 +229,62 @@ func (s *CacheObject) GetNotifier() *common.Notifier {
 	return s.notifier
 }
 
+func (s *CacheObject) notifyEventHandlers(eventObject *common.ServiceEventObject, status CachedStatus) {
+	switch status {
+	case CacheAdded:
+		addHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceAdded)
+		if len(addHandlers) > 0 {
+			uEvent := &common.PluginEvent{EventType: common.OnServiceAdded, EventObject: eventObject}
+			for _, handler := range addHandlers {
+				_ = handler.Callback(uEvent)
+			}
+		}
+	case CacheChanged:
+		updateHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceUpdated)
+		if len(updateHandlers) > 0 {
+			uEvent := &common.PluginEvent{EventType: common.OnServiceUpdated, EventObject: eventObject}
+			for _, handler := range updateHandlers {
+				_ = handler.Callback(uEvent)
+			}
+		}
+	case CacheDeleted:
+		deleteHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceDeleted)
+		if len(deleteHandlers) > 0 {
+			uEvent := &common.PluginEvent{EventType: common.OnServiceDeleted, EventObject: eventObject}
+			for _, handler := range deleteHandlers {
+				_ = handler.Callback(uEvent)
+			}
+		}
+	}
+}
+
 // OnServiceUpdate 服务远程实例更新事件到来后的回调操作
-func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool {
+func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) {
 	err, svcEventKey := event.Error, &event.ServiceEventKey
 	// 更新标记为，表示该对象已经经过远程更新
 	atomic.StoreUint32(&s.hasRemoteUpdated, 1)
 	atomic.StoreUint32(&s.hasRemoteError, 0)
-	var svcDeleted bool
 	if err != nil {
-		// 收取消息有出错
-		instancesValue := s.LoadValue(false)
-		// 没有服务信息直接删除
-		if atomic.CompareAndSwapUint32(&s.hasDeleted, 0, 1) && model.ErrCodeServiceNotFound == err.ErrorCode() {
-			s.Handler.OnEventDeleted(svcEventKey, instancesValue)
-			eventObject := &common.ServiceEventObject{SvcEventKey: *svcEventKey, OldValue: instancesValue}
-			if svcEventKey.Type == model.EventRateLimiting {
-				eventObject.DiffInfo = calcRateLimitDiffInfo(extractRateLimitFromCacheValue(instancesValue), nil)
-			}
-			deleteHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceDeleted)
-			if !reflect2.IsNil(instancesValue) && len(deleteHandlers) > 0 {
-				dEvent := &common.PluginEvent{
-					EventType: common.OnServiceDeleted, EventObject: eventObject}
-				for _, handler := range deleteHandlers {
-					_ = handler.Callback(dEvent)
-				}
-			}
-			svcDeleted = true
-		} else {
-			log.GetBaseLogger().Errorf("OnServiceUpdate: fail to update %s for err %v", *svcEventKey, err)
-			if err.ErrorCode() == model.ErrCodeInvalidServerResponse {
-				// 网络错误问题，这里塞入一个空的 value, 避免每次获取都需要等待
-				atomic.StoreUint32(&s.hasRemoteError, 1)
-			}
+		log.GetBaseLogger().Errorf("OnServiceUpdate: fail to update %s for err %v", *svcEventKey, err)
+		if err.ErrorCode() == model.ErrCodeInvalidServerResponse {
+			// 网络错误问题，这里塞入一个空的 value, 避免每次获取都需要等待
+			atomic.StoreUint32(&s.hasRemoteError, 1)
 		}
 	} else {
 		message := event.Value
-		cachedValue := s.value.Load()
+		cachedValue := s.LoadValue(false)
 		cachedStatus := s.Handler.CompareMessage(cachedValue, message)
-		if cachedStatus == CacheChanged || cachedStatus == CacheNotExists {
-			log.GetBaseLogger().Infof("OnServiceUpdate: cache %s is pending to update", *svcEventKey)
+		if reflect2.IsNil(cachedValue) || cachedStatus == CacheChanged || cachedStatus == CacheAdded ||
+			cachedStatus == CacheDeleted {
+			log.GetBaseLogger().Infof(
+				"OnServiceUpdate: cache %s is pending to update, status %s", *svcEventKey, cachedStatus)
 			svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcEventKey)
 			_ = s.registry.PersistMessage(svcCacheFile, message)
 			cacheValue := s.Handler.MessageToCacheValue(cachedValue, message, s.svcLocalValue, false)
 			s.SetValue(cacheValue)
-			postCacheUpdated := s.Handler.PostCacheUpdated
-			if nil != postCacheUpdated {
-				postCacheUpdated(svcEventKey, cacheValue, cachedStatus)
-			}
 			eventObject := &common.ServiceEventObject{SvcEventKey: *svcEventKey,
 				OldValue: cachedValue, NewValue: cacheValue}
-			if svcEventKey.Type == model.EventRateLimiting {
-				eventObject.DiffInfo = calcRateLimitDiffInfo(extractRateLimitFromCacheValue(cachedValue),
-					extractRateLimitFromCacheValue(cacheValue))
-			}
-			updateHandlers := s.registry.plugins.GetEventSubscribers(common.OnServiceUpdated)
-			// 更新后的cacheValue不会为空
-			if cachedStatus == CacheChanged && len(updateHandlers) > 0 {
-				uEvent := &common.PluginEvent{EventType: common.OnServiceUpdated, EventObject: eventObject}
-				for _, handler := range updateHandlers {
-					_ = handler.Callback(uEvent)
-				}
-			}
-		} else if cachedStatus == CacheEmptyButNoData {
-			log.GetBaseLogger().Errorf("%s, OnServiceUpdate: %s is empty, but discover returns no data",
-				s.registry.GetSDKContextID(), svcEventKey)
+			s.notifyEventHandlers(eventObject, cachedStatus)
 		} else {
 			switch event.Type {
 			case model.EventInstances:
@@ -319,47 +295,6 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) bool 
 		}
 	}
 	s.notifier.Notify(err)
-	return svcDeleted
-}
-
-// 从缓存的值中提取namingpb.RateLimit限流规则
-func extractRateLimitFromCacheValue(cacheValue interface{}) *namingpb.RateLimit {
-	if reflect2.IsNil(cacheValue) {
-		return nil
-	}
-	return cacheValue.(model.ServiceRule).GetValue().(*namingpb.RateLimit)
-}
-
-// 计算新旧限流规则的变化信息
-func calcRateLimitDiffInfo(oldRule *namingpb.RateLimit, newRule *namingpb.RateLimit) *common.RateLimitDiffInfo {
-	updatedRules := make(map[string]*common.RevisionChange)
-	deletedRules := make(map[string]string)
-	if newRule != nil {
-		for _, rule := range newRule.GetRules() {
-			updatedRules[rule.GetId().GetValue()] = &common.RevisionChange{
-				OldRevision: "",
-				NewRevision: rule.GetRevision().GetValue(),
-			}
-		}
-	}
-	if oldRule != nil {
-		for _, rule := range oldRule.GetRules() {
-			newRevision, ok := updatedRules[rule.GetId().GetValue()]
-			if !ok {
-				deletedRules[rule.GetId().GetValue()] = rule.GetRevision().GetValue()
-			} else {
-				if newRevision.NewRevision == rule.GetRevision().GetValue() {
-					delete(updatedRules, rule.GetId().GetValue())
-				} else {
-					newRevision.OldRevision = rule.GetRevision().GetValue()
-				}
-			}
-		}
-	}
-	return &common.RateLimitDiffInfo{
-		UpdatedRules: updatedRules,
-		DeletedRules: deletedRules,
-	}
 }
 
 // GetRevision 获取服务对象的版本号

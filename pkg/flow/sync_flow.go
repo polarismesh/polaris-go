@@ -126,8 +126,8 @@ func (e *Engine) doLoadBalanceToOneInstance(
 	} else {
 		instances = inst.(data.SingleInstancesOwner).SingleInstances()
 	}
-	instancesResp := commonRequest.BuildInstancesResponse(commonRequest.FlowID, commonRequest.DstService,
-		nil, instances, 0, commonRequest.Revision, commonRequest.DstInstances.GetMetadata())
+	instancesResp := commonRequest.BuildInstancesResponse(commonRequest.DstService, nil, instances, 0,
+		commonRequest.DstInstances)
 	return &model.OneInstanceResponse{InstancesResponse: *instancesResp}, nil
 }
 
@@ -305,10 +305,8 @@ func (e *Engine) doSyncGetAllInstances(commonRequest *data.CommonInstancesReques
 	}
 	(&commonRequest.CallResult).SetSuccess(consumeTime)
 	dstInstances := commonRequest.DstInstances
-	return commonRequest.BuildInstancesResponse(
-		commonRequest.FlowID, commonRequest.DstService, commonRequest.Criteria.Cluster,
-		dstInstances.GetInstances(), dstInstances.GetTotalWeight(), dstInstances.GetRevision(),
-		dstInstances.GetMetadata()), nil
+	return commonRequest.BuildInstancesResponse(commonRequest.DstService, commonRequest.Criteria.Cluster,
+		dstInstances.GetInstances(), dstInstances.GetTotalWeight(), dstInstances), nil
 }
 
 // doSyncGetInstances 同步获取服务实例
@@ -329,8 +327,8 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 	} else {
 		instances, totalWeight = targetCls.GetInstances()
 	}
-	return commonRequest.BuildInstancesResponse(commonRequest.FlowID, commonRequest.DstService,
-		targetCls, instances, totalWeight, commonRequest.Revision, commonRequest.DstInstances.GetMetadata()), nil
+	return commonRequest.BuildInstancesResponse(
+		commonRequest.DstService, targetCls, instances, totalWeight, commonRequest.DstInstances), nil
 }
 
 // SyncRegisterV2 async-regis
@@ -632,4 +630,9 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 // SyncGetConfigFile 同步获取配置文件
 func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
 	return e.configFileService.GetConfigFile(namespace, fileGroup, fileName)
+}
+
+// WatchAllInstances 监听所有的实例
+func (e *Engine) WatchAllInstances(request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
+	return e.watchEngine.WatchAllInstances(request)
 }

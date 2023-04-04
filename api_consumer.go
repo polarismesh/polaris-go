@@ -73,6 +73,11 @@ func (c *consumerAPI) InitCalleeService(req *InitCalleeServiceRequest) error {
 	return c.rawAPI.InitCalleeService((*api.InitCalleeServiceRequest)(req))
 }
 
+// WatchAllInstances 监听服务实例变更事件
+func (c *consumerAPI) WatchAllInstances(req *WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
+	return c.rawAPI.WatchAllInstances((*api.WatchAllInstancesRequest)(req))
+}
+
 // Destroy 销毁API，销毁后无法再进行调用
 func (c *consumerAPI) Destroy() {
 	c.rawAPI.Destroy()

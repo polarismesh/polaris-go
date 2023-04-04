@@ -57,10 +57,12 @@ func (s *ServiceEventHandler) OnServiceAdded(event *common.PluginEvent) error {
 // OnServiceDeleted 服务下线回调
 func (s *ServiceEventHandler) OnServiceDeleted(event *common.PluginEvent) error {
 	svcObject := event.EventObject.(*common.ServiceEventObject).OldValue
-	svcKey := s.parseSvcKey(svcObject)
-	if nil == svcKey {
-		return nil
+	if nil != svcObject {
+		svcKey := s.parseSvcKey(svcObject)
+		if nil == svcKey {
+			return nil
+		}
+		s.TaskValues.DeleteValue(*svcKey, &data.AllEqualsComparable{})
 	}
-	s.TaskValues.DeleteValue(*svcKey, &data.AllEqualsComparable{})
 	return nil
 }

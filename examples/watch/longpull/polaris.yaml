@@ -1,0 +1,6 @@
+global:
+  serverConnector:
+    addresses:
+      - 9.134.5.52:8091
+  statReporter:
+    enable: false

@@ -305,10 +305,6 @@ func discoverResponseToEvent(resp *namingpb.DiscoverResponse,
 	svcCode := pb.ConvertServerErrorToRpcError(retCode)
 	if model.IsSuccessResultCode(retCode) {
 		svcEvent.Value = resp
-	} else if retCode == namingpb.NotFoundResource || retCode == namingpb.NotFoundService {
-		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
-		svcEvent.Error = model.NewSDKError(model.ErrCodeServiceNotFound, nil,
-			"service %s not found", svcEvent.ServiceEventKey)
 	} else {
 		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
 		svcEvent.Error = model.NewServerSDKError(retCode,
@@ -499,7 +495,7 @@ func (s *StreamingClient) receiveAndNotify() {
 						s.connector.reportCallStatus(s, updateTask, code, false)
 					}
 					s.connector.retryUpdateTask(updateTask, discoverErr, false)
-					_ = updateTask.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
+					updateTask.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
 						Error: model.NewSDKError(model.ErrCode(code), discoverErr, ""),
 					})
 				}
@@ -528,13 +524,11 @@ func (s *StreamingClient) receiveAndNotify() {
 			// g.reportCallStatus(curClient, updateTask, nil, true)
 			// 触发回调事件
 			svcEvent, discoverCode := discoverResponseToEvent(resp, updateTask.ServiceEventKey, s.connection)
-			// 没有返回grpc错误，返回的消息是合法且不是返回了500错误，认为这次调用成功了
+			// 没有返回grpc错误，返回的消息合法且不是返回了5XX，认为这次调用成功了
 			s.connector.connManager.ReportSuccess(s.connection.ConnID, int32(discoverCode), GetUpdateTaskRequestTime(updateTask))
-			svcDeleted := updateTask.handler.OnServiceUpdate(svcEvent)
-			if !svcDeleted {
-				// 服务如果没有被删除，则添加后续轮询
-				s.connector.addUpdateTaskSet(updateTask)
-			}
+			updateTask.handler.OnServiceUpdate(svcEvent)
+			// 服务如果没有被删除，则添加后续轮询
+			s.connector.addUpdateTaskSet(updateTask)
 		} else {
 			log.GetBaseLogger().Errorf("%s, can not get task %s from streamingClient %s pendingTask",
 				s.connector.ServiceConnector.GetSDKContextID(), svcKey, s.reqID)
@@ -617,7 +611,7 @@ finally:
 		sdkErr := model.NewSDKError(model.ErrCodeNetworkError, err,
 			"fail to GetInstances for %v, reqID %s", task.ServiceEventKey, streamingClient.reqID)
 		g.retryUpdateTask(task, sdkErr, false)
-		_ = task.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
+		task.handler.OnServiceUpdate(&serverconnector.ServiceEvent{
 			Error: model.NewSDKError(model.ErrCodeInvalidServerResponse, sdkErr, ""),
 		})
 		return nil, sdkErr
@@ -768,15 +762,13 @@ func (g *DiscoverConnector) processUpdateTask(
 	}
 	log.GetBaseLogger().Debugf("start to process task %s", task.ServiceEventKey)
 	if task.targetCluster == config.BuiltinCluster {
-		svcDeleted, err := g.syncUpdateTask(task)
+		err := g.syncUpdateTask(task)
 		if err != nil {
 			g.retryUpdateTask(task, err, true)
 			return streamingClient
 		}
 		task.targetCluster = config.DiscoverCluster
-		if !svcDeleted {
-			g.addUpdateTaskSet(task)
-		}
+		g.addUpdateTaskSet(task)
 		return streamingClient
 	}
 	return g.asyncUpdateTask(streamingClient, task)
@@ -949,12 +941,12 @@ func (g *DiscoverConnector) UpdateServers(key *model.ServiceEventKey) error {
 }
 
 // 同步进行服务或规则发现
-func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error) {
+func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) error {
 	var curTime = time.Now()
 	// 获取服务发现server连接
 	connection, err := g.connManager.GetConnection(OpKeyDiscover, task.targetCluster)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer connection.Release(OpKeyDiscover)
 	reqID := NextDiscoverReqID()
@@ -963,7 +955,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 		defer cancel()
 	}
 	if err != nil {
-		return false, err
+		return err
 	}
 	log.GetBaseLogger().Debugf("sync stream %s created, connection %s, timeout %v",
 		reqID, connection.ConnID, g.connectionIdleTimeout)
@@ -974,7 +966,7 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 	if err != nil {
 		log.GetBaseLogger().Errorf(
 			"fail to send request for service %v, error is %+v", task.ServiceEventKey, err)
-		return false, err
+		return err
 	}
 	resp, err := discoverClient.Recv()
 	var sdkErr model.SDKError
@@ -991,11 +983,12 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) (bool, error
 		}
 	}
 	if nil != sdkErr {
-		return false, sdkErr
+		return sdkErr
 	}
 	// 打印应答报文
 	logDiscoverResponse(resp, connection)
 	svcEvent, _ := discoverResponseToEvent(resp, task.ServiceEventKey, connection)
 	atomic.AddUint64(&task.successUpdates, 1)
-	return task.handler.OnServiceUpdate(svcEvent), nil
+	task.handler.OnServiceUpdate(svcEvent)
+	return nil
 }

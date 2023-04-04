@@ -117,8 +117,6 @@ type ServiceEventObject struct {
 	OldValue interface{}
 	// 新加入缓存的对象，如果是删除，则为nil
 	NewValue interface{}
-	// 新旧缓存信息的区别
-	DiffInfo interface{}
 }
 
 // RevisionChange 版本号变化

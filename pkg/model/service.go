@@ -580,6 +580,8 @@ type ServicesResponse struct {
 	Value []*ServiceKey
 	// 规则版本信息
 	Revision string
+	// 规则的hash值
+	HashValue uint64
 	// 规则缓存
 	// RuleCache RuleCache
 	// 规则校验异常
@@ -605,6 +607,16 @@ func (s *ServicesResponse) IsInitialized() bool {
 // GetRevision 获取配置规则的修订版本信息
 func (s *ServicesResponse) GetRevision() string {
 	return s.Revision
+}
+
+// GetHashValue 获取数据的hash值
+func (s *ServicesResponse) GetHashValue() uint64 {
+	return s.HashValue
+}
+
+// IsNotExists 资源是否存在
+func (s *ServicesResponse) IsNotExists() bool {
+	return false
 }
 
 // GetValidateError 获取规则校验异常
@@ -686,10 +698,14 @@ type InstancesResponse struct {
 	// 获取实例的修订版本信息
 	// 与上一次比较，用于确认服务实例是否发生变更
 	Revision string
+	// 获取服务实例hash值
+	HashValue uint64
 	// 服务实例列表
 	Instances []Instance
 	// 当前查询结果所属的集群，如果是获取GetOneInstance返回的结果，则为nil
 	Cluster *Cluster
+	// 服务是否存在
+	NotExists bool
 }
 
 // GetType 获取配置类型
@@ -727,6 +743,11 @@ func (i *InstancesResponse) GetRevision() string {
 	return i.Revision
 }
 
+// GetHashValue 获取数据的hash值
+func (i *InstancesResponse) GetHashValue() uint64 {
+	return i.HashValue
+}
+
 // GetTotalWeight 获取全部实例总权重
 func (i *InstancesResponse) GetTotalWeight() int {
 	return i.TotalWeight
@@ -751,6 +772,11 @@ func (i *InstancesResponse) ReloadServiceClusters() {
 // GetCluster InstancesResponse get the cluster
 func (i *InstancesResponse) GetCluster() *Cluster {
 	return i.Cluster
+}
+
+// IsNotExists 服务是否存在
+func (i *InstancesResponse) IsNotExists() bool {
+	return i.NotExists
 }
 
 // RetStatus 调用结果状态

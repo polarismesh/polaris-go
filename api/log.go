@@ -86,6 +86,11 @@ func SetDetectLogger(logger Logger) {
 	log.SetDetectLogger(logger)
 }
 
+// SetCacheLogger 设置缓存日志对象
+func SetCacheLogger(logger Logger) {
+	log.SetCacheLogger(logger)
+}
+
 // GetDetectLogger 获取探测日志对象
 func GetDetectLogger() Logger {
 	return log.GetDetectLogger()
@@ -99,6 +104,11 @@ func SetStatReportLogger(logger Logger) {
 // GetStatReportLogger 获取统计上报日志对象
 func GetStatReportLogger() Logger {
 	return log.GetStatReportLogger()
+}
+
+// GetCacheLogger 获取缓存日志对象
+func GetCacheLogger() Logger {
+	return log.GetCacheLogger()
 }
 
 // ConfigLoggers 全局配置日志对象
@@ -118,6 +128,9 @@ func ConfigLoggers(logDir string, logLevel int) error {
 	}
 	if err = ConfigNetworkLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigNetworkLogger: %v", err)
+	}
+	if err = ConfigCacheLogger(logDir, logLevel); err != nil {
+		return fmt.Errorf("fail to ConfigCacheLogger: %v", err)
 	}
 	return nil
 }
@@ -152,6 +165,12 @@ func ConfigNetworkLogger(logDir string, logLevel int) error {
 	return log.ConfigNetworkLogger(log.DefaultLogger, option)
 }
 
+// ConfigCacheLogger 配置缓存更新日志对象
+func ConfigCacheLogger(logDir string, logLevel int) error {
+	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultCacheLogRotationPath), logLevel)
+	return log.ConfigNetworkLogger(log.DefaultLogger, option)
+}
+
 // SetLoggersLevel 设置所有日志级别
 func SetLoggersLevel(loglevel int) error {
 	var err error
@@ -174,6 +193,10 @@ func SetLoggersLevel(loglevel int) error {
 	logErr = log.GetNetworkLogger().SetLogLevel(loglevel)
 	if nil != logErr {
 		err = multierror.Append(err, multierror.Prefix(err, "fail to set network logLevel"))
+	}
+	logErr = log.GetCacheLogger().SetLogLevel(loglevel)
+	if nil != logErr {
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set cache logLevel"))
 	}
 	return err
 }

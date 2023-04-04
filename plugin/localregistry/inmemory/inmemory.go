@@ -18,7 +18,6 @@
 package inmemory
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,7 +62,7 @@ type LocalCache struct {
 	*common.RunContext
 	// 这个锁的只有在服务新增或者删除时候触发，频率较小
 	servicesMutex          *sync.RWMutex
-	services               model.HashSet
+	serviceWatchers        map[model.ServiceEventKey]int32
 	serviceMap             *sync.Map
 	connector              serverconnector.ServerConnector
 	serviceRefreshInterval time.Duration
@@ -146,8 +145,8 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	}
 	g.globalConfig = ctx.Config
 	g.pushEmptyProtection = ctx.Config.GetConsumer().GetLocalCache().GetPushEmptyProtection()
-	g.services = model.HashSet{}
 	g.servicesMutex = &sync.RWMutex{}
+	g.serviceWatchers = make(map[model.ServiceEventKey]int32, 0)
 	g.serviceRefreshInterval = ctx.Config.GetConsumer().GetLocalCache().GetServiceRefreshInterval()
 	g.serviceExpireTime = ctx.Config.GetConsumer().GetLocalCache().GetServiceExpireTime()
 	g.persistEnable = ctx.Config.GetConsumer().GetLocalCache().IsPersistEnable()
@@ -259,29 +258,12 @@ func (g *LocalCache) getInstances(cacheObject *CacheObject, isInternalRequest bo
 	return value.(*pb.ServiceInstancesInProto)
 }
 
-// 增加服务名
-func (g *LocalCache) addServiceToSet(svcKey *model.ServiceEventKey) {
-	if svcKey.Type == model.EventInstances {
-		g.servicesMutex.Lock()
-		defer g.servicesMutex.Unlock()
-		g.services.Add(svcKey.ServiceKey)
-	}
-}
-
-// 删除服务名
-func (g *LocalCache) deleteServiceFromSet(svcKey *model.ServiceEventKey) {
-	g.servicesMutex.Lock()
-	defer g.servicesMutex.Unlock()
-	g.services.Delete(svcKey.ServiceKey)
-}
-
 // 删除服务信息，包括从注销监听和删除本地缓存信息
 func (g *LocalCache) deleteService(svcKey *model.ServiceEventKey, oldValue interface{}) {
 	// log.GetBaseLogger().Infof("service %s has been cleared", *svcKey)
 	log.GetBaseLogger().Infof("%s, deregister %s", g.GetSDKContextID(), svcKey)
 	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
-	g.deleteServiceFromSet(svcKey)
 	if g.persistEnable {
 		svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
 		g.persistTasks.Store(svcCacheFile, &persistTask{
@@ -289,6 +271,73 @@ func (g *LocalCache) deleteService(svcKey *model.ServiceEventKey, oldValue inter
 			protoMsg: nil,
 		})
 	}
+}
+
+func logResourceChanged(resp *namingpb.DiscoverResponse, status CachedStatus, oldRevision string, newRevision string) {
+	if status != CacheNotChanged {
+		if len(oldRevision) == 0 {
+			oldRevision = emptyReplaceHolder
+		}
+		if len(newRevision) == 0 {
+			newRevision = emptyReplaceHolder
+		}
+		log.GetCacheLogger().Infof(
+			"service instances %s::%s has updated, compare status %s, old revision is %s, new revision is %s, "+
+				"new response is %s",
+			resp.GetService().GetNamespace().GetValue(), resp.GetService().GetName().GetValue(), status,
+			oldRevision, newRevision, resp.String())
+	}
+}
+
+func compareResource(instValue interface{}, newValue proto.Message) CachedStatus {
+	var oldRevision string
+	var resp = newValue.(*namingpb.DiscoverResponse)
+	var newRevision = resp.GetService().GetRevision().GetValue()
+	var status CachedStatus
+
+	var oldNotExists bool
+	if reflect2.IsNil(instValue) || instValue.(model.RegistryValue).IsNotExists() {
+		oldNotExists = true
+	}
+
+	// 判断是否未变更
+	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+		if oldNotExists {
+			status = CacheEmptyButNotChanged
+		} else {
+			status = CacheNotChanged
+		}
+		logResourceChanged(resp, status, oldRevision, newRevision)
+		return status
+	}
+	// 判断是否已删除
+	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+		if oldNotExists {
+			status = CacheDeleted
+		} else {
+			if registryValue := instValue.(model.RegistryValue); !registryValue.IsNotExists() {
+				status = CacheDeleted
+			} else {
+				status = CacheNotChanged
+			}
+		}
+		logResourceChanged(resp, status, oldRevision, newRevision)
+		return status
+	}
+	if oldNotExists {
+		status = CacheAdded
+		logResourceChanged(resp, status, oldRevision, newRevision)
+		return status
+	}
+	oldResource := instValue.(model.RegistryValue)
+	oldRevision = oldResource.GetRevision()
+	if oldRevision != newRevision {
+		status = CacheChanged
+	} else {
+		status = CacheNotChanged
+	}
+	logResourceChanged(resp, status, oldRevision, newRevision)
+	return status
 }
 
 // 服务实例是否已经更新
@@ -300,9 +349,19 @@ func compareServiceInstances(instValue interface{}, newValue proto.Message) Cach
 	// 判断server的错误码，是否未变更
 	if resp.GetCode().GetValue() == namingpb.DataNoChange {
 		if reflect2.IsNil(instValue) {
-			return CacheEmptyButNoData
+			return CacheEmptyButNotChanged
 		}
 		return CacheNotChanged
+	}
+	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+		if reflect2.IsNil(instValue) {
+			return CacheDeleted
+		}
+		registryValue := instValue.(model.RegistryValue)
+		if !registryValue.IsNotExists() {
+			return CacheDeleted
+		}
+		return CacheDeleted
 	}
 	var newRevision = resp.GetService().GetRevision().GetValue()
 	if len(newRevision) == 0 {
@@ -312,7 +371,7 @@ func compareServiceInstances(instValue interface{}, newValue proto.Message) Cach
 	var status CachedStatus
 	if reflect2.IsNil(instValue) {
 		oldRevision = emptyReplaceHolder
-		status = CacheNotExists
+		status = CacheAdded
 		goto finally
 	}
 	oldInstances = instValue.(model.ServiceInstances)
@@ -433,17 +492,11 @@ func (g *LocalCache) toPluginValues(clsType config.ClusterType) *pb.SvcPluginVal
 	return values
 }
 
-// 实例更新后的处理动作
-func (g *LocalCache) postServiceInstanceUpdated(
-	svcKey *model.ServiceEventKey, cacheValue interface{}, preStatus CachedStatus) {
-}
-
 // 创建服务缓存操作回调集合
 func (g *LocalCache) newServiceCacheHandler() CacheHandlers {
 	return CacheHandlers{
-		CompareMessage:      compareServiceInstances,
+		CompareMessage:      compareResource,
 		MessageToCacheValue: g.messageToServiceInstances,
-		PostCacheUpdated:    g.postServiceInstanceUpdated,
 		OnEventDeleted:      g.deleteService,
 	}
 }
@@ -480,8 +533,6 @@ func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler Cach
 	if !atomic.CompareAndSwapUint32(&actualSvcObject.hasRegistered, 0, 1) {
 		return actualSvcObject.GetNotifier(), nil
 	}
-	// 注册了监听后，认为是被用户需要的服务，加入serviceSet
-	g.addServiceToSet(svcKey)
 	// 如果类型为实例，在加入了监听和serviceSet之后，创建ServiceLocalValue
 	if svcKey.Type == model.EventInstances {
 		createHandlers := g.plugins.GetEventSubscribers(common.OnServiceLocalValueCreated)
@@ -569,17 +620,6 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 		}
 	}
 	return nil
-}
-
-// GetServices 获取服务列表
-func (g *LocalCache) GetServices() model.HashSet {
-	g.servicesMutex.RLock()
-	defer g.servicesMutex.RUnlock()
-	svcs := model.HashSet{}
-	for s := range g.services {
-		svcs.Add(s)
-	}
-	return svcs
 }
 
 // 归还池化查询对象
@@ -675,7 +715,7 @@ func (g *LocalCache) GetServiceRule(svcEventKey *model.ServiceEventKey, includeC
 // 创建服务路由规则缓存操作回调集合
 func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
 	return CacheHandlers{
-		CompareMessage:      compareServiceRouting,
+		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,
 		OnEventDeleted:      g.deleteRule,
 	}
@@ -684,7 +724,7 @@ func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
 // 创建限流规则缓存操作回调集合
 func (g *LocalCache) newRateLimitCacheHandler() CacheHandlers {
 	return CacheHandlers{
-		CompareMessage:      compareRateLimitRule,
+		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,
 		OnEventDeleted:      g.deleteRule,
 	}
@@ -693,7 +733,7 @@ func (g *LocalCache) newRateLimitCacheHandler() CacheHandlers {
 // 创建批量服务回调
 func (g *LocalCache) newServicesHandler() CacheHandlers {
 	return CacheHandlers{
-		CompareMessage:      compareServices,
+		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServices,
 		OnEventDeleted:      g.deleteRule,
 	}
@@ -704,7 +744,6 @@ func (g *LocalCache) deleteRule(svcKey *model.ServiceEventKey, oldValue interfac
 	log.GetBaseLogger().Infof("%s, deregister %s", g.GetSDKContextID(), svcKey)
 	_ = g.connector.DeRegisterServiceHandler(svcKey)
 	g.serviceMap.Delete(*svcKey)
-	g.deleteServiceFromSet(svcKey)
 	if g.persistEnable {
 		cacheFile := lrplug.ServiceEventKeyToFileName(*svcKey)
 		g.persistTasks.Store(cacheFile, &persistTask{
@@ -717,9 +756,9 @@ func (g *LocalCache) deleteRule(svcKey *model.ServiceEventKey, oldValue interfac
 // 处理当之前缓存值为空的场景
 func onOriginalRoutingRuleValueEmpty(newRuleValue *namingpb.Routing) (CachedStatus, string) {
 	if nil != newRuleValue {
-		return CacheNotExists, newRuleValue.GetRevision().GetValue()
+		return CacheAdded, newRuleValue.GetRevision().GetValue()
 	}
-	return CacheNotExists, emptyReplaceHolder
+	return CacheAdded, emptyReplaceHolder
 }
 
 // 处理当之前缓存值不为空的场景
@@ -747,7 +786,7 @@ func compareServiceRouting(instValue interface{}, newValue proto.Message) Cached
 	// 判断server的错误码，是否未变更
 	if resp.GetCode().GetValue() == namingpb.DataNoChange {
 		if reflect2.IsNil(instValue) {
-			status = CacheEmptyButNoData
+			status = CacheEmptyButNotChanged
 		} else {
 			status = CacheNotChanged
 		}
@@ -778,9 +817,9 @@ finally:
 // 处理当之前缓存值为空的场景
 func onOriginalRateLimitRuleEmpty(newRuleValue *namingpb.RateLimit) (CachedStatus, string) {
 	if nil != newRuleValue {
-		return CacheNotExists, newRuleValue.GetRevision().GetValue()
+		return CacheAdded, newRuleValue.GetRevision().GetValue()
 	}
-	return CacheNotExists, emptyReplaceHolder
+	return CacheAdded, emptyReplaceHolder
 }
 
 // 处理当之前缓存值不为空的场景
@@ -801,9 +840,9 @@ func onOriginalRateLimitRuleNotEmpty(oldRevision string, newRuleValue *namingpb.
 func onOriginalServicesEmpty(services []*namingpb.Service) (CachedStatus, string) {
 	newVersion := pb.GenServicesRevision(services)
 	if nil != services && len(services) > 0 {
-		return CacheNotExists, newVersion
+		return CacheAdded, newVersion
 	}
-	return CacheNotExists, emptyReplaceHolder
+	return CacheAdded, emptyReplaceHolder
 }
 
 func onOriginalServicesNotEmpty(oldRevision string, services []*namingpb.Service) (CachedStatus, string) {
@@ -836,7 +875,7 @@ func compareServices(instValue interface{}, newValue proto.Message) CachedStatus
 	// 判断server的错误码，是否未变更
 	if resp.GetCode().GetValue() == namingpb.DataNoChange {
 		if reflect2.IsNil(instValue) {
-			status = CacheEmptyButNoData
+			status = CacheEmptyButNotChanged
 		} else {
 			status = CacheNotChanged
 		}
@@ -874,7 +913,7 @@ func compareRateLimitRule(instValue interface{}, newValue proto.Message) CachedS
 	// 判断server的错误码，是否未变更
 	if resp.GetCode().GetValue() == namingpb.DataNoChange {
 		if reflect2.IsNil(instValue) {
-			status = CacheEmptyButNoData
+			status = CacheEmptyButNotChanged
 		} else {
 			status = CacheNotChanged
 		}
@@ -1003,6 +1042,13 @@ func (g *LocalCache) enhanceServiceEventHandler(svcEventHandler *serverconnector
 	}
 }
 
+func (g *LocalCache) checkResourceWatched(resKey model.ServiceEventKey) bool {
+	g.servicesMutex.Lock()
+	defer g.servicesMutex.Unlock()
+	v, ok := g.serviceWatchers[resKey]
+	return ok && v > 0
+}
+
 // 淘汰过时缓存
 func (g *LocalCache) eliminateExpiredCache() {
 	// 用于检测服务是否过期的定时器，周期为服务过期时间一半
@@ -1037,38 +1083,18 @@ func (g *LocalCache) eliminateExpiredCache() {
 					atomic.CompareAndSwapInt64(&cacheObjectValue.lastVisitTime, lastVisitTime, currentTime)
 					return true
 				}
+
 				// 该服务被订阅,不能淘汰
-				if atomic.LoadUint32(&cacheObjectValue.serviceIsWatched) > 0 {
+				if g.checkResourceWatched(*cacheObjectValue.serviceValueKey) {
 					log.GetBaseLogger().Debugf("%s serviceIsWatched, can not expire", svcKey.String())
 					return true
 				}
 				if time.Duration(diffTime) < g.serviceExpireTime {
 					return true
 				}
-				svcEvKey := k.(model.ServiceEventKey)
 				log.GetBaseLogger().Infof("%s expired, lastVisited: %v, serviceExpireTime：%v",
 					cacheObjectValue.serviceValueKey, time.Unix(0, lastVisitTime),
 					g.serviceExpireTime)
-				oldValue := cacheObjectValue.LoadValue(false)
-				g.eventToCacheHandlers[svcEvKey.Type].OnEventDeleted(&svcEvKey, oldValue)
-				eventObject := &common.ServiceEventObject{
-					SvcEventKey: svcEvKey,
-					OldValue:    oldValue,
-					NewValue:    nil,
-				}
-				if svcEvKey.Type == model.EventRateLimiting {
-					eventObject.DiffInfo = calcRateLimitDiffInfo(extractRateLimitFromCacheValue(oldValue), nil)
-				}
-				deleteHandlers := g.plugins.GetEventSubscribers(common.OnServiceDeleted)
-				if len(deleteHandlers) > 0 && !reflect2.IsNil(oldValue) {
-					event := &common.PluginEvent{
-						EventType:   common.OnServiceDeleted,
-						EventObject: eventObject,
-					}
-					for _, handler := range deleteHandlers {
-						_ = handler.Callback(event)
-					}
-				}
 				return true
 			})
 		case <-fileTaskTicker.C:
@@ -1104,15 +1130,27 @@ func (g *LocalCache) LoadPersistedMessage(file string, msg proto.Message) error 
 }
 
 // WatchService 服务订阅
-func (g *LocalCache) WatchService(svcEventKey *model.ServiceEventKey) error {
-	value, ok := g.serviceMap.Load(*svcEventKey)
+func (g *LocalCache) WatchService(svcEventKey model.ServiceEventKey) {
+	g.servicesMutex.Lock()
+	defer g.servicesMutex.Unlock()
+	v := g.serviceWatchers[svcEventKey]
+	g.serviceWatchers[svcEventKey] = v + 1
+}
+
+// UnwatchService 服务反订阅
+func (g *LocalCache) UnwatchService(svcEventKey model.ServiceEventKey) {
+	g.servicesMutex.Lock()
+	defer g.servicesMutex.Unlock()
+	v, ok := g.serviceWatchers[svcEventKey]
 	if !ok {
-		return model.NewSDKError(model.ErrCodeServiceNotFound, nil,
-			fmt.Sprintf("no key in serviceMap %s", svcEventKey.String()))
+		return
 	}
-	cacheObj := value.(*CacheObject)
-	atomic.StoreUint32(&cacheObj.serviceIsWatched, 1)
-	return nil
+	v = v - 1
+	if v == 0 {
+		delete(g.serviceWatchers, svcEventKey)
+	} else {
+		g.serviceWatchers[svcEventKey] = v
+	}
 }
 
 // init 注册插件

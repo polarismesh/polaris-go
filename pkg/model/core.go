@@ -39,12 +39,16 @@ const (
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
 type RegistryValue interface {
-	// 获取配置类型
+	// GetType 获取配置类型
 	GetType() EventType
-	// 是否初始化，实例列表或路由值是否加载
+	// IsInitialized 是否初始化，实例列表或路由值是否加载
 	IsInitialized() bool
-	// 获取服务实例或规则的版本号
+	// GetRevision 获取服务实例或规则的版本号
 	GetRevision() string
+	// GetHashValue 获取资源的hash值
+	GetHashValue() uint64
+	// IsNotExists 资源是否存在
+	IsNotExists() bool
 }
 
 // String ToString方法

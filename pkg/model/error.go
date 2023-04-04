@@ -19,6 +19,8 @@ package model
 
 import (
 	"fmt"
+
+	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 // ErrCode 错误码类型，Polaris SDK对外返回错误码都使用该类型
@@ -192,7 +194,7 @@ const (
 
 // IsSuccessResultCode 判断是否成功的错误码
 func IsSuccessResultCode(retCode uint32) bool {
-	return retCode/RetCodeDivFactor == SuccessRetCode
+	return retCode/RetCodeDivFactor == SuccessRetCode || retCode == namingpb.NotFoundResource
 }
 
 // IsServerException 判断是否为内部server错误

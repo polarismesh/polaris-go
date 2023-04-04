@@ -82,9 +82,18 @@ func (d *DefaultServiceInstances) GetRevision() string {
 	return ""
 }
 
+// 获取服务实例或规则的Hash值
+func (d *DefaultServiceInstances) GetHashValue() uint64 {
+	return 0
+}
+
 // 获取服务实例列表
 func (d *DefaultServiceInstances) GetInstances() []Instance {
 	return d.instances
+}
+
+func (d *DefaultServiceInstances) IsNotExists() bool {
+	return false
 }
 
 // 获取全部实例总权重

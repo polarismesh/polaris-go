@@ -79,8 +79,6 @@ func (s ServiceUpdateRequest) String() string {
 
 // InstancesRegistry 实例缓存
 type InstancesRegistry interface {
-	// GetServices 获取服务列表，返回结果为一个hashSet, key为类型plugin.ServiceKey
-	GetServices() model.HashSet
 	// GetInstances 非阻塞获取服务实例列表，只读取缓存
 	GetInstances(svcKey *model.ServiceKey, includeCache bool, isInternalRequest bool) model.ServiceInstances
 	// LoadInstances 非阻塞发起一次缓存远程加载操作
@@ -95,8 +93,6 @@ type InstancesRegistry interface {
 	PersistMessage(file string, msg proto.Message) error
 	// LoadPersistedMessage 从文件中加载PB缓存
 	LoadPersistedMessage(file string, msg proto.Message) error
-	// WatchService 服务订阅
-	WatchService(svcKey *model.ServiceEventKey) error
 }
 
 // InstancesFilter 用于在向缓存获取实例时进行过滤
@@ -132,6 +128,10 @@ type RuleRegistry interface {
 	GetServicesByMeta(key *model.ServiceKey, includeCache bool) model.Services
 	// LoadServices 非阻塞加载批量服务
 	LoadServices(key *model.ServiceKey) (*common.Notifier, error)
+	// WatchService 添加服务监听标识
+	WatchService(svcEventKey model.ServiceEventKey)
+	// UnwatchService 取消服务监听标识
+	UnwatchService(svcEventKey model.ServiceEventKey)
 }
 
 // init 初始化

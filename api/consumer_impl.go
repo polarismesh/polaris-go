@@ -113,6 +113,17 @@ func (c *consumerAPI) InitCalleeService(req *InitCalleeServiceRequest) error {
 	return c.context.GetEngine().InitCalleeService(&req.InitCalleeServiceRequest)
 }
 
+// WatchAllInstances 监听服务实例变更事件
+func (c *consumerAPI) WatchAllInstances(req *WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().WatchAllInstances(&req.WatchAllInstancesRequest)
+}
+
 // SDKContext 获取SDK上下文
 func (c *consumerAPI) SDKContext() SDKContext {
 	return c.context
