@@ -58,17 +58,18 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 	if eventObject, ok = event.EventObject.(*common.ServiceEventObject); !ok {
 		return nil
 	}
+	var isService bool
 	switch event.EventType {
 	case common.OnServiceAdded:
-		svcInstances = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
 	case common.OnServiceUpdated:
-		svcInstances = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
 	case common.OnServiceDeleted:
-		svcInstances = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
 	default:
 		// do nothing
 	}
-	if svcInstances != nil {
+	if isService && svcInstances != nil {
 		func() {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
