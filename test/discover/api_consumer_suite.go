@@ -357,9 +357,14 @@ func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout boo
 		request.FlowID = 1111
 		request.Namespace = "errNS"
 		request.Service = "errSVC"
-		_, err = consumer.GetInstances(request)
-		c.Assert(err, check.NotNil)
-		fmt.Printf("Error: %v\n", err.Error())
+		if !mockTimeout {
+			resp, err := consumer.GetInstances(request)
+			c.Assert(err, check.IsNil)
+			c.Assert(resp.NotExists, check.Equals, true)
+		} else {
+			_, err := consumer.GetInstances(request)
+			c.Assert(err, check.NotNil)
+		}
 	})
 }
 
