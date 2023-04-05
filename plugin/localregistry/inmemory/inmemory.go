@@ -1092,9 +1092,12 @@ func (g *LocalCache) eliminateExpiredCache() {
 				if time.Duration(diffTime) < g.serviceExpireTime {
 					return true
 				}
+				svcEvKey := k.(model.ServiceEventKey)
 				log.GetBaseLogger().Infof("%s expired, lastVisited: %v, serviceExpireTime：%v",
 					cacheObjectValue.serviceValueKey, time.Unix(0, lastVisitTime),
 					g.serviceExpireTime)
+				oldValue := cacheObjectValue.LoadValue(false)
+				g.eventToCacheHandlers[svcEvKey.Type].OnEventDeleted(&svcEvKey, oldValue)
 				return true
 			})
 		case <-fileTaskTicker.C:

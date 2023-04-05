@@ -405,11 +405,24 @@ func (t *RuleRoutingTestingSuite) TestInboundRules(c *check.C) {
 	c.Assert(err, check.IsNil)
 	// 等待路由更新
 	time.Sleep(10 * time.Second)
-	// 校验失败，所以上一个规则仍然有效
-	t.callDstService(consumer, c)
+	// 校验失败，服务发现不受影响
+	t.callDstServiceSuccess(consumer, c)
 	err = registerRouteRuleByFile(
 		t.mockServer, t.pbServices[calledSvcKey], "testdata/route_rule/dest_service.json")
 	c.Assert(err, check.IsNil)
+}
+
+// 调用目标服务
+func (t *RuleRoutingTestingSuite) callDstServiceSuccess(consumer api.ConsumerAPI, c *check.C) {
+	request := &api.GetInstancesRequest{}
+	request.FlowID = 1111
+	request.Namespace = defaultNamespace
+	request.Service = calledService
+	request.Timeout = model.ToDurationPtr(3 * time.Second)
+	request.SkipRouteFilter = false
+	resp, err := consumer.GetInstances(request)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp, check.NotNil)
 }
 
 // 调用目标服务

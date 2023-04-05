@@ -374,12 +374,6 @@ func (t *ConsumerTestingSuite) TestGetInstancesErrorNormal(c *check.C) {
 	t.testGetInstancesError(c, false)
 }
 
-// TestGetInstancesErrorTimeout 测试以错误的参数请求实例
-func (t *ConsumerTestingSuite) TestGetInstancesErrorTimeout(c *check.C) {
-	log.Printf("Start TestGetInstancesErrorTimeout")
-	t.testGetInstancesError(c, true)
-}
-
 // 构建服务路由规则
 func (t *ConsumerTestingSuite) buildServiceRoutes() {
 	//

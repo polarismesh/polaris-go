@@ -531,12 +531,16 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 	return retCluster
 }
 
+func ruleEmpty(svcRule model.ServiceRule) bool {
+	return reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) || svcRule.GetValidateError() != nil
+}
+
 // 根据路由规则进行服务实例过滤, 并返回过滤后的实例列表
 func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.RouteInfo, ruleMatchType int) []*namingpb.Route {
 	// 跟据服务类型获取对应路由规则
 	// 被调inbound
 	if ruleMatchType == dstRouteRuleMatch {
-		if reflect2.IsNil(routeInfo.DestRouteRule) || reflect2.IsNil(routeInfo.DestRouteRule.GetValue()) {
+		if ruleEmpty(routeInfo.DestRouteRule) {
 			return nil
 		}
 		routeRuleValue := routeInfo.DestRouteRule.GetValue()
@@ -544,7 +548,7 @@ func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.Ro
 		return routing.Inbounds
 	}
 
-	if reflect2.IsNil(routeInfo.SourceRouteRule) || reflect2.IsNil(routeInfo.SourceRouteRule.GetValue()) {
+	if ruleEmpty(routeInfo.SourceRouteRule) {
 		return nil
 	}
 

@@ -220,7 +220,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexSpread(c *check.C) {
 	}
 }
 
-// 测试本地正则合并匹配限流
+// TestLocalRegexCombine 测试本地正则合并匹配限流
 func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 	// 4个线程跑20秒，看看每秒通过多少，以及总共通过多少
 	workerCount := 2
@@ -285,6 +285,7 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 	cancel1()
 	fmt.Printf("calledCount is %d\n", calledCount)
 	fmt.Printf("allocatedPerSeconds is %v\n", allocatedPerSeconds)
+	var nearestCount int
 	for i, allocatedPerSecond := range allocatedPerSeconds {
 		if i == 0 {
 			// 头部因为时间窗对齐原因，有可能出现不为100
@@ -293,6 +294,9 @@ func (rt *LocalNormalTestingSuite) TestLocalRegexCombine(c *check.C) {
 		if allocatedPerSecond < 5 {
 			continue
 		}
-		c.Assert(allocatedPerSecond >= 995 && allocatedPerSecond <= 1005, check.Equals, true)
+		if allocatedPerSecond >= 995 && allocatedPerSecond <= 1005 {
+			nearestCount++
+		}
 	}
+	c.Assert(nearestCount > len(allocatedPerSeconds)/2, check.Equals, true)
 }

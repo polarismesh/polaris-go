@@ -103,7 +103,7 @@ func (s *SDKContextDestroySuite) TestConsumerDestroy(c *check.C) {
 	c.Assert(lumberjackCount < plog.MaxLogger, check.Equals, true)
 }
 
-// 测试provider api的销毁
+// TestProviderDestroy 测试provider api的销毁
 func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	log.Printf("Start to TestProviderDestroy")
 	// 等待golang一些系统初始化任务完成
@@ -123,7 +123,7 @@ func (s *SDKContextDestroySuite) TestProviderDestroy(c *check.C) {
 	var lumberjackCount int
 	routinesCount, lumberjackCount = parseRoutines(getAllStack())
 	afterDestroyRoutinesNum := routinesCount
-	// log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)
+	log.Printf("afterDestroyRoutinesNum %v", afterDestroyRoutinesNum)
 	c.Assert(preCreateRoutinesNum, check.Equals, afterDestroyRoutinesNum)
 	c.Assert(lumberjackCount < plog.MaxLogger, check.Equals, true)
 }
