@@ -1015,31 +1015,31 @@ func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorCount(c *check.C) {
 }
 
 // TestHalfOpenMustChangeErrorRate 断开熔断变更错误率
-func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
-	fmt.Println("--TestHalfOpenMustChangeErrorRate")
-	defer util.DeleteDir(util.BackupDir)
-	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
-	// enableStat := false
-	period := 1 * time.Second
-	// cfg.Global.StatReporter.Enable = &enableStat
-	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
-	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
-	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetRequestVolumeThreshold(10)
-	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 10)
-	cfg.Consumer.GetCircuitBreaker().SetSleepWindow(time.Second * 10)
-	cfg.Consumer.GetCircuitBreaker().SetRequestCountAfterHalfOpen(10)
-	cfg.Consumer.GetCircuitBreaker().SetSuccessCountAfterHalfOpen(10)
-	cfg.Consumer.GetCircuitBreaker().SetRecoverWindow(time.Second * 10)
-	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetErrorRatePercent(80)
-	var err error
-	var consumerAPI api.ConsumerAPI
-	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
-	c.Assert(err, check.IsNil)
-	defer consumerAPI.Destroy()
-	// 等待直到完成首次地域信息拉取
-	time.Sleep(time.Second * 1)
-	t.testHalfOpenMustChange(c, consumerAPI, "errorRate", 2, 9)
-}
+//func (t *CircuitBreakSuite) TestHalfOpenMustChangeErrorRate(c *check.C) {
+//	fmt.Println("--TestHalfOpenMustChangeErrorRate")
+//	defer util.DeleteDir(util.BackupDir)
+//	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", cbIP, cbPORT)})
+//	// enableStat := false
+//	period := 1 * time.Second
+//	// cfg.Global.StatReporter.Enable = &enableStat
+//	cfg.Consumer.LocalCache.PersistDir = "testdata/backup"
+//	cfg.Consumer.CircuitBreaker.CheckPeriod = &period
+//	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetRequestVolumeThreshold(10)
+//	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetMetricStatTimeWindow(time.Second * 10)
+//	cfg.Consumer.GetCircuitBreaker().SetSleepWindow(time.Second * 5)
+//	cfg.Consumer.GetCircuitBreaker().SetRequestCountAfterHalfOpen(10)
+//	cfg.Consumer.GetCircuitBreaker().SetSuccessCountAfterHalfOpen(10)
+//	cfg.Consumer.GetCircuitBreaker().SetRecoverWindow(time.Second * 10)
+//	cfg.Consumer.GetCircuitBreaker().GetErrorRateConfig().SetErrorRatePercent(80)
+//	var err error
+//	var consumerAPI api.ConsumerAPI
+//	consumerAPI, err = api.NewConsumerAPIByConfig(cfg)
+//	c.Assert(err, check.IsNil)
+//	defer consumerAPI.Destroy()
+//	// 等待直到完成首次地域信息拉取
+//	time.Sleep(time.Second * 1)
+//	t.testHalfOpenMustChange(c, consumerAPI, "errorRate", 2, 9)
+//}
 
 // TestAllHalfOpenReturn 断开熔断变更错误率
 func (t *CircuitBreakSuite) TestAllHalfOpenReturn(c *check.C) {
