@@ -116,4 +116,6 @@ type Engine interface {
 	ProcessRouters(req *ProcessRoutersRequest) (*InstancesResponse, error)
 	// ProcessLoadBalance 执行负载均衡策略，返回负载均衡后的实例
 	ProcessLoadBalance(req *ProcessLoadBalanceRequest) (*OneInstanceResponse, error)
+	// WatchAllInstances 监听实例变更事件
+	WatchAllInstances(request *WatchAllInstancesRequest) (*WatchAllInstancesResponse, error)
 }

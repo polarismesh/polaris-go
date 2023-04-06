@@ -176,7 +176,6 @@ type CommonInstancesRequest struct {
 	DoLoadBalance   bool
 	RouteInfo       servicerouter.RouteInfo
 	DstInstances    model.ServiceInstances
-	Revision        string
 	Criteria        loadbalancer.Criteria
 	FetchAll        bool
 	SkipRouteFilter bool
@@ -350,11 +349,9 @@ func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.Serv
 }
 
 // BuildInstancesResponse 构建查询实例的应答
-func (c *CommonInstancesRequest) BuildInstancesResponse(flowID uint64, dstService model.ServiceKey,
-	cluster *model.Cluster, instances []model.Instance, totalWeight int, revision string,
-	serviceMetaData map[string]string) *model.InstancesResponse {
-	return buildInstancesResponse(c.response, flowID, dstService, cluster, instances, totalWeight, revision,
-		serviceMetaData)
+func (c *CommonInstancesRequest) BuildInstancesResponse(dstService model.ServiceKey, cluster *model.Cluster,
+	instances []model.Instance, totalWeight int, svcInstances model.ServiceInstances) *model.InstancesResponse {
+	return buildInstancesResponse(c.response, dstService, cluster, instances, totalWeight, svcInstances)
 }
 
 // GetDstService 获取目标服务
@@ -375,7 +372,6 @@ func (c *CommonInstancesRequest) GetNotifierTrigger() *model.NotifyTrigger {
 // SetDstInstances 设置目标服务实例
 func (c *CommonInstancesRequest) SetDstInstances(instances model.ServiceInstances) {
 	c.DstInstances = instances
-	c.Revision = instances.GetRevision()
 }
 
 // SetDstRoute 设置目标服务路由规则
@@ -414,14 +410,11 @@ type SingleInstancesOwner interface {
 	SingleInstances() []model.Instance
 }
 
-// buildInstancesResponse 构建查询实例的应答
-func buildInstancesResponse(response *model.InstancesResponse, flowID uint64, dstService model.ServiceKey,
-	cluster *model.Cluster, instances []model.Instance, totalWeight int, revision string,
-	serviceMetaData map[string]string) *model.InstancesResponse {
-	response.FlowID = flowID
+func buildInstancesResponse(response *model.InstancesResponse, dstService model.ServiceKey, cluster *model.Cluster,
+	instances []model.Instance, totalWeight int, svcInstances model.ServiceInstances) *model.InstancesResponse {
 	response.ServiceInfo.Service = dstService.Service
 	response.ServiceInfo.Namespace = dstService.Namespace
-	response.ServiceInfo.Metadata = serviceMetaData
+	response.ServiceInfo.Metadata = svcInstances.GetMetadata()
 	if nil != cluster {
 		// 对外返回的cluster，无需池化，因为可能会被别人引用
 		cluster.SetReuse(false)
@@ -429,8 +422,17 @@ func buildInstancesResponse(response *model.InstancesResponse, flowID uint64, ds
 	response.Cluster = cluster
 	response.TotalWeight = totalWeight
 	response.Instances = instances
-	response.Revision = revision
+	response.Revision = svcInstances.GetRevision()
+	response.HashValue = svcInstances.GetHashValue()
+	response.NotExists = svcInstances.IsNotExists()
 	return response
+}
+
+func BuildInstancesResponse(
+	dstService model.ServiceKey, cluster *model.Cluster, svcInstances model.ServiceInstances) *model.InstancesResponse {
+	response := &model.InstancesResponse{}
+	return buildInstancesResponse(response, dstService, cluster, svcInstances.GetInstances(),
+		svcInstances.GetTotalWeight(), svcInstances)
 }
 
 // PoolGetServicesRequest 获取对象池中请求
@@ -523,6 +525,7 @@ func (cr *CommonRuleRequest) BuildServiceRuleResponse(rule model.ServiceRule) *m
 	resp.Type = rule.GetType()
 	resp.Value = rule.GetValue()
 	resp.Revision = rule.GetRevision()
+	resp.HashValue = rule.GetHashValue()
 	resp.RuleCache = rule.GetRuleCache()
 	resp.Service.Service = cr.DstService.Service
 	resp.Service.Namespace = cr.DstService.Namespace

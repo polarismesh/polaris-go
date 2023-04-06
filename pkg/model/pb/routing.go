@@ -65,6 +65,28 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 	if len(routes) == 0 {
 		return nil
 	}
+	for _, route := range routes {
+		for _, source := range route.GetSources() {
+			for _, matchValue := range source.GetMetadata() {
+				if matchValue.GetType() == namingpb.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
+					_, err := ruleCache.GetRegexMatcher(matchValue.GetValue().GetValue())
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for _, destination := range route.GetDestinations() {
+			for _, matchValue := range destination.GetMetadata() {
+				if matchValue.GetType() == namingpb.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
+					_, err := ruleCache.GetRegexMatcher(matchValue.GetValue().GetValue())
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 

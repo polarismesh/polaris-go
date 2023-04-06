@@ -234,7 +234,10 @@ func (t *taskRoutine) rebuildImmutableValues() {
 func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	taskItem := t.mutableTaskValues[key]
+	taskItem, ok := t.mutableTaskValues[key]
+	if !ok {
+		return
+	}
 	value = taskItem.value
 	if !reflect2.IsNil(value) && !value.EnsureDeleted(value) {
 		// 二次校验不通过，不予删除

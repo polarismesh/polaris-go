@@ -211,17 +211,6 @@ func (g *RuleBasedInstancesFilter) validateParams(routeInfo *servicerouter.Route
 			"GetFilteredInstances param invalid, dstService must exist")
 	}
 
-	var err error
-	// 被调规则如果存在, 主流程必须保证已初始化
-	if err = checkRouteRule(routeInfo.DestRouteRule); err != nil {
-		return false, err
-	}
-
-	// 主调规则如果存在, 主流程必须保证已初始化
-	if err = checkRouteRule(routeInfo.SourceRouteRule); err != nil {
-		return false, err
-	}
-
 	return true, nil
 }
 

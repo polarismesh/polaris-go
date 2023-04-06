@@ -19,17 +19,18 @@ package log
 
 const (
 	// DefaultLogger 默认logger
-	DefaultLogger = LoggerZap
+	DefaultLogger   = LoggerZap
+	DefaultLogLevel = InfoLog
 	// DefaultBaseLogLevel 默认基础日志级别
-	DefaultBaseLogLevel = InfoLog
+	DefaultBaseLogLevel = DefaultLogLevel
 	// DefaultStatLogLevel 默认统计日志级别
-	DefaultStatLogLevel = InfoLog
+	DefaultStatLogLevel = DefaultLogLevel
 	// DefaultDetectLogLevel 默认探测日志级别
-	DefaultDetectLogLevel = InfoLog
+	DefaultDetectLogLevel = DefaultLogLevel
 	// DefaultStatReportLogLevel 默认统计上报日志级别
-	DefaultStatReportLogLevel = InfoLog
+	DefaultStatReportLogLevel = DefaultLogLevel
 	// DefaultNetworkLogLevel 默认网络交互日志级别
-	DefaultNetworkLogLevel = InfoLog
+	DefaultNetworkLogLevel = DefaultLogLevel
 	// 默认基础日志名
 	baseLoggerName = "base"
 	// 默认统计日志名
@@ -40,6 +41,8 @@ const (
 	detectLoggerName = "detect"
 	// 默认网络交互日志名
 	networkLoggerName = "network"
+	// 默认缓存交互日志名
+	cacheLoggerName = "cache"
 )
 
 const (
@@ -63,6 +66,8 @@ const (
 	DefaultDetectLogRotationPath = "/detect/polaris-detect.log"
 	// DefaultNetworkLogRotationPath 默认网络交互日志滚动文件
 	DefaultNetworkLogRotationPath = "/network/polaris-network.log"
+	// DefaultCacheLogRotationPath 默认缓存更新日志滚动文件
+	DefaultCacheLogRotationPath = "/network/polaris-cache.log"
 	// DefaultBaseLogRotationFile 默认基础日志滚动文件全路径
 	DefaultBaseLogRotationFile = DefaultLogRotationRootDir + DefaultBaseLogRotationPath
 	// DefaultStatLogRotationFile 默认统计日志滚动文件全路径
@@ -73,4 +78,6 @@ const (
 	DefaultDetectLogRotationFile = DefaultLogRotationRootDir + DefaultDetectLogRotationPath
 	// DefaultNetworkLogRotationFile 默认网络交互日志滚动文件全路径
 	DefaultNetworkLogRotationFile = DefaultLogRotationRootDir + DefaultNetworkLogRotationPath
+	// DefaultCacheLogRotationFile 默认缓存更新日志滚动文件全路径
+	DefaultCacheLogRotationFile = DefaultLogRotationRootDir + DefaultCacheLogRotationPath
 )

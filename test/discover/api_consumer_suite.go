@@ -357,9 +357,14 @@ func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout boo
 		request.FlowID = 1111
 		request.Namespace = "errNS"
 		request.Service = "errSVC"
-		_, err = consumer.GetInstances(request)
-		c.Assert(err, check.NotNil)
-		fmt.Printf("Error: %v\n", err.Error())
+		if !mockTimeout {
+			resp, err := consumer.GetInstances(request)
+			c.Assert(err, check.IsNil)
+			c.Assert(resp.NotExists, check.Equals, true)
+		} else {
+			_, err := consumer.GetInstances(request)
+			c.Assert(err, check.NotNil)
+		}
 	})
 }
 
@@ -367,12 +372,6 @@ func (t *ConsumerTestingSuite) testGetInstancesError(c *check.C, mockTimeout boo
 func (t *ConsumerTestingSuite) TestGetInstancesErrorNormal(c *check.C) {
 	log.Printf("Start TestGetInstancesErrorNormal")
 	t.testGetInstancesError(c, false)
-}
-
-// TestGetInstancesErrorTimeout 测试以错误的参数请求实例
-func (t *ConsumerTestingSuite) TestGetInstancesErrorTimeout(c *check.C) {
-	log.Printf("Start TestGetInstancesErrorTimeout")
-	t.testGetInstancesError(c, true)
 }
 
 // 构建服务路由规则

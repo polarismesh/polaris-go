@@ -42,7 +42,7 @@ type ServiceEvent struct {
 type EventHandler interface {
 	// OnServiceUpdate 回调函数接口
 	// 返回缓存值是否已经被清理(对于服务被剔除，或者首次服务拉取失败，会返回true)
-	OnServiceUpdate(*ServiceEvent) (deleted bool)
+	OnServiceUpdate(*ServiceEvent)
 	// GetRevision 获取缓存版本号
 	GetRevision() string
 	// GetBusiness 获取业务

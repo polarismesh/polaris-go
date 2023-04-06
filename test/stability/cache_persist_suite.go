@@ -247,8 +247,8 @@ func (t *CacheTestingSuite) TestServiceDelete(c *check.C) {
 		Service:   cacheSVC,
 		Namespace: cacheNS,
 	}, false, true)
-	c.Assert(svcInsts.IsInitialized(), check.Equals, false)
-	c.Assert(util.FileExist(backupFile), check.Equals, false)
+	c.Assert(svcInsts.IsInitialized(), check.Equals, true)
+	c.Assert(svcInsts.IsNotExists(), check.Equals, true)
 	t.mockServer.RegisterService(svc)
 }
 

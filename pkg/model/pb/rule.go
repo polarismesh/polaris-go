@@ -22,6 +22,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
@@ -45,7 +46,9 @@ var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
 type ServiceRuleInProto struct {
 	*model.ServiceKey
 	initialized bool
+	notExists   bool
 	revision    string
+	hashValue   uint64
 	ruleValue   proto.Message
 	ruleCache   model.RuleCache
 	eventType   model.EventType
@@ -76,9 +79,20 @@ func NewServiceRuleInProtoWithInitializeStatus(resp *namingpb.DiscoverResponse, 
 		Service:   resp.Service.Name.GetValue(),
 	}
 	value.initialized = initialized
+	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+		value.notExists = true
+	}
 	value.eventType = GetEventType(resp.GetType())
 	value.assistant = eventTypeToAssistant[value.eventType]
 	value.ruleValue, value.revision = value.assistant.ParseRuleValue(resp)
+	if len(value.revision) > 0 {
+		var err error
+		value.hashValue, err = model.GetCrc64Hash(value.revision)
+		if err != nil {
+			log.GetBaseLogger().Errorf("fail to calc crc64 hash for rule %s, type %v: %v",
+				value.ServiceKey, value.eventType, err)
+		}
+	}
 	value.ruleCache = model.NewRuleCache()
 	return value
 }
@@ -130,9 +144,19 @@ func (s *ServiceRuleInProto) IsInitialized() bool {
 	return s.initialized
 }
 
+// IsNotExists 规则是否存在
+func (s *ServiceRuleInProto) IsNotExists() bool {
+	return s.notExists
+}
+
 // GetRevision 缓存版本号，标识缓存是否更新.
 func (s *ServiceRuleInProto) GetRevision() string {
 	return s.revision
+}
+
+// GetHashValue 获取数据的hash值
+func (s *ServiceRuleInProto) GetHashValue() uint64 {
+	return s.hashValue
 }
 
 // GetRuleCache 获取规则缓存信息.

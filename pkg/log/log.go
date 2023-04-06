@@ -120,6 +120,8 @@ const (
 	DetectLogger
 	// NetworkLogger 与系统服务进行网络交互的相关日志
 	NetworkLogger
+	// CacheLogger 缓存更新日志
+	CacheLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -152,6 +154,11 @@ func (c *container) SetDetectLogger(logger Logger) {
 // SetNetworkLogger 设置网络交互日志对象
 func (c *container) SetNetworkLogger(logger Logger) {
 	c.loggers[NetworkLogger].Store(&logger)
+}
+
+// SetCacheLogger 设置缓存更新日志对象
+func (c *container) SetCacheLogger(logger Logger) {
+	c.loggers[CacheLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -199,6 +206,15 @@ func (c *container) GetNetworkLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetCacheLogger 获取缓存更新日志对象
+func (c *container) GetCacheLogger() Logger {
+	value := c.loggers[CacheLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -219,6 +235,11 @@ func SetDetectLogger(logger Logger) {
 	logContainer.SetDetectLogger(logger)
 }
 
+// SetCacheLogger 全局设置缓存日志对象
+func SetCacheLogger(logger Logger) {
+	logContainer.SetCacheLogger(logger)
+}
+
 // SetNetworkLogger 全局设置网络交互日志对象
 func SetNetworkLogger(logger Logger) {
 	logContainer.SetNetworkLogger(logger)
@@ -227,6 +248,11 @@ func SetNetworkLogger(logger Logger) {
 // GetBaseLogger 获取全局基础日志对象
 func GetBaseLogger() Logger {
 	return logContainer.GetBaseLogger()
+}
+
+// GetCacheLogger 获取缓存更新日志对象
+func GetCacheLogger() Logger {
+	return logContainer.GetCacheLogger()
 }
 
 // GetStatLogger 获取全局统计日志对象
@@ -353,6 +379,10 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default network logger %s", name)))
 		}
+		if err = ConfigDefaultCacheLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default cache logger %s", name)))
+		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
@@ -427,6 +457,16 @@ func ConfigNetworkLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigCacheLogger 配置缓存日志器
+func ConfigCacheLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, cacheLoggerName, options, DefaultLogLevel)
+	if err != nil {
+		return err
+	}
+	SetCacheLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -464,4 +504,10 @@ func ConfigDefaultDetectLogger(pluginName string) error {
 func ConfigDefaultNetworkLogger(pluginName string) error {
 	return ConfigNetworkLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultNetworkLogRotationFile, DefaultNetworkLogLevel))
+}
+
+// ConfigDefaultCacheLogger 配置默认的网络交互日志器
+func ConfigDefaultCacheLogger(pluginName string) error {
+	return ConfigCacheLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultCacheLogRotationFile, DefaultLogLevel))
 }

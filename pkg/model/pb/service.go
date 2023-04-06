@@ -42,12 +42,14 @@ type SvcPluginValues struct {
 // ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
 	service         *namingpb.Service
+	notExists       bool
 	instances       []model.Instance
 	instancesMap    map[string]model.Instance
 	initialized     bool
 	svcIDSet        model.HashSet
 	totalWeight     int
 	revision        string
+	hashValue       uint64
 	clusterCache    atomic.Value
 	svcPluginValues *SvcPluginValues
 	svcLocalValue   local.ServiceLocalValue
@@ -101,6 +103,16 @@ func NewServiceInstancesInProto(resp *namingpb.DiscoverResponse, createLocalValu
 	svcKey := &model.ServiceKey{
 		Namespace: resp.GetService().GetNamespace().GetValue(),
 		Service:   resp.GetService().GetName().GetValue(),
+	}
+	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+		instancesInProto.notExists = true
+	}
+	if len(instancesInProto.revision) > 0 {
+		var err error
+		instancesInProto.hashValue, err = model.GetCrc64Hash(instancesInProto.revision)
+		if err != nil {
+			log.GetBaseLogger().Errorf("fail to calc crc64 hash for instance %s: %v", svcKey, err)
+		}
 	}
 	if len(resp.Instances) > 0 {
 		for _, inst := range resp.Instances {
@@ -181,6 +193,11 @@ func (s *ServiceInstancesInProto) GetInstances() []model.Instance {
 	return s.instances
 }
 
+// IsNotExists 服务是否存在
+func (s *ServiceInstancesInProto) IsNotExists() bool {
+	return s.notExists
+}
+
 // IsInitialized 服务实例列表是否已经加载.
 func (s *ServiceInstancesInProto) IsInitialized() bool {
 	return s.initialized
@@ -194,6 +211,11 @@ func (s *ServiceInstancesInProto) SetInitialized(isInitialized bool) {
 // GetRevision 获取服务的修订版本信息.
 func (s *ServiceInstancesInProto) GetRevision() string {
 	return s.revision
+}
+
+// GetHashValue 获取服务的hash值
+func (s *ServiceInstancesInProto) GetHashValue() uint64 {
+	return s.hashValue
 }
 
 // GetTotalWeight 获取所有实例总权重.
@@ -408,6 +430,7 @@ func GenServicesRevision(services []*namingpb.Service) string {
 type ServicesProto struct {
 	initialized bool
 	revision    string
+	hashValue   uint64
 	ruleValue   []*model.ServiceKey
 	eventType   model.EventType
 	CacheLoaded int32
@@ -431,6 +454,11 @@ func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
 		}
 	}
 	value.revision = GenServicesRevision(resp.Services)
+	var err error
+	value.hashValue, err = model.GetCrc64Hash(value.revision)
+	if err != nil {
+		log.GetBaseLogger().Errorf("fail to calc crc64 hash for services: %v", err)
+	}
 	return value
 }
 
@@ -444,6 +472,11 @@ func (s *ServicesProto) IsInitialized() bool {
 	return s.initialized
 }
 
+// IsNotExists 规则是否存在
+func (s *ServicesProto) IsNotExists() bool {
+	return false
+}
+
 // GetRevision 缓存版本号，标识缓存是否更新.
 func (s *ServicesProto) GetRevision() string {
 	return s.revision
@@ -452,4 +485,9 @@ func (s *ServicesProto) GetRevision() string {
 // GetValue 获取值.
 func (s *ServicesProto) GetValue() []*model.ServiceKey {
 	return s.ruleValue
+}
+
+// GetHashValue 获取数据的hash值
+func (s *ServicesProto) GetHashValue() uint64 {
+	return s.hashValue
 }

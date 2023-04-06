@@ -202,10 +202,14 @@ type ServiceRuleResponse struct {
 	Value interface{}
 	// 规则版本信息
 	Revision string
+	// 规则hash值
+	HashValue uint64
 	// 规则缓存
 	RuleCache RuleCache
 	// 规则校验异常
 	ValidateError error
+	// 服务是否存在
+	NotExists bool
 }
 
 // GetType 获取配置类型.
@@ -233,6 +237,11 @@ func (s *ServiceRuleResponse) GetRevision() string {
 	return s.Revision
 }
 
+// GetHashValue 获取数据的hash值
+func (s *ServiceRuleResponse) GetHashValue() uint64 {
+	return s.HashValue
+}
+
 // GetRuleCache 获取规则缓存信息.
 func (s *ServiceRuleResponse) GetRuleCache() RuleCache {
 	return s.RuleCache
@@ -251,4 +260,9 @@ func (s *ServiceRuleResponse) GetService() string {
 // GetValidateError 获取规则校验异常.
 func (s *ServiceRuleResponse) GetValidateError() error {
 	return s.ValidateError
+}
+
+// IsNotExists 规则是否存在
+func (s *ServiceRuleResponse) IsNotExists() bool {
+	return s.NotExists
 }

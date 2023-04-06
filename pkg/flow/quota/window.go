@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -168,11 +170,51 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	return true
 }
 
+// calcRateLimitDiffInfo 计算新旧限流规则的变化信息
+func calcRateLimitDiffInfo(oldRule *namingpb.RateLimit, newRule *namingpb.RateLimit) *common.RateLimitDiffInfo {
+	updatedRules := make(map[string]*common.RevisionChange)
+	deletedRules := make(map[string]string)
+	if newRule != nil {
+		for _, rule := range newRule.GetRules() {
+			updatedRules[rule.GetId().GetValue()] = &common.RevisionChange{
+				OldRevision: "",
+				NewRevision: rule.GetRevision().GetValue(),
+			}
+		}
+	}
+	if oldRule != nil {
+		for _, rule := range oldRule.GetRules() {
+			newRevision, ok := updatedRules[rule.GetId().GetValue()]
+			if !ok {
+				deletedRules[rule.GetId().GetValue()] = rule.GetRevision().GetValue()
+			} else {
+				if newRevision.NewRevision == rule.GetRevision().GetValue() {
+					delete(updatedRules, rule.GetId().GetValue())
+				} else {
+					newRevision.OldRevision = rule.GetRevision().GetValue()
+				}
+			}
+		}
+	}
+	return &common.RateLimitDiffInfo{
+		UpdatedRules: updatedRules,
+		DeletedRules: deletedRules,
+	}
+}
+
+// 从缓存的值中提取namingpb.RateLimit限流规则
+func extractRateLimitFromCacheValue(cacheValue interface{}) *namingpb.RateLimit {
+	if reflect2.IsNil(cacheValue) {
+		return nil
+	}
+	return cacheValue.(model.ServiceRule).GetValue().(*namingpb.RateLimit)
+}
+
 // OnServiceUpdated 服务更新回调
 func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEventObject) {
 	var updatedRules *common.RateLimitDiffInfo
 	if svcEventObject.SvcEventKey.Type == model.EventRateLimiting {
-		updatedRules = svcEventObject.DiffInfo.(*common.RateLimitDiffInfo)
+		updatedRules = calcRateLimitDiffInfo(nil, extractRateLimitFromCacheValue(svcEventObject.NewValue))
 	}
 	if nil == updatedRules {
 		return

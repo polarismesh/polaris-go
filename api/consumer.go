@@ -33,13 +33,11 @@ const (
 	EventInstance = model.EventInstance
 )
 
-// 网格类型
 const (
-	MeshVirtualService  = model.MeshVirtualService
-	MeshServiceEntry    = model.MeshServiceEntry
-	MeshDestinationRule = model.MeshDestinationRule
-	MeshEnvoyFilter     = model.MeshEnvoyFilter
-	MeshGateway         = model.MeshGateway
+	// WatchModeLongPull watch model by long pulling, the invocation would be hang on until revision updated or timeout
+	WatchModeLongPull = model.WatchModeLongPull
+	// WatchModeNotify watch model by notify to listener
+	WatchModeNotify = model.WatchModeNotify
 )
 
 // GetOneInstanceRequest 获取单个服务的请求对象
@@ -120,6 +118,11 @@ type InitCalleeServiceRequest struct {
 	model.InitCalleeServiceRequest
 }
 
+// WatchAllInstancesRequest .
+type WatchAllInstancesRequest struct {
+	model.WatchAllInstancesRequest
+}
+
 // ConsumerAPI 主调端API方法
 type ConsumerAPI interface {
 	SDKOwner
@@ -135,12 +138,15 @@ type ConsumerAPI interface {
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// Destroy 销毁API，销毁后无法再进行调用
 	Destroy()
+	// Deprecated: please use WatchAllInstances instead
 	// WatchService 订阅服务消息
 	WatchService(req *WatchServiceRequest) (*model.WatchServiceResponse, error)
 	// GetServices 根据业务同步获取批量服务
 	GetServices(req *GetServicesRequest) (*model.ServicesResponse, error)
 	// InitCalleeService 初始化服务运行中需要的被调服务
 	InitCalleeService(req *InitCalleeServiceRequest) error
+	// WatchAllInstances 监听服务实例变更事件
+	WatchAllInstances(req *WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error)
 }
 
 var (

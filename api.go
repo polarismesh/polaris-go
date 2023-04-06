@@ -47,6 +47,9 @@ type GetServicesRequest api.GetServicesRequest
 // InitCalleeServiceRequest is the request struct for InitCalleeService.
 type InitCalleeServiceRequest api.InitCalleeServiceRequest
 
+// WatchAllInstancesRequest is the request to watch instances
+type WatchAllInstancesRequest api.WatchAllInstancesRequest
+
 // ConsumerAPI 主调端API方法.
 type ConsumerAPI interface {
 	api.SDKOwner
@@ -66,6 +69,8 @@ type ConsumerAPI interface {
 	GetServices(req *GetServicesRequest) (*model.ServicesResponse, error)
 	// InitCalleeService 初始化服务运行中需要的被调服务
 	InitCalleeService(req *InitCalleeServiceRequest) error
+	// WatchAllInstances 监听服务实例变更事件
+	WatchAllInstances(req *WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error)
 	// Destroy 销毁API，销毁后无法再进行调用
 	Destroy()
 }
@@ -85,7 +90,6 @@ type ProviderAPI interface {
 	// RegisterInstance
 	// minimum supported version of polaris-server is v1.10.0
 	RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
-	// Deprecated: Use RegisterInstance instead.
 	// Register
 	// 同步注册服务，服务注册成功后会填充instance中的InstanceID字段
 	// 用户可保持该instance对象用于反注册和心跳上报

@@ -86,6 +86,8 @@ type Engine struct {
 	configFileService *configuration.ConfigFileService
 	// 注册状态管理器
 	registerStates *registerstate.RegisterStateManager
+
+	watchEngine *WatchEngine
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -154,6 +156,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
+	flowEngine.watchEngine = NewWatchEngine(flowEngine.registry)
 	flowEngine.subscribe = &subscribeChannel{
 		registerServices: []model.ServiceKey{},
 		eventChannelMap:  make(map[model.ServiceKey]chan model.SubScribeEvent),
@@ -219,13 +222,6 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 			err.Error())
 		return nil, err
 	}
-	svcEventKey := &model.ServiceEventKey{
-		ServiceKey: req.Key,
-		Type:       model.EventInstances,
-	}
-	if err := e.registry.WatchService(svcEventKey); err != nil {
-		return nil, err
-	}
 	watchResp := &model.WatchServiceResponse{}
 	watchResp.EventChannel = ch
 	watchResp.GetAllInstancesResp = allInsRsp
@@ -244,7 +240,7 @@ func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 			log.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe error:%s", err.Error())
 		}
 	}
-	return nil
+	return e.watchEngine.ServiceEventCallback(event)
 }
 
 // Start 启动引擎
