@@ -63,8 +63,8 @@ API的快速使用指南，可以参考：[QuickStart](examples/quickstart)
 
 通常，开发者使用开源或者自研的 HTTP 或者 RPC 框架开发分布式服务。北极星提供多个框架和北极星 SDK 的集成方案和实现。如果你在使用这些框架，不需要直接调用北极星 SDK，就可以使用北极星的服务治理功能。
 
-- Dubbo Go
+- dubbo-go
   - [registry, discovery and routing](https://github.com/apache/dubbo-go/tree/main/registry)
   - [circuit breaker and rate limiter](https://github.com/apache/dubbo-go/tree/main/filter)
-- grpc-go
-  - [grpc-go-polaris](https://github.com/polarismesh/grpc-go-polaris)
+  - [examples](https://github.com/apache/dubbo-go-samples/tree/master/polaris)
+- [grpc-go](https://github.com/polarismesh/grpc-go-polaris)
