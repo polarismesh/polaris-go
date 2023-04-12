@@ -78,6 +78,11 @@ func (c *consumerAPI) WatchAllInstances(req *WatchAllInstancesRequest) (*model.W
 	return c.rawAPI.WatchAllInstances((*api.WatchAllInstancesRequest)(req))
 }
 
+// WatchAllServices 监听服务列表变更事件
+func (c *consumerAPI) WatchAllServices(req *WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	return c.rawAPI.WatchAllServices((*api.WatchAllServicesRequest)(req))
+}
+
 // Destroy 销毁API，销毁后无法再进行调用
 func (c *consumerAPI) Destroy() {
 	c.rawAPI.Destroy()

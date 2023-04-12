@@ -453,7 +453,7 @@ func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
 			})
 		}
 	}
-	value.revision = GenServicesRevision(resp.Services)
+	value.revision = resp.GetService().GetRevision().GetValue()
 	var err error
 	value.hashValue, err = model.GetCrc64Hash(value.revision)
 	if err != nil {

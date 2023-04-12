@@ -118,4 +118,6 @@ type Engine interface {
 	ProcessLoadBalance(req *ProcessLoadBalanceRequest) (*OneInstanceResponse, error)
 	// WatchAllInstances 监听实例变更事件
 	WatchAllInstances(request *WatchAllInstancesRequest) (*WatchAllInstancesResponse, error)
+	// WatchAllServices 监听服务列表变更事件
+	WatchAllServices(request *WatchAllServicesRequest) (*WatchAllServicesResponse, error)
 }

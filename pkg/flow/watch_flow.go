@@ -32,7 +32,8 @@ import (
 
 type WatchContext interface {
 	ServiceEventKey() model.ServiceEventKey
-	OnRegistryValue(value model.RegistryValue)
+	OnInstances(value model.ServiceInstances)
+	OnServices(value model.Services)
 	Cancel()
 }
 
@@ -52,29 +53,48 @@ func NewWatchEngine(registry localregistry.LocalRegistry) *WatchEngine {
 
 // ServiceEventCallback serviceUpdate消息订阅回调
 func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
-	var svcInstances model.ServiceInstances
-	var eventObject *common.ServiceEventObject
-	var ok bool
+	var (
+		eventObject *common.ServiceEventObject
+		ok          bool
+	)
 	if eventObject, ok = event.EventObject.(*common.ServiceEventObject); !ok {
 		return nil
 	}
-	var isService bool
+	var (
+		isInstance   bool
+		svcInstances model.ServiceInstances
+
+		isServices bool
+		services   model.Services
+	)
 	switch event.EventType {
 	case common.OnServiceAdded:
-		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isInstance = eventObject.NewValue.(model.ServiceInstances)
+		services, isServices = eventObject.NewValue.(model.Services)
 	case common.OnServiceUpdated:
-		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isInstance = eventObject.NewValue.(model.ServiceInstances)
+		services, isServices = eventObject.NewValue.(model.Services)
 	case common.OnServiceDeleted:
-		svcInstances, isService = eventObject.NewValue.(model.ServiceInstances)
+		svcInstances, isInstance = eventObject.NewValue.(model.ServiceInstances)
+		services, isServices = eventObject.NewValue.(model.Services)
 	default:
 		// do nothing
 	}
-	if isService && svcInstances != nil {
+	if isInstance && svcInstances != nil {
 		func() {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
 			for _, lpCtx := range w.watchContexts {
-				lpCtx.OnRegistryValue(svcInstances)
+				lpCtx.OnInstances(svcInstances)
+			}
+		}()
+	}
+	if isServices && services != nil {
+		func() {
+			w.rwMutex.RLock()
+			defer w.rwMutex.RUnlock()
+			for _, lpCtx := range w.watchContexts {
+				lpCtx.OnServices(services)
 			}
 		}()
 	}
@@ -90,6 +110,100 @@ func (w *WatchEngine) CancelWatch(watchId uint64) {
 		ctx.Cancel()
 		w.registry.UnwatchService(ctx.ServiceEventKey())
 	}
+}
+
+func (w *WatchEngine) WatchAllServices(
+	request *model.WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	if request.WatchMode == model.WatchModeNotify {
+		return w.notifyAllServices(request)
+	}
+	return w.longPullAllServices(request)
+}
+
+func (w *WatchEngine) notifyAllServices(
+	request *model.WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	nextId := atomic.AddUint64(&w.indexSeed, 1)
+	serviceKey := model.ServiceKey{
+		Namespace: request.Namespace,
+	}
+	serivcesResp := w.registry.GetServicesByMeta(&serviceKey, false)
+	notifyCtx := &NotifyUpdateContext{
+		id: nextId,
+		svcEventKey: model.ServiceEventKey{
+			ServiceKey: serviceKey,
+			Type:       model.EventServices,
+		},
+		servicesListener: request.ServicesListener,
+	}
+	w.rwMutex.Lock()
+	w.watchContexts[nextId] = notifyCtx
+	w.rwMutex.Unlock()
+	if !serivcesResp.IsInitialized() {
+		notifier, err := w.registry.LoadServices(&serviceKey)
+		if err != nil {
+			return nil, err
+		}
+		<-notifier.GetContext().Done()
+		if err := notifier.GetError(); err != nil {
+			return nil, err
+		}
+	}
+	serivcesResp = w.registry.GetServicesByMeta(&serviceKey, false)
+	services := serivcesResp
+	return model.NewWatchAllServicesResponse(nextId, &model.ServicesResponse{
+		Type:      model.EventServices,
+		Value:     services.GetValue(),
+		Revision:  services.GetRevision(),
+		HashValue: services.GetHashValue(),
+	}, w.CancelWatch), nil
+}
+
+func (w *WatchEngine) longPullAllServices(
+	request *model.WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	nextId := atomic.AddUint64(&w.indexSeed, 1)
+	serviceKey := model.ServiceKey{
+		Namespace: request.Namespace,
+	}
+	serivcesResp := w.registry.GetServicesByMeta(&serviceKey, false)
+	pullContext := NewLongPullContext(nextId, request.WaitIndex, request.WaitTime, model.ServiceEventKey{
+		ServiceKey: serviceKey,
+		Type:       model.EventServices,
+	})
+	w.rwMutex.Lock()
+	w.watchContexts[nextId] = pullContext
+	w.rwMutex.Unlock()
+	defer func() {
+		w.rwMutex.Lock()
+		delete(w.watchContexts, nextId)
+		w.rwMutex.Unlock()
+	}()
+	if !serivcesResp.IsInitialized() {
+		_, err := w.registry.LoadServices(&serviceKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	pullContext.Start()
+	var latestServices model.Services
+	if nil != pullContext.registryValue {
+		latestServices = pullContext.registryValue.(model.Services)
+	} else {
+		latestServices = w.registry.GetServicesByMeta(&serviceKey, false)
+	}
+	return model.NewWatchAllServicesResponse(nextId, &model.ServicesResponse{
+		Type:      model.EventServices,
+		Value:     latestServices.GetValue(),
+		Revision:  latestServices.GetRevision(),
+		HashValue: latestServices.GetHashValue(),
+	}, nil), nil
+}
+
+func (w *WatchEngine) WatchAllInstances(
+	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
+	if request.WatchMode == model.WatchModeNotify {
+		return w.notifyAllInstances(request)
+	}
+	return w.longPullAllInstances(request)
 }
 
 func (w *WatchEngine) notifyAllInstances(
@@ -159,28 +273,32 @@ func (w *WatchEngine) longPullAllInstances(
 	return model.NewWatchAllInstancesResponse(nextId, instancesResponse, nil), nil
 }
 
-func (w *WatchEngine) WatchAllInstances(
-	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
-	if request.WatchMode == model.WatchModeNotify {
-		return w.notifyAllInstances(request)
-	}
-	return w.longPullAllInstances(request)
-}
-
 type NotifyUpdateContext struct {
 	id                uint64
 	svcEventKey       model.ServiceEventKey
 	instancesListener model.InstancesListener
+	servicesListener  model.ServicesListener
 }
 
 func (l *NotifyUpdateContext) ServiceEventKey() model.ServiceEventKey {
 	return l.svcEventKey
 }
 
-func (l *NotifyUpdateContext) OnRegistryValue(value model.RegistryValue) {
+func (l *NotifyUpdateContext) OnInstances(value model.ServiceInstances) {
 	go func() {
-		instancesResponse := data.BuildInstancesResponse(l.svcEventKey.ServiceKey, nil, value.(model.ServiceInstances))
+		instancesResponse := data.BuildInstancesResponse(l.svcEventKey.ServiceKey, nil, value)
 		l.instancesListener.OnInstancesUpdate(instancesResponse)
+	}()
+}
+
+func (l *NotifyUpdateContext) OnServices(value model.Services) {
+	go func() {
+		l.servicesListener.OnServicesUpdate(&model.ServicesResponse{
+			Type:      model.EventServices,
+			Value:     value.GetValue(),
+			Revision:  value.GetRevision(),
+			HashValue: value.GetHashValue(),
+		})
 	}()
 }
 
@@ -215,7 +333,16 @@ func (l *LongPullContext) ServiceEventKey() model.ServiceEventKey {
 	return l.svcEventKey
 }
 
-func (l *LongPullContext) OnRegistryValue(value model.RegistryValue) {
+func (l *LongPullContext) OnInstances(value model.ServiceInstances) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.registryValue = value
+	if l.registryValue.IsInitialized() && l.registryValue.GetHashValue() != l.waitIndex {
+		l.waitCancel()
+	}
+}
+
+func (l *LongPullContext) OnServices(value model.Services) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	l.registryValue = value
