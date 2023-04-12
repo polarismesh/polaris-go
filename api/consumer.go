@@ -123,6 +123,11 @@ type WatchAllInstancesRequest struct {
 	model.WatchAllInstancesRequest
 }
 
+// WatchAllServicesRequest .
+type WatchAllServicesRequest struct {
+	model.WatchAllServicesRequest
+}
+
 // ConsumerAPI 主调端API方法
 type ConsumerAPI interface {
 	SDKOwner
@@ -147,6 +152,8 @@ type ConsumerAPI interface {
 	InitCalleeService(req *InitCalleeServiceRequest) error
 	// WatchAllInstances 监听服务实例变更事件
 	WatchAllInstances(req *WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error)
+	// WatchAllServices 监听服务列表变更事件
+	WatchAllServices(req *WatchAllServicesRequest) (*model.WatchAllServicesResponse, error)
 }
 
 var (

@@ -124,6 +124,16 @@ func (c *consumerAPI) WatchAllInstances(req *WatchAllInstancesRequest) (*model.W
 	return c.context.GetEngine().WatchAllInstances(&req.WatchAllInstancesRequest)
 }
 
+func (c *consumerAPI) WatchAllServices(req *WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().WatchAllServices(&req.WatchAllServicesRequest)
+}
+
 // SDKContext 获取SDK上下文
 func (c *consumerAPI) SDKContext() SDKContext {
 	return c.context

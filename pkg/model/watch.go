@@ -24,6 +24,64 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
+type WatchAllServicesRequest struct {
+	// Namespace
+	Namespace string
+	// WatchModel model to wait responses
+	WatchMode WatchMode
+	// WaitIndex is used to enable a blocking query. Waits
+	// until the timeout or the next index is reached
+	WaitIndex uint64
+	// WaitTime is used to bound the duration of a wait.
+	// Defaults to that of the Config, but can be overridden.
+	WaitTime time.Duration
+	// ServicesListener listener for service listeners
+	ServicesListener ServicesListener
+}
+
+func (req *WatchAllServicesRequest) Validate() error {
+	if nil == req {
+		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "WatchServiceRequest can not be nil")
+	}
+	var errs error
+	if req.WatchMode == WatchModeLongPull && req.WaitTime == 0 {
+		errs = multierror.Append(errs, fmt.Errorf("wait time must not be 0 when specific notify mode"))
+	}
+	if req.WatchMode == WatchModeNotify && req.ServicesListener == nil {
+		errs = multierror.Append(errs, fmt.Errorf("listeners is empty when specific notify mode"))
+	}
+	return errs
+}
+
+type WatchAllServicesResponse struct {
+	watchId          uint64
+	servicesResponse *ServicesResponse
+	cancelWatch      func(uint64)
+}
+
+func NewWatchAllServicesResponse(
+	watchId uint64, response *ServicesResponse, cancelWatch func(uint642 uint64)) *WatchAllServicesResponse {
+	return &WatchAllServicesResponse{
+		watchId:          watchId,
+		servicesResponse: response,
+		cancelWatch:      cancelWatch,
+	}
+}
+
+func (w *WatchAllServicesResponse) ServicesResponse() *ServicesResponse {
+	return w.servicesResponse
+}
+
+func (w *WatchAllServicesResponse) WatchId() uint64 {
+	return w.watchId
+}
+
+func (w *WatchAllServicesResponse) CancelWatch() {
+	if w.cancelWatch != nil {
+		w.cancelWatch(w.watchId)
+	}
+}
+
 type WatchAllInstancesRequest struct {
 	ServiceKey
 	// WatchModel model to wait responses
@@ -147,6 +205,11 @@ const (
 type InstancesListener interface {
 	// OnInstancesUpdate notify when service instances changed
 	OnInstancesUpdate(*InstancesResponse)
+}
+
+type ServicesListener interface {
+	// OnServicesUpdate notify when service list changed
+	OnServicesUpdate(*ServicesResponse)
 }
 
 type ServiceRuleListener interface {

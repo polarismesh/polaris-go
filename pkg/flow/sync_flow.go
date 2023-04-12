@@ -636,3 +636,8 @@ func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model
 func (e *Engine) WatchAllInstances(request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	return e.watchEngine.WatchAllInstances(request)
 }
+
+// WatchAllServices 监听所有的服务列表
+func (e *Engine) WatchAllServices(request *model.WatchAllServicesRequest) (*model.WatchAllServicesResponse, error) {
+	return e.watchEngine.WatchAllServices(request)
+}

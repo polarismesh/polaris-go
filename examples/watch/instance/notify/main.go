@@ -38,8 +38,8 @@ var (
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "", "namespace")
-	flag.StringVar(&service, "service", "", "service")
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
+	flag.StringVar(&service, "service", "WatchInstanceNotify", "service")
 	flag.Uint64Var(&waitIndex, "waitIndex", 0, "waitIndex")
 	flag.DurationVar(&waitTime, "waitTime", 10*time.Second, "waitTime")
 }
