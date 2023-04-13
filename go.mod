@@ -1,6 +1,6 @@
 module github.com/polarismesh/polaris-go
 
-go 1.13
+go 1.15
 
 require (
 	github.com/agiledragon/gomonkey v2.0.2+incompatible
