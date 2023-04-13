@@ -28,13 +28,14 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -54,7 +55,7 @@ type NearbyTestingSuite struct {
 	grpcListener net.Listener
 	serviceToken string
 	mocksvr      mock.NamingServer
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 }
 
 // setupServer 构造server
@@ -71,19 +72,19 @@ func (t *NearbyTestingSuite) setupServer(ipAddr string, port int) (*grpc.Server,
 	mockServer := mock.NewNamingServer()
 	token := mockServer.RegisterServerService(config.ServerDiscoverService)
 	mockServer.RegisterServerInstance(ipAddr, port, config.ServerDiscoverService, token, true)
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: srNamespace},
 		Comment: &wrappers.StringValue{Value: "for  service route test"},
 		Owners:  &wrappers.StringValue{Value: "ServiceRoute"},
 	})
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	mockServer.RegisterService(t.testService)
 
-	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
+	service_manage.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, port))
 	if err != nil {
 		log.Fatalf("error listening appserver %v", err)
@@ -94,12 +95,12 @@ func (t *NearbyTestingSuite) setupServer(ipAddr string, port int) (*grpc.Server,
 
 // addInstance 构造instance
 func (t *NearbyTestingSuite) addInstance(region, zone, campus string, health bool) {
-	location := &namingpb.Location{
+	location := &apimodel.Location{
 		Region: &wrappers.StringValue{Value: region},
 		Zone:   &wrappers.StringValue{Value: zone},
 		Campus: &wrappers.StringValue{Value: campus},
 	}
-	ins := &namingpb.Instance{
+	ins := &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
@@ -108,22 +109,22 @@ func (t *NearbyTestingSuite) addInstance(region, zone, campus string, health boo
 		Weight:    &wrappers.UInt32Value{Value: uint32(rand.Intn(999) + 1)},
 		Healthy:   &wrappers.BoolValue{Value: health},
 		Location:  location}
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
-	t.mocksvr.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
+	t.mocksvr.RegisterServiceInstances(testService, []*service_manage.Instance{ins})
 }
 
 // addInstance 构造instance
 func (t *NearbyTestingSuite) addInstanceV2(region, zone, campus string, health bool, isolate bool, weight uint32) {
-	location := &namingpb.Location{
+	location := &apimodel.Location{
 		Region: &wrappers.StringValue{Value: region},
 		Zone:   &wrappers.StringValue{Value: zone},
 		Campus: &wrappers.StringValue{Value: campus},
 	}
-	ins := &namingpb.Instance{
+	ins := &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
@@ -133,12 +134,12 @@ func (t *NearbyTestingSuite) addInstanceV2(region, zone, campus string, health b
 		Isolate:   &wrappers.BoolValue{Value: isolate},
 		Healthy:   &wrappers.BoolValue{Value: health},
 		Location:  location}
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
-	t.mocksvr.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
+	t.mocksvr.RegisterServiceInstances(testService, []*service_manage.Instance{ins})
 }
 
 // 设置模拟桩服务器

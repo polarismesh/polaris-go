@@ -20,16 +20,17 @@ package quota
 import (
 	"time"
 
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
 // DoAsyncRemoteInit 异步处理发送init
 func (r *RateLimitWindow) DoAsyncRemoteInit() error {
-	if r.Rule.GetType() == namingpb.Rule_LOCAL || r.configMode == model.ConfigQuotaLocalMode {
+	if r.Rule.GetType() == apitraffic.Rule_LOCAL || r.configMode == model.ConfigQuotaLocalMode {
 		return nil
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
@@ -48,7 +49,7 @@ func (r *RateLimitWindow) DoAsyncRemoteInit() error {
 
 // DoAsyncRemoteAcquire 异步发送 acquire
 func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
-	if r.Rule.GetType() == namingpb.Rule_LOCAL || r.configMode == model.ConfigQuotaLocalMode {
+	if r.Rule.GetType() == apitraffic.Rule_LOCAL || r.configMode == model.ConfigQuotaLocalMode {
 		return nil
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)

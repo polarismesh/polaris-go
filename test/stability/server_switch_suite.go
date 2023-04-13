@@ -26,13 +26,13 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
@@ -69,19 +69,19 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	grpc.EnableTracing = true
 
 	var err error
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: testSvcName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
 	}
-	discoverService := &namingpb.Service{
+	discoverService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerDiscoverService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
 	}
-	instances := make([]*namingpb.Instance, 0, 2)
+	instances := make([]*service_manage.Instance, 0, 2)
 	for _, port := range mockPorts {
-		instances = append(instances, &namingpb.Instance{
+		instances = append(instances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: config.ServerDiscoverService},
 			Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
@@ -104,7 +104,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 			Namespace: config.ServerNamespace,
 			Service:   config.ServerDiscoverService,
 		}, instances)
-		namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
+		service_manage.RegisterPolarisGRPCServer(grpcServer, mockServer)
 		grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", mockListenHost, port))
 		if err != nil {
 			log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -127,7 +127,7 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening built appserver %v", err))
 	}
-	namingpb.RegisterPolarisGRPCServer(builtinGrpcServer, t.builtinServer)
+	service_manage.RegisterPolarisGRPCServer(builtinGrpcServer, t.builtinServer)
 	log.Printf("appserver listening on %s:%d\n", mockListenHost, builtinPort)
 	go func() {
 		builtinGrpcServer.Serve(builtinListener)

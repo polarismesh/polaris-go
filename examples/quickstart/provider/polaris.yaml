@@ -1,14 +1,7 @@
 global:
-  system:
-    discoverCluster:
-      namespace: Polaris
-      service: polaris.discover
-    healthCheckCluster:
-      namespace: Polaris
-      service: polaris.healthcheck
   serverConnector:
     addresses:
-      - 81.71.45.120:8090
+      - 127.0.0.1:8091
   statReporter:
     enable: false
     chain:
@@ -18,4 +11,3 @@ global:
       prometheus:
         type: pull
         metricPort: 0
-

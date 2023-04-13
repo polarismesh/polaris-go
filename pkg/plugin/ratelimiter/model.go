@@ -20,12 +20,12 @@ package ratelimiter
 import (
 	"time"
 
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // InitCriteria 配额查询相关的信息
 type InitCriteria struct {
-	DstRule   *namingpb.Rule
+	DstRule   *apitraffic.Rule
 	WindowKey string
 }
 

@@ -25,12 +25,13 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -75,12 +76,12 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: providerNamespace},
 		Comment: &wrappers.StringValue{Value: "for consumer api test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: providerService},
 		Namespace: &wrappers.StringValue{Value: providerNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -90,7 +91,7 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 	// 注册系统服务
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
 	// 代理到GRPC服务回调
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	// 进行端口监听
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {

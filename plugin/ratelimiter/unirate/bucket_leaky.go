@@ -23,15 +23,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
 // LeakyBucket 远程配额分配的算法桶
 type LeakyBucket struct {
-	rule *namingpb.Rule
+	rule *apitraffic.Rule
 	// 上次分配配额的时间戳
 	lastGrantTime int64
 	// 等效配额
@@ -90,7 +91,7 @@ func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config) *LeakyBu
 	}
 	effectiveRate = float64(bucket.effectiveDuration.Milliseconds()) / float64(bucket.effectiveAmount)
 	bucket.totalRate = effectiveRate
-	if bucket.rule.Type == namingpb.Rule_GLOBAL {
+	if bucket.rule.Type == apitraffic.Rule_GLOBAL {
 		effectiveRate *= float64(instCount)
 	}
 	bucket.effectiveRate = int64(math.Round(effectiveRate))

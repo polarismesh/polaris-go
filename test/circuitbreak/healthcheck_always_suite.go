@@ -26,13 +26,14 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -80,19 +81,19 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	mockServer := mock.NewNamingServer()
 	token := mockServer.RegisterServerService(config.ServerDiscoverService)
 	mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: checkAlwaysNamespace},
 		Comment: &wrappers.StringValue{Value: "for healthCheck api test"},
 		Owners:  &wrappers.StringValue{Value: "healthCheck"},
 	})
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: checkAlwaysService},
 		Namespace: &wrappers.StringValue{Value: checkAlwaysNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	mockServer.RegisterService(testService)
 	mockServer.GenTestInstancesWithHostPort(testService, instanceTotal, "127.0.0.1", 1024)
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		_ = util.DeleteDir(util.BackupDir)

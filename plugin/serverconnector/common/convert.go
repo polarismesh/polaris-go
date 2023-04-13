@@ -19,13 +19,14 @@ package common
 
 import (
 	"github.com/golang/protobuf/ptypes/wrappers"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 // RegisterRequestToProto 将用户的API注册请求结构转换成为server端需要的proto结构
-func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance *namingpb.Instance) {
+func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance *apiservice.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceId)
 	if nil != request.Protocol {
@@ -50,7 +51,7 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 		pbInstance.Isolate = &wrappers.BoolValue{Value: *request.Isolate}
 	}
 	if nil != request.Location {
-		pbInstance.Location = &namingpb.Location{
+		pbInstance.Location = &apimodel.Location{
 			Region: &wrappers.StringValue{Value: request.Location.Region},
 			Zone:   &wrappers.StringValue{Value: request.Location.Zone},
 			Campus: &wrappers.StringValue{Value: request.Location.Campus},
@@ -58,9 +59,9 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 	}
 	// 开启了远程健康检查
 	if nil != request.TTL {
-		pbInstance.HealthCheck = &namingpb.HealthCheck{
-			Type: namingpb.HealthCheck_HEARTBEAT,
-			Heartbeat: &namingpb.HeartbeatHealthCheck{
+		pbInstance.HealthCheck = &apiservice.HealthCheck{
+			Type: apiservice.HealthCheck_HEARTBEAT,
+			Heartbeat: &apiservice.HeartbeatHealthCheck{
 				Ttl: &wrappers.UInt32Value{Value: uint32(*request.TTL)},
 			},
 		}
@@ -69,8 +70,8 @@ func RegisterRequestToProto(request *model.InstanceRegisterRequest) (pbInstance 
 }
 
 func assembleNamingPbInstance(namespace string, service string, host string,
-	port int, serviceToken string, instanceId string) *namingpb.Instance {
-	pbInstance := namingpb.Instance{
+	port int, serviceToken string, instanceId string) *apiservice.Instance {
+	pbInstance := apiservice.Instance{
 		Namespace:    &wrappers.StringValue{Value: namespace},
 		Service:      &wrappers.StringValue{Value: service},
 		Host:         &wrappers.StringValue{Value: host},
@@ -84,27 +85,27 @@ func assembleNamingPbInstance(namespace string, service string, host string,
 }
 
 // HeartbeatRequestToProto 将用户心跳请转化为服务端需要的proto
-func HeartbeatRequestToProto(request *model.InstanceHeartbeatRequest) (pbInstance *namingpb.Instance) {
+func HeartbeatRequestToProto(request *model.InstanceHeartbeatRequest) (pbInstance *apiservice.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
 // DeregisterRequestToProto 将用户反注册请求转化为服务端需要的proto
-func DeregisterRequestToProto(request *model.InstanceDeRegisterRequest) (pbInstance *namingpb.Instance) {
+func DeregisterRequestToProto(request *model.InstanceDeRegisterRequest) (pbInstance *apiservice.Instance) {
 	pbInstance = assembleNamingPbInstance(request.Namespace, request.Service, request.Host,
 		request.Port, request.ServiceToken, request.InstanceID)
 	return pbInstance
 }
 
 // ReportClientRequestToProto 将客户端上报请转化为服务端需要的proto
-func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance *namingpb.Client) {
-	pbInstance = &namingpb.Client{
+func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance *apiservice.Client) {
+	pbInstance = &apiservice.Client{
 		Id: &wrappers.StringValue{Value: request.ID},
 		Host: &wrappers.StringValue{
 			Value: request.Host,
 		},
-		Type: namingpb.Client_SDK,
+		Type: apiservice.Client_SDK,
 		Version: &wrappers.StringValue{
 			Value: request.Version,
 		},
@@ -113,11 +114,11 @@ func ReportClientRequestToProto(request *model.ReportClientRequest) (pbInstance 
 	return pbInstance
 }
 
-func statInfoToProto(infos []model.StatInfo) []*namingpb.StatInfo {
-	ret := make([]*namingpb.StatInfo, 0, len(infos))
+func statInfoToProto(infos []model.StatInfo) []*apiservice.StatInfo {
+	ret := make([]*apiservice.StatInfo, 0, len(infos))
 
 	for i := range infos {
-		ret = append(ret, &namingpb.StatInfo{
+		ret = append(ret, &apiservice.StatInfo{
 			Target:   &wrappers.StringValue{Value: infos[i].Target},
 			Protocol: &wrappers.StringValue{Value: infos[i].Protocol},
 			Path:     &wrappers.StringValue{Value: infos[i].Path},

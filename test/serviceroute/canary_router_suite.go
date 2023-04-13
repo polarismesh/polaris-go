@@ -26,13 +26,14 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -58,7 +59,7 @@ type CanaryTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 }
 
 // GetName 套件名字
@@ -85,13 +86,13 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
 
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: canaryNamespace},
 		Comment: &wrappers.StringValue{Value: "for consumer api test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: canaryService},
 		Namespace: &wrappers.StringValue{Value: canaryNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -100,7 +101,7 @@ func (t *CanaryTestingSuite) SetUpSuite(c *check.C) {
 	// t.mockServer.GenTestInstances(t.testService, normalInstances)
 	// t.mockServer.GenTestInstancesWithMeta(t.testService, addMetaCount, map[string]string{addMetaKey: addMetaValue})
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatalf("error listening appserver %v", err)
@@ -860,12 +861,12 @@ func (t *CanaryTestingSuite) TestCanaryNormal04(c *check.C) {
 }
 
 func (t *CanaryTestingSuite) addInstance(region, zone, campus string, health bool, metaData map[string]string) {
-	location := &namingpb.Location{
+	location := &apimodel.Location{
 		Region: &wrappers.StringValue{Value: region},
 		Zone:   &wrappers.StringValue{Value: zone},
 		Campus: &wrappers.StringValue{Value: campus},
 	}
-	ins := &namingpb.Instance{
+	ins := &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: canaryService},
 		Namespace: &wrappers.StringValue{Value: canaryNamespace},
@@ -874,7 +875,7 @@ func (t *CanaryTestingSuite) addInstance(region, zone, campus string, health boo
 		Weight:    &wrappers.UInt32Value{Value: uint32(100)},
 		Healthy:   &wrappers.BoolValue{Value: health},
 		Location:  location}
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: canaryService},
 		Namespace: &wrappers.StringValue{Value: canaryNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -882,7 +883,7 @@ func (t *CanaryTestingSuite) addInstance(region, zone, campus string, health boo
 	if metaData != nil {
 		ins.Metadata = metaData
 	}
-	t.mockServer.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
+	t.mockServer.RegisterServiceInstances(testService, []*service_manage.Instance{ins})
 }
 
 // TestCanaryNormal05 和nearbyRouter一起使用

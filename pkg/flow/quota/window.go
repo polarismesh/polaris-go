@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/modern-go/reflect2"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -31,7 +33,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
@@ -70,7 +71,7 @@ func (rs *RateLimitWindowSet) GetRateLimitWindows() []*RateLimitWindow {
 }
 
 // GetRateLimitWindow 获取限流窗口
-func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *namingpb.Rule, flatLabels string) *RateLimitWindow {
+func (rs *RateLimitWindowSet) GetRateLimitWindow(rule *apitraffic.Rule, flatLabels string) *RateLimitWindow {
 	// 访问前进行一次窗口淘汰检查
 	rs.PurgeWindows(model.CurrentMillisecond())
 	rs.updateMutex.RLock()
@@ -106,13 +107,13 @@ func (rs *RateLimitWindowSet) PurgeWindows(nowMilli int64) {
 }
 
 // HasRegex 规则是否还有正则表达式匹配逻辑
-func HasRegex(rule *namingpb.Rule) bool {
+func HasRegex(rule *apitraffic.Rule) bool {
 	labels := rule.GetLabels()
 	if len(labels) == 0 {
 		return false
 	}
 	for _, matcher := range labels {
-		if matcher.GetType() == namingpb.MatchString_REGEX {
+		if matcher.GetType() == apimodel.MatchString_REGEX {
 			return true
 		}
 	}
@@ -121,7 +122,7 @@ func HasRegex(rule *namingpb.Rule) bool {
 
 // AddRateLimitWindow 添加限流窗口
 func (rs *RateLimitWindowSet) AddRateLimitWindow(
-	commonRequest *data.CommonRateLimitRequest, rule *namingpb.Rule, flatLabels string, regexSpread bool) *RateLimitWindow {
+	commonRequest *data.CommonRateLimitRequest, rule *apitraffic.Rule, flatLabels string, regexSpread bool) *RateLimitWindow {
 	rs.updateMutex.Lock()
 	defer rs.updateMutex.Unlock()
 	container := rs.windowByRule[rule.GetRevision().GetValue()]
@@ -171,7 +172,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 }
 
 // calcRateLimitDiffInfo 计算新旧限流规则的变化信息
-func calcRateLimitDiffInfo(oldRule *namingpb.RateLimit, newRule *namingpb.RateLimit) *common.RateLimitDiffInfo {
+func calcRateLimitDiffInfo(oldRule *apitraffic.RateLimit, newRule *apitraffic.RateLimit) *common.RateLimitDiffInfo {
 	updatedRules := make(map[string]*common.RevisionChange)
 	deletedRules := make(map[string]string)
 	if newRule != nil {
@@ -203,11 +204,11 @@ func calcRateLimitDiffInfo(oldRule *namingpb.RateLimit, newRule *namingpb.RateLi
 }
 
 // 从缓存的值中提取namingpb.RateLimit限流规则
-func extractRateLimitFromCacheValue(cacheValue interface{}) *namingpb.RateLimit {
+func extractRateLimitFromCacheValue(cacheValue interface{}) *apitraffic.RateLimit {
 	if reflect2.IsNil(cacheValue) {
 		return nil
 	}
-	return cacheValue.(model.ServiceRule).GetValue().(*namingpb.RateLimit)
+	return cacheValue.(model.ServiceRule).GetValue().(*apitraffic.RateLimit)
 }
 
 // OnServiceUpdated 服务更新回调
@@ -330,7 +331,7 @@ type RateLimitWindow struct {
 	lastAccessTimeMilli int64
 	// 已经匹配到的限流规则，没有匹配则为空
 	// 由于可能会出现规则并没有发生变化，但是缓存对象更新的情况，因此这里使用原子变量
-	Rule *namingpb.Rule
+	Rule *apitraffic.Rule
 	// 其他插件在这里添加的相关数据，一般是统计插件使用
 	PluginData map[int32]interface{}
 	// 淘汰周期，取最大统计周期+1s
@@ -360,12 +361,12 @@ var (
 )
 
 // getExpireDuration 计算淘汰周期
-func getExpireDuration(rule *namingpb.Rule) time.Duration {
+func getExpireDuration(rule *apitraffic.Rule) time.Duration {
 	return getMaxDuration(rule) + ExpireFactor
 }
 
 // getMaxDuration 获取最大的限流周期
-func getMaxDuration(rule *namingpb.Rule) time.Duration {
+func getMaxDuration(rule *apitraffic.Rule) time.Duration {
 	var maxDuration time.Duration
 	for _, amount := range rule.GetAmounts() {
 		pbDuration := amount.GetValidDuration()
@@ -378,7 +379,7 @@ func getMaxDuration(rule *namingpb.Rule) time.Duration {
 }
 
 // NewRateLimitWindow 创建限流窗口
-func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
+func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *apitraffic.Rule,
 	commonRequest *data.CommonRateLimitRequest, labels string) *RateLimitWindow {
 	window := &RateLimitWindow{}
 	window.WindowSet = windowSet
@@ -388,7 +389,7 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *namingpb.Rule,
 	window.uniqueKey, window.hashValue = window.buildQuotaHashValue()
 	window.Rule = rule
 	window.expireDuration = getExpireDuration(rule)
-	if rule.GetType() == namingpb.Rule_GLOBAL {
+	if rule.GetType() == apitraffic.Rule_GLOBAL {
 		window.remoteCluster.Namespace = windowSet.flowAssistant.remoteNamespace
 		window.remoteCluster.Service = windowSet.flowAssistant.remoteService
 	}
@@ -434,9 +435,9 @@ func (r *RateLimitWindow) UpdateTimeDiff(timeDiff int64) {
 }
 
 // buildRemoteConfigMode 构建限流模式及集群
-func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *namingpb.Rule) {
+func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *apitraffic.Rule) {
 	// 解析限流集群配置
-	if rule.GetType() == namingpb.Rule_LOCAL {
+	if rule.GetType() == apitraffic.Rule_LOCAL {
 		r.configMode = model.ConfigQuotaLocalMode
 		return
 	}

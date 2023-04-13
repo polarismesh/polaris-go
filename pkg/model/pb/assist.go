@@ -26,9 +26,11 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -47,7 +49,7 @@ const (
 	MatchAll = "*"
 )
 
-func IsMatchAllValue(ruleMetaValue *namingpb.MatchString) bool {
+func IsMatchAllValue(ruleMetaValue *apimodel.MatchString) bool {
 	return isMatchAllValueString(ruleMetaValue.GetValue().GetValue())
 }
 
@@ -56,7 +58,7 @@ func isMatchAllValueString(value string) bool {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
+func (r *RateLimitingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	rateLimitValue := resp.RateLimit
 	if nil == rateLimitValue {
@@ -78,7 +80,7 @@ func (r *RateLimitingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) 
 	return rateLimitValue, revision
 }
 
-func getRuleLevel(rule *namingpb.Rule) int {
+func getRuleLevel(rule *apitraffic.Rule) int {
 	arguments := rule.Arguments
 	if len(arguments) > 0 {
 		return ruleArgumentLevel + len(arguments)
@@ -90,8 +92,8 @@ func getRuleLevel(rule *namingpb.Rule) int {
 	return ruleServiceLevel
 }
 
-func unifiedRules(inRules []*namingpb.Rule) []*namingpb.Rule {
-	var outRules = make([]*namingpb.Rule, 0, len(inRules))
+func unifiedRules(inRules []*apitraffic.Rule) []*apitraffic.Rule {
+	var outRules = make([]*apitraffic.Rule, 0, len(inRules))
 	if len(inRules) == 0 {
 		return outRules
 	}
@@ -107,39 +109,39 @@ func unifiedRules(inRules []*namingpb.Rule) []*namingpb.Rule {
 			continue
 		}
 		// transfer the labels to arguments
-		var matchArguments = make([]*namingpb.MatchArgument, 0)
+		var matchArguments = make([]*apitraffic.MatchArgument, 0)
 		for labelKey, labelValue := range inRule.Labels {
 			if labelKey == model.LabelKeyMethod {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_METHOD,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_METHOD,
 					Value: labelValue,
 				})
 			} else if labelKey == model.LabelKeyCallerIp {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_CALLER_IP,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_CALLER_IP,
 					Value: labelValue,
 				})
 			} else if strings.HasPrefix(labelKey, model.LabelKeyHeader) {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_HEADER,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_HEADER,
 					Key:   labelKey[len(model.LabelKeyHeader):],
 					Value: labelValue,
 				})
 			} else if strings.HasPrefix(labelKey, model.LabelKeyQuery) {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_QUERY,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_QUERY,
 					Key:   labelKey[len(model.LabelKeyQuery):],
 					Value: labelValue,
 				})
 			} else if strings.HasPrefix(labelKey, model.LabelKeyCallerService) {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_CALLER_SERVICE,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_CALLER_SERVICE,
 					Key:   labelKey[len(model.LabelKeyCallerService):],
 					Value: labelValue,
 				})
 			} else {
-				matchArguments = append(matchArguments, &namingpb.MatchArgument{
-					Type:  namingpb.MatchArgument_CUSTOM,
+				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
+					Type:  apitraffic.MatchArgument_CUSTOM,
 					Key:   labelKey,
 					Value: labelValue,
 				})
@@ -157,7 +159,7 @@ type RateLimitRuleCache struct {
 }
 
 // 限流规则集合
-type rateLimitRules []*namingpb.Rule
+type rateLimitRules []*apitraffic.Rule
 
 // Len 数组长度
 func (rls rateLimitRules) Len() int {
@@ -195,7 +197,7 @@ const (
 
 // SetDefault 设置默认值
 func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
-	rateLimiting := message.(*namingpb.RateLimit)
+	rateLimiting := message.(*apitraffic.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
 		return
 	}
@@ -209,7 +211,7 @@ func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 			rule.Action.Value = strings.ToLower(behaviorName)
 		}
 		if nil == rule.GetReport() {
-			rule.Report = &namingpb.Report{}
+			rule.Report = &apitraffic.Report{}
 		}
 		if nil == rule.GetReport().GetAmountPercent() {
 			rule.GetReport().AmountPercent = &wrappers.UInt32Value{
@@ -221,7 +223,7 @@ func (r *RateLimitingAssistant) SetDefault(message proto.Message) {
 
 // Validate 规则校验
 func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
-	rateLimiting := message.(*namingpb.RateLimit)
+	rateLimiting := message.(*apitraffic.RateLimit)
 	if len(rateLimiting.GetRules()) == 0 {
 		return nil
 	}
@@ -254,7 +256,7 @@ func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.
 const minAmountDuration = 1 * time.Second
 
 // validateAmount 校验配额总量
-func validateAmount(amounts []*namingpb.Amount) error {
+func validateAmount(amounts []*apitraffic.Amount) error {
 	if len(amounts) == 0 {
 		return nil
 	}
@@ -271,7 +273,7 @@ func validateAmount(amounts []*namingpb.Amount) error {
 }
 
 // GetMaxValidDuration 获取最大校验周期
-func GetMaxValidDuration(rule *namingpb.Rule) (time.Duration, error) {
+func GetMaxValidDuration(rule *apitraffic.Rule) (time.Duration, error) {
 	var maxValidDura time.Duration
 	amounts := rule.GetAmounts()
 	if len(amounts) == 0 {

@@ -26,13 +26,14 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -96,8 +97,8 @@ type LBTestingSuite struct {
 
 var (
 	// 健康的服务名
-	lbHealthyService   *namingpb.Service
-	lbHealthyInstances []*namingpb.Instance
+	lbHealthyService   *service_manage.Service
+	lbHealthyInstances []*service_manage.Instance
 )
 
 // SetUpSuite 设置模拟桩服务器
@@ -116,14 +117,14 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: lbNamespace},
 		Comment: &wrappers.StringValue{Value: "for loadbalance test"},
 		Owners:  &wrappers.StringValue{Value: "LoadBalancer"},
 	})
 	// 全部健康的服务
 	serviceToken := uuid.New().String()
-	lbHealthyService = &namingpb.Service{
+	lbHealthyService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: lbService},
 		Namespace: &wrappers.StringValue{Value: lbNamespace},
 		Token:     &wrappers.StringValue{Value: serviceToken},
@@ -133,7 +134,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 
 	// 部分实例不健康的服务
 	serviceToken = uuid.New().String()
-	testPartialService := &namingpb.Service{
+	testPartialService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: lbPartialService},
 		Namespace: &wrappers.StringValue{Value: lbNamespace},
 		Token:     &wrappers.StringValue{Value: serviceToken},
@@ -144,7 +145,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 
 	// 全部实例不健康的服务
 	serviceToken = uuid.New().String()
-	testAllFailService := &namingpb.Service{
+	testAllFailService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: lbAllFailService},
 		Namespace: &wrappers.StringValue{Value: lbNamespace},
 		Token:     &wrappers.StringValue{Value: serviceToken},
@@ -152,7 +153,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer.RegisterService(testAllFailService)
 	t.mockServer.GenInstancesWithStatus(testAllFailService, 50, mock.UnhealthyStatus, 2048)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -542,7 +543,7 @@ func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
 			targetInstId := addrGot[0]
 			replicateInstId1 := addrGot[1]
 			replicateInstId2 := addrGot[2]
-			var anotherInstances = make([]*namingpb.Instance, 0, len(lbHealthyInstances)-1)
+			var anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-1)
 			for _, instance := range lbHealthyInstances {
 				if instance.GetId().GetValue() == targetInstId {
 					continue
@@ -560,7 +561,7 @@ func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
 			anotherInstId := anotherAddr[0]
 			c.Assert(anotherInstId, check.Equals, replicateInstId1)
 			// 比较下一个
-			anotherInstances = make([]*namingpb.Instance, 0, len(lbHealthyInstances)-2)
+			anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-2)
 			for _, instance := range lbHealthyInstances {
 				if instance.GetId().GetValue() == targetInstId {
 					continue
@@ -627,27 +628,3 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 	}
 	c.Assert(allSame, check.Equals, true)
 }
-
-// 测试获取备份节点
-// func (t *LBTestingSuite) TestReplicateNodeMaglev(c *check.C) {
-//	log.Printf("Start TestReplicateNodeRingHash")
-//	lbType := config.DefaultLoadBalancerMaglev
-//	service := lbService
-//	replicate := 2
-//	addrGot := t.doLoadBalanceOnce(c, service, lbType, replicate, nil)
-//	//c.Assert(len(addrGot), check.Equals, replicate+1)
-//	targetInstId := addrGot[0]
-//	fmt.Printf("target instance 1 is %s\n", targetInstId)
-//	var anotherInstances = make([]*namingpb.Instance, 0, len(lbHealthyInstances)-1)
-//	for _, instance := range lbHealthyInstances {
-//		if instance.GetId().GetValue() == targetInstId {
-//			continue
-//		}
-//		anotherInstances = append(anotherInstances, instance)
-//	}
-//	t.mockServer.setInstances(lbHealthyService, anotherInstances)
-//	defer t.mockServer.setInstances(lbHealthyService, lbHealthyInstances)
-//	anotherAddr := t.doLoadBalanceOnce(c, service, lbType, 0, nil)
-//	anotherInstId := anotherAddr[0]
-//	fmt.Printf("target instance 2 is %s\n", anotherInstId)
-// }

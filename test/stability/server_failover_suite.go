@@ -24,11 +24,12 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -61,13 +62,13 @@ func (t *ServerFailOverSuite) SetUpSuite(c *check.C) {
 
 	for _, port := range discoverPortsFailOver {
 		grpcServer, mockServer := createListenMockServer(port)
-		mockServer.RegisterNamespace(&namingpb.Namespace{
+		mockServer.RegisterNamespace(&apimodel.Namespace{
 			Name: &wrappers.StringValue{
 				Value: namespaceFailOver,
 			},
 		})
 		for i := 0; i < svcCountFailOver; i++ {
-			svc := &namingpb.Service{
+			svc := &service_manage.Service{
 				Namespace: &wrappers.StringValue{
 					Value: namespaceFailOver,
 				},
@@ -97,7 +98,7 @@ func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 	for _, port := range discoverPortsFailOver {
 		mockServer.RegisterServerInstance(listenHostFailOver, port, config.ServerDiscoverService, token, true)
 	}
-	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
+	service_manage.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", listenHostFailOver, port))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))

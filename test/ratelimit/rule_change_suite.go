@@ -23,12 +23,12 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
-	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
@@ -182,8 +182,8 @@ func (rt *RuleChangeTestingSuite) TestLabelsChanged(c *check.C) {
 	c.Assert(passedCount >= 100 && passedCount <= 210, check.Equals, true)
 
 	rule := rt.rules[RuleChangeSvcName]
-	rule.Rules[2].Labels[labelAppId] = &v1.MatchString{
-		Type:  v1.MatchString_EXACT,
+	rule.Rules[2].Labels[labelAppId] = &apimodel.MatchString{
+		Type:  apimodel.MatchString_EXACT,
 		Value: &wrappers.StringValue{Value: "changedApp"},
 	}
 	rule.Rules[2].Revision = &wrappers.StringValue{Value: uuid.New().String()}

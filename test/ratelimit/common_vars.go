@@ -28,13 +28,14 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -103,8 +104,8 @@ type CommonRateLimitSuite struct {
 	grpcListener net.Listener
 	mockServer   mock.NamingServer
 
-	services map[string]*namingpb.Service
-	rules    map[string]*namingpb.RateLimit
+	services map[string]*service_manage.Service
+	rules    map[string]*traffic_manage.RateLimit
 }
 
 // 整形转地址
@@ -155,14 +156,14 @@ func (cr *CommonRateLimitSuite) TearDownSuite(c *check.C, s util.NamingTestSuite
 }
 
 // 加载限流规则文件
-func loadRateLimitRules() (map[string]*namingpb.RateLimit, error) {
-	outputs := make(map[string]*namingpb.RateLimit, 0)
+func loadRateLimitRules() (map[string]*traffic_manage.RateLimit, error) {
+	outputs := make(map[string]*traffic_manage.RateLimit, 0)
 	for svcName, rulePath := range rulePaths {
 		buf, err := ioutil.ReadFile(rulePath)
 		if err != nil {
 			return nil, err
 		}
-		rateLimit := &namingpb.RateLimit{}
+		rateLimit := &traffic_manage.RateLimit{}
 		if err = jsonpb.UnmarshalString(string(buf), rateLimit); err != nil {
 			return nil, err
 		}
@@ -184,11 +185,11 @@ func loadRateLimitRules() (map[string]*namingpb.RateLimit, error) {
 }
 
 // 注册所需的所有服务
-func registerServices(mockServer mock.NamingServer) map[string]*namingpb.Service {
-	services := make(map[string]*namingpb.Service)
+func registerServices(mockServer mock.NamingServer) map[string]*service_manage.Service {
+	services := make(map[string]*service_manage.Service)
 	for svcName, namespace := range svcNames {
 		serviceToken := uuid.New().String()
-		service := &namingpb.Service{
+		service := &service_manage.Service{
 			Name:      &wrappers.StringValue{Value: svcName},
 			Namespace: &wrappers.StringValue{Value: namespace},
 			Token:     &wrappers.StringValue{Value: serviceToken},

@@ -24,7 +24,6 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 )
 
 // Type 插件类型，每个扩展点有自己独立的插件类型
@@ -131,18 +130,6 @@ type RateLimitDiffInfo struct {
 	UpdatedRules map[string]*RevisionChange
 	// 哪些规则被删除了，key为ruleID，value为revision
 	DeletedRules map[string]string
-}
-
-// MeshResourceDiffInfo 网格规则的变化信息
-type MeshResourceDiffInfo struct {
-	// 网格ID
-	MeshID string
-	// 网格规则类型
-	ResourceType *namingpb.MeshResource
-	// 哪些规则的版本变化了，key为规则的名字，value为RevisionChange
-	UpdatedResources map[string]*RevisionChange
-	// 哪些规则被删除了，key为规则名字，value为revision
-	DeletedResources map[string]string
 }
 
 // PluginEventHandler 触发插件事件的回调

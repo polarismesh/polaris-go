@@ -28,13 +28,15 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -64,10 +66,10 @@ type EventSubscribeSuit struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 }
 
-func (t *EventSubscribeSuit) addInstance() []*namingpb.Instance {
+func (t *EventSubscribeSuit) addInstance() []*service_manage.Instance {
 	return t.mockServer.GenTestInstancesWithHostPort(t.testService, 1, consumerIPAddress, 2000)
 }
 
@@ -88,13 +90,13 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: consumerNamespace},
 		Comment: &wrappers.StringValue{Value: "for consumer api test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: consumerService},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -102,7 +104,7 @@ func (t *EventSubscribeSuit) SetUpSuite(c *check.C) {
 	t.mockServer.RegisterService(t.testService)
 	t.mockServer.GenTestInstances(t.testService, normalInstances)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -196,12 +198,12 @@ func (t *EventSubscribeSuit) TestInstanceEvent(c *check.C) {
 	c.Assert(insEvent.DeleteEvent.Instances[0].GetId(), check.Equals, id)
 }
 
-func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service, path string) error {
+func registerRouteRuleByFile(mockServer mock.NamingServer, svc *service_manage.Service, path string) error {
 	buf, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	route := &namingpb.Routing{}
+	route := &traffic_manage.Routing{}
 	if err = jsonpb.UnmarshalString(string(buf), route); err != nil {
 		return err
 	}
@@ -214,9 +216,9 @@ func (t *EventSubscribeSuit) TestWatchExpired(c *check.C) {
 	defer util.DeleteDir(util.BackupDir)
 	serviceName := "InboundAddAndDelete"
 	namespace := "Production"
-	Instances := make([]*namingpb.Instance, 0, 2)
+	Instances := make([]*service_manage.Instance, 0, 2)
 
-	Instances = append(Instances, &namingpb.Instance{
+	Instances = append(Instances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: namespace},
@@ -227,7 +229,7 @@ func (t *EventSubscribeSuit) TestWatchExpired(c *check.C) {
 			"env": "formal1",
 		},
 	})
-	Instances = append(Instances, &namingpb.Instance{
+	Instances = append(Instances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: namespace},
@@ -239,7 +241,7 @@ func (t *EventSubscribeSuit) TestWatchExpired(c *check.C) {
 		},
 	})
 
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: namespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},

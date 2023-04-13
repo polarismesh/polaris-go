@@ -24,12 +24,12 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
@@ -87,7 +87,7 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 	clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	var dstFilteredInstances, sourceFilteredInstances *model.Cluster
-	var dstRoutes, sourceRoutes []*namingpb.Route
+	var dstRoutes, sourceRoutes []*apitraffic.Route
 	var filteredInstances *model.Cluster
 	var summary ruleMatchSummary
 	// 检查输入参数
@@ -172,15 +172,15 @@ finally:
 }
 
 // 格式化不匹配的源规则
-func getSourcesText(sources []*namingpb.Source) string {
-	fakeRoute := &namingpb.Route{Sources: sources}
+func getSourcesText(sources []*apitraffic.Source) string {
+	fakeRoute := &apitraffic.Route{Sources: sources}
 	jsonText, _ := (&jsonpb.Marshaler{}).MarshalToString(fakeRoute)
 	return jsonText
 }
 
 // 格式化不匹配的目标规则
-func getNotMatchedDestinationText(notMatchedDestinations []*namingpb.Destination) string {
-	fakeRoute := &namingpb.Route{Destinations: notMatchedDestinations}
+func getNotMatchedDestinationText(notMatchedDestinations []*apitraffic.Destination) string {
+	fakeRoute := &apitraffic.Route{Destinations: notMatchedDestinations}
 	jsonText, _ := (&jsonpb.Marshaler{}).MarshalToString(fakeRoute)
 	return jsonText
 }

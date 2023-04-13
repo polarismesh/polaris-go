@@ -25,11 +25,11 @@ import (
 	"time"
 
 	"github.com/modern-go/reflect2"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/common"
 )
@@ -506,15 +506,15 @@ func (tbs TokenBuckets) Swap(i, j int) {
 }
 
 // initTokenBuckets 初始化令牌桶
-func initTokenBuckets(rule *namingpb.Rule, windowKey string) TokenBuckets {
+func initTokenBuckets(rule *apitraffic.Rule, windowKey string) TokenBuckets {
 	shareInfo := &BucketShareInfo{}
-	if rule.GetAmountMode() == namingpb.Rule_SHARE_EQUALLY {
+	if rule.GetAmountMode() == apitraffic.Rule_SHARE_EQUALLY {
 		shareInfo.shareEqual = true
 	}
-	if rule.GetType() == namingpb.Rule_LOCAL {
+	if rule.GetType() == apitraffic.Rule_LOCAL {
 		shareInfo.local = true
 	}
-	if rule.GetFailover() == namingpb.Rule_FAILOVER_PASS {
+	if rule.GetFailover() == apitraffic.Rule_FAILOVER_PASS {
 		shareInfo.passOnRemoteFail = true
 	}
 	amounts := rule.GetAmounts()
