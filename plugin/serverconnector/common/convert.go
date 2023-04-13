@@ -19,10 +19,10 @@ package common
 
 import (
 	"github.com/golang/protobuf/ptypes/wrappers"
-
-	"github.com/polarismesh/polaris-go/pkg/model"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // RegisterRequestToProto 将用户的API注册请求结构转换成为server端需要的proto结构

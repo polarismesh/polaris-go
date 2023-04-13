@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/polarismesh/specification/source/go/api/v1/config_manage"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
@@ -37,8 +39,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	"github.com/polarismesh/specification/source/go/api/v1/config_manage"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 const (

@@ -20,11 +20,11 @@ package pb
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/modern-go/reflect2"
-
-	"github.com/polarismesh/polaris-go/pkg/model"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // NewRoutingRuleInProto 兼容接口, trpc-go依赖项

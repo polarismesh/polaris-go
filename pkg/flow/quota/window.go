@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/modern-go/reflect2"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -34,8 +36,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // RateLimitWindowSet 限流分配窗口的缓存

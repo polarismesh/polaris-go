@@ -21,6 +21,8 @@ import (
 	"context"
 	"time"
 
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -29,7 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (

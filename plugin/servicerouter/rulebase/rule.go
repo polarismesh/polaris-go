@@ -24,6 +24,7 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -32,7 +33,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // RuleBasedInstancesFilter 基于路由规则的服务实例过滤器

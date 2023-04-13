@@ -24,13 +24,13 @@ import (
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/modern-go/reflect2"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // 服务路由匹配结果

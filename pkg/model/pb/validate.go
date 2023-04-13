@@ -22,9 +22,9 @@ import (
 	"reflect"
 
 	"github.com/golang/protobuf/jsonpb"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 var (

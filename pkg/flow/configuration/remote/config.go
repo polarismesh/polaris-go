@@ -23,11 +23,12 @@ import (
 	"sync"
 	"time"
 
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 const (

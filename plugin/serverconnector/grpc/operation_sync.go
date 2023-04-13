@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -32,8 +34,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // RegisterInstance 同步注册服务

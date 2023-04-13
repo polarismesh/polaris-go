@@ -20,11 +20,12 @@ package quota
 import (
 	"time"
 
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
-	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // DoAsyncRemoteInit 异步处理发送init
