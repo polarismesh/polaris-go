@@ -32,7 +32,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
@@ -52,7 +53,7 @@ var testCacheTokens = []string{"abf588ceee5b48bbb68ba69ef5f5347e", "5039fdecf0d5
 
 var newCacheInstNums = []int{6, 10, 8, 5}
 
-var testServices = make([]*namingpb.Service, 4, 4)
+var testServices = make([]*service_manage.Service, 4, 4)
 
 // CacheFastUpdateSuite 缓存持久化测试套件
 type CacheFastUpdateSuite struct {
@@ -77,14 +78,14 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.mockServer = mock.NewNamingServer()
 	t.mockServer.RegisterServerServices("127.0.0.1", 1949)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: testCacheNs},
 		Comment: &wrappers.StringValue{Value: "for cache update test"},
 		Owners:  &wrappers.StringValue{Value: "CacheUpdater"},
 	})
 
 	for i := 0; i < 4; i++ {
-		testServices[i] = &namingpb.Service{
+		testServices[i] = &service_manage.Service{
 			Name:      &wrappers.StringValue{Value: testCacheSvcs[i]},
 			Namespace: &wrappers.StringValue{Value: testCacheNs},
 			Token:     &wrappers.StringValue{Value: testCacheTokens[i]},
@@ -93,7 +94,7 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 		t.mockServer.GenTestInstances(testServices[i], newCacheInstNums[i])
 	}
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", mockServerHost)
 	if err != nil {

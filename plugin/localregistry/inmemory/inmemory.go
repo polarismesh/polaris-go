@@ -30,7 +30,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
@@ -38,6 +37,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	lrplug "github.com/polarismesh/polaris-go/plugin/localregistry/common"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 const (
@@ -273,7 +275,7 @@ func (g *LocalCache) deleteService(svcKey *model.ServiceEventKey, oldValue inter
 	}
 }
 
-func logResourceChanged(resp *namingpb.DiscoverResponse, status CachedStatus, oldRevision string, newRevision string) {
+func logResourceChanged(resp *apiservice.DiscoverResponse, status CachedStatus, oldRevision string, newRevision string) {
 	if status != CacheNotChanged {
 		if len(oldRevision) == 0 {
 			oldRevision = emptyReplaceHolder
@@ -291,7 +293,7 @@ func logResourceChanged(resp *namingpb.DiscoverResponse, status CachedStatus, ol
 
 func compareResource(instValue interface{}, newValue proto.Message) CachedStatus {
 	var oldRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
+	var resp = newValue.(*apiservice.DiscoverResponse)
 	var newRevision = resp.GetService().GetRevision().GetValue()
 	var status CachedStatus
 
@@ -301,7 +303,7 @@ func compareResource(instValue interface{}, newValue proto.Message) CachedStatus
 	}
 
 	// 判断是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_DataNoChange) {
 		if oldNotExists {
 			status = CacheEmptyButNotChanged
 		} else {
@@ -311,7 +313,7 @@ func compareResource(instValue interface{}, newValue proto.Message) CachedStatus
 		return status
 	}
 	// 判断是否已删除
-	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_NotFoundResource) {
 		if oldNotExists {
 			status = CacheDeleted
 		} else {
@@ -345,15 +347,15 @@ func compareServiceInstances(instValue interface{}, newValue proto.Message) Cach
 	var oldRevision string
 	var oldInstances model.ServiceInstances
 	var oldInstancesCount = 0
-	var resp = newValue.(*namingpb.DiscoverResponse)
+	var resp = newValue.(*apiservice.DiscoverResponse)
 	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_DataNoChange) {
 		if reflect2.IsNil(instValue) {
 			return CacheEmptyButNotChanged
 		}
 		return CacheNotChanged
 	}
-	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_NotFoundResource) {
 		if reflect2.IsNil(instValue) {
 			return CacheDeleted
 		}
@@ -417,7 +419,7 @@ func (g *LocalCache) CreateDefaultInstanceLocalValue(instID string) local.Instan
 // PB对象转服务实例对象
 func (g *LocalCache) messageToServiceInstances(cachedValue interface{}, value proto.Message,
 	svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
-	respInProto := value.(*namingpb.DiscoverResponse)
+	respInProto := value.(*apiservice.DiscoverResponse)
 	svcKey := model.ServiceKey{
 		Service:   respInProto.GetService().GetName().GetValue(),
 		Namespace: respInProto.GetService().GetNamespace().GetValue(),
@@ -754,7 +756,7 @@ func (g *LocalCache) deleteRule(svcKey *model.ServiceEventKey, oldValue interfac
 }
 
 // 处理当之前缓存值为空的场景
-func onOriginalRoutingRuleValueEmpty(newRuleValue *namingpb.Routing) (CachedStatus, string) {
+func onOriginalRoutingRuleValueEmpty(newRuleValue *apitraffic.Routing) (CachedStatus, string) {
 	if nil != newRuleValue {
 		return CacheAdded, newRuleValue.GetRevision().GetValue()
 	}
@@ -762,7 +764,7 @@ func onOriginalRoutingRuleValueEmpty(newRuleValue *namingpb.Routing) (CachedStat
 }
 
 // 处理当之前缓存值不为空的场景
-func onOriginalRoutingRuleValueNotEmpty(oldRevision string, newRuleValue *namingpb.Routing) (CachedStatus, string) {
+func onOriginalRoutingRuleValueNotEmpty(oldRevision string, newRuleValue *apitraffic.Routing) (CachedStatus, string) {
 	if nil != newRuleValue {
 		newRevision := newRuleValue.GetRevision().GetValue()
 		if newRevision != oldRevision {
@@ -781,10 +783,10 @@ func compareServiceRouting(instValue interface{}, newValue proto.Message) Cached
 	var status CachedStatus
 	var oldRevision string
 	var newRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
+	var resp = newValue.(*apiservice.DiscoverResponse)
 	var routingValue = resp.GetRouting()
 	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_DataNoChange) {
 		if reflect2.IsNil(instValue) {
 			status = CacheEmptyButNotChanged
 		} else {
@@ -815,7 +817,7 @@ finally:
 }
 
 // 处理当之前缓存值为空的场景
-func onOriginalRateLimitRuleEmpty(newRuleValue *namingpb.RateLimit) (CachedStatus, string) {
+func onOriginalRateLimitRuleEmpty(newRuleValue *apitraffic.RateLimit) (CachedStatus, string) {
 	if nil != newRuleValue {
 		return CacheAdded, newRuleValue.GetRevision().GetValue()
 	}
@@ -823,7 +825,7 @@ func onOriginalRateLimitRuleEmpty(newRuleValue *namingpb.RateLimit) (CachedStatu
 }
 
 // 处理当之前缓存值不为空的场景
-func onOriginalRateLimitRuleNotEmpty(oldRevision string, newRuleValue *namingpb.RateLimit) (CachedStatus, string) {
+func onOriginalRateLimitRuleNotEmpty(oldRevision string, newRuleValue *apitraffic.RateLimit) (CachedStatus, string) {
 	if nil != newRuleValue {
 		newRevision := newRuleValue.GetRevision().GetValue()
 		if newRevision != oldRevision {
@@ -837,7 +839,7 @@ func onOriginalRateLimitRuleNotEmpty(oldRevision string, newRuleValue *namingpb.
 	return CacheChanged, emptyReplaceHolder
 }
 
-func onOriginalServicesEmpty(services []*namingpb.Service) (CachedStatus, string) {
+func onOriginalServicesEmpty(services []*apiservice.Service) (CachedStatus, string) {
 	newVersion := pb.GenServicesRevision(services)
 	if nil != services && len(services) > 0 {
 		return CacheAdded, newVersion
@@ -845,7 +847,7 @@ func onOriginalServicesEmpty(services []*namingpb.Service) (CachedStatus, string
 	return CacheAdded, emptyReplaceHolder
 }
 
-func onOriginalServicesNotEmpty(oldRevision string, services []*namingpb.Service) (CachedStatus, string) {
+func onOriginalServicesNotEmpty(oldRevision string, services []*apiservice.Service) (CachedStatus, string) {
 	newVersion := pb.GenServicesRevision(services)
 	if nil != services && len(services) > 0 {
 		if newVersion != oldRevision {
@@ -864,7 +866,7 @@ func compareServices(instValue interface{}, newValue proto.Message) CachedStatus
 	var status CachedStatus
 	var oldRevision string
 	var newRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
+	var resp = newValue.(*apiservice.DiscoverResponse)
 	var services = resp.GetServices()
 	// 临时处理
 	log.GetBaseLogger().Debugf("compareServices", services)
@@ -873,7 +875,7 @@ func compareServices(instValue interface{}, newValue proto.Message) CachedStatus
 		goto finally
 	}
 	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_DataNoChange) {
 		if reflect2.IsNil(instValue) {
 			status = CacheEmptyButNotChanged
 		} else {
@@ -908,10 +910,10 @@ func compareRateLimitRule(instValue interface{}, newValue proto.Message) CachedS
 	var status CachedStatus
 	var oldRevision string
 	var newRevision string
-	var resp = newValue.(*namingpb.DiscoverResponse)
+	var resp = newValue.(*apiservice.DiscoverResponse)
 	var ruleValue = resp.GetRateLimit()
 	// 判断server的错误码，是否未变更
-	if resp.GetCode().GetValue() == namingpb.DataNoChange {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_DataNoChange) {
 		if reflect2.IsNil(instValue) {
 			status = CacheEmptyButNotChanged
 		} else {
@@ -943,7 +945,7 @@ finally:
 
 // PB对象转服务实例对象
 func messageToServiceRule(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
-	respInProto := value.(*namingpb.DiscoverResponse)
+	respInProto := value.(*apiservice.DiscoverResponse)
 	svcRule := pb.NewServiceRuleInProto(respInProto)
 	if cacheLoaded {
 		svcRule.CacheLoaded = 1
@@ -957,7 +959,7 @@ func messageToServiceRule(cachedValue interface{}, value proto.Message, svcLocal
 }
 
 func messageToServices(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
-	respInProto := value.(*namingpb.DiscoverResponse)
+	respInProto := value.(*apiservice.DiscoverResponse)
 	mc := pb.NewServicesProto(respInProto)
 	if cacheLoaded {
 		mc.CacheLoaded = 1

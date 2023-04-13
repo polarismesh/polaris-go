@@ -34,9 +34,10 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -64,10 +65,10 @@ const (
 type ServiceUpdateSuite struct {
 	mutex                 sync.Mutex
 	mockServer            mock.NamingServer
-	testService           *namingpb.Service
+	testService           *service_manage.Service
 	testServiceToken      string
-	testServiceInstances  []*namingpb.Instance
-	healthModifyInstances []*namingpb.Instance
+	testServiceInstances  []*service_manage.Instance
+	healthModifyInstances []*service_manage.Instance
 	grpcServer            *grpc.Server
 	grpcListener          net.Listener
 }
@@ -89,12 +90,12 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: svcUpdateNamespace},
 		Comment: &wrappers.StringValue{Value: "for service update test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: svcUpdateServiceSync},
 		Namespace: &wrappers.StringValue{Value: svcUpdateNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -102,7 +103,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	t.testServiceToken = t.mockServer.RegisterService(t.testService)
 	t.testServiceInstances = t.mockServer.GenTestInstances(t.testService, instanceCount)
 
-	healthModifySvc := &namingpb.Service{
+	healthModifySvc := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: svcHealthModifyServiceSync},
 		Namespace: &wrappers.StringValue{Value: svcUpdateNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -111,7 +112,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	t.healthModifyInstances = t.mockServer.GenTestInstances(healthModifySvc, instanceCount)
 	// 生成批量服务
 	for i := 0; i < svcCount; i++ {
-		svc := &namingpb.Service{
+		svc := &service_manage.Service{
 			Name:      &wrappers.StringValue{Value: fmt.Sprintf(batchSvcName, i)},
 			Namespace: &wrappers.StringValue{Value: svcUpdateNamespace},
 			Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -119,7 +120,7 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 		t.mockServer.RegisterService(svc)
 		t.mockServer.GenTestInstances(svc, instanceCount)
 	}
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -151,7 +152,7 @@ const (
 )
 
 // 比较实例列表
-func compareInstances(expectInstances []*namingpb.Instance, obtainInstances []model.Instance) bool {
+func compareInstances(expectInstances []*service_manage.Instance, obtainInstances []model.Instance) bool {
 	obtainMap := make(map[string]model.Instance, 0)
 	for _, instance := range obtainInstances {
 		obtainMap[instance.GetId()] = instance
@@ -225,7 +226,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 	// 启动定时删除服务实例的协程
 	go func() {
 		log.Printf("start worker to set add/delete instance")
-		var instanceBackup *namingpb.Instance
+		var instanceBackup *service_manage.Instance
 		for i := 0; i < modifyCount; i++ {
 			time.Sleep(2500 * time.Millisecond)
 			syncRun(&t.mutex, func() {

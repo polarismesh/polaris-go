@@ -24,13 +24,14 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // ServiceRuleAssistant 助手接口.
 type ServiceRuleAssistant interface {
 	// ParseRuleValue 解析出具体的规则值
-	ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string)
+	ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string)
 	// SetDefault 设置默认值
 	SetDefault(message proto.Message)
 	// Validate 规则校验
@@ -59,7 +60,7 @@ type ServiceRuleInProto struct {
 }
 
 // NewServiceRuleInProto 创建路由规则配置对象.
-func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto {
+func NewServiceRuleInProto(resp *apiservice.DiscoverResponse) *ServiceRuleInProto {
 	value := NewServiceRuleInProtoWithInitializeStatus(resp, true)
 	if nil == resp {
 		value.initialized = false
@@ -68,7 +69,7 @@ func NewServiceRuleInProto(resp *namingpb.DiscoverResponse) *ServiceRuleInProto 
 }
 
 // NewServiceRuleInProtoWithInitializeStatus 创建路由规则配置对象.
-func NewServiceRuleInProtoWithInitializeStatus(resp *namingpb.DiscoverResponse, initialized bool) *ServiceRuleInProto {
+func NewServiceRuleInProtoWithInitializeStatus(resp *apiservice.DiscoverResponse, initialized bool) *ServiceRuleInProto {
 	value := &ServiceRuleInProto{}
 	if nil == resp {
 		value.initialized = initialized
@@ -79,7 +80,7 @@ func NewServiceRuleInProtoWithInitializeStatus(resp *namingpb.DiscoverResponse, 
 		Service:   resp.Service.Name.GetValue(),
 	}
 	value.initialized = initialized
-	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_NotFoundResource) {
 		value.notExists = true
 	}
 	value.eventType = GetEventType(resp.GetType())

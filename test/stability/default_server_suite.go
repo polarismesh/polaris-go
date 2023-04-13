@@ -33,11 +33,12 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -58,11 +59,11 @@ type DefaultServerSuite struct {
 	grpcServer        *grpc.Server
 	grpcListener      net.Listener
 	serviceToken      string
-	testService       *namingpb.Service
+	testService       *service_manage.Service
 	mockServer        mock.NamingServer
-	downPolarisServer []*namingpb.Instance
-	upPolarisServer   []*namingpb.Instance
-	downHeahthServer  []*namingpb.Instance
+	downPolarisServer []*service_manage.Instance
+	upPolarisServer   []*service_manage.Instance
+	downHeahthServer  []*service_manage.Instance
 	serviceReq        *api.GetOneInstanceRequest
 	serverReq         *api.GetInstancesRequest
 }
@@ -78,11 +79,11 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: defaultTestNS},
 		Comment: &wrappers.StringValue{Value: "for default service test"},
 	})
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: defaultTestSVC},
 		Namespace: &wrappers.StringValue{Value: defaultTestNS},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -92,7 +93,7 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	t.mockServer.RegisterServerServices(defaultTestIP, defaultTestPORT)
 	t.mockServer.GenTestInstances(t.testService, 50)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", defaultTestIP, defaultTestPORT))
 	if err != nil {
@@ -100,7 +101,7 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", defaultTestIP, defaultTestPORT)
 
-	t.downPolarisServer = append(t.downPolarisServer, &namingpb.Instance{
+	t.downPolarisServer = append(t.downPolarisServer, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: config.ServerDiscoverService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
@@ -116,7 +117,7 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 		})},
 	})
 
-	t.downHeahthServer = append(t.downHeahthServer, &namingpb.Instance{
+	t.downHeahthServer = append(t.downHeahthServer, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: config.ServerHeartBeatService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
@@ -227,7 +228,7 @@ func (t *DefaultServerSuite) TestDefaultFailOver(c *check.C) {
 func (t *DefaultServerSuite) TestHealthyServerDown(c *check.C) {
 	util.DeleteDir(util.BackupDir)
 	healthKey := &model.ServiceKey{Namespace: config.ServerNamespace, Service: config.ServerHeartBeatService}
-	var upHealthServer []*namingpb.Instance
+	var upHealthServer []*service_manage.Instance
 	upHealthServer = append(upHealthServer, t.mockServer.GetServiceInstances(healthKey)...)
 
 	t.mockServer.SetServiceInstances(healthKey, t.downHeahthServer)
@@ -295,7 +296,7 @@ func (t *DefaultServerSuite) TestHealthyServerDown(c *check.C) {
 		"downserver is %s:%d, status is %v", instance.GetHost(), instance.GetPort(), cbStatus.GetStatus())
 	c.Assert(cbStatus.GetStatus(), check.Equals, model.Open)
 	// 重新上线实例
-	var someDownHealthServers []*namingpb.Instance
+	var someDownHealthServers []*service_manage.Instance
 	someDownHealthServers = append(someDownHealthServers, upHealthServer...)
 	someDownHealthServers = append(someDownHealthServers, t.downHeahthServer...)
 	t.mockServer.SetServiceInstances(healthKey, someDownHealthServers)

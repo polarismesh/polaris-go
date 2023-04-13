@@ -24,8 +24,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration/util"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 var (
@@ -100,7 +100,7 @@ func doLongPolling() {
 		responseCode := response.GetCode()
 
 		// 3.1 接口调用成功，判断版本号是否有更新，如果有更新则通知 remoteRepo 拉取最新，并触发回调事件
-		if responseCode == v1.ExecuteSuccess && response.GetConfigFile() != nil {
+		if responseCode == uint32(apimodel.Code_ExecuteSuccess) && response.GetConfigFile() != nil {
 			pollingRetryPolicy.success()
 
 			changedConfigFile := response.GetConfigFile()
@@ -134,7 +134,7 @@ func doLongPolling() {
 		}
 
 		// 3.2 如果没有变更，打印日志
-		if responseCode == v1.DataNoChange {
+		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			pollingRetryPolicy.success()
 			log.GetBaseLogger().Infof("[Config] long polling result: data no change")
 			continue

@@ -30,9 +30,10 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -72,7 +73,7 @@ type DstMetaTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 }
 
 // 套件名字
@@ -97,13 +98,13 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: dstMetaNamespace},
 		Comment: &wrappers.StringValue{Value: "for consumer api test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: dstMetaService},
 		Namespace: &wrappers.StringValue{Value: dstMetaNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -112,7 +113,7 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer.GenTestInstances(t.testService, normalInstances)
 	t.mockServer.GenTestInstancesWithMeta(t.testService, addMetaCount, map[string]string{addMetaKey: addMetaValue})
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatalf("error listening appserver %v", err)

@@ -24,12 +24,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -100,7 +100,7 @@ func (g *Connector) GetConnectionManager() network.ConnectionManager {
 func (g *Connector) createDiscoverClient(reqID string,
 	connection *network.Connection, timeout time.Duration) (connector.DiscoverClient, context.CancelFunc, error) {
 	// 创建namingClient对象
-	client := namingpb.NewPolarisGRPCClient(network.ToGRPCConn(connection.Conn))
+	client := apiservice.NewPolarisGRPCClient(network.ToGRPCConn(connection.Conn))
 	outgoingCtx, cancel := connector.CreateHeaderContextWithReqId(timeout, reqID)
 	discoverClient, err := client.Discover(outgoingCtx)
 	return discoverClient, cancel, err

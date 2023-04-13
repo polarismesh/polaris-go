@@ -37,7 +37,9 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -88,16 +90,16 @@ type RuleRoutingTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	mockServer   mock.NamingServer
-	pbServices   map[model.ServiceKey]*namingpb.Service
+	pbServices   map[model.ServiceKey]*service_manage.Service
 }
 
 // 注册路由规则
-func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service, path string) error {
+func registerRouteRuleByFile(mockServer mock.NamingServer, svc *service_manage.Service, path string) error {
 	buf, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	route := &namingpb.Routing{}
+	route := &traffic_manage.Routing{}
 	if err = jsonpb.UnmarshalString(string(buf), route); err != nil {
 		return err
 	}
@@ -106,9 +108,9 @@ func registerRouteRuleByFile(mockServer mock.NamingServer, svc *namingpb.Service
 
 // 注册服务及路由规则
 func registerServiceAndRules(mockServer mock.NamingServer, svcName string,
-	namespace string, path string, instances []*namingpb.Instance) *namingpb.Service {
+	namespace string, path string, instances []*service_manage.Instance) *service_manage.Service {
 	// 创建Production路由规则，只有入没有出规则
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: svcName},
 		Namespace: &wrappers.StringValue{Value: namespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -131,12 +133,12 @@ func registerServiceAndRules(mockServer mock.NamingServer, svcName string,
 // 构造高级server
 func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServer) {
 	num := 2
-	onlyInboundInstances := make([]*namingpb.Instance, 0, num)
-	onlyOutboundInstances := make([]*namingpb.Instance, 0, num)
-	bioDirectionInstances := make([]*namingpb.Instance, 0, num)
-	badInbound1Instances := make([]*namingpb.Instance, 0, num)
+	onlyInboundInstances := make([]*service_manage.Instance, 0, num)
+	onlyOutboundInstances := make([]*service_manage.Instance, 0, num)
+	bioDirectionInstances := make([]*service_manage.Instance, 0, num)
+	badInbound1Instances := make([]*service_manage.Instance, 0, num)
 	for i := 0; i < num; i++ {
-		onlyInboundInstances = append(onlyInboundInstances, &namingpb.Instance{
+		onlyInboundInstances = append(onlyInboundInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: onlyInboundService},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -147,7 +149,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 				"env": "formal",
 			},
 		})
-		onlyInboundInstances = append(onlyInboundInstances, &namingpb.Instance{
+		onlyInboundInstances = append(onlyInboundInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: onlyInboundService},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -159,7 +161,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 			},
 		})
 
-		onlyOutboundInstances = append(onlyOutboundInstances, &namingpb.Instance{
+		onlyOutboundInstances = append(onlyOutboundInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: onlyOutboundService},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -170,7 +172,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 				"env": "formal",
 			},
 		})
-		onlyOutboundInstances = append(onlyOutboundInstances, &namingpb.Instance{
+		onlyOutboundInstances = append(onlyOutboundInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: onlyInboundService},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -181,7 +183,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 				"env": fmt.Sprintf("set%d", i),
 			},
 		})
-		bioDirectionInstances = append(bioDirectionInstances, &namingpb.Instance{
+		bioDirectionInstances = append(bioDirectionInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: bioService},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -192,7 +194,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 				"env": "formal",
 			},
 		})
-		badInbound1Instances = append(badInbound1Instances, &namingpb.Instance{
+		badInbound1Instances = append(badInbound1Instances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: badCalledService1},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -204,7 +206,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 			},
 		})
 	}
-	onlyInboundInstances = append(onlyInboundInstances, &namingpb.Instance{
+	onlyInboundInstances = append(onlyInboundInstances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: onlyInboundService},
 		Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -216,7 +218,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 		},
 	})
 
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: productionNamespace},
 		Comment: &wrappers.StringValue{Value: "production env"},
 		Owners:  &wrappers.StringValue{Value: "RuleServiceRoute"},
@@ -241,7 +243,7 @@ func (t *RuleRoutingTestingSuite) setupAdvanceServer(mockServer mock.NamingServe
 func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) {
 	// dest_service共4个实例, 0和2是v1, 1和3是v2
 	num := 5
-	sourceInstances := make([]*namingpb.Instance, 0)
+	sourceInstances := make([]*service_manage.Instance, 0)
 	for i := 0; i < num; i++ {
 		metadata := make(map[string]string)
 		if i%2 == 0 {
@@ -252,7 +254,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 			metadata["logic_set"] = metaSet2
 		}
 
-		ins := &namingpb.Instance{
+		ins := &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: callingService},
 			Namespace: &wrappers.StringValue{Value: defaultNamespace},
@@ -265,7 +267,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 	}
 
 	// dest_service共4个实例
-	destInstances := make([]*namingpb.Instance, 0)
+	destInstances := make([]*service_manage.Instance, 0)
 	// 创建四个subset, 每个set一个实例
 	// 两个实例健康, 两个实例不健康
 	for i := 0; i < num; i++ {
@@ -289,7 +291,7 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 			isHealthy = true
 		}
 
-		ins := &namingpb.Instance{
+		ins := &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: calledService},
 			Namespace: &wrappers.StringValue{Value: defaultNamespace},
@@ -298,14 +300,14 @@ func (t *RuleRoutingTestingSuite) setupBaseServer(mockServer mock.NamingServer) 
 			Healthy:   &wrappers.BoolValue{Value: isHealthy},
 			Weight:    &wrappers.UInt32Value{Value: uint32(rand.Intn(999) + 1)},
 			Metadata:  metadata,
-			HealthCheck: &namingpb.HealthCheck{
-				Type: namingpb.HealthCheck_UNKNOWN,
+			HealthCheck: &service_manage.HealthCheck{
+				Type: service_manage.HealthCheck_UNKNOWN,
 			},
 		}
 		destInstances = append(destInstances, ins)
 	}
 
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: defaultNamespace},
 		Comment: &wrappers.StringValue{Value: "for rule service route test"},
 		Owners:  &wrappers.StringValue{Value: "RuleServiceRoute"},
@@ -358,7 +360,7 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	// get the grpc server wired up
 	grpc.EnableTracing = true
 
-	t.pbServices = make(map[model.ServiceKey]*namingpb.Service, 0)
+	t.pbServices = make(map[model.ServiceKey]*service_manage.Service, 0)
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
@@ -366,7 +368,7 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 		ruleServerIPAddr, ruleServerPort, config.ServerDiscoverService, token, true)
 	t.setupBaseServer(t.mockServer)
 	t.setupAdvanceServer(t.mockServer)
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ruleServerIPAddr, ruleServerPort))
 	if err != nil {
 		log.Fatalf("error listening appserver %v", err)
@@ -829,9 +831,9 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSources(c *check.C) {
 // TestInboundAddAndDelete 测试inbound add and delete
 func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 	serviceName := "InboundAddAndDelete"
-	Instances := make([]*namingpb.Instance, 0, 2)
+	Instances := make([]*service_manage.Instance, 0, 2)
 	for i := 0; i < 2; i++ {
-		Instances = append(Instances, &namingpb.Instance{
+		Instances = append(Instances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: serviceName},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -843,7 +845,7 @@ func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 			},
 		})
 	}
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: productionNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -892,7 +894,7 @@ func (t *RuleRoutingTestingSuite) TestInboundAddAndDelete(c *check.C) {
 // TestInboundNoSourceService 测试只有入流量规则的前提下，不传入sourceService能否成功路由
 func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	serviceName := "InboundNoSource"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: productionNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -902,9 +904,9 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	err := registerRouteRuleByFile(t.mockServer, service, "testdata/route_rule/inbound_no_source.json")
 	c.Assert(err, check.IsNil)
 
-	formalInstances := make([]*namingpb.Instance, 0, 2)
+	formalInstances := make([]*service_manage.Instance, 0, 2)
 	for i := 0; i < 1; i++ {
-		formalInstances = append(formalInstances, &namingpb.Instance{
+		formalInstances = append(formalInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: serviceName},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -918,9 +920,9 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 	}
 	t.mockServer.RegisterServiceInstances(service, formalInstances)
 
-	defaultInstances := make([]*namingpb.Instance, 0, 2)
+	defaultInstances := make([]*service_manage.Instance, 0, 2)
 	for i := 0; i < 1; i++ {
-		defaultInstances = append(defaultInstances, &namingpb.Instance{
+		defaultInstances = append(defaultInstances, &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: serviceName},
 			Namespace: &wrappers.StringValue{Value: productionNamespace},
@@ -961,7 +963,7 @@ func (t *RuleRoutingTestingSuite) TestInboundNoSourceService(c *check.C) {
 // TestOneBaseEnvWithParameter 使用parameter路由，进行基线特性环境匹配
 func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	serviceName := "OneBaseTwoFeatureCaller"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -969,7 +971,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 	t.mockServer.RegisterService(service)
 
 	serviceName = "OneBaseTwoFeatureCallee"
-	service = &namingpb.Service{
+	service = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1029,7 +1031,7 @@ func (t *RuleRoutingTestingSuite) TestOneBaseEnvWithParameter(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	log.Printf("start to TestMultiBaseEnvWithVariable")
 	serviceName := "MultiBaseTwoFeatureCaller"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1037,7 +1039,7 @@ func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 	t.mockServer.RegisterService(service)
 
 	serviceName = "MultiBaseTwoFeatureCallee"
-	service = &namingpb.Service{
+	service = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1094,7 +1096,7 @@ func (t *RuleRoutingTestingSuite) TestMultiBaseEnvWithVariable(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 	log.Printf("start to TestMultipleParameters")
 	serviceName := "MultiParameters"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1160,7 +1162,7 @@ func (t *RuleRoutingTestingSuite) TestMultipleParameters(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 	log.Printf("start to TestMultiVariables")
 	serviceName := "MultiVariables"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1233,7 +1235,7 @@ func (t *RuleRoutingTestingSuite) TestMultiVariables(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 	log.Printf("start to TestBadVariable")
 	serviceName := "BadVariable"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1275,7 +1277,7 @@ func (t *RuleRoutingTestingSuite) TestBadVariable(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 	log.Printf("start to TestParameterRegex")
 	serviceName := "RegexParameter"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1392,7 +1394,7 @@ func (t *RuleRoutingTestingSuite) TestParameterRegex(c *check.C) {
 func (t *RuleRoutingTestingSuite) TestVariableRegex(c *check.C) {
 	log.Printf("start to TestVariableRegex")
 	serviceName := "RegexVariable"
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: testNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -1511,11 +1513,11 @@ type InstanceMetadataAndNum struct {
 }
 
 // RegisterInstancesWithMetadataAndNum 测试实例的 metadata 和 num
-func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *namingpb.Service, metadatas []*InstanceMetadataAndNum) {
+func (t *RuleRoutingTestingSuite) RegisterInstancesWithMetadataAndNum(svc *service_manage.Service, metadatas []*InstanceMetadataAndNum) {
 	for idx, m := range metadatas {
-		var instances []*namingpb.Instance
+		var instances []*service_manage.Instance
 		for i := 0; i < m.num; i++ {
-			instances = append(instances, &namingpb.Instance{
+			instances = append(instances, &service_manage.Instance{
 				Id:        &wrappers.StringValue{Value: uuid.New().String()},
 				Service:   &wrappers.StringValue{Value: svc.Name.GetValue()},
 				Namespace: &wrappers.StringValue{Value: svc.Namespace.GetValue()},

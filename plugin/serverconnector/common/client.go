@@ -21,16 +21,16 @@ import (
 	"context"
 	"time"
 
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // DiscoverClient 服务发现客户端接口
 type DiscoverClient interface {
 	// Send 发送服务发现请求
-	Send(*namingpb.DiscoverRequest) error
+	Send(*apiservice.DiscoverRequest) error
 	// Recv 接收服务发现应答
-	Recv() (*namingpb.DiscoverResponse, error)
+	Recv() (*apiservice.DiscoverResponse, error)
 	// CloseSend 发送EOF
 	CloseSend() error
 }

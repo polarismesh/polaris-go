@@ -34,11 +34,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -275,7 +275,7 @@ func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err e
 const maxLogMsgSize = 4 * 1024 * 1024
 
 // 打印应答消息
-func logDiscoverResponse(resp *namingpb.DiscoverResponse, connection *network.Connection) {
+func logDiscoverResponse(resp *apiservice.DiscoverResponse, connection *network.Connection) {
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		svcKey := model.ServiceEventKey{
 			ServiceKey: model.ServiceKey{
@@ -297,7 +297,7 @@ func logDiscoverResponse(resp *namingpb.DiscoverResponse, connection *network.Co
 }
 
 // 服务发现应答转为事件，从应答里面获取调用discover的返回码
-func discoverResponseToEvent(resp *namingpb.DiscoverResponse,
+func discoverResponseToEvent(resp *apiservice.DiscoverResponse,
 	svcEventKey model.ServiceEventKey, connection *network.Connection) (*serverconnector.ServiceEvent, model.ErrCode) {
 	svcEvent := &serverconnector.ServiceEvent{ServiceEventKey: svcEventKey}
 	retCode := resp.GetCode().GetValue()
@@ -439,7 +439,7 @@ func (s *StreamingClient) IsEndStream() bool {
 
 // 校验Recv收到的错误和应答，看看这次请求是否成功，需要怎么上报discover的实例状态
 // 返回值：report，是否需要上报失败；code，上报的返回码；discoverErr，转化成SDKError，不为空说明这次Recv失败了
-func (s *StreamingClient) checkErrorReport(grpcErr error, resp *namingpb.DiscoverResponse) (report bool, code int32,
+func (s *StreamingClient) checkErrorReport(grpcErr error, resp *apiservice.DiscoverResponse) (report bool, code int32,
 	discoverErr model.SDKError) {
 	// 如果接收的时候出现了错误，那么根据错误进行判断
 	if grpcErr != nil {
@@ -848,10 +848,10 @@ func (s *serviceUpdateTask) needLog() bool {
 }
 
 // 转换为服务发现的请求对象
-func (s *serviceUpdateTask) toDiscoverRequest() *namingpb.DiscoverRequest {
-	var request = &namingpb.DiscoverRequest{
+func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
+	var request = &apiservice.DiscoverRequest{
 		Type: pb.GetProtoRequestType(s.Type),
-		Service: &namingpb.Service{
+		Service: &apiservice.Service{
 			Name:      &wrappers.StringValue{Value: s.Service},
 			Namespace: &wrappers.StringValue{Value: s.Namespace},
 			Revision:  &wrappers.StringValue{Value: s.handler.GetRevision()},

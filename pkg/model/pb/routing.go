@@ -22,11 +22,13 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // NewRoutingRuleInProto 兼容接口, trpc-go依赖项
-func NewRoutingRuleInProto(resp *namingpb.DiscoverResponse) model.ServiceRule {
+func NewRoutingRuleInProto(resp *apiservice.DiscoverResponse) model.ServiceRule {
 	return NewServiceRuleInProto(resp)
 }
 
@@ -35,7 +37,7 @@ type RoutingAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (r *RoutingAssistant) ParseRuleValue(resp *namingpb.DiscoverResponse) (proto.Message, string) {
+func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	routingValue := resp.Routing
 	if nil != routingValue {
@@ -49,7 +51,7 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 	if reflect2.IsNil(message) {
 		return nil
 	}
-	routingValue := message.(*namingpb.Routing)
+	routingValue := message.(*apitraffic.Routing)
 	var err error
 	if err = r.validateRoute("inbound", routingValue.Inbounds, ruleCache); err != nil {
 		return err
@@ -61,14 +63,14 @@ func (r *RoutingAssistant) Validate(message proto.Message, ruleCache model.RuleC
 }
 
 // validateRoute 校验路由规则
-func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Route, ruleCache model.RuleCache) error {
+func (r *RoutingAssistant) validateRoute(direction string, routes []*apitraffic.Route, ruleCache model.RuleCache) error {
 	if len(routes) == 0 {
 		return nil
 	}
 	for _, route := range routes {
 		for _, source := range route.GetSources() {
 			for _, matchValue := range source.GetMetadata() {
-				if matchValue.GetType() == namingpb.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
+				if matchValue.GetType() == apimodel.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
 					_, err := ruleCache.GetRegexMatcher(matchValue.GetValue().GetValue())
 					if err != nil {
 						return err
@@ -78,7 +80,7 @@ func (r *RoutingAssistant) validateRoute(direction string, routes []*namingpb.Ro
 		}
 		for _, destination := range route.GetDestinations() {
 			for _, matchValue := range destination.GetMetadata() {
-				if matchValue.GetType() == namingpb.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
+				if matchValue.GetType() == apimodel.MatchString_REGEX && len(matchValue.GetValue().GetValue()) > 0 {
 					_, err := ruleCache.GetRegexMatcher(matchValue.GetValue().GetValue())
 					if err != nil {
 						return err

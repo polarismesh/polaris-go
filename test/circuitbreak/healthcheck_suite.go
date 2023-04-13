@@ -35,10 +35,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -82,19 +83,19 @@ func (t *HealthCheckTestingSuite) SetUpSuite(c *check.C) {
 	mockServer := mock.NewNamingServer()
 	token := mockServer.RegisterServerService(config.ServerDiscoverService)
 	mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: detectNamespace},
 		Comment: &wrappers.StringValue{Value: "for healthCheck api test"},
 		Owners:  &wrappers.StringValue{Value: "healthCheck"},
 	})
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: detectService},
 		Namespace: &wrappers.StringValue{Value: detectNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
 	mockServer.RegisterService(testService)
 	mockServer.GenTestInstancesWithHostPort(testService, 100, "127.0.0.1", 1024)
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		_ = util.DeleteDir(util.BackupDir)

@@ -31,10 +31,10 @@ import (
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // InnerServiceLBTestingSuite 消费者API测试套
@@ -65,7 +65,7 @@ func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
@@ -88,14 +88,14 @@ func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
 
 // TestConnManger 测试连接管理器
 func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
-	service := &namingpb.Service{
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
 	}
-	var Instances []*namingpb.Instance
+	var Instances []*service_manage.Instance
 
-	Instances = append(Instances, &namingpb.Instance{
+	Instances = append(Instances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
@@ -106,7 +106,7 @@ func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
 			"protocol": "grpc",
 		},
 	})
-	Instances = append(Instances, &namingpb.Instance{
+	Instances = append(Instances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},
@@ -117,7 +117,7 @@ func (t *InnerServiceLBTestingSuite) TestConnManger(c *check.C) {
 			"protocol": "grpc",
 		},
 	})
-	Instances = append(Instances, &namingpb.Instance{
+	Instances = append(Instances, &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace},

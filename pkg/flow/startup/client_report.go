@@ -26,12 +26,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/version"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // NewReportClientCallBack  创建上报回调
@@ -72,7 +72,7 @@ const (
 
 // loadLocalClientReportResult 从本地缓存加载上报结果信息
 func (r *ReportClientCallBack) loadLocalClientReportResult() {
-	resp := &namingpb.Response{}
+	resp := &apiservice.Response{}
 	cachedFile := clientInfoPersistFile
 	err := r.registry.LoadPersistedMessage(cachedFile, resp)
 	if err != nil {

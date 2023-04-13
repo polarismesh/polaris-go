@@ -35,9 +35,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -53,7 +54,7 @@ type CircuitBreakSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 	mockServer   mock.NamingServer
 }
 
@@ -71,17 +72,17 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	// 注册系统服务
 	t.mockServer.RegisterServerServices(cbIP, cbPORT)
 
-	t.mockServer.RegisterRouteRule(&namingpb.Service{
+	t.mockServer.RegisterRouteRule(&service_manage.Service{
 		Name:      &wrappers.StringValue{Value: config.ServerMonitorService},
 		Namespace: &wrappers.StringValue{Value: config.ServerNamespace}},
 		t.mockServer.BuildRouteRule(config.ServerNamespace, config.ServerMonitorService))
 
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: cbNS},
 		Comment: &wrappers.StringValue{Value: "for circuiebreak test"},
 		Owners:  &wrappers.StringValue{Value: "Circuitbreaker"},
 	})
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: cbSVC},
 		Namespace: &wrappers.StringValue{Value: cbNS},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -89,7 +90,7 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	t.mockServer.RegisterService(t.testService)
 	t.mockServer.GenTestInstances(t.testService, cbInstanceCount)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cbIP, cbPORT))
 	c.Assert(err, check.IsNil)
@@ -633,12 +634,12 @@ func (t *CircuitBreakSuite) TestSleepWindow(c *check.C) {
 }
 
 func (t *CircuitBreakSuite) addInstance(srService string, srNamespace string, srIPAddr string, srPort uint32, health bool) {
-	location := &namingpb.Location{
+	location := &apimodel.Location{
 		Region: &wrappers.StringValue{Value: "A"},
 		Zone:   &wrappers.StringValue{Value: "a"},
 		Campus: &wrappers.StringValue{Value: "1"},
 	}
-	ins := &namingpb.Instance{
+	ins := &service_manage.Instance{
 		Id:        &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
@@ -647,12 +648,12 @@ func (t *CircuitBreakSuite) addInstance(srService string, srNamespace string, sr
 		Weight:    &wrappers.UInt32Value{Value: 100},
 		Healthy:   &wrappers.BoolValue{Value: health},
 		Location:  location}
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: srService},
 		Namespace: &wrappers.StringValue{Value: srNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
 	}
-	t.mockServer.RegisterServiceInstances(testService, []*namingpb.Instance{ins})
+	t.mockServer.RegisterServiceInstances(testService, []*service_manage.Instance{ins})
 }
 
 // TestAllCircuitBreaker 测试所有熔断器
@@ -678,7 +679,7 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	// 等待直到完成首次地域信息拉取
 	time.Sleep(time.Second * 1)
 
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: "cbTest1"},
 		Namespace: &wrappers.StringValue{Value: cbNS},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},

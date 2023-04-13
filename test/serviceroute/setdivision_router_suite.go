@@ -31,9 +31,10 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -71,7 +72,7 @@ type SetDivisionTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	mockServer   mock.NamingServer
-	pbServices   map[model.ServiceKey]*namingpb.Service
+	pbServices   map[model.ServiceKey]*service_manage.Service
 }
 
 // SetUpSuite  设置模拟桩
@@ -84,7 +85,7 @@ func (t *SetDivisionTestingSuite) SetUpSuite(c *check.C) {
 	// get the grpc server wired up
 	grpc.EnableTracing = true
 
-	t.pbServices = make(map[model.ServiceKey]*namingpb.Service, 0)
+	t.pbServices = make(map[model.ServiceKey]*service_manage.Service, 0)
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
@@ -92,7 +93,7 @@ func (t *SetDivisionTestingSuite) SetUpSuite(c *check.C) {
 		setDivisionServerIPAddr, setDivisionServerPort, config.ServerDiscoverService, token, true)
 	t.setupBaseServer(t.mockServer, sourceInstanceMeta, clientService)
 	t.setupBaseServer(t.mockServer, dstInstanceMeta, serverService)
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen(
 		"tcp", fmt.Sprintf("%s:%d", setDivisionServerIPAddr, setDivisionServerPort))
 	if err != nil {
@@ -112,8 +113,8 @@ func (t *SetDivisionTestingSuite) TearDownSuite(c *check.C) {
 
 // registerService 注册服务和节点
 func registerService(mockServer mock.NamingServer, serviceName string,
-	namespace string, instances []*namingpb.Instance) *namingpb.Service {
-	service := &namingpb.Service{
+	namespace string, instances []*service_manage.Instance) *service_manage.Service {
+	service := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: serviceName},
 		Namespace: &wrappers.StringValue{Value: namespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -128,9 +129,9 @@ func registerService(mockServer mock.NamingServer, serviceName string,
 // 设置北极星测试实例
 func (t *SetDivisionTestingSuite) setupBaseServer(mockServer mock.NamingServer,
 	instanceMeta map[int]map[string]string, serviceName string) {
-	allinstances := make([]*namingpb.Instance, 0)
+	allinstances := make([]*service_manage.Instance, 0)
 	for index, meta := range instanceMeta {
-		instance := &namingpb.Instance{
+		instance := &service_manage.Instance{
 			Id:        &wrappers.StringValue{Value: uuid.New().String()},
 			Service:   &wrappers.StringValue{Value: serviceName},
 			Namespace: &wrappers.StringValue{Value: setNamespace},
@@ -143,7 +144,7 @@ func (t *SetDivisionTestingSuite) setupBaseServer(mockServer mock.NamingServer,
 
 		allinstances = append(allinstances, instance)
 	}
-	mockServer.RegisterNamespace(&namingpb.Namespace{
+	mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: setNamespace},
 		Comment: &wrappers.StringValue{Value: "set namespace "},
 		Owners:  &wrappers.StringValue{Value: "SetDivisionRouter"},

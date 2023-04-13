@@ -33,8 +33,8 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -162,8 +162,8 @@ func GetGrpcServer() *grpc.Server {
 }
 
 // BuildNamingService 创建一个namingpb service
-func BuildNamingService(namespace string, service string, token string) *namingpb.Service {
-	return &namingpb.Service{
+func BuildNamingService(namespace string, service string, token string) *service_manage.Service {
+	return &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: service},
 		Namespace: &wrappers.StringValue{Value: namespace},
 		Token:     &wrappers.StringValue{Value: token},
@@ -189,7 +189,7 @@ type RegisteredInstance struct {
 func SetupMockDiscover(host string, port int) (*grpc.Server, net.Listener, mock.NamingServer) {
 	grpcServer := grpc.NewServer()
 	mockServer := mock.NewNamingServer()
-	namingpb.RegisterPolarisGRPCServer(grpcServer, mockServer)
+	service_manage.RegisterPolarisGRPCServer(grpcServer, mockServer)
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening discoverServer: %v", err))

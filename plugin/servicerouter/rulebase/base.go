@@ -28,8 +28,9 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 // 服务路由匹配结果
@@ -135,7 +136,7 @@ func (g *RuleBasedInstancesFilter) poolReturnPrioritySubsets(set *prioritySubset
 }
 
 // 匹配metadata
-func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*namingpb.MatchString,
+func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apimodel.MatchString,
 	routeInfo *servicerouter.RouteInfo, ruleCache model.RuleCache) (match bool,
 	invalidRegex string, invalidRegexError error) {
 	var srcMeta map[string]string
@@ -162,7 +163,7 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 				return false, "", nil
 			}
 			switch ruleMetaValue.Type {
-			case namingpb.MatchString_REGEX:
+			case apimodel.MatchString_REGEX:
 				var matchExp *regexp.Regexp
 				matchExp, err = regexp.Compile(rawMetaValue, regexp.RE2)
 				if err != nil {
@@ -175,11 +176,11 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 				if m == nil || m.String() == "" {
 					allMetaMatched = false
 				}
-			case namingpb.MatchString_NOT_EQUALS:
+			case apimodel.MatchString_NOT_EQUALS:
 				allMetaMatched = srcMetaValue != rawMetaValue
-			case namingpb.MatchString_EXACT:
+			case apimodel.MatchString_EXACT:
 				allMetaMatched = srcMetaValue == rawMetaValue
-			case namingpb.MatchString_IN:
+			case apimodel.MatchString_IN:
 				find := false
 				tokens := strings.Split(rawMetaValue, ",")
 				for _, token := range tokens {
@@ -189,7 +190,7 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*nami
 					}
 				}
 				allMetaMatched = find
-			case namingpb.MatchString_NOT_IN:
+			case apimodel.MatchString_NOT_IN:
 				tokens := strings.Split(rawMetaValue, ",")
 				for _, token := range tokens {
 					if token == srcMetaValue {
@@ -231,15 +232,15 @@ func addRouteInfoVariable(key, value string, routeInfo *servicerouter.RouteInfo)
 
 // 非法正则表达式的信息
 type invalidRegexInfo struct {
-	invalidRegexSources      []*namingpb.Source
-	invalidRegexDestinations []*namingpb.Destination
+	invalidRegexSources      []*apitraffic.Source
+	invalidRegexDestinations []*apitraffic.Destination
 	invalidRegexErrors       map[string]string
 }
 
 // 匹配source规则
-func (g *RuleBasedInstancesFilter) matchSource(sources []*namingpb.Source, routeInfo *servicerouter.RouteInfo,
-	ruleMatchType int, ruleCache model.RuleCache) (success bool, matched *namingpb.Source,
-	notMatched []*namingpb.Source, invalidRegexInfos *invalidRegexInfo) {
+func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, routeInfo *servicerouter.RouteInfo,
+	ruleMatchType int, ruleCache model.RuleCache) (success bool, matched *apitraffic.Source,
+	notMatched []*apitraffic.Source, invalidRegexInfos *invalidRegexInfo) {
 	if len(sources) == 0 {
 		return true, nil, nil, nil
 	}
@@ -316,7 +317,7 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*namingpb.Source, route
 }
 
 // 校验输入的元数据是否符合规则
-func validateInMetadata(ruleMetaKey string, ruleMetaValue *namingpb.MatchString, ruleMetaValueStr string,
+func validateInMetadata(ruleMetaKey string, ruleMetaValue *apimodel.MatchString, ruleMetaValueStr string,
 	metadata map[string]map[string]string, matcher *regexp.Regexp) bool {
 	if len(metadata) == 0 {
 		return true
@@ -328,7 +329,7 @@ func validateInMetadata(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 		return true
 	}
 	switch ruleMetaValue.Type {
-	case namingpb.MatchString_REGEX:
+	case apimodel.MatchString_REGEX:
 		for value := range values {
 			m, err := matcher.FindStringMatch(value)
 			if err != nil {
@@ -348,7 +349,7 @@ func validateInMetadata(ruleMetaKey string, ruleMetaValue *namingpb.MatchString,
 
 // 匹配目标标签
 func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.RouteInfo,
-	ruleMeta map[string]*namingpb.MatchString, ruleCache model.RuleCache, svcCache model.ServiceClusters,
+	ruleMeta map[string]*apimodel.MatchString, ruleCache model.RuleCache, svcCache model.ServiceClusters,
 	inCluster *model.Cluster) (cls *model.Cluster, matched bool, invalidRegex string, invalidRegexError error) {
 	cls = model.NewCluster(svcCache, inCluster)
 	var metaChanged bool
@@ -364,7 +365,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			return nil, false, "", nil
 		}
 		switch ruleMetaValue.Type {
-		case namingpb.MatchString_REGEX:
+		case apimodel.MatchString_REGEX:
 			// 对于正则表达式，则可能匹配到多个value，
 			// 需要把服务下面的所有的meta value都拿出来比较
 			regexObj, err := ruleCache.GetRegexMatcher(ruleMetaValueStr)
@@ -418,7 +419,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 
 // 获取具体用于匹配的元数据的value
 func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.RouteInfo, ruleMetaKey string,
-	ruleMetaValue *namingpb.MatchString) (string, bool) {
+	ruleMetaValue *apimodel.MatchString) (string, bool) {
 	var srcMeta map[string]string
 	if routeInfo.SourceService != nil {
 		srcMeta = routeInfo.SourceService.GetMetadata()
@@ -426,16 +427,16 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 	var processedRuleMetaValue string
 	var exist bool
 	switch ruleMetaValue.ValueType {
-	case namingpb.MatchString_TEXT:
+	case apimodel.MatchString_TEXT:
 		processedRuleMetaValue = ruleMetaValue.GetValue().GetValue()
 		exist = true
-	case namingpb.MatchString_PARAMETER:
+	case apimodel.MatchString_PARAMETER:
 		if len(srcMeta) == 0 {
 			exist = false
 		} else {
 			processedRuleMetaValue, exist = srcMeta[ruleMetaKey]
 		}
-	case namingpb.MatchString_VARIABLE:
+	case apimodel.MatchString_VARIABLE:
 		processedRuleMetaValue, exist = g.getVariable(ruleMetaValue.GetValue().GetValue())
 		if exist {
 			addRouteInfoVariable(ruleMetaValue.GetValue().GetValue(), processedRuleMetaValue, routeInfo)
@@ -450,7 +451,7 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 // populateSubsetsFromDst 根据destination中的规则填充分组列表
 // 返回是否存在匹配的实例
 func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerouter.RouteInfo,
-	svcCache model.ServiceClusters, ruleCache model.RuleCache, dst *namingpb.Destination,
+	svcCache model.ServiceClusters, ruleCache model.RuleCache, dst *apitraffic.Destination,
 	subsetsMap map[uint32]*prioritySubsets, inCluster *model.Cluster) (matched bool, invalidRegexInfos *invalidRegexInfo) {
 	// 获取subset
 	cluster, ok,
@@ -462,7 +463,7 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 				invalidRegexErrors: map[string]string{
 					invalidRegex: invalidRegexError.Error(),
 				},
-				invalidRegexDestinations: []*namingpb.Destination{dst},
+				invalidRegexDestinations: []*apitraffic.Destination{dst},
 			}
 		}
 		return false, invalidInfo
@@ -536,7 +537,7 @@ func ruleEmpty(svcRule model.ServiceRule) bool {
 }
 
 // 根据路由规则进行服务实例过滤, 并返回过滤后的实例列表
-func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.RouteInfo, ruleMatchType int) []*namingpb.Route {
+func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.RouteInfo, ruleMatchType int) []*apitraffic.Route {
 	// 跟据服务类型获取对应路由规则
 	// 被调inbound
 	if ruleMatchType == dstRouteRuleMatch {
@@ -544,7 +545,7 @@ func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.Ro
 			return nil
 		}
 		routeRuleValue := routeInfo.DestRouteRule.GetValue()
-		routing := routeRuleValue.(*namingpb.Routing)
+		routing := routeRuleValue.(*apitraffic.Routing)
 		return routing.Inbounds
 	}
 
@@ -557,19 +558,19 @@ func (g *RuleBasedInstancesFilter) getRoutesFromRule(routeInfo *servicerouter.Ro
 		return nil
 	}
 	routeRuleValue := routeInfo.SourceRouteRule.GetValue()
-	routing := routeRuleValue.(*namingpb.Routing)
+	routing := routeRuleValue.(*apitraffic.Routing)
 	return routing.Outbounds
 }
 
 // 规则匹配的结果，用于后续日志输出
 type ruleMatchSummary struct {
-	matchedSource            []*namingpb.Source
+	matchedSource            []*apitraffic.Source
 	errorRegexes             map[string]string
-	notMatchedSources        []*namingpb.Source
-	invalidRegexSources      []*namingpb.Source
-	invalidRegexDestinations []*namingpb.Destination
-	notMatchedDestinations   []*namingpb.Destination
-	weightZeroDestinations   []*namingpb.Destination
+	notMatchedSources        []*apitraffic.Source
+	invalidRegexSources      []*apitraffic.Source
+	invalidRegexDestinations []*apitraffic.Destination
+	notMatchedDestinations   []*apitraffic.Destination
+	weightZeroDestinations   []*apitraffic.Destination
 }
 
 func (rms *ruleMatchSummary) appendErrorRegexes(invalid *invalidRegexInfo) {
@@ -590,7 +591,7 @@ func (rms *ruleMatchSummary) appendErrorRegexes(invalid *invalidRegexInfo) {
 
 // 根据路由规则进行服务实例过滤, 并返回过滤后的实例列表
 func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, routeInfo *servicerouter.RouteInfo,
-	svcCache model.ServiceClusters, routes []*namingpb.Route,
+	svcCache model.ServiceClusters, routes []*apitraffic.Route,
 	inCluster *model.Cluster, summary *ruleMatchSummary) (*model.Cluster, error) {
 	var ruleCache model.RuleCache
 	if ruleMatchType == dstRouteRuleMatch {

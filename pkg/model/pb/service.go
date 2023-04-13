@@ -28,9 +28,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/metric"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // SvcPluginValues 服务级插件值.
@@ -41,7 +42,7 @@ type SvcPluginValues struct {
 
 // ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
-	service         *namingpb.Service
+	service         *apiservice.Service
 	notExists       bool
 	instances       []model.Instance
 	instancesMap    map[string]model.Instance
@@ -57,7 +58,7 @@ type ServiceInstancesInProto struct {
 }
 
 // InstSlice instSlice，[]*namingpb.Instance的别名.
-type InstSlice []*namingpb.Instance
+type InstSlice []*apiservice.Instance
 
 // Len instSlice的长度.
 func (is InstSlice) Len() int {
@@ -75,7 +76,7 @@ func (is InstSlice) Less(i, j int) bool {
 }
 
 // NewServiceInstancesInProto ServiceInstancesResponse的构造函数.
-func NewServiceInstancesInProto(resp *namingpb.DiscoverResponse, createLocalValue func(string) local.InstanceLocalValue,
+func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalValue func(string) local.InstanceLocalValue,
 	pluginValues *SvcPluginValues, svcLocalValue local.ServiceLocalValue,
 ) *ServiceInstancesInProto {
 	// 未初始化
@@ -104,7 +105,7 @@ func NewServiceInstancesInProto(resp *namingpb.DiscoverResponse, createLocalValu
 		Namespace: resp.GetService().GetNamespace().GetValue(),
 		Service:   resp.GetService().GetName().GetValue(),
 	}
-	if resp.GetCode().GetValue() == namingpb.NotFoundResource {
+	if resp.GetCode().GetValue() == uint32(apimodel.Code_NotFoundResource) {
 		instancesInProto.notExists = true
 	}
 	if len(instancesInProto.revision) > 0 {
@@ -253,7 +254,7 @@ func (s *ServiceInstancesInProto) GetServiceLocalValue() local.ServiceLocalValue
 
 // InstanceInProto 通过proto定义来构造实例.
 type InstanceInProto struct {
-	*namingpb.Instance
+	*apiservice.Instance
 	instanceKey *model.InstanceKey
 	// 本地可变记录，只初始化一次，后续都引用该指针
 	localValue local.InstanceLocalValue
@@ -263,7 +264,7 @@ type InstanceInProto struct {
 
 // NewInstanceInProto InstanceInProto的构造函数.
 func NewInstanceInProto(
-	instance *namingpb.Instance, svcKey *model.ServiceKey, localValue local.InstanceLocalValue,
+	instance *apiservice.Instance, svcKey *model.ServiceKey, localValue local.InstanceLocalValue,
 ) *InstanceInProto {
 	instInProto := &InstanceInProto{
 		Instance:   instance,
@@ -417,7 +418,7 @@ func (i *InstanceInProto) SingleInstances() []model.Instance {
 }
 
 // GenServicesRevision 修正服务.
-func GenServicesRevision(services []*namingpb.Service) string {
+func GenServicesRevision(services []*apiservice.Service) string {
 	h := md5.New()
 	for _, svc := range services {
 		io.WriteString(h, svc.Namespace.GetValue())
@@ -437,7 +438,7 @@ type ServicesProto struct {
 }
 
 // NewServicesProto 新建服务proto.
-func NewServicesProto(resp *namingpb.DiscoverResponse) *ServicesProto {
+func NewServicesProto(resp *apiservice.DiscoverResponse) *ServicesProto {
 	value := &ServicesProto{}
 	if nil == resp {
 		value.initialized = false

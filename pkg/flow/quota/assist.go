@@ -30,9 +30,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 const (
@@ -196,7 +197,7 @@ func (f *FlowQuotaAssistant) GetAllWindowSets() map[model.ServiceKey]*RateLimitW
 }
 
 // GetRateLimitWindow 获取配额分配窗口
-func (f *FlowQuotaAssistant) GetRateLimitWindow(svcKey model.ServiceKey, rule *namingpb.Rule,
+func (f *FlowQuotaAssistant) GetRateLimitWindow(svcKey model.ServiceKey, rule *apitraffic.Rule,
 	label string) (*RateLimitWindowSet, *RateLimitWindow) {
 	windowSet := f.GetRateLimitWindowSet(svcKey, true)
 	return windowSet, windowSet.GetRateLimitWindow(rule, label)
@@ -307,7 +308,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	return windows, nil
 }
 
-func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache model.RuleCache) bool {
+func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache) bool {
 	if pb.IsMatchAllValue(matchString) {
 		return true
 	}
@@ -315,9 +316,9 @@ func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache
 	matchValue := matchString.GetValue().GetValue()
 
 	switch matchType {
-	case namingpb.MatchString_EXACT:
+	case apimodel.MatchString_EXACT:
 		return value == matchValue
-	case namingpb.MatchString_REGEX:
+	case apimodel.MatchString_REGEX:
 		regexObj, err := ruleCache.GetRegexMatcher(matchValue)
 		if nil != err {
 			log.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
@@ -334,9 +335,9 @@ func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache
 			return false
 		}
 		return true
-	case namingpb.MatchString_NOT_EQUALS:
+	case apimodel.MatchString_NOT_EQUALS:
 		return value != matchValue
-	case namingpb.MatchString_IN:
+	case apimodel.MatchString_IN:
 		tokens := strings.Split(matchValue, ",")
 		for _, token := range tokens {
 			if token == value {
@@ -344,7 +345,7 @@ func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache
 			}
 		}
 		return false
-	case namingpb.MatchString_NOT_IN:
+	case apimodel.MatchString_NOT_IN:
 		tokens := strings.Split(matchValue, ",")
 		for _, token := range tokens {
 			if token == value {
@@ -357,7 +358,7 @@ func matchStringValue(matchString *namingpb.MatchString, value string, ruleCache
 }
 
 // lookupRule 寻址规则
-func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map[string]string) []*namingpb.Rule {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map[string]string) []*apitraffic.Rule {
 	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
 		return nil
@@ -367,12 +368,12 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map
 		return nil
 	}
 	ruleCache := svcRule.GetRuleCache()
-	rateLimiting := svcRule.GetValue().(*namingpb.RateLimit)
+	rateLimiting := svcRule.GetValue().(*apitraffic.RateLimit)
 	rulesList := rateLimiting.Rules
 	if len(rulesList) == 0 {
 		return nil
 	}
-	matchRules := make([]*namingpb.Rule, 0)
+	matchRules := make([]*apitraffic.Rule, 0)
 	for _, rule := range rulesList {
 		if nil != rule.GetDisable() && rule.GetDisable().GetValue() {
 			// 规则被停用
@@ -416,17 +417,17 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map
 }
 
 // FormatLabelToStr 格式化字符串
-func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *namingpb.Rule) (string, bool) {
+func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *apitraffic.Rule) (string, bool) {
 	methodMatcher := rule.GetMethod()
 	regexCombine := rule.GetRegexCombine().GetValue()
 	methodValue := ""
 	var regexSpread bool
 	if nil != methodMatcher && !pb.IsMatchAllValue(methodMatcher) {
-		if regexCombine && methodMatcher.GetType() != namingpb.MatchString_EXACT {
+		if regexCombine && methodMatcher.GetType() != apimodel.MatchString_EXACT {
 			methodValue = methodMatcher.GetValue().GetValue()
 		} else {
 			methodValue = request.Method
-			if methodMatcher.GetType() != namingpb.MatchString_EXACT {
+			if methodMatcher.GetType() != apimodel.MatchString_EXACT {
 				regexSpread = true
 			}
 		}
@@ -436,12 +437,12 @@ func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *namingpb.Rule)
 	for _, argumentMatcher := range argumentsList {
 		var labelValue string
 		valueMatcher := argumentMatcher.GetValue()
-		if regexCombine && valueMatcher.GetType() != namingpb.MatchString_EXACT {
+		if regexCombine && valueMatcher.GetType() != apimodel.MatchString_EXACT {
 			labelValue = valueMatcher.GetValue().GetValue()
 		} else {
 			stringStringMap := request.Arguments[int(argumentMatcher.GetType())]
 			labelValue, _ = getLabelValue(argumentMatcher, stringStringMap)
-			if valueMatcher.GetType() != namingpb.MatchString_EXACT {
+			if valueMatcher.GetType() != apimodel.MatchString_EXACT {
 				regexSpread = true
 			}
 		}
@@ -454,12 +455,12 @@ func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *namingpb.Rule)
 	return methodValue + config.DefaultMapKVTupleSeparator + strings.Join(tmpList, config.DefaultMapKVTupleSeparator), regexSpread
 }
 
-func getLabelValue(matchArgument *namingpb.MatchArgument, stringStringMap map[string]string) (string, bool) {
+func getLabelValue(matchArgument *apitraffic.MatchArgument, stringStringMap map[string]string) (string, bool) {
 	switch matchArgument.GetType() {
-	case namingpb.MatchArgument_CUSTOM, namingpb.MatchArgument_HEADER, namingpb.MatchArgument_QUERY, namingpb.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
 		value, ok := stringStringMap[matchArgument.GetKey()]
 		return value, ok
-	case namingpb.MatchArgument_METHOD, namingpb.MatchArgument_CALLER_IP:
+	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
 		var value string
 		var ok bool
 		for _, v := range stringStringMap {
@@ -474,11 +475,11 @@ func getLabelValue(matchArgument *namingpb.MatchArgument, stringStringMap map[st
 	}
 }
 
-func getLabelEntry(matchArgument *namingpb.MatchArgument, labelValue string) string {
+func getLabelEntry(matchArgument *apitraffic.MatchArgument, labelValue string) string {
 	switch matchArgument.GetType() {
-	case namingpb.MatchArgument_CUSTOM, namingpb.MatchArgument_HEADER, namingpb.MatchArgument_QUERY, namingpb.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + matchArgument.GetKey() + config.DefaultMapKeyValueSeparator + labelValue
-	case namingpb.MatchArgument_METHOD, namingpb.MatchArgument_CALLER_IP:
+	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + labelValue
 	default:
 		return ""

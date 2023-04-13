@@ -26,8 +26,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	v1 "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 const (
@@ -144,7 +144,7 @@ func (r *ConfigFileRepo) pull() error {
 			pulledConfigFile, responseCode, pulledConfigFileVersion, time.Now().UnixNano()/1e6-startTime.UnixNano()/1e6)
 
 		// 拉取成功
-		if responseCode == v1.ExecuteSuccess {
+		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
 			// 本地配置文件落后，更新内存缓存
 			if r.remoteConfigFile == nil || pulledConfigFile.Version >= r.remoteConfigFile.Version {
 				r.remoteConfigFile = deepCloneConfigFile(pulledConfigFile)
@@ -154,7 +154,7 @@ func (r *ConfigFileRepo) pull() error {
 		}
 
 		// 远端没有此配置文件
-		if responseCode == v1.NotFoundResource {
+		if responseCode == uint32(apimodel.Code_NotFoundResource) {
 			log.GetBaseLogger().Warnf("[Config] config file not found, please check whether config file released. %+v", r.configFileMetadata)
 
 			// 删除配置文件

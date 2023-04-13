@@ -37,11 +37,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -64,7 +65,7 @@ type CacheTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 	mockServer   mock.NamingServer
 }
 
@@ -79,12 +80,12 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.serviceToken = uuid.New().String()
 	t.mockServer = mock.NewNamingServer()
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: cacheNS},
 		Comment: &wrappers.StringValue{Value: "for cache persist test"},
 		Owners:  &wrappers.StringValue{Value: "CachePersistor"},
 	})
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: cacheSVC},
 		Namespace: &wrappers.StringValue{Value: cacheNS},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -94,7 +95,7 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(cacheIP, cachePort, config.ServerDiscoverService, token, true)
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", cacheIP, cachePort))
 	if err != nil {
@@ -273,7 +274,7 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance, c *check.C)
 	c.Assert(util.FileExist(backupFile), check.Equals, true)
 	backupJson, err := tryOpenFile(backupFile)
 	c.Assert(err, check.IsNil)
-	svcResp := &namingpb.DiscoverResponse{}
+	svcResp := &service_manage.DiscoverResponse{}
 	jsonpb.Unmarshal(backupJson, svcResp)
 	backupJson.Close()
 	svcInsts := pb.NewServiceInstancesInProto(svcResp, func(string) local.InstanceLocalValue {
@@ -331,7 +332,7 @@ func (t *CacheTestingSuite) TestFirstGetUseCacheFile(c *check.C) {
 	err1 := os.Mkdir("./testdata/test_log/backup", os.ModePerm)
 	c.Assert(err1, check.IsNil)
 	defer util.DeleteDir("./testdata/test_log/backup")
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: "TestCacheFile"},
 		Namespace: &wrappers.StringValue{Value: "Test"},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -433,7 +434,7 @@ func (t *CacheTestingSuite) TestFileCacheAvailableTime(c *check.C) {
 	err1 := os.Mkdir("./testdata/test_log/backup1", os.ModePerm)
 	c.Assert(err1, check.IsNil)
 	defer util.DeleteDir("./testdata/test_log/backup1")
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: fmt.Sprintf("TestCacheFile1")},
 		Namespace: &wrappers.StringValue{Value: "Test"},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},

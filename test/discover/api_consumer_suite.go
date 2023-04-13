@@ -35,9 +35,11 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 const (
@@ -67,7 +69,7 @@ type ConsumerTestingSuite struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	serviceToken string
-	testService  *namingpb.Service
+	testService  *service_manage.Service
 }
 
 // GetName 套件名字
@@ -93,13 +95,13 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer = mock.NewNamingServer()
 	token := t.mockServer.RegisterServerService(config.ServerDiscoverService)
 	t.mockServer.RegisterServerInstance(ipAddr, shopPort, config.ServerDiscoverService, token, true)
-	t.mockServer.RegisterNamespace(&namingpb.Namespace{
+	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: consumerNamespace},
 		Comment: &wrappers.StringValue{Value: "for consumer api test"},
 		Owners:  &wrappers.StringValue{Value: "ConsumerAPI"},
 	})
 	t.mockServer.RegisterServerServices(ipAddr, shopPort)
-	t.testService = &namingpb.Service{
+	t.testService = &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: consumerService},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Token:     &wrappers.StringValue{Value: t.serviceToken},
@@ -109,7 +111,7 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 	t.mockServer.GenInstancesWithStatus(t.testService, isolatedInstances, mock.IsolatedStatus, 2048)
 	t.mockServer.GenInstancesWithStatus(t.testService, unhealthyInstances, mock.UnhealthyStatus, 4096)
 
-	namingpb.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
+	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddr, shopPort))
 	if err != nil {
 		log.Fatalf("error listening appserver %v", err)
@@ -380,33 +382,33 @@ func (t *ConsumerTestingSuite) buildServiceRoutes() {
 	//
 	//
 	// 进站规则
-	t.mockServer.RegisterRouteRule(t.testService, &namingpb.Routing{
+	t.mockServer.RegisterRouteRule(t.testService, &traffic_manage.Routing{
 		Revision:  &wrappers.StringValue{Value: uuid.New().String()},
 		Service:   &wrappers.StringValue{Value: consumerService},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
-		Inbounds: []*namingpb.Route{
+		Inbounds: []*traffic_manage.Route{
 			{
 				// 指定源服务为任意服务, 否则因为没有sourceServiceInfo会匹配不了
-				Sources: []*namingpb.Source{
+				Sources: []*traffic_manage.Source{
 					{
 						Service:   &wrappers.StringValue{Value: "*"},
 						Namespace: &wrappers.StringValue{Value: "*"}},
 				},
 				// 根据不同逻辑set来进行目标服务分区路由
-				Destinations: []*namingpb.Destination{
+				Destinations: []*traffic_manage.Destination{
 					{
-						Metadata: map[string]*namingpb.MatchString{
+						Metadata: map[string]*apimodel.MatchString{
 							"logic_set": {
-								Type:  namingpb.MatchString_EXACT,
+								Type:  apimodel.MatchString_EXACT,
 								Value: &wrappers.StringValue{Value: "test"}},
 						},
 						Priority: &wrappers.UInt32Value{Value: 1},
 						Weight:   &wrappers.UInt32Value{Value: 100},
 					},
 					{
-						Metadata: map[string]*namingpb.MatchString{
+						Metadata: map[string]*apimodel.MatchString{
 							"logic_set": {
-								Type:  namingpb.MatchString_EXACT,
+								Type:  apimodel.MatchString_EXACT,
 								Value: &wrappers.StringValue{Value: "test"},
 							},
 						},
@@ -462,7 +464,7 @@ func (t *ConsumerTestingSuite) TestMultiGet(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	for i := 0; i < workerCount; i++ {
-		testService := &namingpb.Service{
+		testService := &service_manage.Service{
 			Name:      &wrappers.StringValue{Value: fmt.Sprintf("%s_%d", consumerService, i)},
 			Namespace: &wrappers.StringValue{Value: consumerNamespace},
 			Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -502,7 +504,7 @@ func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 
-	testServiceNoraml := &namingpb.Service{
+	testServiceNoraml := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: "initNormalService"},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -512,7 +514,7 @@ func (t *ConsumerTestingSuite) TestConsumerInit(c *check.C) {
 		testServiceNoraml, normalInstances, "127.0.0.1", 10080)
 
 	initTestService := fmt.Sprintf("%s_%s", consumerService, "initTest")
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: initTestService},
 		Namespace: &wrappers.StringValue{Value: consumerNamespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -572,7 +574,7 @@ func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 		Namespace: consumerNamespace,
 		Service:   reliableConsumerService,
 	}
-	testService := &namingpb.Service{
+	testService := &service_manage.Service{
 		Name:      &wrappers.StringValue{Value: svcKey.Service},
 		Namespace: &wrappers.StringValue{Value: svcKey.Namespace},
 		Token:     &wrappers.StringValue{Value: uuid.New().String()},
@@ -580,7 +582,7 @@ func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 	t.mockServer.RegisterService(testService)
 	host := "127.0.0.1"
 	var basePort uint32 = 8080
-	instances := []*namingpb.Instance{
+	instances := []*service_manage.Instance{
 		{
 			Id:      &wrappers.StringValue{Value: uuid.New().String()},
 			Host:    &wrappers.StringValue{Value: host},
@@ -655,7 +657,7 @@ func (t *ConsumerTestingSuite) TestMultiGetWhenUpdate(c *check.C) {
 			default:
 				nextPort := basePort + idx
 				idx++
-				instances = append(instances, &namingpb.Instance{
+				instances = append(instances, &service_manage.Instance{
 					Id:      &wrappers.StringValue{Value: uuid.New().String()},
 					Host:    &wrappers.StringValue{Value: host},
 					Port:    &wrappers.UInt32Value{Value: nextPort},

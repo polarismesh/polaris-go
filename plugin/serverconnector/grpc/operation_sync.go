@@ -30,9 +30,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // RegisterInstance 同步注册服务
@@ -53,7 +54,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (
-		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextRegisterInstanceReqID()
 		ctx, cancel  = connector.CreateHeaderContext(*req.Timeout, connector.AppendHeaderWithReqId(header, reqID))
 	)
@@ -81,8 +82,8 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态，对于已存在状态则不认为失败
-	if namingpb.ExecuteSuccess != pbResp.GetCode().GetValue() &&
-		namingpb.ExistedResource != pbResp.GetCode().GetValue() {
+	if uint32(apimodel.Code_ExecuteSuccess) != pbResp.GetCode().GetValue() &&
+		uint32(apimodel.Code_ExistedResource) != pbResp.GetCode().GetValue() {
 		errMsg := fmt.Sprintf(
 			"fail to registerInstance, request %s, server code %d, reason %s, server %s",
 			*req, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), conn.ConnID)
@@ -96,7 +97,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 	}
 	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
 	resp := &model.InstanceRegisterResponse{InstanceID: pbResp.GetInstance().GetId().GetValue(),
-		Existed: namingpb.ExistedResource == pbResp.GetCode().GetValue()}
+		Existed: uint32(apimodel.Code_ExistedResource) == pbResp.GetCode().GetValue()}
 	return resp, nil
 }
 
@@ -117,7 +118,7 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (
-		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextDeRegisterInstanceReqID()
 		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
 	)
@@ -144,8 +145,8 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态，对于不存在状态则不认为失败
-	if namingpb.ExecuteSuccess != pbResp.GetCode().GetValue() &&
-		namingpb.NotFoundResource != pbResp.GetCode().GetValue() {
+	if uint32(apimodel.Code_ExecuteSuccess) != pbResp.GetCode().GetValue() &&
+		uint32(apimodel.Code_NotFoundResource) != pbResp.GetCode().GetValue() {
 		errMsg := fmt.Sprintf(
 			"fail to deregisterInstance, request %s, server code %d, reason %s, server %s",
 			*req, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), conn.ConnID)
@@ -178,7 +179,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (
-		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextHeartbeatReqID()
 		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
 	)
@@ -205,7 +206,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态
-	if namingpb.ExecuteSuccess != pbResp.GetCode().GetValue() {
+	if uint32(apimodel.Code_ExecuteSuccess) != pbResp.GetCode().GetValue() {
 		errMsg := fmt.Sprintf(
 			"fail to heartbeat, request %s, server error code is %d, error is %s, server %s",
 			*req, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), conn.ConnID)
@@ -264,7 +265,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (
-		namingClient = namingpb.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
+		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextReportClientReqID()
 		ctx, cancel  = connector.CreateHeaderContextWithReqId(req.Timeout, reqID)
 	)
@@ -294,7 +295,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态
-	if namingpb.ExecuteSuccess != pbResp.GetCode().GetValue() && namingpb.CMDBNotFindHost != pbResp.GetCode().GetValue() {
+	if uint32(apimodel.Code_ExecuteSuccess) != pbResp.GetCode().GetValue() && uint32(apimodel.Code_CMDBNotFindHost) != pbResp.GetCode().GetValue() {
 		errMsg := fmt.Sprintf("fail to reportClient, server error code is %d, error is %s, connID %s",
 			pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), conn.ConnID)
 		if serverCodeType == model.ErrCodeServerError {

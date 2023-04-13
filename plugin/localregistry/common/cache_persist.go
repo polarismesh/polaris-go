@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 const (
@@ -93,7 +93,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 	}
 	values := make(map[model.ServiceEventKey]CacheFileInfo, len(cacheFiles))
 	for _, cacheFile := range cacheFiles {
-		msg := &namingpb.DiscoverResponse{}
+		msg := &apiservice.DiscoverResponse{}
 		svcValueKey, fileInfo, err := cph.loadCacheFromFile(cacheFile, msg)
 		if err != nil {
 			log.GetBaseLogger().Errorf("fail to load cache from file %s, error is %v", cacheFile, err)

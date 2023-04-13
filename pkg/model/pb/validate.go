@@ -24,35 +24,35 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	namingpb "github.com/polarismesh/polaris-go/pkg/model/pb/v1"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 var (
-	eventTypeToProtoRequestType = map[model.EventType]namingpb.DiscoverRequest_DiscoverRequestType{
-		model.EventInstances:    namingpb.DiscoverRequest_INSTANCE,
-		model.EventRouting:      namingpb.DiscoverRequest_ROUTING,
-		model.EventRateLimiting: namingpb.DiscoverRequest_RATE_LIMIT,
-		model.EventServices:     namingpb.DiscoverRequest_SERVICES,
+	eventTypeToProtoRequestType = map[model.EventType]apiservice.DiscoverRequest_DiscoverRequestType{
+		model.EventInstances:    apiservice.DiscoverRequest_INSTANCE,
+		model.EventRouting:      apiservice.DiscoverRequest_ROUTING,
+		model.EventRateLimiting: apiservice.DiscoverRequest_RATE_LIMIT,
+		model.EventServices:     apiservice.DiscoverRequest_SERVICES,
 	}
 
-	protoRespTypeToEventType = map[namingpb.DiscoverResponse_DiscoverResponseType]model.EventType{
-		namingpb.DiscoverResponse_INSTANCE:   model.EventInstances,
-		namingpb.DiscoverResponse_ROUTING:    model.EventRouting,
-		namingpb.DiscoverResponse_RATE_LIMIT: model.EventRateLimiting,
-		namingpb.DiscoverResponse_SERVICES:   model.EventServices,
+	protoRespTypeToEventType = map[apiservice.DiscoverResponse_DiscoverResponseType]model.EventType{
+		apiservice.DiscoverResponse_INSTANCE:   model.EventInstances,
+		apiservice.DiscoverResponse_ROUTING:    model.EventRouting,
+		apiservice.DiscoverResponse_RATE_LIMIT: model.EventRateLimiting,
+		apiservice.DiscoverResponse_SERVICES:   model.EventServices,
 	}
 )
 
 // GetProtoRequestType 通过事件类型获取请求类型
-func GetProtoRequestType(event model.EventType) namingpb.DiscoverRequest_DiscoverRequestType {
+func GetProtoRequestType(event model.EventType) apiservice.DiscoverRequest_DiscoverRequestType {
 	if reqType, ok := eventTypeToProtoRequestType[event]; ok {
 		return reqType
 	}
-	return namingpb.DiscoverRequest_UNKNOWN
+	return apiservice.DiscoverRequest_UNKNOWN
 }
 
 // GetEventType 通过应答类型获取事件类型
-func GetEventType(respType namingpb.DiscoverResponse_DiscoverResponseType) model.EventType {
+func GetEventType(respType apiservice.DiscoverResponse_DiscoverResponseType) model.EventType {
 	if eventType, ok := protoRespTypeToEventType[respType]; ok {
 		return eventType
 	}
@@ -93,7 +93,7 @@ func (d *DiscoverError) Error() string {
 // ValidateMessage 校验消息
 // 校验返回码为500或者消息类型不对
 func ValidateMessage(eventKey *model.ServiceEventKey, message interface{}) error {
-	respValue, ok := message.(*namingpb.DiscoverResponse)
+	respValue, ok := message.(*apiservice.DiscoverResponse)
 	if !ok {
 		return &DiscoverError{
 			Code:    int32(model.ErrorCodeRpcError),
