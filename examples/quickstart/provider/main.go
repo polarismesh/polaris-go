@@ -39,7 +39,7 @@ var (
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "Production", "namespace")
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
