@@ -6,7 +6,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/polarismesh/polaris-go?style=flat-square)](https://github.com/polarismesh/polaris-go)
 
-English | [简体中文](./README-zh.md) 
+English | [简体中文](./README-zh.md)
 
 README：
 
@@ -67,7 +67,9 @@ A polaris-examples module is included in our project for you to get started with
 Developers usually use HTTP or RPC frameworks to develop distributed service. Polaris SDK is already integrated into some development frameworks. If using these frameworks, you can enable Polaris Service Governance functions without using Polaris SDK directly.
 
 - dubbo-go
-  - [registry, discovery and routing](https://github.com/apache/dubbo-go/tree/main/registry)
+  - [registry and discovery](https://github.com/apache/dubbo-go/tree/main/registry)
+  - [routing](https://github.com/apache/dubbo-go/tree/main/cluster/router)
   - [circuit breaker and rate limiter](https://github.com/apache/dubbo-go/tree/main/filter)
   - [examples](https://github.com/apache/dubbo-go-samples/tree/master/polaris)
 - [grpc-go](https://github.com/polarismesh/grpc-go-polaris)
+
