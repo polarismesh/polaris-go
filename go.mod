@@ -26,7 +26,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.7.0
 	go.uber.org/zap v1.21.0
-	golang.org/x/net v0.2.0
+	golang.org/x/net v0.0.0-20220919232410-f2f64ebce3c1
 	google.golang.org/genproto v0.0.0-20220504150022-98cd25cafc72 // indirect
 	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
