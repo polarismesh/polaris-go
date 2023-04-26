@@ -35,4 +35,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-replace golang.org/x/net v0.2.0 => golang.org/x/net v0.0.0-20221019024206-cb67ada4b0ad
+replace (
+	golang.org/x/net v0.2.0 => golang.org/x/net v0.0.0-20221019024206-cb67ada4b0ad
+	golang.org/x/sys v0.2.0 => golang.org/x/sys v0.0.0-20221010170243-090e33056c14
+)
