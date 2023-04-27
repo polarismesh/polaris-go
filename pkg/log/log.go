@@ -459,7 +459,7 @@ func ConfigNetworkLogger(pluginName string, options *Options) error {
 
 // ConfigCacheLogger 配置缓存日志器
 func ConfigCacheLogger(pluginName string, options *Options) error {
-	logger, err := configLogger(pluginName, cacheLoggerName, options, DefaultLogLevel)
+	logger, err := configLogger(pluginName, cacheLoggerName, options, DefaultCacheLogLevel)
 	if err != nil {
 		return err
 	}
@@ -506,8 +506,8 @@ func ConfigDefaultNetworkLogger(pluginName string) error {
 		CreateDefaultLoggerOptions(DefaultNetworkLogRotationFile, DefaultNetworkLogLevel))
 }
 
-// ConfigDefaultCacheLogger 配置默认的网络交互日志器
+// ConfigDefaultCacheLogger 配置默认的缓存日志器
 func ConfigDefaultCacheLogger(pluginName string) error {
 	return ConfigCacheLogger(pluginName,
-		CreateDefaultLoggerOptions(DefaultCacheLogRotationFile, DefaultLogLevel))
+		CreateDefaultLoggerOptions(DefaultCacheLogRotationFile, DefaultCacheLogLevel))
 }
