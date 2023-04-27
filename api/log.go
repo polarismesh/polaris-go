@@ -170,7 +170,7 @@ func ConfigNetworkLogger(logDir string, logLevel int) error {
 // ConfigCacheLogger 配置缓存更新日志对象
 func ConfigCacheLogger(logDir string, logLevel int) error {
 	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultCacheLogRotationPath), logLevel)
-	return log.ConfigNetworkLogger(log.DefaultLogger, option)
+	return log.ConfigCacheLogger(log.DefaultLogger, option)
 }
 
 // SetLoggersLevel 设置所有日志级别
