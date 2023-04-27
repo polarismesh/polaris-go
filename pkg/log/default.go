@@ -31,6 +31,8 @@ const (
 	DefaultStatReportLogLevel = DefaultLogLevel
 	// DefaultNetworkLogLevel 默认网络交互日志级别
 	DefaultNetworkLogLevel = DefaultLogLevel
+	// DefaultCacheLogLevel 默认缓存日志级别
+	DefaultCacheLogLevel = DefaultLogLevel
 	// 默认基础日志名
 	baseLoggerName = "base"
 	// 默认统计日志名
@@ -67,7 +69,7 @@ const (
 	// DefaultNetworkLogRotationPath 默认网络交互日志滚动文件
 	DefaultNetworkLogRotationPath = "/network/polaris-network.log"
 	// DefaultCacheLogRotationPath 默认缓存更新日志滚动文件
-	DefaultCacheLogRotationPath = "/network/polaris-cache.log"
+	DefaultCacheLogRotationPath = "/cache/polaris-cache.log"
 	// DefaultBaseLogRotationFile 默认基础日志滚动文件全路径
 	DefaultBaseLogRotationFile = DefaultLogRotationRootDir + DefaultBaseLogRotationPath
 	// DefaultStatLogRotationFile 默认统计日志滚动文件全路径

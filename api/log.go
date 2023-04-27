@@ -60,7 +60,7 @@ const (
 	// DefaultNetworkLogLevel 默认网络交互日志级别
 	DefaultNetworkLogLevel = log.DefaultNetworkLogLevel
 	// DefaultCacheLogLevel 默认缓存日志级别
-	DefaultCacheLogLevel = log.DefaultNetworkLogLevel
+	DefaultCacheLogLevel = log.DefaultCacheLogLevel
 )
 
 // SetBaseLogger 设置基础日志对象
