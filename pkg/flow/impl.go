@@ -293,9 +293,9 @@ func (e *Engine) getLoadBalancer(svcInstances model.ServiceInstances, chooseAlgo
 	loadbalancer.LoadBalancer, error) {
 	svcInstancesProto, ok := svcInstances.(*pb.ServiceInstancesInProto)
 	if ok {
-		svcLoadbalancer := svcInstancesProto.GetServiceLoadbalancer()
-		if !reflect2.IsNil(svcLoadbalancer) {
-			return svcLoadbalancer, nil
+		svcLoadBalancer := svcInstancesProto.GetServiceLoadbalancer()
+		if !reflect2.IsNil(svcLoadBalancer) {
+			return svcLoadBalancer, nil
 		}
 	}
 	if chooseAlgorithm == "" {

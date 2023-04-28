@@ -23,25 +23,25 @@ import (
 
 // TaskValue 任务值类型
 type TaskValue interface {
-	// 比较两个元素
+	// CompareTo 比较两个元素
 	CompareTo(interface{}) int
-	// 删除前进行检查，返回true才删除，该检查是同步操作
+	// EnsureDeleted 删除前进行检查，返回true才删除，该检查是同步操作
 	EnsureDeleted(value interface{}) bool
 }
 
 // TaskValues 定时任务处理的数据
 type TaskValues interface {
-	// 获取启动状态
+	// Started 获取启动状态
 	Started() bool
-	// 增加数据
+	// AddValue 增加数据
 	// 对于非立即启动的任务，首次增加value时，协程才开始启动
 	AddValue(key interface{}, value TaskValue)
-	// 删除数据
+	// DeleteValue 删除数据
 	// 当缓存数据列表为空时，对于非长稳运行的任务，则会结束协程
 	DeleteValue(key interface{}, value TaskValue)
 }
 
-// 任务处理结果
+// TaskResult 任务处理结果
 type TaskResult int
 
 const (
@@ -53,6 +53,7 @@ const (
 	TERMINATE
 )
 
+// TaskEvent 任务事件
 type TaskEvent int
 
 const (
@@ -64,7 +65,7 @@ const (
 
 // PeriodicCallBack 回调接口
 type PeriodicCallBack interface {
-	// 任务回调函数
+	// Process 任务回调函数
 	// 参数说明：
 	// lastProcessTime：上一次任务处理时间
 	// taskKey：任务数据主键
@@ -94,7 +95,7 @@ type PeriodicTask struct {
 
 // PriorityCallBack 调度高优先级任务
 type PriorityCallBack interface {
-	// 处理任务内容
+	// Process 处理任务内容
 	Process()
 }
 
