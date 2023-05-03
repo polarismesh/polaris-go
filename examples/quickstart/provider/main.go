@@ -100,7 +100,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(10)
 	// 实例id不是必填，如果不填，服务端会默认生成一个唯一Id，否则当提供实例id时，需要保证实例id是唯一的
-	registerRequest.InstanceId = providedInstanceId(namespace, service, svr.host, svr.port)
+	registerRequest.InstanceID = providedInstanceId(namespace, service, svr.host, svr.port)
 	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)

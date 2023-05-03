@@ -836,7 +836,7 @@ func (cbg *CircuitBreakGauge) GetCalledInstance() Instance {
 	return cbg.ChangeInstance
 }
 
-// 检测指标是否合法
+// Validate 检测指标是否合法
 func (cbg *CircuitBreakGauge) Validate() error {
 	if !reflect2.IsNil(cbg.ChangeInstance) {
 		return nil
@@ -1201,8 +1201,8 @@ const (
 const (
 	// HealthCheckTypeHeartBeat 健康检查类型：心跳
 	HealthCheckTypeHeartBeat int = 0
-	// DefaultHeartbeatTtl
-	DefaultHeartbeatTtl int = 5
+	// DefaultHeartbeatTTL 默认心跳周期
+	DefaultHeartbeatTTL int = 5
 )
 
 // InstanceRegisterRequest 注册服务请求
@@ -1244,7 +1244,7 @@ type InstanceRegisterRequest struct {
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 	// 可选，指定实例id
-	InstanceId string
+	InstanceID string
 }
 
 // String 打印消息内容
@@ -1300,7 +1300,7 @@ func (g *InstanceRegisterRequest) GetLocation() *Location {
 // SetDefaultTTL set default ttl
 func (g *InstanceRegisterRequest) SetDefaultTTL() {
 	if g.TTL == nil {
-		g.SetTTL(DefaultHeartbeatTtl)
+		g.SetTTL(DefaultHeartbeatTTL)
 	}
 }
 
@@ -1371,6 +1371,7 @@ type StatInfo struct {
 	Protocol string
 }
 
+// Empty 判断StatInfo是否为空
 func (s StatInfo) Empty() bool {
 	return s.Target == ""
 }
