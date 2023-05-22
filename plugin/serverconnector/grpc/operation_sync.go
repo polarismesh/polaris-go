@@ -176,6 +176,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
+	fmt.Printf("GetConnection : %s\n", time.Since(startTime).String())
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (
@@ -236,9 +237,11 @@ func (g *Connector) waitDiscoverReady() error {
 			// 超时
 			return nil
 		default:
-			if g.connManager.IsReady() && atomic.CompareAndSwapUint32(&g.hasPrintedReady, 0, 1) {
-				// 准备就绪
-				log.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
+			if g.connManager.IsReady() {
+				if atomic.CompareAndSwapUint32(&g.hasPrintedReady, 0, 1) {
+					// 准备就绪
+					log.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
+				}
 				return nil
 			}
 			time.Sleep(clock.TimeStep())

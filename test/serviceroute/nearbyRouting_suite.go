@@ -18,6 +18,7 @@
 package serviceroute
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -286,6 +287,10 @@ func (t *NearbyTestingSuite) TestCaseNB1(c *check.C) {
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
+
+	loc := consumer.SDKContext().GetValueContext().GetCurrentLocation()
+	c.Logf("NearbyTestingSuite.TestCaseNB1 : %#v", loc)
+
 	request := t.getTestServiceReq()
 	resp, err := consumer.GetInstances(request)
 
@@ -312,9 +317,6 @@ func (t *NearbyTestingSuite) TestCase2(c *check.C) {
 	log.Printf("Start to TestCase2: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -323,7 +325,11 @@ func (t *NearbyTestingSuite) TestCase2(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
 	request := t.getTestServiceReq()
+	loc := consumer.SDKContext().GetValueContext().GetCurrentLocation()
+	c.Logf("NearbyTestingSuite.TestCase2 : %#v", loc.GetLocation())
 	resp, err := consumer.GetInstances(request)
+	insData, _ := json.Marshal(resp.GetInstances())
+	c.Logf("NearbyTestingSuite.TestCase2 instances : %s", string(insData))
 	c.Assert(err, check.IsNil)
 	for _, inst := range resp.GetInstances() {
 		c.Assert(inst.GetRegion(), check.Equals, "A")
@@ -347,9 +353,6 @@ func (t *NearbyTestingSuite) TestCase3(c *check.C) {
 	log.Printf("Start to TestCase3: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
@@ -357,6 +360,10 @@ func (t *NearbyTestingSuite) TestCase3(c *check.C) {
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
+
+	loc := consumer.SDKContext().GetValueContext().GetCurrentLocation()
+	c.Logf("NearbyTestingSuite.TestCase3 : %#v", loc.GetLocation())
+
 	request := t.getTestServiceReq()
 	resp, err := consumer.GetInstances(request)
 	c.Assert(err, check.IsNil)
@@ -392,6 +399,10 @@ func (t *NearbyTestingSuite) TestCase4(c *check.C) {
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
+
+	loc := consumer.SDKContext().GetValueContext().GetCurrentLocation()
+	c.Logf("NearbyTestingSuite.TestCase4 : %#v", loc.GetLocation())
+
 	request := t.getTestServiceReq()
 	resp, err := consumer.GetInstances(request)
 	c.Assert(err, check.IsNil)
@@ -427,6 +438,10 @@ func (t *NearbyTestingSuite) TestCase5(c *check.C) {
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
 	defer consumer.Destroy()
+
+	loc := consumer.SDKContext().GetValueContext().GetCurrentLocation()
+	c.Logf("NearbyTestingSuite.TestCase5 : %#v", loc.GetLocation())
+
 	request := t.getTestServiceReq()
 	resp, err := consumer.GetInstances(request)
 	c.Assert(err, check.IsNil)
@@ -452,18 +467,13 @@ func (t *NearbyTestingSuite) TestCase6(c *check.C) {
 	log.Printf("Start to TestCase6: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
+
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("campus")
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMaxMatchLevel("zone")
-	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
-	//	"matchLevel": "campus",
-	//	"lowestMatchLevel": "zone",
-	// })
+
 	t.batchAddInstance(0, 0, 0, 0, 4, 0, 4, 0)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -487,18 +497,11 @@ func (t *NearbyTestingSuite) TestCase7(c *check.C) {
 	log.Printf("Start to TestCase7: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("zone")
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetEnableDegradeByUnhealthyPercent(false)
-	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
-	//	"matchLevel": "zone",
-	//	"enableDegradeByUnhealthyPercent": false,
-	// })
 	t.batchAddInstance(4, 0, 0, 0, 4, 4, 4, 4)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -546,10 +549,6 @@ func (t *NearbyTestingSuite) TestMetadataNearby(c *check.C) {
 	// 可以匹配到城市级别的实例
 	t.addInstance("A", "a", "1", true)
 
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// enableStat := false
-	// cfg.Global.StatReporter.Enable = &enableStat
 	cfg := t.getDefaultTestConfiguration(c)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)
@@ -585,18 +584,11 @@ func (t *NearbyTestingSuite) TestCase8(c *check.C) {
 	log.Printf("Start to TestCase8: ")
 	defer util.DeleteDir(util.BackupDir)
 	t.mocksvr.SetServiceMetadata(t.serviceToken, model.NearbyMetadataEnable, "true")
-	// cfg, err := config.LoadConfigurationByFile("testdata/sr_nearby.yaml")
-	// c.Assert(err, check.IsNil)
-	// cfg.GetGlobal().GetStatReporter().SetEnable(false)
 	cfg := t.getDefaultTestConfiguration(c)
 	cfg.GetConsumer().GetServiceRouter().SetEnableRecoverAll(true)
 	cfg.GetConsumer().GetServiceRouter().SetPercentOfMinInstances(0.2)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetUnhealthyPercentToDegrade(50)
 	cfg.GetConsumer().GetServiceRouter().GetNearbyConfig().SetMatchLevel("zone")
-	// cfg.GetConsumer().GetServiceRouter().SetPluginConfig(config.DefaultServiceRouterNearbyBased, map[string]interface{}{
-	//	"unhealthyPercentToDegrade": 50,
-	//	"matchLevel": "zone",
-	// })
 	t.batchAddInstance(4, 2, 0, 0, 2, 2, 4, 4)
 	consumer, err := api.NewConsumerAPIByConfig(cfg)
 	c.Assert(err, check.IsNil)

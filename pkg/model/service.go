@@ -196,6 +196,12 @@ type Instance interface {
 	// GetRevision .获取实例的修订版本信息
 	// 与上一次比较，用于确认服务实例是否发生变更
 	GetRevision() string
+	// GetTtl 获取实例设置的 TTL
+	GetTtl() int64
+	// SetHealthy
+	SetHealthy(status bool)
+	// DeepClone deep clone Instance
+	DeepClone() Instance
 }
 
 // InstanceWeight 节点权重

@@ -169,11 +169,12 @@ const (
 	DefaultServiceRouterNearbyBased string = "nearbyBasedRouter"
 	// DefaultServiceRouterSetDivision 默认set分组.
 	DefaultServiceRouterSetDivision string = "setDivisionRouter"
-
 	// DefaultServiceRouterDstMeta 默认基于目标元数据路由.
 	DefaultServiceRouterDstMeta string = "dstMetaRouter"
 	// DefaultServiceRouterCanary 金丝雀路由.
 	DefaultServiceRouterCanary string = "canaryRouter"
+	// DefaultServiceRouterZeroProtect 零实例保护
+	DefaultServiceRouterZeroProtect string = "zeroProtectRouter"
 
 	// DefaultLoadBalancerWR 默认负载均衡器,权重随机.
 	DefaultLoadBalancerWR string = "weightedRandom"

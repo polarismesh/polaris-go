@@ -30,6 +30,8 @@ import (
 type ServiceRouterConfigImpl struct {
 	// 服务路由责任链
 	Chain []string `yaml:"chain" json:"chain"`
+	// 服务路由责任链
+	AfterChain []string `yaml:"afterChain" json:"afterChain"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 	// 进行过滤时的最大过滤比例
@@ -56,6 +58,17 @@ func (s *ServiceRouterConfigImpl) GetChain() []string {
 
 // SetChain 设置路由责任链配置.
 func (s *ServiceRouterConfigImpl) SetChain(chain []string) {
+	s.Chain = chain
+}
+
+// GetAfterChain consumer.serviceRouter.afterChain
+// 路由责任链后置路由配置.
+func (s *ServiceRouterConfigImpl) GetAfterChain() []string {
+	return s.Chain
+}
+
+// SetAfterChain 设置路由责任链配置.
+func (s *ServiceRouterConfigImpl) SetAfterChain(chain []string) {
 	s.Chain = chain
 }
 
@@ -102,6 +115,23 @@ func (s *ServiceRouterConfigImpl) Verify() error {
 	if *(s.PercentOfMinInstances) >= 1 || *(s.PercentOfMinInstances) < 0 {
 		errs = multierror.Append(errs, fmt.Errorf("consumer.servicerouter.percentOfMinInstances must be in range [0.0, 1.0)"))
 	}
+
+	if len(s.AfterChain) != 0 {
+		hashFilterOnly := false
+		hashZeroProtect := false
+		for i := range s.AfterChain {
+			if s.AfterChain[i] == DefaultServiceRouterFilterOnly {
+				hashFilterOnly = true
+			}
+			if s.AfterChain[i] == DefaultServiceRouterZeroProtect {
+				hashZeroProtect = true
+			}
+		}
+		if hashFilterOnly && hashZeroProtect {
+			errs = multierror.Append(errs, fmt.Errorf("consumer.servicerouter.afterChain not set filterOnlyRouter and zeroProtectRouter same time"))
+		}
+	}
+
 	plugErr := s.Plugin.Verify()
 	if plugErr != nil {
 		errs = multierror.Append(errs, plugErr)
@@ -114,6 +144,9 @@ func (s *ServiceRouterConfigImpl) SetDefault() {
 	if len(s.Chain) == 0 {
 		s.Chain = append(s.Chain, DefaultServiceRouterRuleBased)
 		s.Chain = append(s.Chain, DefaultServiceRouterNearbyBased)
+	}
+	if len(s.AfterChain) == 0 {
+		s.AfterChain = append(s.AfterChain, DefaultServiceRouterFilterOnly)
 	}
 	if nil == s.PercentOfMinInstances {
 		s.PercentOfMinInstances = new(float64)

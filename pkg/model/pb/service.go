@@ -24,8 +24,10 @@ import (
 	"sort"
 	"sync/atomic"
 
+	"github.com/golang/protobuf/proto"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/metric"
@@ -368,6 +370,12 @@ func (i *InstanceInProto) IsHealthy() bool {
 	return i.GetHealthy().GetValue()
 }
 
+// SetHealthy set instance health status.
+func (i *InstanceInProto) SetHealthy(status bool) {
+	i.Healthy = wrapperspb.Bool(status)
+}
+
+
 // IsIsolated instance is isolated.
 func (i *InstanceInProto) IsIsolated() bool {
 	return i.GetIsolate().GetValue()
@@ -416,6 +424,30 @@ func (i *InstanceInProto) GetSliceWindows(pluginIndex int32) []*metric.SliceWind
 // SingleInstances 获取单个实例数组.
 func (i *InstanceInProto) SingleInstances() []model.Instance {
 	return i.singleInstances
+}
+
+// GetTtl 获取实例设置的 TTL
+func (i *InstanceInProto) GetTtl() int64 {
+	return int64(i.GetHealthCheck().GetHeartbeat().GetTtl().GetValue())
+}
+
+// DeepClone 获取实例设置的 TTL
+func (i *InstanceInProto) DeepClone() model.Instance {
+	clonePbIns := proto.Clone(i.Instance).(*apiservice.Instance)
+	copyIns := &InstanceInProto{
+		Instance: clonePbIns,
+		instanceKey: &model.InstanceKey{
+			ServiceKey: model.ServiceKey{
+				Namespace: i.GetNamespace(),
+				Service:   i.GetService(),
+			},
+			Host: i.GetHost(),
+			Port: int(i.GetPort()),
+		},
+		localValue: i.GetInstanceLocalValue(),
+	}
+	copyIns.singleInstances = []model.Instance{copyIns}
+	return copyIns
 }
 
 // GenServicesRevision 修正服务.

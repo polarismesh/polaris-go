@@ -105,7 +105,7 @@ func buildRegisterStateKey(namespace string, service string, host string, port i
 
 func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *registerState, regis registerFunc, beat heartbeatFunc) {
 	instance := state.instance
-	log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task started {%s, %s, %s:%d}",
+	log.GetStatLogger().Infof("[Provider][Heartbeat] instance heartbeat task started {%s, %s, %s:%d}",
 		instance.Namespace, instance.Service, instance.Host, instance.Port)
 	ticker := time.NewTicker(time.Duration(*instance.TTL) * time.Second)
 	defer ticker.Stop()
@@ -116,7 +116,7 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 	for {
 		select {
 		case <-ctx.Done():
-			log.GetBaseLogger().Infof("[HeartBeat] instance heartbeat task stopped {%s, %s, %s:%d}",
+			log.GetStatLogger().Infof("[Provider][Heartbeat] instance heartbeat task stopped {%s, %s, %s:%d}",
 				instance.Namespace, instance.Service, instance.Host, instance.Port)
 			return
 		case <-ticker.C:
@@ -128,8 +128,9 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 				ServiceToken: instance.ServiceToken,
 				InstanceID:   instance.InstanceId,
 			}
+			start := time.Now()
 			if err := beat(hbReq); err != nil {
-				log.GetBaseLogger().Errorf("heartbeat failed {%s, %s, %s:%d}",
+				log.GetStatLogger().Errorf("[Provider][Heartbeat] heartbeat failed {%s, %s, %s:%d}",
 					instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 				errCnt++
 
@@ -139,17 +140,17 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 					state.lastRegisterTime = time.Now()
 					_, err = regis(instance, CreateRegisterV2Header())
 					if err == nil {
-						log.GetBaseLogger().Infof("re-register instatnce success {%s, %s, %s:%d}",
+						log.GetStatLogger().Infof("[Provider][Heartbeat] re-register instatnce success {%s, %s, %s:%d}",
 							instance.Namespace, instance.Service, instance.Host, instance.Port)
 					} else {
-						log.GetBaseLogger().Warnf("re-register instatnce failed {%s, %s, %s:%d}",
+						log.GetStatLogger().Warnf("[Provider][Heartbeat] re-register instatnce failed {%s, %s, %s:%d}",
 							instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 					}
 				}
 				break
 			}
-			log.GetBaseLogger().Debugf("heartbeat success {%s, %s, %s:%d}",
-				instance.Namespace, instance.Service, instance.Host, instance.Port)
+			log.GetStatLogger().Infof("[Provider][Heartbeat] success {%s, %s, %s:%d} cost:%d ms",
+				instance.Namespace, instance.Service, instance.Host, instance.Port, time.Since(start).Milliseconds())
 			errCnt = 0
 			break
 		}

@@ -10,7 +10,7 @@
           "metadata": {
             "k1": {
               "type": "REGEX",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k1-0"
             }
           }
@@ -23,7 +23,7 @@
           "metadata": {
             "k2": {
               "type": "REGEX",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k2-0"
             }
           },
@@ -40,7 +40,7 @@
           "metadata": {
             "k1": {
               "type": "REGEX",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k1-1"
             }
           }
@@ -53,7 +53,7 @@
           "metadata": {
             "k2": {
               "type": "REGEX",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k2-1"
             }
           },

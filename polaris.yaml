@@ -214,6 +214,9 @@ consumer:
       - ruleBasedRouter
       # 就近路由策略
       - nearbyBasedRouter
+    afterChain:
+      # 开启零实例保护路由，和 filterOnlyRouter 互斥
+      # - zeroProtectRouter
     #描述：服务路由插件的配置
     plugin:
       nearbyBasedRouter:
