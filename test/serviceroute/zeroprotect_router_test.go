@@ -24,6 +24,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
@@ -31,9 +35,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	"github.com/polarismesh/polaris-go/plugin/servicerouter/zeroprotect"
-	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func genMockInstance(svcName, namespace string, count int64) []model.Instance {

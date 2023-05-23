@@ -19,7 +19,6 @@ package flow
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -417,8 +416,6 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 	if serviceEvent.SvcEventKey.Type != model.EventInstances {
 		return nil
 	}
-	fmt.Printf("%s %s %s\n", event.EventType, serviceEvent.SvcEventKey.Type, "")
-
 	s.lock.RLock()
 	channel, ok := s.eventChannelMap[serviceEvent.SvcEventKey.ServiceKey]
 	s.lock.RUnlock()

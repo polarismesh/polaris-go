@@ -20,13 +20,14 @@ package zeroprotect
 import (
 	"strconv"
 
+	"go.uber.org/zap"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
-	"go.uber.org/zap"
 )
 
 const (

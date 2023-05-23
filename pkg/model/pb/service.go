@@ -375,7 +375,6 @@ func (i *InstanceInProto) SetHealthy(status bool) {
 	i.Healthy = wrapperspb.Bool(status)
 }
 
-
 // IsIsolated instance is isolated.
 func (i *InstanceInProto) IsIsolated() bool {
 	return i.GetIsolate().GetValue()
