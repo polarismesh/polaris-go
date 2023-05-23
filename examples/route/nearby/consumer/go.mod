@@ -2,7 +2,7 @@ module github.com/polarismesh/polaris-go-nearby-consumer
 
 go 1.17
 
-require github.com/polarismesh/polaris-go v1.2.0-beta.3
+require github.com/polarismesh/polaris-go v1.4.3
 
 replace github.com/polarismesh/polaris-go => ../../../../
 

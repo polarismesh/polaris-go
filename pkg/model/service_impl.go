@@ -27,6 +27,14 @@ type DefaultServiceInstances struct {
 	totalWeight int
 
 	clusterCache ServiceClusters
+
+	registryValue RegistryValue
+}
+
+func NewDefaultServiceInstancesWithRegistryValue(service ServiceInfo, registryValue RegistryValue, instances []Instance) ServiceInstances {
+	svcInstances := NewDefaultServiceInstances(service, instances).(*DefaultServiceInstances)
+	svcInstances.registryValue = registryValue
+	return svcInstances
 }
 
 func NewDefaultServiceInstances(service ServiceInfo, instances []Instance) ServiceInstances {
@@ -79,11 +87,17 @@ func (d *DefaultServiceInstances) IsInitialized() bool {
 
 // 获取服务实例或规则的版本号
 func (d *DefaultServiceInstances) GetRevision() string {
+	if d.registryValue != nil {
+		return d.registryValue.GetRevision()
+	}
 	return ""
 }
 
 // 获取服务实例或规则的Hash值
 func (d *DefaultServiceInstances) GetHashValue() uint64 {
+	if d.registryValue != nil {
+		return d.registryValue.GetHashValue()
+	}
 	return 0
 }
 

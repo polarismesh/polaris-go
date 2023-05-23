@@ -176,7 +176,6 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeNetworkError, err, "fail to get connection, opKey %s", opKey)
 	}
-	fmt.Printf("GetConnection : %s\n", time.Since(startTime).String())
 	// 释放server连接
 	defer conn.Release(opKey)
 	var (

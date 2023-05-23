@@ -166,6 +166,7 @@ func (t *DstMetaTestingSuite) TestGetMetaWrong(c *check.C) {
 		addMetaKey: wrongAddMetaValue,
 	}
 	_, err = consumer.GetInstances(request)
+	log.Printf("TestGetMetaWrong.GetInstances : %+v", err.Error())
 	c.Assert(err, check.NotNil)
 	c.Assert(err.(model.SDKError).ErrorCode(), check.Equals, model.ErrCodeDstMetaMismatch)
 }

@@ -64,12 +64,12 @@ func (s *ServiceRouterConfigImpl) SetChain(chain []string) {
 // GetAfterChain consumer.serviceRouter.afterChain
 // 路由责任链后置路由配置.
 func (s *ServiceRouterConfigImpl) GetAfterChain() []string {
-	return s.Chain
+	return s.AfterChain
 }
 
 // SetAfterChain 设置路由责任链配置.
 func (s *ServiceRouterConfigImpl) SetAfterChain(chain []string) {
-	s.Chain = chain
+	s.AfterChain = chain
 }
 
 // GetPluginConfig consumer.serviceRouter.plugin.

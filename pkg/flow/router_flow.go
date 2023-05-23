@@ -43,10 +43,20 @@ func (e *Engine) parseRouters(routers []string) ([]servicerouter.ServiceRouter, 
 	if len(routers) == 0 {
 		return svcRouters, nil
 	}
-	// 如果最后一个路由规则不是 filterOnly 或者 zeroProtect 的话，默认走 filterOnly
+	// 如果最后一个路由规则不是 filterOnly 或者 zeroProtect 的话
 	lastRouter := routers[len(routers)-1]
 	if lastRouter != config.DefaultServiceRouterFilterOnly && lastRouter != config.DefaultServiceRouterZeroProtect {
-		routers = append(routers, config.DefaultServiceRouterFilterOnly)
+		afterChain := e.configuration.GetConsumer().GetServiceRouter().GetAfterChain()
+		for i := range afterChain {
+			if afterChain[i] == config.DefaultServiceRouterFilterOnly {
+				routers = append(routers, config.DefaultServiceRouterFilterOnly)
+				break
+			}
+			if afterChain[i] == config.DefaultServiceRouterZeroProtect {
+				routers = append(routers, config.DefaultServiceRouterZeroProtect)
+				break
+			}
+		}
 	}
 	for _, router := range routers {
 		targetPlugin, err := e.plugins.GetPlugin(common.TypeServiceRouter, router)

@@ -71,6 +71,7 @@ func (g *ZeroProtectFilter) GetFilteredInstances(routeInfo *servicerouter.RouteI
 	healthyCount := healthyInstances.Count()
 	if healthyCount == 0 {
 		outCluster = model.NewCluster(g.doZeroProtect(outCluster), withinCluster)
+		// 重新建立索引缓存
 		outCluster.ClearClusterValue()
 		clsValue = outCluster.GetClusterValue()
 	}
@@ -125,15 +126,15 @@ func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster) model.Servi
 	if len(zeroProtectIns) != 0 {
 		svcName := curCluster.GetClusters().GetServiceInstances().GetService()
 		nsName := curCluster.GetClusters().GetServiceInstances().GetNamespace()
-		log.GetStatLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
+		log.GetBaseLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
 			zap.Any("instances", zeroProtectIns))
 	}
 
-	finalCluster := model.NewServiceClusters(model.NewDefaultServiceInstances(model.ServiceInfo{
+	finalCluster := model.NewServiceClusters(model.NewDefaultServiceInstancesWithRegistryValue(model.ServiceInfo{
 		Service:   curCluster.GetClusters().GetServiceInstances().GetService(),
 		Namespace: curCluster.GetClusters().GetServiceInstances().GetNamespace(),
 		Metadata:  curCluster.GetClusters().GetServiceInstances().GetMetadata(),
-	}, finalInstances))
+	}, curCluster.GetClusters().GetServiceInstances(), finalInstances))
 	return finalCluster
 }
 

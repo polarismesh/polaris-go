@@ -482,9 +482,10 @@ func (cr *ServicesRequest) InitByGetServicesRequest(
 // BuildServicesResponse 构建答复
 func (cr *ServicesRequest) BuildServicesResponse(mesh model.Services) *model.ServicesResponse {
 	resp := model.ServicesResponse{
-		Type:     mesh.GetType(),
-		Value:    mesh.GetValue(),
-		Revision: mesh.GetRevision(),
+		Type:      mesh.GetType(),
+		Value:     mesh.GetValue(),
+		Revision:  mesh.GetRevision(),
+		HashValue: mesh.GetHashValue(),
 	}
 	return &resp
 }

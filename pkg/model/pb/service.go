@@ -24,7 +24,6 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/golang/protobuf/proto"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -432,7 +431,38 @@ func (i *InstanceInProto) GetTtl() int64 {
 
 // DeepClone 获取实例设置的 TTL
 func (i *InstanceInProto) DeepClone() model.Instance {
-	clonePbIns := proto.Clone(i.Instance).(*apiservice.Instance)
+	clonePbIns := &apiservice.Instance{
+		Id:                wrapperspb.String(i.GetId()),
+		Service:           wrapperspb.String(i.GetService()),
+		Namespace:         wrapperspb.String(i.GetNamespace()),
+		VpcId:             wrapperspb.String(i.GetVpcId()),
+		Host:              wrapperspb.String(i.GetHost()),
+		Port:              wrapperspb.UInt32(i.GetPort()),
+		Protocol:          wrapperspb.String(i.GetProtocol()),
+		Version:           wrapperspb.String(i.GetVersion()),
+		Priority:          wrapperspb.UInt32(i.GetPriority()),
+		Weight:            wrapperspb.UInt32(uint32(i.GetWeight())),
+		EnableHealthCheck: wrapperspb.Bool(i.IsEnableHealthCheck()),
+		HealthCheck: &apiservice.HealthCheck{
+			Type: i.GetHealthCheck().GetType(),
+			Heartbeat: &apiservice.HeartbeatHealthCheck{
+				Ttl: wrapperspb.UInt32(uint32(i.GetTtl())),
+			},
+		},
+		Healthy: wrapperspb.Bool(i.IsHealthy()),
+		Isolate: wrapperspb.Bool(i.IsIsolated()),
+		Location: &apimodel.Location{
+			Region: wrapperspb.String(i.GetRegion()),
+			Zone:   wrapperspb.String(i.GetZone()),
+			Campus: wrapperspb.String(i.GetCampus()),
+		},
+		Metadata:     i.GetMetadata(),
+		LogicSet:     wrapperspb.String(i.GetLogicSet()),
+		Ctime:        wrapperspb.String(i.GetCtime().GetValue()),
+		Mtime:        wrapperspb.String(i.GetMtime().GetValue()),
+		Revision:     wrapperspb.String(i.GetRevision()),
+		ServiceToken: wrapperspb.String(i.GetServiceToken().GetValue()),
+	}
 	copyIns := &InstanceInProto{
 		Instance: clonePbIns,
 		instanceKey: &model.InstanceKey{

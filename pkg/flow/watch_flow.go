@@ -85,7 +85,9 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
 			for _, lpCtx := range w.watchContexts {
-				lpCtx.OnInstances(svcInstances)
+				if lpCtx.ServiceEventKey().Type == model.EventInstances {
+					lpCtx.OnInstances(svcInstances)
+				}
 			}
 		}()
 	}
@@ -94,7 +96,9 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
 			for _, lpCtx := range w.watchContexts {
-				lpCtx.OnServices(services)
+				if lpCtx.ServiceEventKey().Type == model.EventServices {
+					lpCtx.OnServices(services)
+				}
 			}
 		}()
 	}
