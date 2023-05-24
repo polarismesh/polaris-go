@@ -115,23 +115,6 @@ func (s *ServiceRouterConfigImpl) Verify() error {
 	if *(s.PercentOfMinInstances) >= 1 || *(s.PercentOfMinInstances) < 0 {
 		errs = multierror.Append(errs, fmt.Errorf("consumer.servicerouter.percentOfMinInstances must be in range [0.0, 1.0)"))
 	}
-
-	if len(s.AfterChain) != 0 {
-		hashFilterOnly := false
-		hashZeroProtect := false
-		for i := range s.AfterChain {
-			if s.AfterChain[i] == DefaultServiceRouterFilterOnly {
-				hashFilterOnly = true
-			}
-			if s.AfterChain[i] == DefaultServiceRouterZeroProtect {
-				hashZeroProtect = true
-			}
-		}
-		if hashFilterOnly && hashZeroProtect {
-			errs = multierror.Append(errs, fmt.Errorf("consumer.servicerouter.afterChain not set filterOnlyRouter and zeroProtectRouter same time"))
-		}
-	}
-
 	plugErr := s.Plugin.Verify()
 	if plugErr != nil {
 		errs = multierror.Append(errs, plugErr)

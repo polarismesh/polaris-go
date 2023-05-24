@@ -191,11 +191,9 @@ func (e *Engine) LoadFlowRouteChain() error {
 	for i := range afterChain {
 		if afterChain[i] == config.DefaultServiceRouterFilterOnly {
 			lastRouterName = config.DefaultServiceRouterFilterOnly
-			break
 		}
 		if afterChain[i] == config.DefaultServiceRouterZeroProtect {
 			lastRouterName = config.DefaultServiceRouterZeroProtect
-			break
 		}
 	}
 

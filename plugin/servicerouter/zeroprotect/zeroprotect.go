@@ -70,9 +70,11 @@ func (g *ZeroProtectFilter) GetFilteredInstances(routeInfo *servicerouter.RouteI
 	healthyInstances := clsValue.GetInstancesSet(false, false)
 	healthyCount := healthyInstances.Count()
 	if healthyCount == 0 {
-		outCluster = model.NewCluster(g.doZeroProtect(outCluster), withinCluster)
+		outCluster = g.doZeroProtect(outCluster, withinCluster)
 		// 重新建立索引缓存
 		outCluster.ClearClusterValue()
+		// 由于零实例保护逻辑只会返回
+		outCluster.HasLimitedInstances = true
 		clsValue = outCluster.GetClusterValue()
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
@@ -81,7 +83,7 @@ func (g *ZeroProtectFilter) GetFilteredInstances(routeInfo *servicerouter.RouteI
 	return result, nil
 }
 
-func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster) model.ServiceClusters {
+func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster, withinCluster *model.Cluster) *model.Cluster {
 	lastBeat := int64(-1)
 	instances, _ := curCluster.GetAllInstances()
 	instanceLastBeatTimes := map[string]int64{}
@@ -102,9 +104,8 @@ func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster) model.Servi
 		instanceLastBeatTimes[ins.GetId()] = beatTime
 	}
 	if lastBeat == -1 {
-		return curCluster.GetClusters()
+		return curCluster
 	}
-	finalInstances := make([]model.Instance, 0, len(instances))
 	zeroProtectIns := make([]model.Instance, 0, len(instances))
 	for i := range instances {
 		ins := instances[i]
@@ -114,32 +115,29 @@ func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster) model.Servi
 		}
 		needProtect := NeedZeroProtect(lastBeat, beatTime, ins.GetTtl())
 		if !needProtect {
-			finalInstances = append(finalInstances, ins)
 			continue
 		}
-		cloneIns := ins.DeepClone()
-		cloneIns.SetHealthy(true)
-		finalInstances = append(finalInstances, cloneIns)
-		zeroProtectIns = append(zeroProtectIns, cloneIns)
+		zeroProtectIns = append(zeroProtectIns, ins)
 	}
 
 	if len(zeroProtectIns) != 0 {
 		svcName := curCluster.GetClusters().GetServiceInstances().GetService()
 		nsName := curCluster.GetClusters().GetServiceInstances().GetNamespace()
 		log.GetBaseLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
-			zap.Any("instances", zeroProtectIns))
+			zap.Any("total", len(zeroProtectIns)), zap.Any("instances", zeroProtectIns))
 	}
 
 	finalCluster := model.NewServiceClusters(model.NewDefaultServiceInstancesWithRegistryValue(model.ServiceInfo{
 		Service:   curCluster.GetClusters().GetServiceInstances().GetService(),
 		Namespace: curCluster.GetClusters().GetServiceInstances().GetNamespace(),
 		Metadata:  curCluster.GetClusters().GetServiceInstances().GetMetadata(),
-	}, curCluster.GetClusters().GetServiceInstances(), finalInstances))
-	return finalCluster
+	}, curCluster.GetClusters().GetServiceInstances(), zeroProtectIns))
+	return model.NewCluster(finalCluster, withinCluster)
 }
 
+// NeedZeroProtect .
 func NeedZeroProtect(lastBeat, beatTime, ttl int64) bool {
-	return lastBeat-3*ttl > beatTime && beatTime <= lastBeat
+	return lastBeat-3*ttl > beatTime
 }
 
 // Enable 是否需要启动规则路由

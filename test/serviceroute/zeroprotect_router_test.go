@@ -96,7 +96,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 
 		result, err := router.GetFilteredInstances(&servicerouter.RouteInfo{}, mockCluster, model.NewCluster(mockCluster, nil))
 		assert.NoError(t, err)
-		instanceSet := result.OutputCluster.GetClusterValue().GetInstancesSet(false, false)
+		instanceSet := result.OutputCluster.GetClusterValue().GetInstancesSet(true, false)
 		assert.Equal(t, int64(healthCount), int64(instanceSet.Count()))
 	})
 
@@ -145,7 +145,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 
 		result, err := router.GetFilteredInstances(&servicerouter.RouteInfo{}, mockCluster, model.NewCluster(mockCluster, nil))
 		assert.NoError(t, err)
-		instanceSet := result.OutputCluster.GetClusterValue().GetInstancesSet(false, false)
+		instanceSet := result.OutputCluster.GetClusterValue().GetInstancesSet(true, false)
 		assert.Equal(t, int64(zeroProtectInsCount), int64(instanceSet.Count()))
 	})
 }

@@ -118,7 +118,7 @@ func useConsumerAPI(consumer polaris.ConsumerAPI, zeroprotectIns map[string]stru
 	}
 
 	if len(zeroprotectIns) != len(resp.GetInstances()) {
-		log.Fatal("zero protect recover instance count not expect")
+		log.Fatalf("zero protect recover instance count:%d not expect:%d", len(resp.GetInstances()), len(zeroprotectIns))
 	}
 }
 
@@ -155,7 +155,7 @@ func useRouterAPI(consumer polaris.ConsumerAPI, router polaris.RouterAPI, zeropr
 	}
 
 	if len(zeroprotectIns) != len(routeResp.GetInstances()) {
-		log.Fatal("zero protect recover instance count not expect")
+		log.Fatalf("zero protect recover instance count:%d not expect:%d", len(routeResp.GetInstances()), len(zeroprotectIns))
 	}
 	routeReq = &polaris.ProcessRoutersRequest{}
 	routeReq.DstInstances = resp
