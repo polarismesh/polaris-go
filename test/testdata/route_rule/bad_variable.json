@@ -10,7 +10,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "VARIABLE"
+              "value_type": "VARIABLE"
             }
           }
         }
@@ -22,7 +22,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "VARIABLE"
+              "value_type": "VARIABLE"
             }
           },
           "priority": 0,

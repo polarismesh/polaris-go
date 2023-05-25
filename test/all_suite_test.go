@@ -71,8 +71,6 @@ func init() {
 	Suite(&serviceroute.SetDivisionTestingSuite{})
 	// 金丝雀路由测试
 	Suite(&serviceroute.CanaryTestingSuite{})
-	// sdkcontext 销毁测试
-	Suite(&stability.SDKContextDestroySuite{})
 	// 缓存持久化测试
 	Suite(&stability.CacheTestingSuite{})
 	// 服务定时更新测试

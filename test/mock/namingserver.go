@@ -20,10 +20,12 @@ package mock
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	log2 "log"
+	"sort"
 	"sync"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -279,6 +282,8 @@ func (n *namingServer) RegisterInstance(ctx context.Context,
 	if n.skipRequest(OperationRegistry) {
 		time.Sleep(syncWaitTime)
 	}
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	key := &model.ServiceKey{
 		Service:   req.GetService().GetValue(),
 		Namespace: req.GetNamespace().GetValue()}
@@ -329,6 +334,8 @@ func (n *namingServer) DeregisterInstance(ctx context.Context,
 	if n.skipRequest(OperationDeRegistry) {
 		time.Sleep(syncWaitTime)
 	}
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	inst, ok := n.instances[req.Id.GetValue()]
 	if ok {
 		req = inst
@@ -387,6 +394,8 @@ func (n *namingServer) Heartbeat(ctx context.Context, req *service_manage.Instan
 	if n.skipRequest(OperationHeartbeat) {
 		time.Sleep(syncWaitTime)
 	}
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	inst, ok := n.instances[req.Id.GetValue()]
 	if ok {
 		req = inst
@@ -601,11 +610,18 @@ func (n *namingServer) Discover(server service_manage.PolarisGRPC_DiscoverServer
 		var code uint32 = uint32(apimodel.Code_ExecuteSuccess)
 		var info = "execute success"
 		var services []*service_manage.Service
+		var revision = ""
 		// 根据不同类型返回不同的数据
 		switch req.Type {
 		case service_manage.DiscoverRequest_INSTANCE:
 			n.rwMutex.RLock()
 			instances = n.svcInstances[*key]
+			revisions := make([]string, 0, len(instances))
+			for i := range instances {
+				revisions = append(revisions, instances[i].GetRevision().GetValue())
+			}
+			revisions = append(revisions)
+			revision, _ = CompositeComputeRevision(revisions)
 			n.rwMutex.RUnlock()
 		case service_manage.DiscoverRequest_ROUTING:
 			n.rwMutex.RLock()
@@ -629,11 +645,23 @@ func (n *namingServer) Discover(server service_manage.PolarisGRPC_DiscoverServer
 			code = uint32(apimodel.Code_InvalidParameter)
 			info = fmt.Sprintf("unsupported type %v", req.Type)
 		}
+
+		var svc = req.Service
+		for i := range n.services {
+			item := n.services[i]
+			if item.GetNamespace().GetValue() == req.Service.GetNamespace().GetValue() && item.GetName().GetValue() == req.Service.GetName().GetValue() {
+				svc = item
+				break
+			}
+		}
+		revision, _ = CompositeComputeRevision([]string{revision, svc.GetRevision().GetValue()})
+		svc.Revision = wrapperspb.String(revision)
+
 		resp := &service_manage.DiscoverResponse{
 			Type:      namingTypeReqToResp[req.Type],
 			Code:      &wrappers.UInt32Value{Value: code},
 			Info:      &wrappers.StringValue{Value: info},
-			Service:   req.Service,
+			Service:   svc,
 			Instances: instances,
 			Routing:   routing,
 			RateLimit: ratelimit,
@@ -656,6 +684,21 @@ func (n *namingServer) Discover(server service_manage.PolarisGRPC_DiscoverServer
 			return err
 		}
 	}
+}
+
+// CompositeComputeRevision 将多个 revision 合并计算为一个
+func CompositeComputeRevision(revisions []string) (string, error) {
+	h := sha1.New()
+
+	sort.Strings(revisions)
+
+	for i := range revisions {
+		if _, err := h.Write([]byte(revisions[i])); err != nil {
+			return "", err
+		}
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // RegisterService 注册服务信息
@@ -880,6 +923,8 @@ func (n *namingServer) RegisterServerInstanceReturnId(host string, port int, nam
 
 // DeleteServerInstance 删除系统服务实例
 func (n *namingServer) DeleteServerInstance(namespace string, service string, id string) {
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	k := model.ServiceKey{
 		Namespace: namespace,
 		Service:   service,
@@ -897,6 +942,8 @@ func (n *namingServer) DeleteServerInstance(namespace string, service string, id
 
 // UpdateServerInstanceWeight 修改系统服务实例权重
 func (n *namingServer) UpdateServerInstanceWeight(namespace string, service string, id string, weight uint32) {
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	k := model.ServiceKey{
 		Namespace: namespace,
 		Service:   service,
@@ -916,6 +963,8 @@ func (n *namingServer) UpdateServerInstanceWeight(namespace string, service stri
 
 // UpdateServerInstanceHealthy 修改系统服务实例健康状态
 func (n *namingServer) UpdateServerInstanceHealthy(namespace string, service string, id string, healthy bool) {
+	n.rwMutex.Lock()
+	defer n.rwMutex.Unlock()
 	k := model.ServiceKey{
 		Namespace: namespace,
 		Service:   service,
@@ -1242,6 +1291,7 @@ func (n *namingServer) SetServiceMetadata(token string, key string, value string
 			svc.Metadata = make(map[string]string, 0)
 		}
 		svc.Metadata[key] = value
+		svc.Revision = wrapperspb.String(uuid.NewString())
 	}
 }
 

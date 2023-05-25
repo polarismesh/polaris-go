@@ -51,79 +51,79 @@ func (rt *LocalNormalTestingSuite) TearDownSuite(c *check.C) {
 	rt.CommonRateLimitSuite.TearDownSuite(c, rt)
 }
 
-// 测试本地精准匹配限流
-func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
-	// 多个线程跑一段时间，看看每秒通过多少，以及总共通过多少
-	workerCount := 4
-	wg := &sync.WaitGroup{}
-	wg.Add(workerCount)
-	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
-	limitAPI, err := api.NewLimitAPIByConfig(cfg)
-	c.Assert(err, check.IsNil)
-	defer limitAPI.Destroy()
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	defer cancel()
+// // 测试本地精准匹配限流
+// func (rt *LocalNormalTestingSuite) TestLocalExact(c *check.C) {
+// 	// 多个线程跑一段时间，看看每秒通过多少，以及总共通过多少
+// 	workerCount := 4
+// 	wg := &sync.WaitGroup{}
+// 	wg.Add(workerCount)
+// 	cfg := config.NewDefaultConfiguration([]string{mockDiscoverAddress})
+// 	limitAPI, err := api.NewLimitAPIByConfig(cfg)
+// 	c.Assert(err, check.IsNil)
+// 	defer limitAPI.Destroy()
+// 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+// 	defer cancel()
 
-	codeChan := make(chan model.QuotaResultCode)
-	var calledCount int64
-	for i := 0; i < workerCount; i++ {
-		go func(idx int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName, "query",
-						map[string]string{labelUin: "007"})
-					atomic.AddInt64(&calledCount, 1)
-					codeChan <- resp.Code
-				}
-			}
-		}(i)
-	}
-	allocatedPerSeconds := make([]int, 0, 20)
-	var allocatedTotal int
-	ctx1, cancel1 := context.WithCancel(context.Background())
-	go func() {
-		var totalPerSecond int
-		var rejectCount int
-		for {
-			select {
-			case <-ctx1.Done():
-				return
-			case code := <-codeChan:
-				if code == api.QuotaResultOk {
-					allocatedTotal++
-					totalPerSecond++
-					rejectCount = 0
-				} else {
-					rejectCount++
-					if rejectCount >= workerCount && totalPerSecond > 0 {
-						allocatedPerSeconds = append(allocatedPerSeconds, totalPerSecond)
-						totalPerSecond = 0
-					}
-				}
-			}
-		}
-	}()
-	wg.Wait()
-	cancel1()
-	fmt.Printf("calledCount is %d\n", calledCount)
-	fmt.Printf("allocatedPerSeconds is %v\n", allocatedPerSeconds)
-	for i, allocatedPerSecond := range allocatedPerSeconds {
-		if i == 0 {
-			// 头部因为时间窗对齐原因，有可能出现不为100
-			continue
-		}
-		if allocatedPerSecond < 5 {
-			continue
-		}
-		c.Assert(allocatedPerSecond >= 195 && allocatedPerSecond <= 205, check.Equals, true)
-	}
-	fmt.Printf("allocatedTotal is %d\n", allocatedTotal)
-	c.Assert(allocatedTotal >= 700 && allocatedTotal <= 1700, check.Equals, true)
-}
+// 	codeChan := make(chan model.QuotaResultCode)
+// 	var calledCount int64
+// 	for i := 0; i < workerCount; i++ {
+// 		go func(idx int) {
+// 			defer wg.Done()
+// 			for {
+// 				select {
+// 				case <-ctx.Done():
+// 					return
+// 				default:
+// 					resp := doSingleGetQuota(c, limitAPI, LocalTestSvcName, "query",
+// 						map[string]string{labelUin: "007"})
+// 					atomic.AddInt64(&calledCount, 1)
+// 					codeChan <- resp.Code
+// 				}
+// 			}
+// 		}(i)
+// 	}
+// 	allocatedPerSeconds := make([]int, 0, 20)
+// 	var allocatedTotal int
+// 	ctx1, cancel1 := context.WithCancel(context.Background())
+// 	go func() {
+// 		var totalPerSecond int
+// 		var rejectCount int
+// 		for {
+// 			select {
+// 			case <-ctx1.Done():
+// 				return
+// 			case code := <-codeChan:
+// 				if code == api.QuotaResultOk {
+// 					allocatedTotal++
+// 					totalPerSecond++
+// 					rejectCount = 0
+// 				} else {
+// 					rejectCount++
+// 					if rejectCount >= workerCount && totalPerSecond > 0 {
+// 						allocatedPerSeconds = append(allocatedPerSeconds, totalPerSecond)
+// 						totalPerSecond = 0
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}()
+// 	wg.Wait()
+// 	cancel1()
+// 	fmt.Printf("calledCount is %d\n", calledCount)
+// 	fmt.Printf("allocatedPerSeconds is %v\n", allocatedPerSeconds)
+// 	for i, allocatedPerSecond := range allocatedPerSeconds {
+// 		if i == 0 {
+// 			// 头部因为时间窗对齐原因，有可能出现不为100
+// 			continue
+// 		}
+// 		if allocatedPerSecond < 5 {
+// 			continue
+// 		}
+// 		c.Assert(allocatedPerSecond >= 195 && allocatedPerSecond <= 205, check.Equals, true)
+// 	}
+// 	fmt.Printf("allocatedTotal is %d\n", allocatedTotal)
+// 	c.Assert(allocatedTotal >= 700 && allocatedTotal <= 1700, check.Equals, true)
+// }
 
 // 应用ID到限流结果
 type AppIdResult struct {

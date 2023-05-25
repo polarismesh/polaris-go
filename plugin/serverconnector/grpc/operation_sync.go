@@ -236,9 +236,11 @@ func (g *Connector) waitDiscoverReady() error {
 			// 超时
 			return nil
 		default:
-			if g.connManager.IsReady() && atomic.CompareAndSwapUint32(&g.hasPrintedReady, 0, 1) {
-				// 准备就绪
-				log.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
+			if g.connManager.IsReady() {
+				if atomic.CompareAndSwapUint32(&g.hasPrintedReady, 0, 1) {
+					// 准备就绪
+					log.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
+				}
 				return nil
 			}
 			time.Sleep(clock.TimeStep())

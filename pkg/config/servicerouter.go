@@ -30,6 +30,8 @@ import (
 type ServiceRouterConfigImpl struct {
 	// 服务路由责任链
 	Chain []string `yaml:"chain" json:"chain"`
+	// 服务路由责任链
+	AfterChain []string `yaml:"afterChain" json:"afterChain"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 	// 进行过滤时的最大过滤比例
@@ -57,6 +59,17 @@ func (s *ServiceRouterConfigImpl) GetChain() []string {
 // SetChain 设置路由责任链配置.
 func (s *ServiceRouterConfigImpl) SetChain(chain []string) {
 	s.Chain = chain
+}
+
+// GetAfterChain consumer.serviceRouter.afterChain
+// 路由责任链后置路由配置.
+func (s *ServiceRouterConfigImpl) GetAfterChain() []string {
+	return s.AfterChain
+}
+
+// SetAfterChain 设置路由责任链配置.
+func (s *ServiceRouterConfigImpl) SetAfterChain(chain []string) {
+	s.AfterChain = chain
 }
 
 // GetPluginConfig consumer.serviceRouter.plugin.
@@ -114,6 +127,9 @@ func (s *ServiceRouterConfigImpl) SetDefault() {
 	if len(s.Chain) == 0 {
 		s.Chain = append(s.Chain, DefaultServiceRouterRuleBased)
 		s.Chain = append(s.Chain, DefaultServiceRouterNearbyBased)
+	}
+	if len(s.AfterChain) == 0 {
+		s.AfterChain = append(s.AfterChain, DefaultServiceRouterFilterOnly)
 	}
 	if nil == s.PercentOfMinInstances {
 		s.PercentOfMinInstances = new(float64)

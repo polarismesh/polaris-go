@@ -43,9 +43,20 @@ func (e *Engine) parseRouters(routers []string) ([]servicerouter.ServiceRouter, 
 	if len(routers) == 0 {
 		return svcRouters, nil
 	}
-	// add the filter only plugin to do the unhealthy filter
-	if routers[len(routers)-1] != config.DefaultServiceRouterFilterOnly {
-		routers = append(routers, config.DefaultServiceRouterFilterOnly)
+	// 如果最后一个路由规则不是 filterOnly 或者 zeroProtect 的话
+	lastRouter := routers[len(routers)-1]
+	if lastRouter != config.DefaultServiceRouterFilterOnly && lastRouter != config.DefaultServiceRouterZeroProtect {
+		afterChain := e.configuration.GetConsumer().GetServiceRouter().GetAfterChain()
+		lastRouterName := config.DefaultServiceRouterFilterOnly
+		for i := range afterChain {
+			if afterChain[i] == config.DefaultServiceRouterFilterOnly {
+				lastRouterName = config.DefaultServiceRouterFilterOnly
+			}
+			if afterChain[i] == config.DefaultServiceRouterZeroProtect {
+				lastRouterName = config.DefaultServiceRouterZeroProtect
+			}
+		}
+		routers = append(routers, lastRouterName)
 	}
 	for _, router := range routers {
 		targetPlugin, err := e.plugins.GetPlugin(common.TypeServiceRouter, router)

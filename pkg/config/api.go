@@ -357,6 +357,9 @@ type ServiceRouterConfig interface {
 	// GetChain consumer.serviceRouter.chain
 	// 路由责任链配置
 	GetChain() []string
+	// GetChain consumer.serviceRouter.afterChain
+	// 路由责任链后置路由配置
+	GetAfterChain() []string
 	// SetChain 设置路由责任链配置
 	SetChain([]string)
 	// GetPercentOfMinInstances 获取PercentOfMinInstances参数

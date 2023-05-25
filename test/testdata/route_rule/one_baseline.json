@@ -10,7 +10,7 @@
           "metadata": {
             "env": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           }
         }
@@ -22,7 +22,7 @@
           "metadata": {
             "env": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           },
           "priority": 0,
@@ -34,7 +34,7 @@
           "metadata": {
             "env": {
               "type": "EXACT",
-              "valueType": "TEXT",
+              "value_type": "TEXT",
               "value": "base"
             }
           },
@@ -57,7 +57,7 @@
           "metadata": {
             "env": {
               "type": "EXACT",
-              "valueType": "TEXT",
+              "value_type": "TEXT",
               "value": "base"
             }
           },

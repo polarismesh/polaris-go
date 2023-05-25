@@ -57,7 +57,7 @@ type Engine struct {
 	// 全局配置
 	configuration config.Configuration
 	// 只做过滤的服务路由插件实例
-	filterOnlyRouter servicerouter.ServiceRouter
+	finalRouterPlugin servicerouter.ServiceRouter
 	// 服务路由责任链
 	routerChain *servicerouter.RouterChain
 	// 上报插件链
@@ -164,6 +164,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	callbackHandler := common.PluginEventHandler{
 		Callback: flowEngine.ServiceEventCallback,
 	}
+	initContext.Plugins.RegisterEventSubscriber(common.OnServiceAdded, callbackHandler)
 	initContext.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
 	globalCtx.SetValue(model.ContextKeyEngine, flowEngine)
 
@@ -184,11 +185,23 @@ func (e *Engine) LoadFlowRouteChain() error {
 	if err != nil {
 		return err
 	}
-	filterOnlyRouterPlugin, err := e.plugins.GetPlugin(common.TypeServiceRouter, config.DefaultServiceRouterFilterOnly)
+
+	afterChain := e.configuration.GetConsumer().GetServiceRouter().GetAfterChain()
+	lastRouterName := config.DefaultServiceRouterFilterOnly
+	for i := range afterChain {
+		if afterChain[i] == config.DefaultServiceRouterFilterOnly {
+			lastRouterName = config.DefaultServiceRouterFilterOnly
+		}
+		if afterChain[i] == config.DefaultServiceRouterZeroProtect {
+			lastRouterName = config.DefaultServiceRouterZeroProtect
+		}
+	}
+
+	finalRouterPlugin, err := e.plugins.GetPlugin(common.TypeServiceRouter, lastRouterName)
 	if err != nil {
 		return err
 	}
-	e.filterOnlyRouter = filterOnlyRouterPlugin.(servicerouter.ServiceRouter)
+	e.finalRouterPlugin = finalRouterPlugin.(servicerouter.ServiceRouter)
 	// 加载负载均衡插件
 	e.loadbalancer, err = data.GetLoadBalancer(e.configuration, e.plugins)
 	if err != nil {
@@ -385,19 +398,22 @@ type subscribeChannel struct {
 	lock             sync.RWMutex
 }
 
+var (
+	subscriberWatchEventType = map[common.PluginEventType]struct{}{
+		common.OnServiceUpdated: {},
+		common.OnServiceAdded:   {},
+	}
+)
+
 // DoSubScribe is called when a new subscription is created
 func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
-	if event.EventType != common.OnServiceUpdated {
+	if _, ok := subscriberWatchEventType[event.EventType]; !ok {
 		return nil
 	}
 	serviceEvent := event.EventObject.(*common.ServiceEventObject)
 	if serviceEvent.SvcEventKey.Type != model.EventInstances {
 		return nil
 	}
-	insEvent := &model.InstanceEvent{}
-	insEvent.AddEvent = data.CheckAddInstances(serviceEvent)
-	insEvent.UpdateEvent = data.CheckUpdateInstances(serviceEvent)
-	insEvent.DeleteEvent = data.CheckDeleteInstances(serviceEvent)
 	s.lock.RLock()
 	channel, ok := s.eventChannelMap[serviceEvent.SvcEventKey.ServiceKey]
 	s.lock.RUnlock()
@@ -406,6 +422,12 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 			serviceEvent.SvcEventKey.ServiceKey.Service)
 		return nil
 	}
+
+	insEvent := &model.InstanceEvent{}
+	insEvent.AddEvent = data.CheckAddInstances(serviceEvent)
+	insEvent.UpdateEvent = data.CheckUpdateInstances(serviceEvent)
+	insEvent.DeleteEvent = data.CheckDeleteInstances(serviceEvent)
+
 	var err error
 	for i := 0; i < 2; i++ {
 		if err = pushToBufferChannel(insEvent, channel); err == nil {

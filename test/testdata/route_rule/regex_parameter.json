@@ -10,7 +10,7 @@
           "metadata": {
             "k1": {
               "type": "REGEX",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           }
         }
@@ -22,7 +22,7 @@
           "metadata": {
             "k2": {
               "type": "REGEX",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           },
           "priority": 0,

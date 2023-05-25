@@ -10,7 +10,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           }
         }
@@ -22,7 +22,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           },
           "priority": 0,
@@ -38,11 +38,11 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             },
             "k3": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           }
         }
@@ -54,11 +54,11 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             },
             "k4": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           },
           "weight": 100
@@ -73,11 +73,11 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             },
             "k5": {
               "type": "EXACT",
-              "valueType": "TEXT",
+              "value_type": "TEXT",
               "value": "v5"
             }
           }
@@ -90,12 +90,12 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "TEXT",
+              "value_type": "TEXT",
               "value": "v2-0"
             },
             "k4": {
               "type": "EXACT",
-              "valueType": "PARAMETER"
+              "value_type": "PARAMETER"
             }
           },
           "weight": 100

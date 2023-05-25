@@ -10,7 +10,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k1"
             }
           }
@@ -23,7 +23,7 @@
           "metadata": {
             "k1": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k1"
             }
           },
@@ -40,12 +40,12 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k2"
             },
             "k3": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k3"
             }
           }
@@ -58,12 +58,12 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k2"
             },
             "k4": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k4k"
             }
           },
@@ -79,7 +79,7 @@
           "metadata": {
             "k2": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k2"
             },
             "k5": {
@@ -100,7 +100,7 @@
             },
             "k4": {
               "type": "EXACT",
-              "valueType": "VARIABLE",
+              "value_type": "VARIABLE",
               "value": "k4"
             }
           },

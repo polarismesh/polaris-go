@@ -297,7 +297,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 func (e *Engine) afterLazyGetInstances(
 	req *data.CommonInstancesRequest) (cls *model.Cluster, redirected *model.ServiceInfo, err model.SDKError) {
 	var result *servicerouter.RouteResult
-	req.RouteInfo.FilterOnlyRouter = e.filterOnlyRouter
+	req.RouteInfo.FilterOnlyRouter = e.finalRouterPlugin
 	// 服务路由
 	if !req.SkipRouteFilter {
 		result, err = e.getServiceRoutedInstances(req)

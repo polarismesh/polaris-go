@@ -26,6 +26,7 @@ import (
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/metric"
@@ -368,6 +369,11 @@ func (i *InstanceInProto) IsHealthy() bool {
 	return i.GetHealthy().GetValue()
 }
 
+// SetHealthy set instance health status.
+func (i *InstanceInProto) SetHealthy(status bool) {
+	i.Healthy = wrapperspb.Bool(status)
+}
+
 // IsIsolated instance is isolated.
 func (i *InstanceInProto) IsIsolated() bool {
 	return i.GetIsolate().GetValue()
@@ -416,6 +422,61 @@ func (i *InstanceInProto) GetSliceWindows(pluginIndex int32) []*metric.SliceWind
 // SingleInstances 获取单个实例数组.
 func (i *InstanceInProto) SingleInstances() []model.Instance {
 	return i.singleInstances
+}
+
+// GetTtl 获取实例设置的 TTL
+func (i *InstanceInProto) GetTtl() int64 {
+	return int64(i.GetHealthCheck().GetHeartbeat().GetTtl().GetValue())
+}
+
+// DeepClone 获取实例设置的 TTL
+func (i *InstanceInProto) DeepClone() model.Instance {
+	clonePbIns := &apiservice.Instance{
+		Id:                wrapperspb.String(i.GetId()),
+		Service:           wrapperspb.String(i.GetService()),
+		Namespace:         wrapperspb.String(i.GetNamespace()),
+		VpcId:             wrapperspb.String(i.GetVpcId()),
+		Host:              wrapperspb.String(i.GetHost()),
+		Port:              wrapperspb.UInt32(i.GetPort()),
+		Protocol:          wrapperspb.String(i.GetProtocol()),
+		Version:           wrapperspb.String(i.GetVersion()),
+		Priority:          wrapperspb.UInt32(i.GetPriority()),
+		Weight:            wrapperspb.UInt32(uint32(i.GetWeight())),
+		EnableHealthCheck: wrapperspb.Bool(i.IsEnableHealthCheck()),
+		HealthCheck: &apiservice.HealthCheck{
+			Type: i.GetHealthCheck().GetType(),
+			Heartbeat: &apiservice.HeartbeatHealthCheck{
+				Ttl: wrapperspb.UInt32(uint32(i.GetTtl())),
+			},
+		},
+		Healthy: wrapperspb.Bool(i.IsHealthy()),
+		Isolate: wrapperspb.Bool(i.IsIsolated()),
+		Location: &apimodel.Location{
+			Region: wrapperspb.String(i.GetRegion()),
+			Zone:   wrapperspb.String(i.GetZone()),
+			Campus: wrapperspb.String(i.GetCampus()),
+		},
+		Metadata:     i.GetMetadata(),
+		LogicSet:     wrapperspb.String(i.GetLogicSet()),
+		Ctime:        wrapperspb.String(i.GetCtime().GetValue()),
+		Mtime:        wrapperspb.String(i.GetMtime().GetValue()),
+		Revision:     wrapperspb.String(i.GetRevision()),
+		ServiceToken: wrapperspb.String(i.GetServiceToken().GetValue()),
+	}
+	copyIns := &InstanceInProto{
+		Instance: clonePbIns,
+		instanceKey: &model.InstanceKey{
+			ServiceKey: model.ServiceKey{
+				Namespace: i.GetNamespace(),
+				Service:   i.GetService(),
+			},
+			Host: i.GetHost(),
+			Port: int(i.GetPort()),
+		},
+		localValue: i.GetInstanceLocalValue(),
+	}
+	copyIns.singleInstances = []model.Instance{copyIns}
+	return copyIns
 }
 
 // GenServicesRevision 修正服务.

@@ -693,10 +693,12 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	request1.FlowID = 1111
 	request1.Namespace = cbNS
 	request1.Service = "cbTest1"
+	// 获取的实例是 t.addInstance("cbTest1", cbNS, "127.0.0.1", 1234, true)
 	response, err := consumerAPI.GetOneInstance(request1)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(response.Instances), check.Equals, 1)
 	targetIns := response.GetInstances()[0]
+	c.Assert("127.0.0.1:1234", check.Equals, fmt.Sprintf("%s:%d", targetIns.GetHost(), targetIns.GetPort()))
 
 	// 熔断
 	var callResult = &api.ServiceCallResult{}
@@ -704,6 +706,7 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	callResult.Delay = model.ToDurationPtr(1000 * time.Millisecond)
 	callResult.RetCode = proto.Int(-1)
 	callResult.CalledInstance = targetIns
+	// 触发目标实例发生熔断
 	for i := 0; i < 15; i++ {
 		err := consumerAPI.UpdateServiceCallResult(callResult)
 		c.Assert(err, check.IsNil)
@@ -726,9 +729,11 @@ func (t *CircuitBreakSuite) TestAllCircuitBreaker(c *check.C) {
 	c.Assert(len(instResp.Instances), check.Equals, 1)
 	c.Assert(instResp.Instances[0].GetCircuitBreakerStatus().GetStatus(), check.Equals, model.Open)
 
+	// 目标实例设置为不健康
 	t.mockServer.UpdateServerInstanceHealthy(cbNS, "cbTest1", targetIns.GetId(), false)
 	time.Sleep(time.Second * 3)
 	oneResponse, err := consumerAPI.GetInstances(request2)
+	c.Log(oneResponse.GetInstances())
 	c.Assert(err, check.IsNil)
 	c.Assert(len(oneResponse.Instances), check.Equals, 2)
 	for _, ins := range oneResponse.GetInstances() {
