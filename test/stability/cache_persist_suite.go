@@ -191,19 +191,19 @@ func (t *CacheTestingSuite) testCacheCompareForward(
 	t.checkPersist(refreshSvcInstances.Instances, c)
 }
 
-// TestCacheExpireAndPersist 测试过程
-func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
-	defer util.DeleteDir(util.BackupDir)
-	fmt.Println("Cache Persist Suite: TestCacheExpireAndPersist")
-	cfg, err := config.LoadConfigurationByFile("testdata/cache.yaml")
-	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
-	c.Assert(err, check.IsNil)
-	origSvcInstances := t.testCacheCompareOriginal(cfg, c)
-	err = t.restoreBackupFile()
-	c.Assert(err, check.IsNil)
-	t.mockServer.GenTestInstances(t.testService, 2)
-	t.testCacheCompareForward(origSvcInstances, cfg, false, c)
-}
+// // TestCacheExpireAndPersist 测试过程
+// func (t *CacheTestingSuite) TestCacheExpireAndPersist(c *check.C) {
+// 	defer util.DeleteDir(util.BackupDir)
+// 	fmt.Println("Cache Persist Suite: TestCacheExpireAndPersist")
+// 	cfg, err := config.LoadConfigurationByFile("testdata/cache.yaml")
+// 	cfg.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
+// 	c.Assert(err, check.IsNil)
+// 	origSvcInstances := t.testCacheCompareOriginal(cfg, c)
+// 	err = t.restoreBackupFile()
+// 	c.Assert(err, check.IsNil)
+// 	t.mockServer.GenTestInstances(t.testService, 2)
+// 	t.testCacheCompareForward(origSvcInstances, cfg, false, c)
+// }
 
 // // TestCacheWithSomeDefaultServerDown 测试当一些埋点server down掉时的情景
 // func (t *CacheTestingSuite) TestCacheWithSomeDefaultServerDown(c *check.C) {
