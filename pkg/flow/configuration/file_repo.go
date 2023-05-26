@@ -15,15 +15,14 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package remote
+package configuration
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -35,12 +34,6 @@ const (
 	delayMinTime = 1   // 1s
 	delayMaxTime = 120 // 120s
 )
-
-var configFileRepos []*ConfigFileRepo
-
-var startCheckVersionOnce = new(sync.Once)
-
-var stopCheckVersionTask context.CancelFunc
 
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
 type ConfigFileRepo struct {
@@ -57,9 +50,8 @@ type ConfigFileRepo struct {
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
 type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string) error
 
-// NewConfigFileRepo 创建远程配置文件
-func NewConfigFileRepo(metadata model.ConfigFileMetadata,
-	connector configconnector.ConfigConnector,
+// newConfigFileRepo 创建远程配置文件
+func newConfigFileRepo(metadata model.ConfigFileMetadata, connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
@@ -70,25 +62,22 @@ func NewConfigFileRepo(metadata model.ConfigFileMetadata,
 			delayMinTime: delayMinTime,
 			delayMaxTime: delayMaxTime,
 		},
+		remoteConfigFile: &configconnector.ConfigFile{
+			Namespace: metadata.GetNamespace(),
+			FileGroup: metadata.GetFileGroup(),
+			FileName:  metadata.GetFileName(),
+			Version:   initVersion,
+		},
 	}
-
-	configFileRepos = append(configFileRepos, repo)
-
 	// 1. 同步从服务端拉取配置
-	err := repo.pull()
-	if err != nil {
+	if err := repo.pull(); err != nil {
 		return nil, err
 	}
-	// 2. 加到长轮询的池子里
-	repo.addToLongPollingPoll()
-	// 3. 启动定时比对版本号的任务
-	startCheckVersionOnce.Do(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		stopCheckVersionTask = cancel
-		go startCheckVersionTask(ctx)
-	})
-
 	return repo, nil
+}
+
+func (r *ConfigFileRepo) GetNotifiedVersion() uint64 {
+	return r.notifiedVersion
 }
 
 // GetContent 获取配置文件内容
@@ -117,13 +106,14 @@ func (r *ConfigFileRepo) pull() error {
 	log.GetBaseLogger().Infof("[Config] start pull config file. config file = %+v, version = %d",
 		r.configFileMetadata, r.notifiedVersion)
 
-	retryTimes := 0
-	var err error
+	var (
+		retryTimes = 0
+		err        error
+	)
 	for retryTimes < 3 {
 		startTime := time.Now()
 
 		response, err := r.connector.GetConfigFile(pullConfigFileReq)
-
 		if err != nil {
 			log.GetBaseLogger().Errorf("[Config] failed to pull config file. retry times = %d", retryTimes, err)
 			r.retryPolicy.fail()
@@ -142,7 +132,7 @@ func (r *ConfigFileRepo) pull() error {
 			pulledConfigFileVersion = int64(pulledConfigFile.GetVersion())
 		}
 		log.GetBaseLogger().Infof("[Config] pull config file finished. config file = %+v, code = %d, version = %d, duration = %d ms",
-			pulledConfigFile, responseCode, pulledConfigFileVersion, time.Now().UnixNano()/1e6-startTime.UnixNano()/1e6)
+			pulledConfigFile, responseCode, pulledConfigFileVersion, time.Since(startTime).Milliseconds())
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
@@ -157,18 +147,17 @@ func (r *ConfigFileRepo) pull() error {
 		// 远端没有此配置文件
 		if responseCode == uint32(apimodel.Code_NotFoundResource) {
 			log.GetBaseLogger().Warnf("[Config] config file not found, please check whether config file released. %+v", r.configFileMetadata)
-
 			// 删除配置文件
 			if r.remoteConfigFile != nil {
 				r.remoteConfigFile = nil
 				r.fireChangeEvent(NotExistedFileContent)
 			}
-
 			return nil
 		}
 
 		// 预期之外的状态码，重试
-		log.GetBaseLogger().Errorf("[Config] pull response with unexpected code. retry times = %d, code = %d", retryTimes, responseCode)
+		log.GetBaseLogger().Errorf("[Config] pull response with unexpected code.",
+			zap.Int("retry-times", retryTimes), zap.Uint32("code", responseCode))
 		err = fmt.Errorf("pull config file with unexpect code. %d", responseCode)
 		r.retryPolicy.fail()
 		retryTimes++
@@ -188,72 +177,13 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 	}
 }
 
-func (r *ConfigFileRepo) addToLongPollingPoll() {
-	// 从服务端找不到配置文件或者拉取异常
-	if r.remoteConfigFile == nil {
-		r.remoteConfigFile = &configconnector.ConfigFile{
-			Namespace: r.configFileMetadata.GetNamespace(),
-			FileGroup: r.configFileMetadata.GetFileGroup(),
-			FileName:  r.configFileMetadata.GetFileName(),
-			Version:   initVersion,
-		}
-	}
-
-	addConfigFileToLongPollingPool(r)
-}
-
-// StopCheckVersionTask 停止检查版本任务
-func StopCheckVersionTask() {
-	if stopCheckVersionTask != nil {
-		stopCheckVersionTask()
-	}
-}
-
-func startCheckVersionTask(ctx context.Context) {
-	t := time.NewTimer(time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			break
-		case <-t.C:
-			for _, repo := range configFileRepos {
-				// 没有通知版本号
-				if repo.notifiedVersion == initVersion {
-					continue
-				}
-				// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
-				if repo.remoteConfigFile == nil || repo.notifiedVersion > repo.remoteConfigFile.GetVersion() {
-					if repo.remoteConfigFile == nil {
-						log.GetBaseLogger().Warnf("[Config] client does not pull the configuration, it will be pulled again."+
-							"file = %+v, notified version = %d",
-							repo.configFileMetadata, repo.notifiedVersion)
-					} else {
-						log.GetBaseLogger().Warnf("[Config] notified version greater than pulled version, will pull config file again. "+
-							"file = %+v, notified version = %d, pulled version = %d",
-							repo.configFileMetadata, repo.notifiedVersion, repo.remoteConfigFile.GetVersion())
-					}
-
-					err := repo.pull()
-					if err != nil {
-						log.GetBaseLogger().Errorf("[Config] pull config file error by check version task.", err)
-					}
-				}
-			}
-		}
-	}
-}
-
 func (r *ConfigFileRepo) onLongPollingNotified(newVersion uint64) {
 	if r.remoteConfigFile != nil && r.remoteConfigFile.GetVersion() >= newVersion {
 		return
 	}
-
 	r.notifiedVersion = newVersion
-
-	err := r.pull()
-	if err != nil {
-		log.GetBaseLogger().Errorf("[Config] pull config file error by check version task.", err)
+	if err := r.pull(); err != nil {
+		log.GetBaseLogger().Errorf("[Config] pull config file error by check version task.", zap.Error(err))
 	}
 }
 
@@ -264,10 +194,9 @@ func (r *ConfigFileRepo) AddChangeListener(listener ConfigFileRepoChangeListener
 
 func (r *ConfigFileRepo) fireChangeEvent(newContent string) {
 	for _, listener := range r.listeners {
-		err := listener(r.configFileMetadata, newContent)
-		if err != nil {
-			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed. config file = %+v",
-				r.configFileMetadata, err)
+		if err := listener(r.configFileMetadata, newContent); err != nil {
+			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed.",
+				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}
 	}
 }

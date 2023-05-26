@@ -20,7 +20,6 @@ package configuration
 import (
 	"sync"
 
-	"github.com/polarismesh/polaris-go/pkg/flow/configuration/remote"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -28,32 +27,30 @@ import (
 type defaultConfigFile struct {
 	model.DefaultConfigFileMetadata
 
-	remoteConfigFileRepo *remote.ConfigFileRepo
-	content              string
+	fileRepo *ConfigFileRepo
+	content  string
 
-	lock                *sync.Mutex
+	lock                sync.RWMutex
 	changeListeners     []func(event model.ConfigFileChangeEvent)
 	changeListenerChans []chan model.ConfigFileChangeEvent
 }
 
-func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *remote.ConfigFileRepo) *defaultConfigFile {
+func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *ConfigFileRepo) *defaultConfigFile {
 	configFile := &defaultConfigFile{
-		remoteConfigFileRepo: repo,
-		content:              repo.GetContent(),
-		lock:                 new(sync.Mutex),
+		fileRepo: repo,
+		content:  repo.GetContent(),
 	}
 	configFile.Namespace = metadata.GetNamespace()
 	configFile.FileGroup = metadata.GetFileGroup()
 	configFile.FileName = metadata.GetFileName()
 
 	repo.AddChangeListener(configFile.repoChangeListener)
-
 	return configFile
 }
 
 // GetContent 获取配置文件内容
 func (c *defaultConfigFile) GetContent() string {
-	if c.content == remote.NotExistedFileContent {
+	if c.content == NotExistedFileContent {
 		return ""
 	}
 	return c.content
@@ -61,7 +58,7 @@ func (c *defaultConfigFile) GetContent() string {
 
 // HasContent 是否有配置内容
 func (c *defaultConfigFile) HasContent() bool {
-	return c.content != "" && c.content != remote.NotExistedFileContent
+	return c.content != "" && c.content != NotExistedFileContent
 }
 
 func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string) error {
@@ -72,9 +69,9 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 
 	var changeType model.ChangeType
 
-	if oldContent == remote.NotExistedFileContent && newContent != remote.NotExistedFileContent {
+	if oldContent == NotExistedFileContent && newContent != NotExistedFileContent {
 		changeType = model.Added
-	} else if oldContent != remote.NotExistedFileContent && newContent == remote.NotExistedFileContent {
+	} else if oldContent != NotExistedFileContent && newContent == NotExistedFileContent {
 		changeType = model.Deleted
 		// NotExistedFileContent 只用于内部删除标记，不应该透露给用户
 		newContent = ""
@@ -97,11 +94,12 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 }
 
 // AddChangeListenerWithChannel 增加配置文件变更监听器
-func (c *defaultConfigFile) AddChangeListenerWithChannel(changeChan chan model.ConfigFileChangeEvent) {
+func (c *defaultConfigFile) AddChangeListenerWithChannel() <-chan model.ConfigFileChangeEvent {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-
+	changeChan := make(chan model.ConfigFileChangeEvent, 64)
 	c.changeListenerChans = append(c.changeListenerChans, changeChan)
+	return changeChan
 }
 
 // AddChangeListener 增加配置文件变更监听器
