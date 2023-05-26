@@ -354,8 +354,21 @@ config:
     serverSwitchInterval: 10m
     #描述：重连间隔时间
     reconnectInterval: 500ms
-    polaris:
+    #描述:连接器插件配置
+    plugin:
+      polaris:
       #描述:GRPC客户端单次最大链路接收报文
       #类型:int
       #范围:(0:524288000]
-      maxCallRecvMsgSize: 52428800
+        maxCallRecvMsgSize: 52428800
+  # 配置过滤器
+  configFilter:
+    enable: true
+    chain:
+      - crypto
+    plugin:
+      crypto:
+        entries:
+          - name: AES
+
+

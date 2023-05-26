@@ -450,6 +450,21 @@ func (n *namingServer) Heartbeat(ctx context.Context, req *service_manage.Instan
 	}, nil
 }
 
+func (n *namingServer) BatchHeartbeat(server service_manage.PolarisGRPC_BatchHeartbeatServer) error {
+	// TODO
+	return nil
+}
+
+func (n *namingServer) BatchGetHeartbeat(ctx context.Context, req *service_manage.GetHeartbeatsRequest) (*service_manage.GetHeartbeatsResponse, error) {
+	// TODO
+	return &service_manage.GetHeartbeatsResponse{}, nil
+}
+
+func (n *namingServer) BatchDelHeartbeat(ctx context.Context, req *service_manage.DelHeartbeatsRequest) (*service_manage.DelHeartbeatsResponse, error) {
+	// TODO
+	return &service_manage.DelHeartbeatsResponse{}, nil
+}
+
 // 是否忽略当前请求
 func (n *namingServer) skipRequest(operation OperationType) bool {
 	//

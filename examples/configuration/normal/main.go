@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -39,12 +40,12 @@ func main() {
 
 	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
 	if err != nil {
-		fmt.Println("fail to get config.", err)
+		log.Println("fail to get config.", err)
 		return
 	}
 
 	// 打印配置文件内容
-	fmt.Println(configFile.GetContent())
+	log.Println(configFile.GetContent())
 
 	// 方式一：添加监听器
 	configFile.AddChangeListener(changeListener)
@@ -55,11 +56,11 @@ func main() {
 	for {
 		select {
 		case event := <-changeChan:
-			fmt.Println(fmt.Sprintf("received change event by channel. %+v", event))
+			log.Printf("received change event by channel. %+v", event)
 		}
 	}
 }
 
 func changeListener(event model.ConfigFileChangeEvent) {
-	fmt.Println(fmt.Sprintf("received change event. %+v", event))
+	log.Printf("received change event. %+v", event)
 }

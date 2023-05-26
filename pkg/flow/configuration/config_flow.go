@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 )
 
 // ConfigFileFlow 配置中心核心服务门面类
@@ -43,6 +44,7 @@ type ConfigFileFlow struct {
 	notifiedVersion map[string]uint64
 
 	connector     configconnector.ConfigConnector
+	chain         configfilter.Chain
 	configuration config.Configuration
 
 	startLongPollingTaskOnce sync.Once
@@ -50,9 +52,11 @@ type ConfigFileFlow struct {
 
 // NewConfigFileFlow 创建配置中心服务
 func NewConfigFileFlow(connector configconnector.ConfigConnector,
+	chain configfilter.Chain,
 	configuration config.Configuration) *ConfigFileFlow {
 	configFileService := &ConfigFileFlow{
 		connector:       connector,
+		chain:           chain,
 		configuration:   configuration,
 		repos:           make([]*ConfigFileRepo, 0, 8),
 		configFileCache: map[string]model.ConfigFile{},
@@ -96,7 +100,7 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 		return configFile, nil
 	}
 
-	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.configuration)
+	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration)
 	if err != nil {
 		return nil, err
 	}

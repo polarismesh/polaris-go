@@ -1,8 +1,8 @@
 global:
   serverConnector:
     addresses:
-      - 119.91.66.223:8091
+      - 127.0.0.1:8091
 config:
   configConnector:
     addresses:
-      - 119.91.66.223:8093
+      - 127.0.0.1:8093
