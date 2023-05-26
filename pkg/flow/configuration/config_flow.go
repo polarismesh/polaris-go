@@ -54,7 +54,7 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector,
 	configFileService := &ConfigFileFlow{
 		connector:       connector,
 		configuration:   configuration,
-		repos: make([]*ConfigFileRepo, 0, 8),
+		repos:           make([]*ConfigFileRepo, 0, 8),
 		configFileCache: map[string]model.ConfigFile{},
 		configFilePool:  map[string]*ConfigFileRepo{},
 		notifiedVersion: map[string]uint64{},
