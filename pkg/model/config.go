@@ -59,13 +59,12 @@ type ConfigFileMetadata interface {
 // ConfigFile 文本类型配置文件对象
 type ConfigFile interface {
 	ConfigFileMetadata
-
 	// GetContent 获取配置文件内容
 	GetContent() string
 	// HasContent 是否有配置内容
 	HasContent() bool
 	// AddChangeListenerWithChannel 增加配置文件变更监听器
-	AddChangeListenerWithChannel(chan ConfigFileChangeEvent)
+	AddChangeListenerWithChannel() <-chan ConfigFileChangeEvent
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
 }

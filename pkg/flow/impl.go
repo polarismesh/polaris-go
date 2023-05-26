@@ -83,7 +83,7 @@ type Engine struct {
 	// 修改消息订阅插件链
 	subscribe *subscribeChannel
 	// 配置中心门面类
-	configFileService *configuration.ConfigFileService
+	configFileFlow *configuration.ConfigFileFlow
 	// 注册状态管理器
 	registerStates *registerstate.RegisterStateManager
 
@@ -170,7 +170,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		flowEngine.configFileService = configuration.NewConfigFileService(flowEngine.configConnector, flowEngine.configuration)
+		flowEngine.configFileFlow = configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configuration)
 	}
 
 	// 初始注册状态管理器
@@ -327,8 +327,8 @@ func (e *Engine) Destroy() error {
 	if e.flowQuotaAssistant != nil {
 		e.flowQuotaAssistant.Destroy()
 	}
-	if e.configFileService != nil {
-		e.configFileService.Destroy()
+	if e.configFileFlow != nil {
+		e.configFileFlow.Destroy()
 	}
 	e.registerStates.Destroy()
 	return nil

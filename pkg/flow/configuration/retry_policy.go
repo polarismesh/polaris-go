@@ -15,10 +15,38 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package remote
+package configuration
 
-const (
-	initVersion = 0
-
-	NotExistedFileContent = string("@@not_existed@@")
+import (
+	"time"
 )
+
+type retryPolicy struct {
+	delayMinTime     time.Duration
+	delayMaxTime     time.Duration
+	currentDelayTime time.Duration
+}
+
+func (r *retryPolicy) success() {
+	r.currentDelayTime = 0
+}
+
+func (r *retryPolicy) fail() {
+	delayTime := r.currentDelayTime
+
+	if delayTime == 0 {
+		delayTime = r.delayMinTime
+	} else {
+		if r.currentDelayTime<<1 < r.delayMaxTime {
+			delayTime = r.currentDelayTime << 1
+		} else {
+			delayTime = r.delayMaxTime
+		}
+	}
+
+	r.currentDelayTime = delayTime
+}
+
+func (r *retryPolicy) delay() {
+	time.Sleep(r.currentDelayTime * time.Second)
+}

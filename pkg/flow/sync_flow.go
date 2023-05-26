@@ -629,7 +629,7 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 
 // SyncGetConfigFile 同步获取配置文件
 func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
-	return e.configFileService.GetConfigFile(namespace, fileGroup, fileName)
+	return e.configFileFlow.GetConfigFile(namespace, fileGroup, fileName)
 }
 
 // WatchAllInstances 监听所有的实例
