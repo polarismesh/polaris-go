@@ -32,6 +32,7 @@ var DefaultConfigFileEnable = true
 // ConfigFileConfigImpl 对接配置中心相关配置.
 type ConfigFileConfigImpl struct {
 	ConfigConnectorConfig *ConfigConnectorConfigImpl `yaml:"configConnector" json:"configConnector"`
+	ConfigFilterConfig    *ConfigFilterConfigImpl    `yaml:"configFilter" json:"configFilter"`
 	// 是否启动配置中心
 	Enable                    *bool  `yaml:"enable" json:"enable"`
 	PropertiesValueCacheSize  *int32 `yaml:"propertiesValueCacheSize" json:"propertiesValueCacheSize"`
@@ -41,6 +42,11 @@ type ConfigFileConfigImpl struct {
 // GetConfigConnectorConfig config.configConnector前缀开头的所有配置项.
 func (c *ConfigFileConfigImpl) GetConfigConnectorConfig() ConfigConnectorConfig {
 	return c.ConfigConnectorConfig
+}
+
+// GetConfigFilterConfig config.configFilter前缀开头的所有配置项.
+func (c *ConfigFileConfigImpl) GetConfigFilterConfig() ConfigFilterConfig {
+	return c.ConfigFilterConfig
 }
 
 // IsEnable config.enable.
@@ -82,6 +88,9 @@ func (c *ConfigFileConfigImpl) Verify() error {
 	if err := c.ConfigConnectorConfig.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err := c.ConfigFilterConfig.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	if c.Enable == nil {
 		return fmt.Errorf("config.enable must not be nil")
 	}
@@ -97,6 +106,7 @@ func (c *ConfigFileConfigImpl) Verify() error {
 // SetDefault 设置ConfigConnector配置的默认值.
 func (c *ConfigFileConfigImpl) SetDefault() {
 	c.ConfigConnectorConfig.SetDefault()
+	c.ConfigFilterConfig.SetDefault()
 	if c.Enable == nil {
 		c.Enable = &DefaultConfigFileEnable
 	}
@@ -112,4 +122,6 @@ func (c *ConfigFileConfigImpl) SetDefault() {
 func (c *ConfigFileConfigImpl) Init() {
 	c.ConfigConnectorConfig = &ConfigConnectorConfigImpl{}
 	c.ConfigConnectorConfig.Init()
+	c.ConfigFilterConfig = &ConfigFilterConfigImpl{}
+	c.ConfigFilterConfig.Init()
 }

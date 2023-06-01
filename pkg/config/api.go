@@ -79,6 +79,8 @@ type ConfigFileConfig interface {
 	IsEnable() bool
 	// GetConfigConnectorConfig 配置文件连接器
 	GetConfigConnectorConfig() ConfigConnectorConfig
+	// GetConfigFilterConfig 配置文件加密器
+	GetConfigFilterConfig() ConfigFilterConfig
 	// GetPropertiesValueCacheSize 值缓存的最大数量
 	GetPropertiesValueCacheSize() int32
 	// GetPropertiesValueExpireTime 缓存的过期时间，默认为 60s
@@ -492,4 +494,12 @@ type ConfigConnectorConfig interface {
 
 	// GetConnectorType 后端服务器类型，默认是 polaris
 	GetConnectorType() string
+}
+
+// ConfigFilterConfig 配置中心加密相关配置
+type ConfigFilterConfig interface {
+	BaseConfig
+	PluginConfig
+	IsEnable() bool
+	GetChain() []string
 }

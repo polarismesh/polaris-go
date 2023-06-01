@@ -29,6 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -59,6 +60,20 @@ func GetConfigConnector(
 		return nil, err
 	}
 	return targetPlugin.(configconnector.ConfigConnector), nil
+}
+
+// GetConfigFilterChain 加载配置过滤链
+func GetConfigFilterChain(cfg config.Configuration, supplier plugin.Supplier) (configfilter.Chain, error) {
+	chain := make(configfilter.Chain, 0)
+	chainNames := cfg.GetConfigFile().GetConfigFilterConfig().GetChain()
+	for _, name := range chainNames {
+		targetPlugin, err := supplier.GetPlugin(common.TypeConfigFilter, name)
+		if err != nil {
+			return nil, err
+		}
+		chain = append(chain, targetPlugin.(configfilter.ConfigFilter))
+	}
+	return chain, nil
 }
 
 // GetRegistry 加载本地缓存插件

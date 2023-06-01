@@ -54,6 +54,8 @@ const (
 	TypeLocationProvider Type = 0x1012
 	// TypeConfigConnector extend point of config file connector
 	TypeConfigConnector Type = 0x1014
+	// TypeConfigFilter extend point of config file filter
+	TypeConfigFilter Type = 0x1015
 )
 
 var typeToPresent = map[Type]string{
@@ -69,6 +71,7 @@ var typeToPresent = map[Type]string{
 	TypeRateLimiter:      "rateLimiter",
 	TypeLocationProvider: "locationProvider",
 	TypeConfigConnector:  "configConnector",
+	TypeConfigFilter:     "configFilter",
 }
 
 // ToString方法
@@ -220,4 +223,5 @@ var LoadedPluginTypes = []Type{
 	TypeRateLimiter,
 	TypeLocationProvider,
 	TypeConfigConnector,
+	TypeConfigFilter,
 }

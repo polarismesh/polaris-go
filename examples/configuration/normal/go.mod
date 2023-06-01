@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-nearby-provider
+module github.com/polarismesh/polaris-go-configuration
 
 go 1.17
 
@@ -35,4 +35,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace github.com/polarismesh/polaris-go => ../../../../
+replace github.com/polarismesh/polaris-go => ../../../

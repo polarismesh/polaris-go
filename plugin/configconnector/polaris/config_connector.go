@@ -239,10 +239,18 @@ func transferToClientConfigFileInfo(configFile *configconnector.ConfigFile) *con
 		Group:     wrapperspb.String(configFile.GetFileGroup()),
 		FileName:  wrapperspb.String(configFile.GetFileName()),
 		Version:   wrapperspb.UInt64(configFile.GetVersion()),
+		PublicKey: wrapperspb.String(configFile.GetPublicKey()),
 	}
 }
 
 func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfigFileInfo) *configconnector.ConfigFile {
+	var tags []*configconnector.ConfigFileTag
+	for _, tag := range configFileInfo.GetTags() {
+		tags = append(tags, &configconnector.ConfigFileTag{
+			Key:   tag.Key.GetValue(),
+			Value: tag.Value.GetValue(),
+		})
+	}
 	return &configconnector.ConfigFile{
 		Namespace: configFileInfo.GetNamespace().GetValue(),
 		FileGroup: configFileInfo.GetGroup().GetValue(),
@@ -250,6 +258,8 @@ func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfig
 		Content:   configFileInfo.GetContent().GetValue(),
 		Version:   configFileInfo.GetVersion().GetValue(),
 		Md5:       configFileInfo.GetMd5().GetValue(),
+		Encrypted: configFileInfo.GetEncrypted().GetValue(),
+		Tags:      tags,
 	}
 }
 

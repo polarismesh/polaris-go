@@ -139,6 +139,8 @@ const (
 	DefaultConfigConnectorAddresses = "127.0.0.1:8093"
 	// DefaultMinRegisterInterval
 	DefaultMinRegisterInterval = 30 * time.Second
+	// DefaultConfigFilterEnabled 默认配置过滤是否开启
+	DefaultConfigFilterEnabled bool = true
 )
 
 // defaultBuiltinServerPort 默认埋点server的端口，与上面的IP一一对应.

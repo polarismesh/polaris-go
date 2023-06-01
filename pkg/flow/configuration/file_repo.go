@@ -28,6 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 )
 
 const (
@@ -38,6 +39,7 @@ const (
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
 type ConfigFileRepo struct {
 	connector     configconnector.ConfigConnector
+	chain         configfilter.Chain
 	configuration config.Configuration
 
 	configFileMetadata model.ConfigFileMetadata
@@ -51,10 +53,13 @@ type ConfigFileRepo struct {
 type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string) error
 
 // newConfigFileRepo 创建远程配置文件
-func newConfigFileRepo(metadata model.ConfigFileMetadata, connector configconnector.ConfigConnector,
+func newConfigFileRepo(metadata model.ConfigFileMetadata,
+	connector configconnector.ConfigConnector,
+	chain configfilter.Chain,
 	configuration config.Configuration) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
+		chain:              chain,
 		configuration:      configuration,
 		configFileMetadata: metadata,
 		notifiedVersion:    initVersion,
@@ -95,6 +100,13 @@ func (r *ConfigFileRepo) getVersion() uint64 {
 	return r.remoteConfigFile.GetVersion()
 }
 
+func (r *ConfigFileRepo) getDataKey() string {
+	if r.remoteConfigFile == nil {
+		return ""
+	}
+	return r.remoteConfigFile.GetDataKey()
+}
+
 func (r *ConfigFileRepo) pull() error {
 	pullConfigFileReq := &configconnector.ConfigFile{
 		Namespace: r.configFileMetadata.GetNamespace(),
@@ -113,9 +125,10 @@ func (r *ConfigFileRepo) pull() error {
 	for retryTimes < 3 {
 		startTime := time.Now()
 
-		response, err := r.connector.GetConfigFile(pullConfigFileReq)
+		response, err := r.chain.Execute(pullConfigFileReq, r.connector.GetConfigFile)
+
 		if err != nil {
-			log.GetBaseLogger().Errorf("[Config] failed to pull config file. retry times = %d", retryTimes, err)
+			log.GetBaseLogger().Errorf("[Config] failed to pull config file. retry times = %d, err = %v", retryTimes, err)
 			r.retryPolicy.fail()
 			retryTimes++
 			r.retryPolicy.delay()
@@ -167,6 +180,13 @@ func (r *ConfigFileRepo) pull() error {
 }
 
 func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configconnector.ConfigFile {
+	tags := make([]*configconnector.ConfigFileTag, 0, len(sourceConfigFile.Tags))
+	for _, tag := range sourceConfigFile.Tags {
+		tags = append(tags, &configconnector.ConfigFileTag{
+			Key:   tag.Key,
+			Value: tag.Value,
+		})
+	}
 	return &configconnector.ConfigFile{
 		Namespace: sourceConfigFile.GetNamespace(),
 		FileGroup: sourceConfigFile.GetFileGroup(),
@@ -174,6 +194,8 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 		Content:   sourceConfigFile.GetContent(),
 		Version:   sourceConfigFile.GetVersion(),
 		Md5:       sourceConfigFile.GetMd5(),
+		Encrypted: sourceConfigFile.GetEncrypted(),
+		Tags:      tags,
 	}
 }
 

@@ -38,6 +38,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/location"
@@ -50,7 +51,7 @@ import (
 type Engine struct {
 	// 服务端连接器
 	connector serverconnector.ServerConnector
-	// 服务端连接器
+	// 配置中心连接器
 	configConnector configconnector.ConfigConnector
 	// 服务本地缓存
 	registry localregistry.LocalRegistry
@@ -88,6 +89,8 @@ type Engine struct {
 	registerStates *registerstate.RegisterStateManager
 
 	watchEngine *WatchEngine
+	// 配置过滤链
+	configFilterChain configfilter.Chain
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -119,6 +122,13 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	// 加载配置中心连接器
 	if len(cfg.GetConfigFile().GetConfigConnectorConfig().GetAddresses()) > 0 {
 		flowEngine.configConnector, err = data.GetConfigConnector(cfg, plugins)
+		if err != nil {
+			return err
+		}
+	}
+	// 加载配置过滤链
+	if cfg.GetConfigFile().GetConfigFilterConfig().IsEnable() {
+		flowEngine.configFilterChain, err = data.GetConfigFilterChain(cfg, plugins)
 		if err != nil {
 			return err
 		}
@@ -170,7 +180,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		flowEngine.configFileFlow = configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configuration)
+		flowEngine.configFileFlow = configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
 	}
 
 	// 初始注册状态管理器
