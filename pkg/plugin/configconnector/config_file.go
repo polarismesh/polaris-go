@@ -19,10 +19,12 @@
 package configconnector
 
 const (
+	// ConfigFileTagKeyUseEncrypted 配置加密开关标识，value 为 boolean
+	ConfigFileTagKeyUseEncrypted = "internal-encrypted"
 	// ConfigFileTagKeyDataKey 加密密钥 tag key
-	ConfigFileTagKeyDataKey = "data_key"
+	ConfigFileTagKeyDataKey = "internal-datakey"
 	// ConfigFileTagKeyEncryptAlgo 加密算法 tag key
-	ConfigFileTagKeyEncryptAlgo = "encrypt_algo"
+	ConfigFileTagKeyEncryptAlgo = "internal-encryptalgo"
 )
 
 // ConfigFile 配置文件

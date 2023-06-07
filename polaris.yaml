@@ -365,9 +365,11 @@ config:
   configFilter:
     enable: true
     chain:
+      # 启用配置解密插件
       - crypto
     plugin:
       crypto:
+        # 配置解密插件的算法插件类型
         entries:
           - name: AES
 
