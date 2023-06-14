@@ -38,7 +38,12 @@ type WatchContext interface {
 }
 
 type WatchEngine struct {
-	rwMutex       sync.RWMutex
+	rwMutex sync.RWMutex
+	// instancesWatch 服务实例 watcher 列表
+	instancesWatch map[string]map[string]map[uint64]WatchContext
+	// servicesWatch 服务 watcher 列表
+	servicesWatch map[string]map[uint64]WatchContext
+	// watchContexts watcher map
 	watchContexts map[uint64]WatchContext
 	indexSeed     uint64
 	registry      localregistry.LocalRegistry
@@ -84,9 +89,16 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 		func() {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
-			for _, lpCtx := range w.watchContexts {
-				if lpCtx.ServiceEventKey().Type == model.EventInstances {
-					lpCtx.OnInstances(svcInstances)
+			nsName := svcInstances.GetNamespace()
+			svcName := svcInstances.GetService()
+			if _, ok := w.instancesWatch[nsName]; ok {
+				watchers, ok := w.instancesWatch[nsName][svcName]
+				if ok {
+					for _, lpCtx := range watchers {
+						if lpCtx.ServiceEventKey().Type == model.EventInstances {
+							lpCtx.OnInstances(svcInstances)
+						}
+					}
 				}
 			}
 		}()
@@ -95,9 +107,12 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 		func() {
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
-			for _, lpCtx := range w.watchContexts {
-				if lpCtx.ServiceEventKey().Type == model.EventServices {
-					lpCtx.OnServices(services)
+			nsName := svcInstances.GetNamespace()
+			if watchers, ok := w.servicesWatch[nsName]; ok {
+				for _, lpCtx := range watchers {
+					if lpCtx.ServiceEventKey().Type == model.EventServices {
+						lpCtx.OnServices(services)
+					}
 				}
 			}
 		}()
@@ -110,6 +125,21 @@ func (w *WatchEngine) CancelWatch(watchId uint64) {
 	defer w.rwMutex.Unlock()
 	ctx, ok := w.watchContexts[watchId]
 	if ok {
+		svcKey := ctx.ServiceEventKey()
+		svcName := svcKey.Service
+		nsName := svcKey.Namespace
+		if svcKey.Type == model.EventInstances {
+			if _, ok := w.instancesWatch[nsName]; ok {
+				if val, ok := w.instancesWatch[nsName][svcName]; ok {
+					delete(val, watchId)
+				}
+			}
+		}
+		if svcKey.Type == model.EventServices {
+			if val, ok := w.servicesWatch[svcName]; ok {
+				delete(val, watchId)
+			}
+		}
 		delete(w.watchContexts, watchId)
 		ctx.Cancel()
 		w.registry.UnwatchService(ctx.ServiceEventKey())
@@ -122,6 +152,15 @@ func (w *WatchEngine) WatchAllServices(
 		return w.notifyAllServices(request)
 	}
 	return w.longPullAllServices(request)
+}
+
+func (w *WatchEngine) addServiceWatchContext(index uint64, namespace string, wCtx WatchContext) {
+	if _, ok := w.servicesWatch[namespace]; !ok {
+		w.servicesWatch[namespace] = map[uint64]WatchContext{}
+	}
+	watchers := w.servicesWatch[namespace]
+	watchers[index] = wCtx
+	w.servicesWatch[namespace] = watchers
 }
 
 func (w *WatchEngine) notifyAllServices(
@@ -140,6 +179,7 @@ func (w *WatchEngine) notifyAllServices(
 		servicesListener: request.ServicesListener,
 	}
 	w.rwMutex.Lock()
+	w.addServiceWatchContext(nextId, request.Namespace, notifyCtx)
 	w.watchContexts[nextId] = notifyCtx
 	w.rwMutex.Unlock()
 	if !serivcesResp.IsInitialized() {
@@ -174,6 +214,7 @@ func (w *WatchEngine) longPullAllServices(
 		Type:       model.EventServices,
 	})
 	w.rwMutex.Lock()
+	w.addServiceWatchContext(nextId, request.Namespace, pullContext)
 	w.watchContexts[nextId] = pullContext
 	w.rwMutex.Unlock()
 	defer func() {
@@ -210,6 +251,18 @@ func (w *WatchEngine) WatchAllInstances(
 	return w.longPullAllInstances(request)
 }
 
+func (w *WatchEngine) addInstanceWatchContext(nextId uint64, namespace, service string, wCtx WatchContext) {
+	if _, ok := w.instancesWatch[namespace]; !ok {
+		w.instancesWatch[namespace] = map[string]map[uint64]WatchContext{}
+	}
+	if _, ok := w.instancesWatch[namespace][service]; !ok {
+		w.instancesWatch[namespace][service] = map[uint64]WatchContext{}
+	}
+	watchers := w.instancesWatch[namespace][service]
+	watchers[nextId] = wCtx
+	w.instancesWatch[namespace][service] = watchers
+}
+
 func (w *WatchEngine) notifyAllInstances(
 	request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	nextId := atomic.AddUint64(&w.indexSeed, 1)
@@ -227,6 +280,7 @@ func (w *WatchEngine) notifyAllInstances(
 		instancesListener: request.InstancesListener,
 	}
 	w.rwMutex.Lock()
+	w.addInstanceWatchContext(nextId, request.Namespace, request.Service, notifyCtx)
 	w.watchContexts[nextId] = notifyCtx
 	w.rwMutex.Unlock()
 	if !svcInstances.IsInitialized() {
@@ -253,6 +307,7 @@ func (w *WatchEngine) longPullAllInstances(
 		Type:       model.EventInstances,
 	})
 	w.rwMutex.Lock()
+	w.addInstanceWatchContext(nextId, request.Namespace, request.Service, pullContext)
 	w.watchContexts[nextId] = pullContext
 	w.rwMutex.Unlock()
 	defer func() {
