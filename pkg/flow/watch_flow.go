@@ -51,8 +51,10 @@ type WatchEngine struct {
 
 func NewWatchEngine(registry localregistry.LocalRegistry) *WatchEngine {
 	return &WatchEngine{
-		watchContexts: make(map[uint64]WatchContext),
-		registry:      registry,
+		instancesWatch: map[string]map[string]map[uint64]WatchContext{},
+		servicesWatch:  map[string]map[uint64]WatchContext{},
+		watchContexts:  make(map[uint64]WatchContext),
+		registry:       registry,
 	}
 }
 
