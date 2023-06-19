@@ -30,6 +30,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 )
 
+const (
+	AllNamespace = "*"
+)
+
 type WatchContext interface {
 	ServiceEventKey() model.ServiceEventKey
 	OnInstances(value model.ServiceInstances)
@@ -107,13 +111,20 @@ func (w *WatchEngine) ServiceEventCallback(event *common.PluginEvent) error {
 	}
 	if isServices && services != nil {
 		func() {
+			nsNames := []string{
+				AllNamespace,
+				services.GetNamespace(),
+			}
+
 			w.rwMutex.RLock()
 			defer w.rwMutex.RUnlock()
-			nsName := svcInstances.GetNamespace()
-			if watchers, ok := w.servicesWatch[nsName]; ok {
-				for _, lpCtx := range watchers {
-					if lpCtx.ServiceEventKey().Type == model.EventServices {
-						lpCtx.OnServices(services)
+			for _, nsName := range nsNames {
+				// 通知 watch 全部命名空间服务列表的 watcher
+				if watchers, ok := w.servicesWatch[nsName]; ok {
+					for _, lpCtx := range watchers {
+						if lpCtx.ServiceEventKey().Type == model.EventServices {
+							lpCtx.OnServices(services)
+						}
 					}
 				}
 			}
@@ -157,6 +168,9 @@ func (w *WatchEngine) WatchAllServices(
 }
 
 func (w *WatchEngine) addServiceWatchContext(index uint64, namespace string, wCtx WatchContext) {
+	if namespace == "" {
+		namespace = AllNamespace
+	}
 	if _, ok := w.servicesWatch[namespace]; !ok {
 		w.servicesWatch[namespace] = map[uint64]WatchContext{}
 	}
