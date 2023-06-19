@@ -494,6 +494,7 @@ type ServicesProto struct {
 	initialized bool
 	revision    string
 	hashValue   uint64
+	namespace   string
 	ruleValue   []*model.ServiceKey
 	eventType   model.EventType
 	CacheLoaded int32
@@ -507,6 +508,7 @@ func NewServicesProto(resp *apiservice.DiscoverResponse) *ServicesProto {
 		return value
 	}
 	value.initialized = true
+	value.namespace = resp.GetService().GetNamespace().GetValue()
 	value.eventType = GetEventType(resp.GetType())
 	if len(resp.Services) > 0 {
 		for _, svc := range resp.Services {
@@ -553,4 +555,9 @@ func (s *ServicesProto) GetValue() []*model.ServiceKey {
 // GetHashValue 获取数据的hash值
 func (s *ServicesProto) GetHashValue() uint64 {
 	return s.hashValue
+}
+
+// GetNamespace 获取命名空间
+func (s *ServicesProto) GetNamespace() string {
+	return s.namespace
 }

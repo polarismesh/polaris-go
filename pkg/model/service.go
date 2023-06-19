@@ -576,6 +576,7 @@ func (g *InitCalleeServiceRequest) Validate() error {
 type Services interface {
 	RegistryValue
 	GetValue() []*ServiceKey
+	GetNamespace() string
 }
 
 // ServicesResponse 批量服务应答

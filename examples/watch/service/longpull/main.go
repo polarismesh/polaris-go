@@ -20,6 +20,7 @@ package main
 import (
 	"flag"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
@@ -33,7 +34,7 @@ var (
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "", "namespace")
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.Uint64Var(&waitIndex, "waitIndex", 0, "waitIndex")
 	flag.DurationVar(&waitTime, "waitTime", 60*time.Second, "waitTime")
 }
@@ -47,27 +48,56 @@ func main() {
 	}
 	defer consumer.Destroy()
 
-	var index uint64 = waitIndex
+	go func() {
+		var index uint64 = waitIndex
+		for {
+			req := &polaris.WatchAllServicesRequest{}
+			req.Namespace = namespace
+			req.WaitTime = waitTime
+			req.WaitIndex = index
+			req.WatchMode = api.WatchModeLongPull
+			resp, err := consumer.WatchAllServices(req)
+			if err != nil {
+				log.Fatalf("fail to watch all instances, namespace %s, err: %s", namespace, err)
+			}
+			servicesResp := resp.ServicesResponse()
+			index = servicesResp.GetHashValue()
+			log.Printf("namespace %s, services count is %d, revision : %s, next watch index %d", namespace,
+				len(servicesResp.GetValue()), resp.ServicesResponse().GetRevision(), index)
+			// for _, svc := range servicesResp.GetValue() {
+			// 	log.Printf("namespace %s, svc %s", svc.Namespace, svc.Service)
+			// }
 
-	for {
-		req := &polaris.WatchAllServicesRequest{}
-		req.Namespace = namespace
-		req.WaitTime = waitTime
-		req.WaitIndex = index
-		req.WatchMode = api.WatchModeLongPull
-		resp, err := consumer.WatchAllServices(req)
-		if err != nil {
-			log.Fatalf("fail to watch all instances, namespace %s, err: %s", namespace, err)
+			log.Printf("namespace %s, watch id is %d\n", namespace, resp.WatchId())
+			resp.CancelWatch()
 		}
-		servicesResp := resp.ServicesResponse()
-		index = servicesResp.GetHashValue()
-		log.Printf("namespace %s, services count is %d, revision : %s, next watch index %d", namespace,
-			len(servicesResp.GetValue()), resp.ServicesResponse().GetRevision(), index)
-		// for _, svc := range servicesResp.GetValue() {
-		// 	log.Printf("namespace %s, svc %s", svc.Namespace, svc.Service)
-		// }
+	}()
 
-		log.Printf("namespace %s, watch id is %d\n", namespace, resp.WatchId())
-		resp.CancelWatch()
-	}
+	go func() {
+		var index uint64 = waitIndex
+		for {
+			req := &polaris.WatchAllServicesRequest{}
+			req.WaitTime = waitTime
+			req.WaitIndex = index
+			req.WatchMode = api.WatchModeLongPull
+			resp, err := consumer.WatchAllServices(req)
+			if err != nil {
+				log.Fatalf("fail to watch all instances, err: %s", err)
+			}
+			servicesResp := resp.ServicesResponse()
+			index = servicesResp.GetHashValue()
+			log.Printf("namespace all, services count is %d, revision : %s, next watch index %d",
+				len(servicesResp.GetValue()), resp.ServicesResponse().GetRevision(), index)
+			// for _, svc := range servicesResp.GetValue() {
+			// 	log.Printf("namespace %s, svc %s", svc.Namespace, svc.Service)
+			// }
+
+			log.Printf("namespace all, watch id is %d\n", resp.WatchId())
+			resp.CancelWatch()
+		}
+	}()
+
+	wait := sync.WaitGroup{}
+	wait.Add(1)
+	wait.Wait()
 }
