@@ -128,11 +128,11 @@ func (us *UpstreamRequestSuccessStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *UpstreamRequestSuccessStrategy) InitMetricValue(dataSource interface{}) float64 {
-	guage, ok := dataSource.(*model.ServiceCallResult)
+	gauge, ok := dataSource.(*model.ServiceCallResult)
 	if !ok {
 		return 0
 	}
-	if guage.RetStatus == model.RetSuccess {
+	if gauge.RetStatus == model.RetSuccess {
 		return 1
 	}
 	return 0
@@ -140,8 +140,8 @@ func (us *UpstreamRequestSuccessStrategy) InitMetricValue(dataSource interface{}
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *UpstreamRequestSuccessStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	if guage, ok := dataSource.(*model.ServiceCallResult); ok {
-		if guage.RetStatus == model.RetSuccess {
+	if gauge, ok := dataSource.(*model.ServiceCallResult); ok {
+		if gauge.RetStatus == model.RetSuccess {
 			targetValue.Inc()
 		}
 	}
@@ -162,29 +162,29 @@ func (us *UpstreamRequestTimeoutStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *UpstreamRequestTimeoutStrategy) InitMetricValue(dataSource interface{}) float64 {
-	guage, ok := dataSource.(*model.ServiceCallResult)
+	gauge, ok := dataSource.(*model.ServiceCallResult)
 	if !ok {
 		return 0
 	}
-	delay := guage.GetDelay()
+	delay := gauge.GetDelay()
 	if delay == nil {
 		return 0
 	}
-	delayMs := (*delay).Milliseconds()
+	delayMs := delay.Milliseconds()
 	return float64(delayMs)
 }
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *UpstreamRequestTimeoutStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	guage, ok := dataSource.(*model.ServiceCallResult)
+	gauge, ok := dataSource.(*model.ServiceCallResult)
 	if !ok {
 		return
 	}
-	delay := guage.GetDelay()
+	delay := gauge.GetDelay()
 	if delay == nil {
 		return
 	}
-	targetValue.Add((*delay).Milliseconds())
+	targetValue.Add(delay.Milliseconds())
 }
 
 func (us *UpstreamRequestTimeoutStrategy) NeedAvg() bool {
@@ -206,28 +206,28 @@ func (us *UpstreamRequestMaxTimeoutStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *UpstreamRequestMaxTimeoutStrategy) InitMetricValue(dataSource interface{}) float64 {
-	guage, ok := dataSource.(*model.ServiceCallResult)
+	gauge, ok := dataSource.(*model.ServiceCallResult)
 	if !ok {
 		return 0
 	}
-	delay := guage.GetDelay()
+	delay := gauge.GetDelay()
 	if delay == nil {
 		return 0
 	}
-	return float64((*delay).Milliseconds())
+	return float64(delay.Milliseconds())
 }
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *UpstreamRequestMaxTimeoutStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	guage, ok := dataSource.(*model.ServiceCallResult)
+	gauge, ok := dataSource.(*model.ServiceCallResult)
 	if !ok {
 		return
 	}
-	delay := guage.GetDelay()
+	delay := gauge.GetDelay()
 	if delay == nil {
 		return
 	}
-	delayMs := float64((*delay).Milliseconds())
+	delayMs := float64(delay.Milliseconds())
 	for {
 		oldValue := targetValue.GetValue()
 		if delayMs > float64(oldValue) {
@@ -382,11 +382,11 @@ func (us *RateLimitRequestPassStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *RateLimitRequestPassStrategy) InitMetricValue(dataSource interface{}) float64 {
-	guage, ok := dataSource.(*model.RateLimitGauge)
+	gauge, ok := dataSource.(*model.RateLimitGauge)
 	if !ok {
 		return 0
 	}
-	if guage.Result == model.QuotaResultOk {
+	if gauge.Result == model.QuotaResultOk {
 		return 1.0
 	}
 	return 0
@@ -394,11 +394,11 @@ func (us *RateLimitRequestPassStrategy) InitMetricValue(dataSource interface{}) 
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *RateLimitRequestPassStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	guage, ok := dataSource.(*model.RateLimitGauge)
+	gauge, ok := dataSource.(*model.RateLimitGauge)
 	if !ok {
 		return
 	}
-	if guage.Result == model.QuotaResultOk {
+	if gauge.Result == model.QuotaResultOk {
 		targetValue.Inc()
 	}
 }
@@ -418,11 +418,11 @@ func (us *RateLimitRequestLimitStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *RateLimitRequestLimitStrategy) InitMetricValue(dataSource interface{}) float64 {
-	guage, ok := dataSource.(*model.RateLimitGauge)
+	gauge, ok := dataSource.(*model.RateLimitGauge)
 	if !ok {
 		return 0
 	}
-	if guage.Result == model.QuotaResultLimited {
+	if gauge.Result == model.QuotaResultLimited {
 		return 1.0
 	}
 	return 0
@@ -430,11 +430,11 @@ func (us *RateLimitRequestLimitStrategy) InitMetricValue(dataSource interface{})
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *RateLimitRequestLimitStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	guage, ok := dataSource.(*model.RateLimitGauge)
+	gauge, ok := dataSource.(*model.RateLimitGauge)
 	if !ok {
 		return
 	}
-	if guage.Result == model.QuotaResultLimited {
+	if gauge.Result == model.QuotaResultLimited {
 		targetValue.Inc()
 	}
 }

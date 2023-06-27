@@ -175,7 +175,7 @@ func PutDataFromContainerInOrder(metricVecCaches map[string]*prometheus.GaugeVec
 	values := collector.CollectValues()
 	for i := range values {
 		metricValue := values[i]
-		guage, ok := metricVecCaches[metricValue.MetricName()]
+		gauge, ok := metricVecCaches[metricValue.MetricName()]
 		if !ok {
 			continue
 		}
@@ -183,17 +183,17 @@ func PutDataFromContainerInOrder(metricVecCaches map[string]*prometheus.GaugeVec
 		case *StatRevisionMetric:
 			if rs.GetRevision() < currentRevision-RevisionMaxScope {
 				// 如果连续两个版本还没有数据，就清除该数据
-				guage.Delete(rs.GetLabels())
+				gauge.Delete(rs.GetLabels())
 				collector.RemoveStatMetric(rs.GetSignature())
 				continue
 			}
 			if rs.GetRevision() < currentRevision {
 				// 如果版本为老版本，则清零数据
-				guage.Delete(rs.GetLabels())
-				guage.With(rs.GetLabels()).Set(0)
+				gauge.Delete(rs.GetLabels())
+				gauge.With(rs.GetLabels()).Set(0)
 				continue
 			}
 		}
-		guage.With(metricValue.GetLabels()).Set(float64(metricValue.GetValue()))
+		gauge.With(metricValue.GetLabels()).Set(float64(metricValue.GetValue()))
 	}
 }

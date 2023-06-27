@@ -171,9 +171,7 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 	return nil
 }
 
-func (s *PrometheusReporter) initSampleMapping(strategies []statcommon.MetricValueAggregationStrategy,
-	order []string) error {
-
+func (s *PrometheusReporter) initSampleMapping(strategies []statcommon.MetricValueAggregationStrategy, order []string) error {
 	for i := range strategies {
 		strategy := strategies[i]
 		guageVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
