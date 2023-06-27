@@ -67,7 +67,7 @@ func (s *ServerAddressList) getAndConnectServer(
 	force bool, svc config.ClusterService, timeout time.Duration) *Connection {
 	s.connectMutex.Lock()
 	defer s.connectMutex.Unlock()
-	address, instance, err := s.getServerAddress(s.manager.GetHashKey())
+	address, instance, err := s.getServerAddress()
 	if err != nil {
 		log.GetNetworkLogger().Errorf("fail get server address from service %s, error %v", svc, err)
 		return nil
@@ -81,7 +81,7 @@ func (s *ServerAddressList) getAndConnectServer(
 }
 
 // getServerAddress 与远程server进行连接
-func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Instance, error) {
+func (s *ServerAddressList) getServerAddress() (string, model.Instance, error) {
 	var targetAddress string
 	var instance model.Instance
 	if s.service.ClusterType == config.BuiltinCluster || s.service.ClusterType == config.ConfigCluster {
@@ -106,11 +106,7 @@ func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Inst
 			FlowID:    atomic.AddUint64(&flowID, 1),
 			Namespace: s.service.Namespace,
 			Service:   s.service.Service,
-			// SourceService: &model.ServiceInfo{
-			//	Metadata: map[string]string{"protocol": s.manager.protocol},
-			// },
-			Metadata: map[string]string{"protocol": s.manager.protocol},
-			HashKey:  hashKey,
+			Metadata:  map[string]string{"protocol": s.manager.protocol},
 		}
 		// 获取系统服务，不重试，超时时间设为300ms
 		req.SetRetryCount(0)
@@ -140,7 +136,6 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 	var lastConn = s.loadCurrentConnection()
 	if !force && IsAvailableConnection(lastConn) && lastConn.Address == addr {
 		log.GetNetworkLogger().Debugf("address %s not changed, no need to switch server", addr)
-		// 服务地址没有发生变更，无需切换
 		return lastConn, nil
 	}
 	connectTime := time.Now()
@@ -203,10 +198,9 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 }
 
 // tryGetConnection 与远程server进行连接
-func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []byte) (*Connection, error) {
+func (s *ServerAddressList) tryGetConnection(timeout time.Duration) (*Connection, error) {
 	curConnValue := s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
-		// log.GetBaseLogger().Debugf("[CheckConnection]traceCheck IsAvailableConnection")
 		return curConnValue, nil
 	}
 	s.connectMutex.Lock()
@@ -215,7 +209,7 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 	if IsAvailableConnection(curConnValue) {
 		return curConnValue, nil
 	}
-	address, instance, err := s.getServerAddress(hashKey)
+	address, instance, err := s.getServerAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +343,7 @@ func (c *connectionManager) SetConnCreator(creator ConnCreator) {
 }
 
 // tryGetConnection 尝试获取连接
-func (c *connectionManager) tryGetConnection(clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
+func (c *connectionManager) tryGetConnection(clusterType config.ClusterType) (*Connection, error) {
 	serverList, ok := c.serverServices[clusterType]
 	if !ok {
 		var useDefault, ok bool
@@ -361,19 +355,13 @@ func (c *connectionManager) tryGetConnection(clusterType config.ClusterType, has
 		}
 		serverList = c.serverServices[config.BuiltinCluster]
 	}
-	return serverList.tryGetConnection(c.connectTimeout, hashKey)
+	return serverList.tryGetConnection(c.connectTimeout)
 }
 
 // GetConnection 获取并占用连接
 func (c *connectionManager) GetConnection(opKey string, clusterType config.ClusterType) (*Connection, error) {
-	return c.GetConnectionByHashKey(opKey, clusterType, c.GetHashKey())
-}
-
-// GetConnectionByHashKey 获取并占用连接
-func (c *connectionManager) GetConnectionByHashKey(
-	opKey string, clusterType config.ClusterType, hashKey []byte) (*Connection, error) {
 	for {
-		conn, err := c.tryGetConnection(clusterType, hashKey)
+		conn, err := c.tryGetConnection(clusterType)
 		if err != nil {
 			log.GetNetworkLogger().Errorf(
 				"fail to get connection, opKey is %s, cluster %v, error is %s", opKey, clusterType, err)
@@ -383,16 +371,6 @@ func (c *connectionManager) GetConnectionByHashKey(
 			return conn, nil
 		}
 	}
-}
-
-func (c *connectionManager) GetHashExpectedInstance(clusterType config.ClusterType,
-	hash []byte) (string, model.Instance, error) {
-	serverList, ok := c.serverServices[clusterType]
-	if !ok {
-		panic(fmt.Sprintf("connectionManager has no clusterType %s", clusterType))
-	}
-	addr, ins, err := serverList.getServerAddress(hash)
-	return addr, ins, err
 }
 
 func (c *connectionManager) ConnectByAddr(clusterType config.ClusterType, addr string,
