@@ -36,6 +36,7 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -50,7 +51,7 @@ const (
 	// 测试服务器的默认地址
 	svcUpdateIPAdress = "127.0.0.1"
 	// 测试服务器的端口
-	svcUpdatePort = 11211
+	svcUpdatePort = commontest.ServiceUpdateSuitServerPort
 	// 初始化服务实例数
 	instanceCount = 4
 	// 测试多服务首次并发拉取的场景

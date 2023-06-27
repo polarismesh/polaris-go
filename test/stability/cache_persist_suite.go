@@ -41,6 +41,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -49,7 +50,7 @@ const (
 	cacheNS                = "cacheNS"
 	cacheSVC               = "cacheSVC"
 	cacheIP                = "127.0.0.1"
-	cachePort              = 8028
+	cachePort              = commontest.CacheSuitServerPort
 	serviceExpireDuration  = 5 * time.Second
 	serviceRefreshDuration = 1 * time.Second
 )

@@ -21,7 +21,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/polarismesh/specification v1.3.2-alpha.2
 	github.com/prometheus/client_golang v1.12.2
-	github.com/prometheus/client_model v0.2.0
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.8.2

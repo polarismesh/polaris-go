@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -45,7 +46,7 @@ const (
 	cbNS            = "cbns"
 	cbSVC           = "cbsvc"
 	cbIP            = "127.0.0.1"
-	cbPORT          = 8088
+	cbPORT          = commontest.CircuitBreakSuitServerPort
 	cbInstanceCount = 50
 )
 

@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -46,10 +47,10 @@ const (
 	defaultTestSVC = "defTestService"
 
 	defaultTestIP   = "127.0.0.1"
-	defaultTestPORT = 9652
+	defaultTestPORT = commontest.DefaultServerNormalSuitServerPort
 
 	wrongServerIp   = "127.0.0.1"
-	wrongServerPort = 10086
+	wrongServerPort = commontest.DefaultServerAbNormalSuitServerPort
 
 	testCacheDir = "testdata/test_cache/"
 )

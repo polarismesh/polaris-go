@@ -40,6 +40,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 )
 
 const (
@@ -50,7 +51,7 @@ const (
 	// 测试服务器的默认地址
 	consumerIPAddress = "127.0.0.1"
 	// 测试服务器的端口
-	consumerPort = 8008
+	consumerPort = commontest.ConsumerSuitServerPort
 	// env name for config file
 	envName = "server_addr"
 )

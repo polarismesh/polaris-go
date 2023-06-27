@@ -36,6 +36,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -48,7 +49,7 @@ const (
 )
 
 var (
-	mockPorts   = []int{10090, 10091, 10092, 10093, 10094}
+	mockPorts   = commontest.ServerSwitchSuitServerPort
 	builtinPort = 10095
 )
 

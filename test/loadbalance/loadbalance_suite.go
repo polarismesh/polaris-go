@@ -38,6 +38,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -46,7 +47,7 @@ const (
 	lbNamespace      = "lbNS"
 	lbService        = "lbSvc"
 	lbIPAddr         = "127.0.0.1"
-	lbPort           = 8008
+	lbPort           = commontest.LoadBananceSuitServerPort
 	lbMonitorIP      = "127.0.0.1"
 	lbMonitorPort    = 8009
 	lbPartialService = "lbPartialSvc"

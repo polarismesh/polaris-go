@@ -36,13 +36,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
-const (
-	mockServerHost       = "127.0.0.1:1949"
-	falseMockeServerHost = "127.0.0.1:1950"
+var (
+	mockServerPort       = commontest.CacheFastUpdateSuitServerPort
+	falseMockServerPort  = commontest.CacheFastUpdateFailSuitServerPort
+	mockServerHost       = "127.0.0.1"
+	falseMockeServerHost = "127.0.0.1"
 	testCacheNs          = "Test"
 )
 
@@ -77,7 +80,7 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 
 	t.grpcServer = grpc.NewServer(grpcOptions...)
 	t.mockServer = mock.NewNamingServer()
-	t.mockServer.RegisterServerServices("127.0.0.1", 1949)
+	t.mockServer.RegisterServerServices("127.0.0.1", mockServerPort)
 	t.mockServer.RegisterNamespace(&apimodel.Namespace{
 		Name:    &wrappers.StringValue{Value: testCacheNs},
 		Comment: &wrappers.StringValue{Value: "for cache update test"},
@@ -96,11 +99,11 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 
 	service_manage.RegisterPolarisGRPCServer(t.grpcServer, t.mockServer)
 
-	t.grpcListener, err = net.Listen("tcp", mockServerHost)
+	t.grpcListener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", mockServerHost, mockServerPort))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("error listening appserver %v", err))
 	}
-	log.Printf("appserver listening on %s\n", mockServerHost)
+	log.Printf("appserver listening on %s\n", fmt.Sprintf("%s:%d", mockServerHost, mockServerPort))
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
@@ -148,9 +151,9 @@ func (t *CacheFastUpdateSuite) testCacheUpdate(c *check.C, failToUpdate bool) {
 	var configuration *config.ConfigurationImpl
 	// 当failToupdate表示是否连接正确的mockserver，为false时连接正确的，true时连接错误的
 	if failToUpdate {
-		configuration = config.NewDefaultConfiguration([]string{falseMockeServerHost})
+		configuration = config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", falseMockeServerHost, falseMockServerPort)})
 	} else {
-		configuration = config.NewDefaultConfiguration([]string{mockServerHost})
+		configuration = config.NewDefaultConfiguration([]string{fmt.Sprintf("%s:%d", mockServerHost, mockServerPort)})
 	}
 	configuration.GetConsumer().GetLocalCache().SetStartUseFileCache(false)
 

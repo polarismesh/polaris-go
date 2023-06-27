@@ -33,13 +33,14 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (
 	setDivisionServerIPAddr         = "127.0.0.1"
-	setDivisionServerPort           = 8011 // 需要跟配置文件一致(sr_setdivision.yaml)
+	setDivisionServerPort           = commontest.SetDivisionSuiteServerPort // 需要跟配置文件一致(sr_setdivision.yaml)
 	setDivisionMonitorIPAddr        = "127.0.0.1"
 	setDivisionMonitorPort          = 8012
 	internalSetEnableKey            = "internal-enable-set"

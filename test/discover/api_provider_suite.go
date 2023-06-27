@@ -32,6 +32,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -40,7 +41,7 @@ const (
 	providerNamespace    = "providerNS"
 	providerService      = "providerSVC"
 	providerIPAddress    = "127.0.0.1"
-	providerPort         = 8008
+	providerPort         = commontest.ProviderSuitServerPort
 	providerInstanceIP   = "127.0.0.2"
 	providerInstancePort = 8848
 )

@@ -38,6 +38,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -50,7 +51,7 @@ const (
 	// 测试服务器的默认地址
 	detectIPAdress = "127.0.0.1"
 	// 测试服务器的端口
-	detectPort = 8008
+	detectPort = commontest.HealthCheckSuitServerPort
 )
 
 // HealthCheckTestingSuite 消费者API测试套

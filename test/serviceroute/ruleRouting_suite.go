@@ -40,13 +40,14 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
 
 const (
 	ruleServerIPAddr  = "127.0.0.1"
-	ruleServerPort    = 8010 // 需要跟配置文件一致(sr_rule.yaml)
+	ruleServerPort    = commontest.RouterRuleSuitServerPort // 需要跟配置文件一致(sr_rule.yaml)
 	ruleMonitorIPAddr = "127.0.0.1"
 	ruleMonitorPort   = 8011
 )

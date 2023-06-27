@@ -34,6 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -46,7 +47,7 @@ const (
 	// 测试服务器的默认地址
 	canaryIPAddress = "127.0.0.1"
 	// 测试服务器的端口
-	canaryPort = 8118
+	canaryPort = commontest.CanarySuitServerPort
 	// 测试monitor的地址
 	canaryMonitorIPAddr = "127.0.0.1"
 	// 测试monitor的端口
