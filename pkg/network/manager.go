@@ -82,9 +82,6 @@ type ConnectionManager interface {
 	// GetConnection 获取并占用连接
 	GetConnection(opKey string, clusterType config.ClusterType) (*Connection, error)
 
-	// GetConnectionByHashKey 通过传入一致性hashKey的方式获取链接
-	GetConnectionByHashKey(opKey string, clusterType config.ClusterType, hashKey []byte) (*Connection, error)
-
 	// ReportConnectionDown 报告连接故障
 	ReportConnectionDown(connID ConnID)
 
@@ -102,9 +99,6 @@ type ConnectionManager interface {
 
 	// IsReady discover服务是否已经就绪
 	IsReady() bool
-
-	// GetHashExpectedInstance 计算hash Key对应的实例
-	GetHashExpectedInstance(clusterType config.ClusterType, hash []byte) (string, model.Instance, error)
 
 	// ConnectByAddr 直接通过addr连接，慎使用
 	ConnectByAddr(clusterType config.ClusterType, addr string, instance model.Instance) (*Connection, error)
