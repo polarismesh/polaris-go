@@ -787,15 +787,21 @@ func (i *InstancesResponse) IsNotExists() bool {
 }
 
 // RetStatus 调用结果状态
-type RetStatus int
+type RetStatus string
 
 const (
 	// RetSuccess 调用成功
-	RetSuccess RetStatus = 1
+	RetSuccess RetStatus = "success"
 	// RetFail 调用失败
-	RetFail RetStatus = 2
+	RetFail RetStatus = "fail"
 	// RetTimeout 调用超时
-	RetTimeout RetStatus = 3
+	RetTimeout RetStatus = "timeout"
+	// RetFlowControl 限流
+	RetFlowControl RetStatus = "flow_control"
+	// RetReject 被熔断
+	RetReject RetStatus = "reject"
+	// RetUnknown
+	RetUnknown RetStatus = "unknown"
 )
 
 // ServiceCallResult 服务调用结果
@@ -811,6 +817,10 @@ type ServiceCallResult struct {
 	RetCode *int32
 	// 必选，被调服务实例获取接口的最大时延
 	Delay *time.Duration
+	// 可选，主调实例的IP信息
+	CalledIP string
+	// 可选，生效的规则名称
+	RuleName string
 	// 可选，主调服务实例的服务信息
 	SourceService *ServiceInfo
 }
@@ -823,6 +833,7 @@ type RateLimitGauge struct {
 	Method    string
 	Arguments []Argument
 	Result    QuotaResultCode
+	RuleName  string
 }
 
 // CircuitBreakGauge Circuit Break Gauge
@@ -870,10 +881,6 @@ func (s *ServiceCallResult) Validate() error {
 	if nil == s.CalledInstance || reflect2.IsNil(s.CalledInstance) {
 		errs = multierror.Append(errs, fmt.Errorf("ServiceCallResult: The instance called can not be empty"))
 	}
-	if s.RetStatus != RetSuccess && s.RetStatus != RetFail {
-		errs = multierror.Append(errs,
-			fmt.Errorf("ServiceCallResult: retStatus should be const RetSuccess or RetFail"))
-	}
 	if nil == s.GetRetCode() {
 		errs = multierror.Append(errs, fmt.Errorf("ServiceCallResult: retCode should not be empty"))
 	}
@@ -898,6 +905,11 @@ func (s *ServiceCallResult) SetCalledInstance(inst Instance) *ServiceCallResult 
 	return s
 }
 
+// SetMethod 调用时延
+func (s *ServiceCallResult) SetMethod(method string) {
+	s.Method = method
+}
+
 // GetService 实例所属服务名
 func (s *ServiceCallResult) GetService() string {
 	return s.CalledInstance.GetService()
@@ -916,6 +928,11 @@ func (s *ServiceCallResult) GetID() string {
 // GetCalledInstance 获取被调服务实例
 func (s *ServiceCallResult) GetCalledInstance() Instance {
 	return s.CalledInstance
+}
+
+// GetMethod 调用时延
+func (s *ServiceCallResult) GetMethod() string {
+	return s.Method
 }
 
 // GetHost 实例的节点信息

@@ -14,18 +14,14 @@
 // specific language governing permissionsr and limitations under the License.
 //
 
-package prometheus
+package common
 
 import (
 	"fmt"
-	"net/http"
+	"sort"
 	"strings"
-	"sync"
-
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/plugin/metrics/prometheus/addons"
 )
 
 // MetricsType 指标类型，对应 Prometheus 提供的 Collector 类型.
@@ -56,11 +52,13 @@ const (
 	CalleeInstance  = "callee_instance"
 	CalleeRetCode   = "callee_result_code"
 	CalleeMethod    = "callee_method"
+	CalleeResult    = "callee_result"
 	CallerNamespace = "caller_namespace"
 	CallerService   = "caller_service"
 	CallerIP        = "caller_ip"
 	CallerLabels    = "caller_labels"
 	MetricNameLabel = "metric_name"
+	RuleName        = "rule_name"
 
 	// MetricsNameUpstreamRequestTotal 与路由、请求相关的指标信息.
 	MetricsNameUpstreamRequestTotal      = "upstream_rq_total"
@@ -82,128 +80,7 @@ const (
 	NilValue = "__NULL__"
 )
 
-// 服务路由相关指标.
-var (
-	RouterGaugeNames []string = []string{
-		MetricsNameUpstreamRequestTotal,
-		MetricsNameUpstreamRequestSuccess,
-		MetricsNameUpstreamRequestTimeout,
-		MetricsNameUpstreamRequestMaxTimeout,
-	}
-
-	UpstreamRequestTotal = metricDesc{
-		Name:       MetricsNameUpstreamRequestTotal,
-		Help:       "total of request per period",
-		MetricType: TypeForCounterVec,
-		LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	}
-
-	UpstreamRequestSuccess = metricDesc{
-		Name:       MetricsNameUpstreamRequestSuccess,
-		Help:       "total of success request per period",
-		MetricType: TypeForCounterVec,
-		LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	}
-
-	UpstreamRequestTimeout = metricDesc{
-		Name:       MetricsNameUpstreamRequestTimeout,
-		Help:       "total of request delay per period",
-		MetricType: TypeForGaugeVec,
-		LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	}
-
-	UpstreamRequestMaxTimeout = metricDesc{
-		Name:       MetricsNameUpstreamRequestMaxTimeout,
-		Help:       "maximum request delay per period",
-		MetricType: TypeForMaxGaugeVec,
-		LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	}
-
-	UpstreamRequestDelay = metricDesc{
-		Name:       MetricsNameUpstreamRequestDelay,
-		Help:       "per request delay per period",
-		MetricType: TypeForHistogramVec,
-		LabelNames: GetLabels(InstanceGaugeLabelOrder),
-	}
-)
-
-// 限流相关指标.
-var (
-	RateLimitGaugeNames []string = []string{
-		MetricsNameRateLimitRequestTotal,
-		MetricsNameRateLimitRequestPass,
-		MetricsNameRateLimitRequestLimit,
-	}
-
-	RateLimitRequestTotal = metricDesc{
-		Name:       MetricsNameRateLimitRequestTotal,
-		Help:       "total of rate limit per period",
-		MetricType: TypeForCounterVec,
-		LabelNames: GetLabels(RateLimitGaugeLabelOrder),
-	}
-
-	RateLimitRequestPass = metricDesc{
-		Name:       MetricsNameRateLimitRequestPass,
-		Help:       "total of passed request per period",
-		MetricType: TypeForCounterVec,
-		LabelNames: GetLabels(RateLimitGaugeLabelOrder),
-	}
-
-	RateLimitRequestLimit = metricDesc{
-		Name:       MetricsNameRateLimitRequestLimit,
-		Help:       "total of limited request per period",
-		MetricType: TypeForCounterVec,
-		LabelNames: GetLabels(RateLimitGaugeLabelOrder),
-	}
-)
-
-var (
-	CircuitBreakerGaugeNames []string = []string{
-		MetricsNameCircuitBreakerOpen,
-		MetricsNameCircuitBreakerHalfOpen,
-	}
-
-	CircuitBreakerOpen = metricDesc{
-		Name:       MetricsNameCircuitBreakerOpen,
-		Help:       "total of opened circuit breaker",
-		MetricType: TypeForGaugeVec,
-		LabelNames: GetLabels(CircuitBreakerGaugeLabelOrder),
-	}
-
-	CircuitBreakerHalfOpen = metricDesc{
-		Name:       MetricsNameCircuitBreakerHalfOpen,
-		Help:       "total of half-open circuit breaker",
-		MetricType: TypeForGaugeVec,
-		LabelNames: GetLabels(CircuitBreakerGaugeLabelOrder),
-	}
-)
-
-var metrcisDesces map[string]metricDesc = map[string]metricDesc{
-	MetricsNameUpstreamRequestTotal:      UpstreamRequestTotal,
-	MetricsNameUpstreamRequestSuccess:    UpstreamRequestSuccess,
-	MetricsNameUpstreamRequestTimeout:    UpstreamRequestTimeout,
-	MetricsNameUpstreamRequestMaxTimeout: UpstreamRequestMaxTimeout,
-	MetricsNameUpstreamRequestDelay:      UpstreamRequestDelay,
-
-	MetricsNameRateLimitRequestTotal: RateLimitRequestTotal,
-	MetricsNameRateLimitRequestPass:  RateLimitRequestPass,
-	MetricsNameRateLimitRequestLimit: RateLimitRequestLimit,
-
-	MetricsNameCircuitBreakerOpen:     CircuitBreakerOpen,
-	MetricsNameCircuitBreakerHalfOpen: CircuitBreakerHalfOpen,
-}
-
 type LabelValueSupplier func(val interface{}) string
-
-func GetLabels(m map[string]LabelValueSupplier) []string {
-	labels := make([]string, 0, len(m))
-
-	for k := range m {
-		labels = append(labels, k)
-	}
-
-	return labels
-}
 
 var (
 	// InstanceGaugeLabelOrder 实例监控指标的label顺序
@@ -232,6 +109,18 @@ var (
 			}
 			return fmt.Sprintf("%d", *val.GetRetCode())
 		},
+		CalleeMethod: func(args interface{}) string {
+			val := args.(*model.ServiceCallResult)
+			return val.GetMethod()
+		},
+		CalleeResult: func(args interface{}) string {
+			val := args.(*model.ServiceCallResult)
+			retStatus := string(val.GetRetStatus())
+			if retStatus != "" {
+				return retStatus
+			}
+			return NilValue
+		},
 
 		// 主调方相关信息
 		CallerLabels: func(args interface{}) string {
@@ -244,7 +133,8 @@ var (
 			for k, v := range labels {
 				ret = append(ret, fmt.Sprintf("%s=%s", k, v))
 			}
-			return strings.Join(ret, ",")
+			sort.Strings(ret)
+			return strings.Join(ret, "|")
 		},
 		CallerNamespace: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
@@ -265,6 +155,9 @@ var (
 		CallerIP: func(args interface{}) string {
 			return NilValue
 		},
+		RuleName: func(args interface{}) string {
+			return NilValue
+		},
 	}
 
 	RateLimitGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
@@ -283,6 +176,13 @@ var (
 		CallerLabels: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
 			return formatLabelsToStr(val.Arguments)
+		},
+		RuleName: func(args interface{}) string {
+			val := args.(*model.RateLimitGauge)
+			if val.RuleName != "" {
+				return val.RuleName
+			}
+			return NilValue
 		},
 	}
 
@@ -328,59 +228,11 @@ func formatLabelsToStr(arguments []model.Argument) string {
 	for _, argument := range arguments {
 		s = append(s, argument.String())
 	}
-
+	sort.Strings(s)
 	return strings.Join(s, "|")
 }
 
-func buildMetrics() ([]prometheus.Collector, map[string]prometheus.Collector) {
-	var (
-		metricVecCaches = map[string]prometheus.Collector{}
-		collectors      = make([]prometheus.Collector, 0, len(metrcisDesces))
-	)
-
-	for _, desc := range metrcisDesces {
-		var collector prometheus.Collector
-		switch desc.MetricType {
-		case TypeForGaugeVec:
-			collector = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-				Name: desc.Name,
-				Help: desc.Help,
-			}, desc.LabelNames)
-		case TypeForCounterVec:
-			collector = prometheus.NewCounterVec(prometheus.CounterOpts{
-				Name: desc.Name,
-				Help: desc.Help,
-			}, desc.LabelNames)
-		case TypeForMaxGaugeVec:
-			collector = addons.NewMaxGaugeVec(prometheus.GaugeOpts{
-				Name: desc.Name,
-				Help: desc.Help,
-			}, desc.LabelNames)
-		case TypeForHistogramVec:
-			collector = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-				Name: desc.Name,
-				Help: desc.Help,
-			}, desc.LabelNames)
-		}
-		collectors = append(collectors, collector)
-		metricVecCaches[desc.Name] = collector
-	}
-	return collectors, metricVecCaches
-}
-
-type metricsHttpHandler struct {
-	handler http.Handler
-	lock    sync.RWMutex
-}
-
-// ServeHTTP 提供 prometheus http 服务.
-func (p *metricsHttpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	p.handler.ServeHTTP(writer, request)
-}
-
-func convertInsGaugeToLabels(val *model.ServiceCallResult, bindIP string) map[string]string {
+func ConvertInsGaugeToLabels(val *model.ServiceCallResult, bindIP string) map[string]string {
 	labels := make(map[string]string)
 	for label, supplier := range InstanceGaugeLabelOrder {
 		labels[label] = supplier(val)
@@ -389,7 +241,7 @@ func convertInsGaugeToLabels(val *model.ServiceCallResult, bindIP string) map[st
 	return labels
 }
 
-func convertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string {
+func ConvertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string {
 	labels := make(map[string]string)
 	for label, supplier := range RateLimitGaugeLabelOrder {
 		labels[label] = supplier(val)
@@ -397,7 +249,7 @@ func convertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string 
 	return labels
 }
 
-func convertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
+func ConvertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
 	labels := make(map[string]string)
 	for label, supplier := range CircuitBreakerGaugeLabelOrder {
 		labels[label] = supplier(val)

@@ -22,9 +22,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -39,7 +42,7 @@ func initArgs() {
 	flag.Int64Var(&port, "port", 18080, "port")
 }
 
-// PolarisConsumer is a consumer of ratelimit service
+// PolarisConsumer is a consumer of polaris
 type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
 	namespace string
@@ -54,6 +57,7 @@ func (svr *PolarisConsumer) Run() {
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
+		// DiscoverEchoServer
 		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
 		getOneRequest.Service = service
@@ -69,22 +73,48 @@ func (svr *PolarisConsumer) runWebServer() {
 			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
 		}
 
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
-		if err != nil {
-			log.Printf("[errot] new request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-			return
-		}
-
-		req.Header = r.Header
-		log.Printf("[info] req header : %v", req.Header)
-		resp, err := http.DefaultClient.Do(req)
+		start := time.Now()
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 		if err != nil {
 			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+			delay := time.Since(start)
+
+			ret := &polaris.ServiceCallResult{
+				ServiceCallResult: model.ServiceCallResult{
+					EmptyInstanceGauge: model.EmptyInstanceGauge{},
+					CalledInstance:     instance,
+					Method:             "/echo",
+					RetStatus:          model.RetFail,
+				},
+			}
+			ret.SetDelay(delay)
+			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+				log.Printf("do report service call result : %+v", err)
+			}
 			return
+		}
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+		delay := time.Since(start)
+
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             "/echo",
+				RetStatus:          model.RetSuccess,
+			},
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			ret.RetStatus = model.RetFlowControl
+		}
+		ret.SetDelay(delay)
+		ret.SetRetCode(int32(resp.StatusCode))
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
 		}
 
 		defer resp.Body.Close()
@@ -116,7 +146,7 @@ func main() {
 	}
 	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件
-	// consumer, err = polaris.NewConsumerAPIByAddress("127.0.0.1:8091")
+	// consumer, err = api.NewConsumerAPIByAddress("127.0.0.1:8091")
 
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
