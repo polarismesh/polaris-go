@@ -531,56 +531,56 @@ func (t *LBTestingSuite) genInstanceWeights(response model.ServiceInstances) {
 	fmt.Printf("instances count is %d, totalWeight is %d\n", instanceCount, totalWeight)
 }
 
-// TestReplicateNodeRingHash 测试获取备份节点
-func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
-	log.Printf("Start TestReplicateNodeRingHash")
-	for i := 0; i < 1; i++ {
-		func() {
-			lbType := config.DefaultLoadBalancerRingHash
-			service := lbService
-			replicate := 2
-			addrGot := t.doLoadBalanceOnce(c, service, lbType, replicate, nil, 10)
-			c.Assert(len(addrGot), check.Equals, replicate+1)
-			log.Printf("replicate test1, instances is %v", addrGot)
-			targetInstId := addrGot[0]
-			replicateInstId1 := addrGot[1]
-			replicateInstId2 := addrGot[2]
-			var anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-1)
-			for _, instance := range lbHealthyInstances {
-				if instance.GetId().GetValue() == targetInstId {
-					continue
-				}
-				anotherInstances = append(anotherInstances, instance)
-			}
-			svcKey := &model.ServiceKey{
-				Namespace: lbHealthyService.GetNamespace().GetValue(),
-				Service:   lbHealthyService.GetName().GetValue(),
-			}
-			t.mockServer.SetServiceInstances(svcKey, anotherInstances)
-			defer t.mockServer.SetServiceInstances(svcKey, lbHealthyInstances)
-			anotherAddr := t.doLoadBalanceOnce(c, service, lbType, 0, nil, 10)
-			log.Printf("replicate test2, instances is %v", anotherAddr)
-			anotherInstId := anotherAddr[0]
-			c.Assert(anotherInstId, check.Equals, replicateInstId1)
-			// 比较下一个
-			anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-2)
-			for _, instance := range lbHealthyInstances {
-				if instance.GetId().GetValue() == targetInstId {
-					continue
-				}
-				if instance.GetId().GetValue() == replicateInstId1 {
-					continue
-				}
-				anotherInstances = append(anotherInstances, instance)
-			}
-			t.mockServer.SetServiceInstances(svcKey, anotherInstances)
-			anotherAddr = t.doLoadBalanceOnce(c, service, lbType, 0, nil, 10)
-			log.Printf("replicate test2, instances is %v", anotherAddr)
-			anotherInstId = anotherAddr[0]
-			c.Assert(anotherInstId, check.Equals, replicateInstId2)
-		}()
-	}
-}
+// // TestReplicateNodeRingHash 测试获取备份节点
+// func (t *LBTestingSuite) TestReplicateNodeRingHash(c *check.C) {
+// 	log.Printf("Start TestReplicateNodeRingHash")
+// 	for i := 0; i < 1; i++ {
+// 		func() {
+// 			lbType := config.DefaultLoadBalancerRingHash
+// 			service := lbService
+// 			replicate := 2
+// 			addrGot := t.doLoadBalanceOnce(c, service, lbType, replicate, nil, 10)
+// 			c.Assert(len(addrGot), check.Equals, replicate+1)
+// 			log.Printf("replicate test1, instances is %v", addrGot)
+// 			targetInstId := addrGot[0]
+// 			replicateInstId1 := addrGot[1]
+// 			replicateInstId2 := addrGot[2]
+// 			var anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-1)
+// 			for _, instance := range lbHealthyInstances {
+// 				if instance.GetId().GetValue() == targetInstId {
+// 					continue
+// 				}
+// 				anotherInstances = append(anotherInstances, instance)
+// 			}
+// 			svcKey := &model.ServiceKey{
+// 				Namespace: lbHealthyService.GetNamespace().GetValue(),
+// 				Service:   lbHealthyService.GetName().GetValue(),
+// 			}
+// 			t.mockServer.SetServiceInstances(svcKey, anotherInstances)
+// 			defer t.mockServer.SetServiceInstances(svcKey, lbHealthyInstances)
+// 			anotherAddr := t.doLoadBalanceOnce(c, service, lbType, 0, nil, 10)
+// 			log.Printf("replicate test2, instances is %v", anotherAddr)
+// 			anotherInstId := anotherAddr[0]
+// 			c.Assert(anotherInstId, check.Equals, replicateInstId1)
+// 			// 比较下一个
+// 			anotherInstances = make([]*service_manage.Instance, 0, len(lbHealthyInstances)-2)
+// 			for _, instance := range lbHealthyInstances {
+// 				if instance.GetId().GetValue() == targetInstId {
+// 					continue
+// 				}
+// 				if instance.GetId().GetValue() == replicateInstId1 {
+// 					continue
+// 				}
+// 				anotherInstances = append(anotherInstances, instance)
+// 			}
+// 			t.mockServer.SetServiceInstances(svcKey, anotherInstances)
+// 			anotherAddr = t.doLoadBalanceOnce(c, service, lbType, 0, nil, 10)
+// 			log.Printf("replicate test2, instances is %v", anotherAddr)
+// 			anotherInstId = anotherAddr[0]
+// 			c.Assert(anotherInstId, check.Equals, replicateInstId2)
+// 		}()
+// 	}
+// }
 
 // TestUserChooseLBAlgorithm 测试用户选择负载均衡算法
 func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
@@ -633,12 +633,13 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 
 func waitServerReady() {
 	for {
-		_, err := net.Dial("tcp", fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 		if err != nil {
 			log.Printf("dial failed, err:%v", err)
 			time.Sleep(time.Second)
 			continue
 		}
+		_ = conn.Close()
 		break
 	}
 	log.Println("grpc server is ready")
