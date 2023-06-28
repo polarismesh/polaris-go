@@ -635,10 +635,11 @@ func waitServerReady() {
 	for {
 		_, err := net.Dial("tcp", fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
 		if err != nil {
-			fmt.Printf("dial failed, err:%v\n", err)
+			log.Printf("dial failed, err:%v", err)
 			time.Sleep(time.Second)
 			continue
 		}
 		break
 	}
+	log.Println("grpc server is ready")
 }
