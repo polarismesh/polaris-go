@@ -110,7 +110,7 @@ func (t *HealthCheckTestingSuite) SetUpSuite(c *check.C) {
 
 // TearDownSuite 结束测试套程序
 func (t *HealthCheckTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

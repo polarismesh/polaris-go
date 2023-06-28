@@ -121,14 +121,16 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 
 }
 
 // SetUpSuite 结束测试套程序
 func (t *DstMetaTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

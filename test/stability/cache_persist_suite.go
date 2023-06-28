@@ -104,7 +104,10 @@ func (t *CacheTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", cacheIP, cachePort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
@@ -115,7 +118,7 @@ func (t *CacheTestingSuite) GetName() string {
 
 // TearDownSuite 销毁套件
 func (t *CacheTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	for i := 0; i < 5; i++ {
 		if util.DirExist(util.BackupDir) {
 			err := os.RemoveAll(util.BackupDir)

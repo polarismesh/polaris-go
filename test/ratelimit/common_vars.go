@@ -120,7 +120,10 @@ func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
 	cr.grpcServer, cr.grpcListener, cr.mockServer = util.SetupMockDiscover(discoverHost, discoverPort)
 	log.Printf("discover-server listening on %s\n", mockDiscoverAddress)
 	go func() {
-		cr.grpcServer.Serve(cr.grpcListener)
+		// cr.grpcServer.Serve(cr.grpcListener)
+		if err := cr.grpcServer.Serve(cr.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 	cr.services = registerServices(cr.mockServer)
 	if startRemote {
@@ -148,7 +151,7 @@ func (cr *CommonRateLimitSuite) SetUpSuite(c *check.C, startRemote bool) {
 
 // SetUpSuite 结束测试套程序
 func (cr *CommonRateLimitSuite) TearDownSuite(c *check.C, s util.NamingTestSuite) {
-	cr.grpcServer.Stop()
+	cr.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

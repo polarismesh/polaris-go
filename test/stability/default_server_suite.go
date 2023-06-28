@@ -150,7 +150,10 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	}
 
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
@@ -161,7 +164,7 @@ func (t *DefaultServerSuite) GetName() string {
 
 // TearDownSuite 销毁套件
 func (t *DefaultServerSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

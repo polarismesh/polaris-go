@@ -150,7 +150,9 @@ func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	t.serviceToken = uuid.New().String()
 	t.grpcServer, t.grpcListener, t.mocksvr = t.setupServer(srIPAddr, srPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 	awaitServerReady(srIPAddr, srPort)
 }
@@ -169,7 +171,7 @@ func awaitServerReady(ip string, port int) {
 
 // SetUpSuite 结束测试套程序
 func (t *NearbyTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

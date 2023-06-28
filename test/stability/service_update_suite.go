@@ -128,17 +128,20 @@ func (t *ServiceUpdateSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
 // SetUpSuite 结束测试套程序
 func (t *ServiceUpdateSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}
 	util.InsertLog(t, c.GetTestLog())
+	t.grpcServer.GracefulStop()
 }
 
 // 获取用例名
@@ -194,7 +197,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	wg := &sync.WaitGroup{}
-	wg.Add(getWorkerCount)
+	wg.Add(getWorkerCount + modifyCount)
 	for i := 0; i < getWorkerCount; i++ {
 		go func(idx int) {
 			defer wg.Done()
@@ -231,6 +234,7 @@ func (t *ServiceUpdateSuite) TestDynamicAddService(c *check.C) {
 		for i := 0; i < modifyCount; i++ {
 			time.Sleep(2500 * time.Millisecond)
 			syncRun(&t.mutex, func() {
+				defer wg.Done()
 				if nil == instanceBackup {
 					instanceBackup = t.testServiceInstances[modifyIndex]
 					t.testServiceInstances = t.testServiceInstances[modifyIndex+1:]
@@ -294,7 +298,7 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	wg := &sync.WaitGroup{}
-	wg.Add(getWorkerCount)
+	wg.Add(getWorkerCount + modifyCount)
 	for i := 0; i < getWorkerCount; i++ {
 		go func(idx int) {
 			defer func() {
@@ -336,6 +340,9 @@ func (t *ServiceUpdateSuite) TestDynamicModifyInstance(c *check.C) {
 		for i := 0; i < modifyCount; i++ {
 			time.Sleep(2500 * time.Millisecond)
 			syncRun(&t.mutex, func() {
+				defer func() {
+					wg.Done()
+				}()
 				instance := t.healthModifyInstances[modifyIndex]
 				instance.Healthy = &wrappers.BoolValue{
 					Value: lastHealthy,

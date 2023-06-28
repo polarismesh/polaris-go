@@ -125,7 +125,7 @@ func (t *ConsumerTestingSuite) SetUpSuite(c *check.C) {
 
 // TearDownSuite 结束测试套程序
 func (t *ConsumerTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
@@ -140,7 +140,7 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 // TestInitConsumerConfigByDefault 测试以无文件默认配置初始化消费者api
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByDefault")
-	cfg := config.NewDefaultConfiguration([]string{"127.0.0.1:8008"})
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("127.0.0.1:%s", consumerPort)})
 	enableStat := false
 	cfg.Global.StatReporter.Enable = &enableStat
 	consumerAPI, err := api.NewConsumerAPIByConfig(cfg)

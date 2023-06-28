@@ -102,13 +102,16 @@ func (t *SetDivisionTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", setDivisionServerIPAddr, setDivisionServerPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
 // TearDownSuite 结束测试套程序
 func (t *SetDivisionTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

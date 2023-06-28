@@ -18,25 +18,25 @@
 package common
 
 const (
-	ConsumerSuitServerPort              = 18000
-	ProviderSuitServerPort              = 18001
-	LoadBananceSuitServerPort           = 18002
-	HealthCheckSuitServerPort           = 18003
-	HealthCheckAlwaysSuitServerPort     = 18004
-	CircuitBreakSuitServerPort          = 18005
-	NearbySuitServerPort                = 18006
-	RouterRuleSuitServerPort            = 18007
-	DestMetadataSuitServerPort          = 18008
-	SetDivisionSuiteServerPort          = 18009
-	CanarySuitServerPort                = 18010
-	CacheSuitServerPort                 = 18011
-	ServiceUpdateSuitServerPort         = 18012
-	DefaultServerNormalSuitServerPort   = 18013
-	DefaultServerAbNormalSuitServerPort = 18014
-	CacheFastUpdateSuitServerPort       = 18015
-	CacheFastUpdateFailSuitServerPort   = 18016
+	ConsumerSuitServerPort              = 58000
+	ProviderSuitServerPort              = 58001
+	LoadBananceSuitServerPort           = 58002
+	HealthCheckSuitServerPort           = 58003
+	HealthCheckAlwaysSuitServerPort     = 58004
+	CircuitBreakSuitServerPort          = 58005
+	NearbySuitServerPort                = 58006
+	RouterRuleSuitServerPort            = 58007
+	DestMetadataSuitServerPort          = 58008
+	SetDivisionSuiteServerPort          = 58009
+	CanarySuitServerPort                = 58010
+	CacheSuitServerPort                 = 58011
+	ServiceUpdateSuitServerPort         = 58012
+	DefaultServerNormalSuitServerPort   = 58013
+	DefaultServerAbNormalSuitServerPort = 58014
+	CacheFastUpdateSuitServerPort       = 58015
+	CacheFastUpdateFailSuitServerPort   = 58016
 )
 
 var (
-	ServerSwitchSuitServerPort = []int{10090, 10091, 10092, 10093, 10094}
+	ServerSwitchSuitServerPort = []int{50090, 50091, 50092, 50093, 50094}
 )

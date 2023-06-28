@@ -108,7 +108,7 @@ func (t *CircuitBreakSuite) GetName() string {
 
 // TearDownSuite 销毁套件
 func (t *CircuitBreakSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

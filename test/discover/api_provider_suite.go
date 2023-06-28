@@ -110,7 +110,7 @@ func (t *ProviderTestingSuite) SetUpSuite(c *check.C) {
 // TearDownSuite 结束测试套程序
 func (t *ProviderTestingSuite) TearDownSuite(c *check.C) {
 	t.provider.Destroy()
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

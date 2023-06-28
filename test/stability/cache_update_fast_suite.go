@@ -105,7 +105,10 @@ func (t *CacheFastUpdateSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s\n", fmt.Sprintf("%s:%d", mockServerHost, mockServerPort))
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
@@ -116,7 +119,7 @@ func (t *CacheFastUpdateSuite) GetName() string {
 
 // 销毁套件
 func (t *CacheFastUpdateSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

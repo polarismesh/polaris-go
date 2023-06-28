@@ -6,7 +6,7 @@ global:
     retryInterval: 1s
   serverConnector:
     addresses:
-      - 127.0.0.1:8028
+      - 127.0.0.1:58011
     protocol: grpc
     syncInterval: 3s
     connectTimeout: 1s
@@ -15,7 +15,13 @@ global:
     serverSwitchInterval: 50m
     plugin: {}
   statReporter:
-    enable: false
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricPort: 0
 consumer:
   localCache:
     serviceExpireTime: 5s

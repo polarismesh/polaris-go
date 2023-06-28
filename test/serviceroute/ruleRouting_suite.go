@@ -376,14 +376,17 @@ func (t *RuleRoutingTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ruleServerIPAddr, ruleServerPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 	awaitServerReady(ruleServerIPAddr, ruleServerPort)
 }
 
 // TearDownSuite 结束测试套程序
 func (t *RuleRoutingTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 
