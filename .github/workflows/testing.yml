@@ -50,6 +50,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
+      # Execute vert check
+      - name: vert check
+        run: bash vert.sh -install && bash vert.sh
+
       # Run tests
       - name: run tests
         run: |
