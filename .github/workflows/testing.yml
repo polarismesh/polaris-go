@@ -59,6 +59,7 @@ jobs:
             if [[ "${line}" == "" ]]; then
               continue
             fi
+            export SDK_SUIT_TEST=${line}
             go test -timeout=240m -v -covermode=count -coverprofile=coverage_${line}.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
           done
 
