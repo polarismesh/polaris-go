@@ -2,6 +2,7 @@ ConsumerTestingSuite
 ProviderTestingSuite
 LBTestingSuite
 CircuitBreakSuite
+HealthCheckTestingSuite
 HealthCheckAlwaysTestingSuite
 NearbyTestingSuite
 RuleRoutingTestingSuite
@@ -19,4 +20,3 @@ InnerServiceLBTestingSuite
 LocalNormalTestingSuite
 RuleChangeTestingSuite
 RemoteNormalTestingSuite
-HealthCheckTestingSuite
