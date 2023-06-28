@@ -163,6 +163,7 @@ func (t *LBTestingSuite) SetUpSuite(c *check.C) {
 	go func() {
 		t.grpcServer.Serve(t.grpcListener)
 	}()
+	waitServerReady()
 }
 
 // TearDownSuite 清理模拟桩服务器 SetUpSuite 结束测试套程序
@@ -628,4 +629,16 @@ func (t *LBTestingSuite) TestUserChooseLBAlgorithm(c *check.C) {
 		}
 	}
 	c.Assert(allSame, check.Equals, true)
+}
+
+func waitServerReady() {
+	for {
+		_, err := net.Dial("tcp", fmt.Sprintf("%s:%d", lbIPAddr, lbPort))
+		if err != nil {
+			fmt.Printf("dial failed, err:%v\n", err)
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
 }
