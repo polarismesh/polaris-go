@@ -102,8 +102,11 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
+	waitServerReady(shopPort)
 }
 
 // TearDownSuite 结束测试套程序

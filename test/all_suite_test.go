@@ -27,6 +27,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 	"testing"
 
 	. "gopkg.in/check.v1"
@@ -35,6 +36,7 @@ import (
 	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
+	"github.com/polarismesh/polaris-go/test/ratelimit"
 	"github.com/polarismesh/polaris-go/test/serviceroute"
 	"github.com/polarismesh/polaris-go/test/stability"
 	"github.com/polarismesh/polaris-go/test/subscribe"
@@ -69,7 +71,7 @@ var (
 		"ServerFailOverSuite":           mockServerFailOverSuite,
 		"EventSubscribeSuit":            mockEventSubscribeSuit,
 		"InnerServiceLBTestingSuite":    mockInnerServiceLBTestingSuite,
-		"LocalNormalTestingSuite":       func() {},
+		"LocalNormalTestingSuite":       mockLocalNormalTestingSuite,
 		"RuleChangeTestingSuite":        func() {},
 		"RemoteNormalTestingSuite":      func() {},
 	}
@@ -84,9 +86,10 @@ func init() {
 	var suits []string
 	suitType := os.Getenv("SDK_SUIT_TEST")
 	if len(suitType) != 0 {
-		suits = []string{suitType}
+		suits = []string{strings.TrimSpace(suitType)}
 	} else {
 		content, err := ioutil.ReadFile("suit.txt")
+		log.Printf("line str : %+v", string(content))
 		if err != nil {
 			panic(err)
 		}
@@ -100,11 +103,13 @@ func init() {
 				panic(err)
 			}
 			lineStr := string(line)
-			if lineStr != "" {
-				suits = append(suits, lineStr)
+			log.Printf("line str : %+v", lineStr)
+			if lineStr != "" && !strings.HasPrefix(lineStr, "#") {
+				suits = append(suits, strings.TrimSpace(strings.ReplaceAll(lineStr, "#", "")))
 			}
 		}
 	}
+	log.Printf("suit : %+v", suits)
 	for i := range suits {
 		runner, ok := suitFunc[suits[i]]
 		if ok {
@@ -112,8 +117,6 @@ func init() {
 		}
 	}
 
-	// // 基础本地限流用例测试
-	// Suite(&ratelimit.LocalNormalTestingSuite{})
 	// // 限流规则变更用例测试
 	// Suite(&ratelimit.RuleChangeTestingSuite{})
 	// // 基础远程限流用例测试
@@ -202,4 +205,9 @@ func mockServerFailOverSuite() {
 // 消息订阅 测试
 func mockEventSubscribeSuit() {
 	Suite(&subscribe.EventSubscribeSuit{})
+}
+
+func mockLocalNormalTestingSuite() {
+	// 基础本地限流用例测试
+	Suite(&ratelimit.LocalNormalTestingSuite{})
 }

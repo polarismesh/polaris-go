@@ -97,8 +97,11 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	c.Assert(err, check.IsNil)
 	log2.Printf("appserver listening on %s:%d\n", cbIP, cbPORT)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
+	waitServerReady(cbPORT)
 }
 
 // GetName 套件名字

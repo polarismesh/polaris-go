@@ -51,7 +51,7 @@ const (
 	// 测试服务器的默认地址
 	detectIPAdress = "127.0.0.1"
 	// 测试服务器的端口
-	detectPort = commontest.HealthCheckSuitServerPort
+	detectPort = commontest.HealthCheckAlwaysSuitServerPort
 )
 
 // HealthCheckTestingSuite 消费者API测试套
@@ -104,8 +104,11 @@ func (t *HealthCheckTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
+	waitServerReady(shopPort)
 }
 
 // TearDownSuite 结束测试套程序
@@ -276,4 +279,18 @@ func startHTTPServer(address string, sTime int, statusCode int) error {
 		log.Printf("httpserver err %v", err)
 	}
 	return err
+}
+
+func waitServerReady(port int) {
+	for {
+		conn, err := grpc.Dial(fmt.Sprintf("%s:%d", detectIPAdress, port), grpc.WithBlock(), grpc.WithInsecure())
+		if err != nil {
+			log.Printf("dial failed, err:%v", err)
+			time.Sleep(time.Second)
+			continue
+		}
+		_ = conn.Close()
+		break
+	}
+	log.Println("grpc server is ready")
 }
