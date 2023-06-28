@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -85,7 +86,7 @@ func init() {
 	if len(suitType) != 0 {
 		suits = []string{suitType}
 	} else {
-		content, err := os.ReadFile("suit.txt")
+		content, err := ioutil.ReadFile("suit.txt")
 		if err != nil {
 			panic(err)
 		}
