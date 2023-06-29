@@ -17,16 +17,11 @@ global:
   statReporter:
     enable: true
     chain:
-      - stat2Monitor
-      - serviceCache
-      - rateLimitRecord
-      - serviceRoute
+      - prometheus
     plugin:
-      stat2Monitor:
-        metricsReportWindow: 30s
-        metricsNumBuckets: 6
-      serviceCache:
-        reportInterval: 10s
+      prometheus:
+        type: pull
+        metricPort: 0
 consumer:
   localCache:
     serviceExpireTime: 24h

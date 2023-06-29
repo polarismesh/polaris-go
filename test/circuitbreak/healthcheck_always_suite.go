@@ -34,6 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -46,7 +47,7 @@ const (
 	// 测试服务器的默认地址
 	checkAlwaysIPAdress = "127.0.0.1"
 	// 测试服务器的端口
-	checkAlwaysPort = 8008
+	checkAlwaysPort = commontest.HealthCheckAlwaysSuitServerPort
 	// 所有实例数量
 	instanceTotal = 5
 )
@@ -101,13 +102,16 @@ func (t *HealthCheckAlwaysTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
+	waitServerReady(shopPort)
 }
 
 // TearDownSuite 结束测试套程序
 func (t *HealthCheckAlwaysTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

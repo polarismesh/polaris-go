@@ -32,6 +32,7 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -44,7 +45,7 @@ const (
 	// 测试服务器的默认地址
 	dstMetaIPAddress = "127.0.0.1"
 	// 测试服务器的端口
-	dstMetaPort = 8118
+	dstMetaPort = commontest.DestMetadataSuitServerPort
 	// 测试monitor的默认地址
 	dstMetaMonitorAddress = "127.0.0.1"
 	// 测试monitor的端口
@@ -120,14 +121,16 @@ func (t *DstMetaTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 
 }
 
 // SetUpSuite 结束测试套程序
 func (t *DstMetaTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

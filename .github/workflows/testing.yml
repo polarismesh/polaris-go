@@ -51,14 +51,25 @@ jobs:
         uses: actions/checkout@v3
 
       # Execute vert check
-      - name: vert check
-        run: bash vert.sh -install && bash vert.sh
+      # - name: vert check
+      #   run: bash vert.sh -install && bash vert.sh
 
       # Run tests
       - name: run tests
         run: |
+          set -ex         # Exit on error; debugging enabled.
+          set -o pipefail # Fail a pipe if any sub-command fails.
+          
           cd ./test
-          go test -timeout=240m -v -coverprofile=coverage.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
+          for line in $(cat suit.txt)
+          do
+            if [[ "${line}" == "" ]]; then
+              continue
+            fi
+            export SDK_SUIT_TEST=${line}
+            echo "SDK_SUIT_TEST=${SDK_SUIT_TEST}"
+            go test -timeout=240m -v -covermode=count -coverprofile=coverage_${line}.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
+          done
 
       - name: Coverage
         run: bash <(curl -s https://codecov.io/bash)

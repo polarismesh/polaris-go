@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -46,10 +47,10 @@ const (
 	defaultTestSVC = "defTestService"
 
 	defaultTestIP   = "127.0.0.1"
-	defaultTestPORT = 9652
+	defaultTestPORT = commontest.DefaultServerNormalSuitServerPort
 
 	wrongServerIp   = "127.0.0.1"
-	wrongServerPort = 10086
+	wrongServerPort = commontest.DefaultServerAbNormalSuitServerPort
 
 	testCacheDir = "testdata/test_cache/"
 )
@@ -149,7 +150,10 @@ func (t *DefaultServerSuite) SetUpSuite(c *check.C) {
 	}
 
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		// t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
@@ -160,7 +164,7 @@ func (t *DefaultServerSuite) GetName() string {
 
 // TearDownSuite 销毁套件
 func (t *DefaultServerSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	util.InsertLog(t, c.GetTestLog())
 }
 

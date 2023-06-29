@@ -18,9 +18,16 @@
 package test
 
 import (
+	"bufio"
+	"bytes"
+	"errors"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"strings"
 	"testing"
 
 	. "gopkg.in/check.v1"
@@ -43,54 +50,164 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
+var (
+	suitFunc = map[string]func(){
+		"ConsumerTestingSuite":          mockConsumerTestingSuite,
+		"ProviderTestingSuite":          mockProviderTestingSuite,
+		"LBTestingSuite":                mockLBTestingSuite,
+		"CircuitBreakSuite":             mockCircuitBreakSuite,
+		"HealthCheckTestingSuite":       mockHealthCheckTestingSuite,
+		"HealthCheckAlwaysTestingSuite": mockHealthCheckAlwaysTestingSuite,
+		"NearbyTestingSuite":            mockNearbyTestingSuite,
+		"RuleRoutingTestingSuite":       mockRuleRoutingTestingSuite,
+		"DstMetaTestingSuite":           mockDstMetaTestingSuite,
+		"SetDivisionTestingSuite":       mockSetDivisionTestingSuite,
+		"CanaryTestingSuite":            mockCanaryTestingSuite,
+		"CacheTestingSuite":             mockCacheTestingSuite,
+		"ServiceUpdateSuite":            mockServiceUpdateSuite,
+		"ServerSwitchSuite":             mockServerSwitchSuite,
+		"DefaultServerSuite":            mockDefaultServerSuite,
+		"CacheFastUpdateSuite":          mockCacheFastUpdateSuite,
+		"ServerFailOverSuite":           mockServerFailOverSuite,
+		"EventSubscribeSuit":            mockEventSubscribeSuit,
+		"InnerServiceLBTestingSuite":    mockInnerServiceLBTestingSuite,
+		"LocalNormalTestingSuite":       mockLocalNormalTestingSuite,
+		"RuleChangeTestingSuite":        func() {},
+		"RemoteNormalTestingSuite":      func() {},
+	}
+)
+
 // 初始化测试套
 func init() {
 	logDir := "testdata/test_log"
 	if err := api.ConfigLoggers(logDir, api.DebugLog); err != nil {
 		log.Fatalf("fail to ConfigLoggers: %v", err)
 	}
-	// consumer api测试
-	Suite(&discover.ConsumerTestingSuite{})
-	// provider api 测试
-	Suite(&discover.ProviderTestingSuite{})
-	// 负载均衡测试
-	Suite(&loadbalance.LBTestingSuite{})
-	// 熔断测试
-	Suite(&circuitbreak.CircuitBreakSuite{})
-	// 健康探测测试
-	Suite(&circuitbreak.HealthCheckTestingSuite{})
-	// 持久探测测试
-	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
-	// 就近路由接入测试
-	Suite(&serviceroute.NearbyTestingSuite{})
-	// 规则路由测试
-	Suite(&serviceroute.RuleRoutingTestingSuite{})
-	// dstmeta路由插件测试
-	Suite(&serviceroute.DstMetaTestingSuite{})
-	// set分组测试
-	Suite(&serviceroute.SetDivisionTestingSuite{})
-	// 金丝雀路由测试
-	Suite(&serviceroute.CanaryTestingSuite{})
-	// 缓存持久化测试
-	Suite(&stability.CacheTestingSuite{})
-	// 服务定时更新测试
-	Suite(&stability.ServiceUpdateSuite{})
-	// 后台server连接切换测试
-	Suite(&stability.ServerSwitchSuite{})
-	// 埋点server可靠性测试
-	Suite(&stability.DefaultServerSuite{})
-	// 缓存快速更新测试
-	Suite(&stability.CacheFastUpdateSuite{})
-	// server异常调用测试
-	Suite(&stability.ServerFailOverSuite{})
-	// 消息订阅 测试
-	Suite(&subscribe.EventSubscribeSuit{})
-	// 内部服务结构测试
-	Suite(&loadbalance.InnerServiceLBTestingSuite{})
-	// 基础本地限流用例测试
-	Suite(&ratelimit.LocalNormalTestingSuite{})
+	var suits []string
+	suitType := os.Getenv("SDK_SUIT_TEST")
+	if len(suitType) != 0 {
+		suits = []string{strings.TrimSpace(suitType)}
+	} else {
+		content, err := ioutil.ReadFile("suit.txt")
+		log.Printf("line str : %+v", string(content))
+		if err != nil {
+			panic(err)
+		}
+		reader := bufio.NewReader(bytes.NewBuffer(content))
+		for {
+			line, _, err := reader.ReadLine()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				panic(err)
+			}
+			lineStr := string(line)
+			log.Printf("line str : %+v", lineStr)
+			if lineStr != "" && !strings.HasPrefix(lineStr, "#") {
+				suits = append(suits, strings.TrimSpace(strings.ReplaceAll(lineStr, "#", "")))
+			}
+		}
+	}
+	log.Printf("suit : %+v", suits)
+	for i := range suits {
+		runner, ok := suitFunc[suits[i]]
+		if ok {
+			runner()
+		}
+	}
+
 	// // 限流规则变更用例测试
 	// Suite(&ratelimit.RuleChangeTestingSuite{})
 	// // 基础远程限流用例测试
 	// Suite(&ratelimit.RemoteNormalTestingSuite{})
+}
+
+func mockConsumerTestingSuite() {
+	Suite(&discover.ConsumerTestingSuite{})
+}
+
+func mockProviderTestingSuite() {
+	Suite(&discover.ProviderTestingSuite{})
+}
+
+func mockLBTestingSuite() {
+	Suite(&loadbalance.LBTestingSuite{})
+}
+
+// 内部服务结构测试
+func mockInnerServiceLBTestingSuite() {
+	Suite(&loadbalance.InnerServiceLBTestingSuite{})
+}
+
+func mockCircuitBreakSuite() {
+	Suite(&circuitbreak.CircuitBreakSuite{})
+}
+
+func mockHealthCheckTestingSuite() {
+	Suite(&circuitbreak.HealthCheckTestingSuite{})
+}
+
+func mockHealthCheckAlwaysTestingSuite() {
+	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
+}
+
+func mockNearbyTestingSuite() {
+	Suite(&serviceroute.NearbyTestingSuite{})
+}
+
+func mockRuleRoutingTestingSuite() {
+	Suite(&serviceroute.RuleRoutingTestingSuite{})
+}
+
+func mockDstMetaTestingSuite() {
+	Suite(&serviceroute.DstMetaTestingSuite{})
+}
+
+func mockSetDivisionTestingSuite() {
+	Suite(&serviceroute.SetDivisionTestingSuite{})
+}
+
+func mockCanaryTestingSuite() {
+	Suite(&serviceroute.CanaryTestingSuite{})
+}
+
+// 缓存持久化测试
+func mockCacheTestingSuite() {
+	Suite(&stability.CacheTestingSuite{})
+}
+
+// 服务定时更新测试
+func mockServiceUpdateSuite() {
+	Suite(&stability.ServiceUpdateSuite{})
+}
+
+// 后台server连接切换测试
+func mockServerSwitchSuite() {
+	Suite(&stability.ServerSwitchSuite{})
+}
+
+// 埋点server可靠性测试
+func mockDefaultServerSuite() {
+	Suite(&stability.DefaultServerSuite{})
+}
+
+// 缓存快速更新测试
+func mockCacheFastUpdateSuite() {
+	Suite(&stability.CacheFastUpdateSuite{})
+}
+
+// server异常调用测试
+func mockServerFailOverSuite() {
+	Suite(&stability.ServerFailOverSuite{})
+}
+
+// 消息订阅 测试
+func mockEventSubscribeSuit() {
+	Suite(&subscribe.EventSubscribeSuit{})
+}
+
+func mockLocalNormalTestingSuite() {
+	// 基础本地限流用例测试
+	Suite(&ratelimit.LocalNormalTestingSuite{})
 }

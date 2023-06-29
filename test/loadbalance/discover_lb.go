@@ -72,15 +72,17 @@ func (t *InnerServiceLBTestingSuite) SetUpSuite(c *check.C) {
 	}
 	log.Printf("appserver listening on %s:%d\n", ipAddr, shopPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
-
 	t.monitorToken = t.mockServer.RegisterServerService(config.ServerMonitorService)
+	waitServerReady()
 }
 
 // TearDownSuite SetUpSuite 结束测试套程序
 func (t *InnerServiceLBTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

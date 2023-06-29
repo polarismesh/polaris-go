@@ -36,6 +36,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -48,7 +49,7 @@ const (
 )
 
 var (
-	mockPorts   = []int{10090, 10091, 10092, 10093, 10094}
+	mockPorts   = commontest.ServerSwitchSuitServerPort
 	builtinPort = 10095
 )
 
@@ -111,7 +112,10 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 		}
 		log.Printf("appserver listening on %s:%d\n", mockListenHost, port)
 		go func() {
-			grpcServer.Serve(grpcListener)
+			// grpcServer.Serve(grpcListener)
+			if err := grpcServer.Serve(grpcListener); err != nil {
+				panic(err)
+			}
 		}()
 	}
 	// 纯埋点server，只包含系统服务信息，不包含自身实例以及其他服务信息
@@ -130,14 +134,17 @@ func (t *ServerSwitchSuite) SetUpSuite(c *check.C) {
 	service_manage.RegisterPolarisGRPCServer(builtinGrpcServer, t.builtinServer)
 	log.Printf("appserver listening on %s:%d\n", mockListenHost, builtinPort)
 	go func() {
-		builtinGrpcServer.Serve(builtinListener)
+		// builtinGrpcServer.Serve(builtinListener)
+		if err := builtinGrpcServer.Serve(builtinListener); err != nil {
+			panic(err)
+		}
 	}()
 }
 
 // TearDownSuite SetUpSuite 结束测试套程序
 func (t *ServerSwitchSuite) TearDownSuite(c *check.C) {
 	for _, grpcServer := range t.grpcServers {
-		grpcServer.Stop()
+		grpcServer.GracefulStop()
 	}
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)

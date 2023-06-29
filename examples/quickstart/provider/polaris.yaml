@@ -1,12 +1,11 @@
 global:
   serverConnector:
     addresses:
-      - 139.186.249.101:8091
+      - 119.91.66.223:8091
   statReporter:
-    enable: false
+    enable: true
     chain:
       - prometheus
-      # - pushgateway
     plugin:
       prometheus:
         type: pull

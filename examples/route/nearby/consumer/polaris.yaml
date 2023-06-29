@@ -13,7 +13,6 @@ global:
     enable: true
     chain:
       - prometheus
-      # - pushgateway
     plugin:
       prometheus:
         type: pull

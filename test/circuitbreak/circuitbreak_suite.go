@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -45,7 +46,7 @@ const (
 	cbNS            = "cbns"
 	cbSVC           = "cbsvc"
 	cbIP            = "127.0.0.1"
-	cbPORT          = 8088
+	cbPORT          = commontest.CircuitBreakSuitServerPort
 	cbInstanceCount = 50
 )
 
@@ -96,8 +97,11 @@ func (t *CircuitBreakSuite) SetUpSuite(c *check.C) {
 	c.Assert(err, check.IsNil)
 	log2.Printf("appserver listening on %s:%d\n", cbIP, cbPORT)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
+	waitServerReady(cbPORT)
 }
 
 // GetName 套件名字
@@ -107,7 +111,7 @@ func (t *CircuitBreakSuite) GetName() string {
 
 // TearDownSuite 销毁套件
 func (t *CircuitBreakSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

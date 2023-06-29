@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	commontest "github.com/polarismesh/polaris-go/test/common"
 	"github.com/polarismesh/polaris-go/test/mock"
 	"github.com/polarismesh/polaris-go/test/util"
 )
@@ -45,7 +46,7 @@ const (
 	srNamespace   = "srNS"
 	srService     = "srSvc"
 	srIPAddr      = "127.0.0.1"
-	srPort        = 8009 // 需要跟配置文件一致(sr_nearby.yaml)
+	srPort        = commontest.NearbySuitServerPort // 需要跟配置文件一致(sr_nearby.yaml)
 	srMonitorAddr = "127.0.0.1"
 	srMonitorPort = 8010
 )
@@ -149,7 +150,9 @@ func (t *NearbyTestingSuite) SetUpSuite(c *check.C) {
 	t.serviceToken = uuid.New().String()
 	t.grpcServer, t.grpcListener, t.mocksvr = t.setupServer(srIPAddr, srPort)
 	go func() {
-		t.grpcServer.Serve(t.grpcListener)
+		if err := t.grpcServer.Serve(t.grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 	awaitServerReady(srIPAddr, srPort)
 }
@@ -168,7 +171,7 @@ func awaitServerReady(ip string, port int) {
 
 // SetUpSuite 结束测试套程序
 func (t *NearbyTestingSuite) TearDownSuite(c *check.C) {
-	t.grpcServer.Stop()
+	t.grpcServer.GracefulStop()
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)
 	}

@@ -9,7 +9,7 @@ global:
   serverConnector:
     # 服务注册中心地址
     addresses:
-      - 127.0.0.1:8088
+      - 127.0.0.1:58005
     # 访问服务注册中心的协议
     protocol: grpc
     # 服务的定时同步周期
@@ -18,6 +18,14 @@ global:
     serverSwitchInterval: 50m
     # 连接超时时间
     connectTimeout: 1000ms
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricPort: 0
 consumer:
   localCache:
     # 缓存类型

@@ -15,6 +15,14 @@ global:
     # 连接超时时间
     connectTimeout: 1s
     connectionIdleTimeout: 10s
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricPort: 0
 consumer:
   localCache:
     # 缓存类型

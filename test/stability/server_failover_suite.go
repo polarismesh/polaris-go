@@ -105,7 +105,10 @@ func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 	}
 	log.Printf("appserver listening on %s:%d\n", listenHostFailOver, port)
 	go func() {
-		grpcServer.Serve(grpcListener)
+		// grpcServer.Serve(grpcListener)
+		if err := grpcServer.Serve(grpcListener); err != nil {
+			panic(err)
+		}
 	}()
 	return grpcServer, mockServer
 }
@@ -113,7 +116,7 @@ func createListenMockServer(port int) (*grpc.Server, mock.NamingServer) {
 // SetUpSuite 启动测试套程序
 func (t *ServerFailOverSuite) TearDownSuite(c *check.C) {
 	for _, grpcServer := range t.grpcServers {
-		grpcServer.Stop()
+		grpcServer.GracefulStop()
 	}
 	if util.DirExist(util.BackupDir) {
 		os.RemoveAll(util.BackupDir)

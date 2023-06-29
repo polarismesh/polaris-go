@@ -1,22 +1,36 @@
 #!/bin/bash
+# Tencent is pleased to support the open source community by making polaris-go available.
+#
+# Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
+#
+# Licensed under the BSD 3-Clause License (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# https://opensource.org/licenses/BSD-3-Clause
+#
+# Unless required by applicable law or agreed to in writing, software distributed
+# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
-set -ex  # Exit on error; debugging enabled.
-set -o pipefail  # Fail a pipe if any sub-command fails.
+set -ex         # Exit on error; debugging enabled.
+set -o pipefail # Fail a pipe if any sub-command fails.
 
 # not makes sure the command passed to it does not exit with a return code of 0.
 not() {
-  # This is required instead of the earlier (! $COMMAND) because subshells and
-  # pipefail don't work the same on Darwin as in Linux.
-  ! "$@"
+    # This is required instead of the earlier (! $COMMAND) because subshells and
+    # pipefail don't work the same on Darwin as in Linux.
+    ! "$@"
 }
 
 die() {
-  echo "$@" >&2
-  exit 1
+    echo "$@" >&2
+    exit 1
 }
 
 fail_on_output() {
-  tee /dev/stderr | not read
+    tee /dev/stderr | not read
 }
 
 # Check to make sure it's safe to modify the user's git repo.
@@ -24,7 +38,7 @@ git status --porcelain | fail_on_output
 
 # Undo any edits made by this script.
 cleanup() {
-  git reset --hard HEAD
+    git reset --hard HEAD
 }
 trap cleanup EXIT
 
@@ -32,17 +46,17 @@ PATH="${HOME}/go/bin:${GOROOT}/bin:${PATH}"
 go version
 
 if [[ "$1" = "-install" ]]; then
-  # Install the pinned versions as defined in module tools.
-  pushd ./test/tools
-  go install \
-    golang.org/x/lint/golint \
-    golang.org/x/tools/cmd/goimports \
-    honnef.co/go/tools/cmd/staticcheck \
-    github.com/client9/misspell/cmd/misspell
-  popd
-  exit 0
+    # Install the pinned versions as defined in module tools.
+    pushd ./test/tools
+    go install \
+        golang.org/x/lint/golint \
+        golang.org/x/tools/cmd/goimports \
+        honnef.co/go/tools/cmd/staticcheck \
+        github.com/client9/misspell/cmd/misspell
+    popd
+    exit 0
 elif [[ "$#" -ne 0 ]]; then
-  die "Unknown argument(s): $*"
+    die "Unknown argument(s): $*"
 fi
 
 # - Ensure all source files contain a copyright message.
@@ -64,17 +78,21 @@ misspell -error .
 # go mod tidy.
 # Perform these checks on each module inside polaris-go.
 for MOD_FILE in $(find . -name 'go.mod'); do
-  MOD_DIR=$(dirname ${MOD_FILE})
-  pushd ${MOD_DIR}
-  go vet -all ./... | fail_on_output
-  #gofmt -s -d -l . 2>&1 | fail_on_output
-  #goimports -l . 2>&1 | not grep -vE "\.pb\.go"
-  #golint ./... 2>&1 | not grep -vE "\.pb\.go"
+    MOD_DIR=$(dirname ${MOD_FILE})
+    pushd ${MOD_DIR}
+    go vet -all ./... | fail_on_output
+    #gofmt -s -d -l . 2>&1 | fail_on_output
+    #goimports -l . 2>&1 | not grep -vE "\.pb\.go"
+    #golint ./... 2>&1 | not grep -vE "\.pb\.go"
 
-  go mod tidy
-  git status --porcelain 2>&1 | fail_on_output || \
-    (git status; git --no-pager diff; exit 1)
-  popd
+    go mod tidy
+    git status --porcelain 2>&1 | fail_on_output ||
+        (
+            git status
+            git --no-pager diff
+            exit 1
+        )
+    popd
 done
 
 # - Collection of static analysis checks
