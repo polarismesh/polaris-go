@@ -156,12 +156,12 @@ func buildInstanceProperty(now time.Time, allowedRequests int, instances model.H
 		request.Properties = append(request.Properties, localregistry.InstanceProperties{
 			ID:      instID.(string),
 			Service: &request.ServiceKey,
-			Properties: map[string]interface{}{localregistry.PropertyCircuitBreakerStatus: &circuitBreakerStatus{
-				circuitBreaker:           cbName,
-				status:                   status,
-				startTime:                now,
-				maxHalfOpenAllowReqTimes: allowedRequests,
-				halfOpenQuota:            int32(allowedRequests),
+			Properties: map[string]interface{}{localregistry.PropertyCircuitBreakerStatus: &model.CircuitBreakerStatusImpl{
+				CircuitBreaker:           cbName,
+				Status:                   status,
+				StartTime:                now,
+				MaxHalfOpenAllowReqTimes: allowedRequests,
+				HalfOpenQuota:            int32(allowedRequests),
 			}},
 		})
 	}

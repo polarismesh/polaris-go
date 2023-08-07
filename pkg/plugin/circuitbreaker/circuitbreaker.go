@@ -25,6 +25,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+// CircuitBreaker 【扩展点接口】资源熔断（实例熔断、方法熔断、服务熔断）
+type CircuitBreaker interface {
+	// CheckResource get the resource circuitbreaker status
+	CheckResource(Resource) model.CircuitBreakerStatus
+	// Report report resource invoke result stat
+	Report(*ResourceStat)
+}
+
 // InstanceCircuitBreaker 【扩展点接口】节点熔断
 type InstanceCircuitBreaker interface {
 	plugin.Plugin

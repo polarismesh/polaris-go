@@ -27,6 +27,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+type FailOverType int32
+
+const (
+	_ FailOverType = iota
+	FailOverAll
+	FailOverNone
+)
+
 // RouteInfo 路由信息
 type RouteInfo struct {
 	// 源服务信息
@@ -57,6 +65,8 @@ type RouteInfo struct {
 	Canary string
 	// 进行匹配的规则类型，如规则路由有入规则和出规则之分
 	MatchRuleType RuleType
+	// 规则路由失败降级类型
+	FailOverType *FailOverType
 }
 
 // Init 初始化map

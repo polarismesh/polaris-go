@@ -78,75 +78,6 @@ type ServiceInstances interface {
 	IsCacheLoaded() bool
 }
 
-// Status 断路器状态
-type Status int
-
-const (
-	// Open 断路器已打开，代表节点已经被熔断
-	Open Status = 1
-	// HalfOpen 断路器半开，节点处于刚熔断恢复，只允许少量请求通过
-	HalfOpen Status = 2
-	// Close 断路器关闭，节点处于正常工作状态
-	Close Status = 3
-)
-
-// String toString method
-func (s Status) String() string {
-	switch s {
-	case Open:
-		return "open"
-	case HalfOpen:
-		return "half-open"
-	case Close:
-		return "close"
-	}
-	return "unknown"
-}
-
-// HealthCheckStatus 健康探测状态
-type HealthCheckStatus int
-
-const (
-	// Healthy 节点探测结果已经恢复健康, 代表可以放开一部分流量
-	Healthy HealthCheckStatus = 1
-	// Dead 节点仍然不可用
-	Dead HealthCheckStatus = 2
-)
-
-// CircuitBreakerStatus  熔断器状态管理器
-type CircuitBreakerStatus interface {
-	// GetCircuitBreaker 标识被哪个熔断器熔断
-	GetCircuitBreaker() string
-	// GetStatus 熔断状态
-	GetStatus() Status
-	// GetStartTime 状态转换的时间
-	GetStartTime() time.Time
-	// IsAvailable 是否可以分配请求
-	IsAvailable() bool
-	// Allocate 执行请求分配
-	Allocate() bool
-	// GetRequestsAfterHalfOpen 获取进入半开状态之后分配的请求数
-	GetRequestsAfterHalfOpen() int32
-	// GetFailRequestsAfterHalfOpen 获取进入半开状态之后的失败请求数
-	GetFailRequestsAfterHalfOpen() int32
-	// AddRequestCountAfterHalfOpen 添加半开状态下面的请求数
-	AddRequestCountAfterHalfOpen(n int32, success bool) int32
-	// GetFinalAllocateTimeInt64 获取分配了最后配额的时间
-	GetFinalAllocateTimeInt64() int64
-	// AcquireStatusLock 获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
-	AcquireStatusLock() bool
-	// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
-	AllocatedRequestsAfterHalfOpen() int32
-}
-
-// ActiveDetectStatus 健康探测管理器
-type ActiveDetectStatus interface {
-	// GetStatus 健康探测结果状态
-	GetStatus() HealthCheckStatus
-	// GetStartTime 状态转换的时间
-	GetStartTime() time.Time
-}
-
 // Instance 服务实例信息
 type Instance interface {
 	// GetInstanceKey 获取实例四元组标识
@@ -1233,8 +1164,6 @@ const (
 type InstanceRegisterRequest struct {
 	// 必选，服务名
 	Service string
-	// 必选，服务访问Token
-	ServiceToken string
 	// 必选，命名空间
 	Namespace string
 	// 必选，服务监听host，支持IPv6地址
@@ -1243,6 +1172,8 @@ type InstanceRegisterRequest struct {
 	Port int
 
 	// 以下字段可选，默认nil表示客户端不配置，使用服务端配置
+	// 可选，服务访问Token
+	ServiceToken string
 	// 服务协议
 	Protocol *string
 	// 服务权重，默认100，范围0-10000

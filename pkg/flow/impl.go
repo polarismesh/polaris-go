@@ -75,6 +75,8 @@ type Engine struct {
 	plugins plugin.Supplier
 	// 任务调度协程
 	taskRoutines []schedule.TaskRoutine
+	// 熔断引擎
+	circuitBreakerFlow *CircuitBreakerFlow
 	// 实时熔断任务队列
 	rtCircuitBreakChan chan<- *model.PriorityTask
 	// 实时熔断公共任务信息
@@ -258,6 +260,10 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 // GetContext 获取上下文
 func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
+}
+
+func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
+	return e.circuitBreakerFlow
 }
 
 // ServiceEventCallback serviceUpdate消息订阅回调

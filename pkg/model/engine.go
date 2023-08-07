@@ -128,4 +128,12 @@ type Engine interface {
 	WatchAllInstances(request *WatchAllInstancesRequest) (*WatchAllInstancesResponse, error)
 	// WatchAllServices 监听服务列表变更事件
 	WatchAllServices(request *WatchAllServicesRequest) (*WatchAllServicesResponse, error)
+	// Check
+	Check(Resource) (*CheckResult, error)
+	// Report
+	Report(*ResourceStat) error
+	// MakeFunctionDecorator
+	MakeFunctionDecorator(*RequestContext) CustomerFunction
+	// MakeInvokeHandler
+	MakeInvokeHandler(*RequestContext) InvokeHandler
 }
