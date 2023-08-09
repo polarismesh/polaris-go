@@ -26,6 +26,7 @@ import (
 	"github.com/modern-go/reflect2"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+	slimiter "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
@@ -504,7 +505,7 @@ func (r *RateLimitWindow) Init() {
 }
 
 func (r *RateLimitWindow) buildInitTargetStr() string {
-	target := rlimitV2.LimitTarget{
+	target := slimiter.LimitTarget{
 		Namespace: r.SvcKey.Namespace,
 		Service:   r.SvcKey.Service,
 		Labels:    r.Labels,
@@ -523,19 +524,19 @@ func (r *RateLimitWindow) AsyncRateLimitConnector() AsyncRateLimitConnector {
 }
 
 // InitializeRequest 转换成限流PB初始化消息
-func (r *RateLimitWindow) InitializeRequest() *rlimitV2.RateLimitInitRequest {
+func (r *RateLimitWindow) InitializeRequest() *slimiter.RateLimitInitRequest {
 	clientID := r.Engine().GetContext().GetClientId()
-	initReq := &rlimitV2.RateLimitInitRequest{}
+	initReq := &slimiter.RateLimitInitRequest{}
 	initReq.ClientId = clientID
-	initReq.Target = &rlimitV2.LimitTarget{}
+	initReq.Target = &slimiter.LimitTarget{}
 	initReq.Target.Namespace = r.SvcKey.Namespace
 	initReq.Target.Service = r.SvcKey.Service
 	initReq.Target.Labels = r.Labels
 
-	quotaMode := rlimitV2.QuotaMode(r.Rule.GetAmountMode())
+	quotaMode := slimiter.QuotaMode(r.Rule.GetAmountMode())
 	tokenBuckets := r.trafficShapingBucket.GetAmountInfos()
 	for _, tokenBucket := range tokenBuckets {
-		quotaTotal := &rlimitV2.QuotaTotal{
+		quotaTotal := &slimiter.QuotaTotal{
 			Mode:      quotaMode,
 			Duration:  tokenBucket.ValidDuration,
 			MaxAmount: tokenBucket.MaxAmount,
@@ -567,14 +568,14 @@ func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportReques
 		Service:   r.SvcKey.Service,
 		Namespace: r.SvcKey.Namespace,
 		Labels:    r.Labels,
-		QuotaUsed: make(map[time.Duration]*rlimitV2.QuotaSum),
+		QuotaUsed: make(map[time.Duration]*slimiter.QuotaSum),
 	}
 	curTimeMilli := r.toServerTimeMilli(model.CurrentMillisecond())
 	usageInfo := r.trafficShapingBucket.GetQuotaUsed(curTimeMilli)
 	reportReq.Timestamp = usageInfo.CurTimeMilli
 	if len(usageInfo.Passed) > 0 {
 		for durationMilli, passed := range usageInfo.Passed {
-			reportReq.QuotaUsed[time.Duration(durationMilli)*time.Millisecond] = &rlimitV2.QuotaSum{
+			reportReq.QuotaUsed[time.Duration(durationMilli)*time.Millisecond] = &slimiter.QuotaSum{
 				Used:    passed,
 				Limited: usageInfo.Limited[durationMilli],
 			}

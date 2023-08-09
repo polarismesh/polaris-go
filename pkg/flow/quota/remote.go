@@ -20,6 +20,7 @@ package quota
 import (
 	"context"
 	"fmt"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"io"
 	"net"
 	"strings"
@@ -42,9 +43,9 @@ import (
 // ResponseCallBack 应答回调函数
 type ResponseCallBack interface {
 	// OnInitResponse 应答回调函数
-	OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, curTimeMilli int64)
+	OnInitResponse(counter *ratelimiter.QuotaCounter, duration time.Duration, curTimeMilli int64)
 	// OnReportResponse 应答回调函数
-	OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64)
+	OnReportResponse(counter *ratelimiter.QuotaLeft, duration time.Duration, curTimeMilli int64)
 }
 
 // RateLimitMsgSender 限流消息同步器
@@ -52,7 +53,7 @@ type RateLimitMsgSender interface {
 	// HasInitialized 是否已经初始化
 	HasInitialized(svcKey model.ServiceKey, labels string) bool
 	// SendInitRequest 发送初始化请求
-	SendInitRequest(request *rlimitV2.RateLimitInitRequest, callback ResponseCallBack)
+	SendInitRequest(request *ratelimiter.RateLimitInitRequest, callback ResponseCallBack)
 	// SendReportRequest 发送上报请求
 	SendReportRequest(request *rlimitV2.ClientRateLimitReportRequest) error
 	// AdjustTime 同步时间
@@ -116,9 +117,9 @@ type StreamCounterSet struct {
 	// 客户端连接
 	conn *grpc.ClientConn
 	// 限流客户端
-	client rlimitV2.RateLimitGRPCV2Client
+	client ratelimiter.RateLimitGRPCV2Client
 	// 消息流
-	serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient
+	serviceStream ratelimiter.RateLimitGRPCV2_ServiceClient
 	// 已发起初始化的窗口，初始化完毕后，value为大于0的值
 	initialingWindows map[CounterIdentifier]*InitializeRecord
 	// 回调函数
@@ -192,7 +193,7 @@ func (s *StreamCounterSet) createConnection() (*grpc.ClientConn, error) {
 
 // preInitCheck 初始化操作的前置检查
 func (s *StreamCounterSet) preInitCheck(
-	counterIdentifier CounterIdentifier, callback ResponseCallBack) rlimitV2.RateLimitGRPCV2_ServiceClient {
+	counterIdentifier CounterIdentifier, callback ResponseCallBack) ratelimiter.RateLimitGRPCV2_ServiceClient {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if nil == s.conn {
@@ -205,7 +206,7 @@ func (s *StreamCounterSet) preInitCheck(
 		s.conn = conn
 	}
 	if nil == s.client {
-		s.client = rlimitV2.NewRateLimitGRPCV2Client(s.conn)
+		s.client = ratelimiter.NewRateLimitGRPCV2Client(s.conn)
 	}
 	if nil == s.serviceStream {
 		selfHost := s.asyncConnector.getIPString(s.HostIdentifier.host, s.HostIdentifier.port)
@@ -249,7 +250,7 @@ func createHeaderContext(headers map[string]string) context.Context {
 }
 
 // SendInitRequest 发送初始化请求
-func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitRequest, callback ResponseCallBack) {
+func (s *StreamCounterSet) SendInitRequest(initReq *ratelimiter.RateLimitInitRequest, callback ResponseCallBack) {
 	counterIdentifier := CounterIdentifier{
 		service:   initReq.GetTarget().GetService(),
 		namespace: initReq.GetTarget().GetNamespace(),
@@ -260,8 +261,8 @@ func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitReques
 		return
 	}
 	// 发起初始化
-	request := &rlimitV2.RateLimitRequest{
-		Cmd:                  rlimitV2.RateLimitCmd_INIT,
+	request := &ratelimiter.RateLimitRequest{
+		Cmd:                  ratelimiter.RateLimitCmd_INIT,
 		RateLimitInitRequest: initReq,
 	}
 	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
@@ -275,7 +276,7 @@ func (s *StreamCounterSet) SendInitRequest(initReq *rlimitV2.RateLimitInitReques
 }
 
 // checkAndCreateClient 检查并创建客户端
-func (s *StreamCounterSet) checkAndCreateClient() (rlimitV2.RateLimitGRPCV2Client, error) {
+func (s *StreamCounterSet) checkAndCreateClient() (ratelimiter.RateLimitGRPCV2Client, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	curTimeMilli := model.CurrentMillisecond()
@@ -298,7 +299,7 @@ func (s *StreamCounterSet) checkAndCreateClient() (rlimitV2.RateLimitGRPCV2Clien
 		s.conn = conn
 	}
 	if reflect2.IsNil(s.client) {
-		s.client = rlimitV2.NewRateLimitGRPCV2Client(s.conn)
+		s.client = ratelimiter.NewRateLimitGRPCV2Client(s.conn)
 	}
 	return s.client, nil
 }
@@ -357,7 +358,7 @@ func (s *StreamCounterSet) AdjustTime() int64 {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.asyncConnector.msgTimeout)
 	defer cancel()
-	timeResp, err := client.TimeAdjust(ctx, &rlimitV2.TimeAdjustRequest{})
+	timeResp, err := client.TimeAdjust(ctx, &ratelimiter.TimeAdjustRequest{})
 	atomic.StoreInt64(&s.lastSyncTimeMilli, model.CurrentMillisecond())
 	if err != nil {
 		log.GetNetworkLogger().Errorf("[RateLimit]fail to send timeAdjust message to %s:%d, key is %s, err is %v",
@@ -386,7 +387,7 @@ func (s *StreamCounterSet) closeConnection() {
 }
 
 // cleanup 清理stream
-func (s *StreamCounterSet) cleanup(serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
+func (s *StreamCounterSet) cleanup(serviceStream ratelimiter.RateLimitGRPCV2_ServiceClient) {
 	s.asyncConnector.dropStreamCounterSet(s, serviceStream)
 	s.closeConnection()
 }
@@ -406,7 +407,7 @@ func IsSuccess(code uint32) bool {
 }
 
 // updateByInitResp 通过初始化应答来更新
-func (s *StreamCounterSet) updateByInitResp(identifier CounterIdentifier, initResp *rlimitV2.RateLimitInitResponse) {
+func (s *StreamCounterSet) updateByInitResp(identifier CounterIdentifier, initResp *ratelimiter.RateLimitInitResponse) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.clientKey = initResp.GetClientKey()
@@ -427,7 +428,7 @@ func (s *StreamCounterSet) updateByInitResp(identifier CounterIdentifier, initRe
 }
 
 // processInitResponse 处理初始化应答
-func (s *StreamCounterSet) processInitResponse(initResp *rlimitV2.RateLimitInitResponse) bool {
+func (s *StreamCounterSet) processInitResponse(initResp *ratelimiter.RateLimitInitResponse) bool {
 	target := initResp.GetTarget()
 	identifier := CounterIdentifier{
 		service:   target.GetService(),
@@ -454,7 +455,7 @@ func (s *StreamCounterSet) processInitResponse(initResp *rlimitV2.RateLimitInitR
 }
 
 // processReportResponse 处理上报的应答
-func (s *StreamCounterSet) processReportResponse(reportRsp *rlimitV2.RateLimitReportResponse) bool {
+func (s *StreamCounterSet) processReportResponse(reportRsp *ratelimiter.RateLimitReportResponse) bool {
 	if IsSuccess(reportRsp.GetCode()) {
 		s.mutex.RLock()
 		nowMilli := model.CurrentMillisecond()
@@ -474,7 +475,7 @@ func (s *StreamCounterSet) processReportResponse(reportRsp *rlimitV2.RateLimitRe
 }
 
 // processResponse 处理应答消息
-func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
+func (s *StreamCounterSet) processResponse(serviceStream ratelimiter.RateLimitGRPCV2_ServiceClient) {
 	defer s.cleanup(serviceStream)
 	for {
 		resp, err := serviceStream.Recv()
@@ -486,7 +487,7 @@ func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV
 			return
 		}
 		switch resp.Cmd {
-		case rlimitV2.RateLimitCmd_INIT:
+		case ratelimiter.RateLimitCmd_INIT:
 			initResp := resp.GetRateLimitInitResponse()
 			if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 				initRspStr, _ := (&jsonpb.Marshaler{}).MarshalToString(initResp)
@@ -495,7 +496,7 @@ func (s *StreamCounterSet) processResponse(serviceStream rlimitV2.RateLimitGRPCV
 			if !s.processInitResponse(initResp) {
 				return
 			}
-		case rlimitV2.RateLimitCmd_ACQUIRE:
+		case ratelimiter.RateLimitCmd_ACQUIRE:
 			reportResp := resp.GetRateLimitReportResponse()
 			if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 				reportRspStr, _ := (&jsonpb.Marshaler{}).MarshalToString(reportResp)
@@ -527,7 +528,7 @@ func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRat
 	if nil == record {
 		return fmt.Errorf("fail to find initialingWindow, identifier is %s", identifier)
 	}
-	reportReq := &rlimitV2.RateLimitReportRequest{}
+	reportReq := &ratelimiter.RateLimitReportRequest{}
 	reportReq.ClientKey = s.clientKey
 	// 转换系统时间
 	reportReq.Timestamp = clientReportReq.Timestamp
@@ -540,8 +541,8 @@ func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRat
 		reportReq.QuotaUses = append(reportReq.QuotaUses, sum)
 	}
 	// 发起上报调用
-	request := &rlimitV2.RateLimitRequest{
-		Cmd:                    rlimitV2.RateLimitCmd_ACQUIRE,
+	request := &ratelimiter.RateLimitRequest{
+		Cmd:                    ratelimiter.RateLimitCmd_ACQUIRE,
 		RateLimitReportRequest: reportReq,
 	}
 	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
@@ -635,7 +636,7 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 
 // dropStreamCounterSet 淘汰流管理器
 func (a *asyncRateLimitConnector) dropStreamCounterSet(
-	streamCounterSet *StreamCounterSet, serviceStream rlimitV2.RateLimitGRPCV2_ServiceClient) {
+	streamCounterSet *StreamCounterSet, serviceStream ratelimiter.RateLimitGRPCV2_ServiceClient) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	existStream := a.streams[*streamCounterSet.HostIdentifier]

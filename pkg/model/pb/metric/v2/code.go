@@ -17,6 +17,8 @@
 
 package v2
 
+import "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
+
 type Code uint32
 
 // 对于400的错误，一般是规则错误或者客户端BUG导致，直接前台返回失败，无需重试
@@ -68,8 +70,8 @@ const (
 )
 
 // GetErrorCode 返回错误码
-func GetErrorCode(resp *RateLimitResponse) uint32 {
-	if resp.GetCmd() == RateLimitCmd_INIT {
+func GetErrorCode(resp *ratelimiter.RateLimitResponse) uint32 {
+	if resp.GetCmd() == ratelimiter.RateLimitCmd_INIT {
 		return resp.GetRateLimitInitResponse().GetCode()
 	}
 	return resp.GetRateLimitReportResponse().GetCode()
