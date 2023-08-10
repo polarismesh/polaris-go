@@ -18,6 +18,7 @@
 package v2
 
 import (
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"time"
 )
 
@@ -26,13 +27,13 @@ type ClientRateLimitReportRequest struct {
 	Service   string
 	Namespace string
 	Labels    string
-	QuotaUsed map[time.Duration]*QuotaSum
+	QuotaUsed map[time.Duration]*ratelimiter.QuotaSum
 	Timestamp int64
 }
 
 // NewClientRateLimitReportRequest 创建上报请求对象
 func NewClientRateLimitReportRequest() *ClientRateLimitReportRequest {
 	return &ClientRateLimitReportRequest{
-		QuotaUsed: make(map[time.Duration]*QuotaSum),
+		QuotaUsed: make(map[time.Duration]*ratelimiter.QuotaSum),
 	}
 }

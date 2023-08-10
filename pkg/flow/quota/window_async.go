@@ -21,10 +21,10 @@ import (
 	"time"
 
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+	slimiter "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
@@ -79,7 +79,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 }
 
 // OnInitResponse 应答回调函数
-func (r *RateLimitWindow) OnInitResponse(counter *rlimitV2.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
+func (r *RateLimitWindow) OnInitResponse(counter *slimiter.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
 	r.SetStatus(Initialized)
 	log.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
 	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
@@ -92,7 +92,7 @@ func (r *RateLimitWindow) OnInitResponse(counter *rlimitV2.QuotaCounter, duratio
 }
 
 // OnReportResponse 应答回调函数
-func (r *RateLimitWindow) OnReportResponse(counter *rlimitV2.QuotaLeft, duration time.Duration, curTimeMilli int64) {
+func (r *RateLimitWindow) OnReportResponse(counter *slimiter.QuotaLeft, duration time.Duration, curTimeMilli int64) {
 	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
 		Left:            counter.GetLeft(),
 		ClientCount:     counter.GetClientCount(),

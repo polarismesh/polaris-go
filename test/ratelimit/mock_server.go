@@ -19,12 +19,12 @@ package ratelimit
 
 import (
 	"context"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
 
 const (
@@ -102,14 +102,14 @@ func (m *MockRateLimitServer) SetClientKey(uid string, key uint32) {
 const delayDuration = 2 * time.Second
 
 // 处理请求
-func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest) *rlimitV2.RateLimitResponse {
+func (m *MockRateLimitServer) processRequest(request *ratelimiter.RateLimitRequest) *ratelimiter.RateLimitResponse {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	switch request.Cmd {
-	case rlimitV2.RateLimitCmd_INIT:
+	case ratelimiter.RateLimitCmd_INIT:
 		initReq := request.GetRateLimitInitRequest()
 		if m.operation4xx[OperationInit] {
-			initResp := &rlimitV2.RateLimitInitResponse{
+			initResp := &ratelimiter.RateLimitInitResponse{
 				Code:       400213,
 				Target:     initReq.GetTarget(),
 				ClientKey:  0,
@@ -117,8 +117,8 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 				SlideCount: 0,
 				Timestamp:  model.CurrentMillisecond(),
 			}
-			return &rlimitV2.RateLimitResponse{
-				Cmd:                   rlimitV2.RateLimitCmd_INIT,
+			return &ratelimiter.RateLimitResponse{
+				Cmd:                   ratelimiter.RateLimitCmd_INIT,
 				RateLimitInitResponse: initResp,
 			}
 		}
@@ -131,34 +131,34 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 			// 等待一段时间，再返回
 			time.Sleep(delayDuration)
 		}
-		initResp := &rlimitV2.RateLimitInitResponse{
+		initResp := &ratelimiter.RateLimitInitResponse{
 			Code:      200000,
 			Target:    initReq.GetTarget(),
 			ClientKey: 1,
-			Counters: []*rlimitV2.QuotaCounter{
+			Counters: []*ratelimiter.QuotaCounter{
 				{
 					Duration:    initReq.Totals[0].Duration,
 					CounterKey:  m.clientKeys[initReq.ClientId],
 					Left:        atomic.LoadInt64(&m.mockMaxAmount),
-					Mode:        rlimitV2.Mode_BATCH_OCCUPY,
+					Mode:        ratelimiter.Mode_BATCH_OCCUPY,
 					ClientCount: uint32(len(m.clientKeys)),
 				},
 			},
 			Timestamp: timeMilli,
 		}
-		return &rlimitV2.RateLimitResponse{
-			Cmd:                   rlimitV2.RateLimitCmd_INIT,
+		return &ratelimiter.RateLimitResponse{
+			Cmd:                   ratelimiter.RateLimitCmd_INIT,
 			RateLimitInitResponse: initResp,
 		}
-	case rlimitV2.RateLimitCmd_ACQUIRE:
+	case ratelimiter.RateLimitCmd_ACQUIRE:
 		reportReq := request.GetRateLimitReportRequest()
 		if m.operation4xx[OperationReport] {
-			reportResp := &rlimitV2.RateLimitReportResponse{
+			reportResp := &ratelimiter.RateLimitReportResponse{
 				Code:      400213,
 				Timestamp: model.CurrentMillisecond(),
 			}
-			return &rlimitV2.RateLimitResponse{
-				Cmd:                     rlimitV2.RateLimitCmd_ACQUIRE,
+			return &ratelimiter.RateLimitResponse{
+				Cmd:                     ratelimiter.RateLimitCmd_ACQUIRE,
 				RateLimitReportResponse: reportResp,
 			}
 		}
@@ -171,9 +171,9 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 			// 等待一段时间，再返回
 			time.Sleep(delayDuration)
 		}
-		reportResp := &rlimitV2.RateLimitReportResponse{
+		reportResp := &ratelimiter.RateLimitReportResponse{
 			Code: 200000,
-			QuotaLefts: []*rlimitV2.QuotaLeft{
+			QuotaLefts: []*ratelimiter.QuotaLeft{
 				{
 					CounterKey:  reportReq.QuotaUses[0].CounterKey,
 					Left:        atomic.AddInt64(&m.mockMaxAmount, 0-int64(reportReq.QuotaUses[0].Used)),
@@ -182,8 +182,8 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 			},
 			Timestamp: timeMilli,
 		}
-		return &rlimitV2.RateLimitResponse{
-			Cmd:                     rlimitV2.RateLimitCmd_ACQUIRE,
+		return &ratelimiter.RateLimitResponse{
+			Cmd:                     ratelimiter.RateLimitCmd_ACQUIRE,
 			RateLimitReportResponse: reportResp,
 		}
 	}
@@ -191,7 +191,7 @@ func (m *MockRateLimitServer) processRequest(request *rlimitV2.RateLimitRequest)
 }
 
 // 消息处理接口
-func (m *MockRateLimitServer) Service(stream rlimitV2.RateLimitGRPCV2_ServiceServer) error {
+func (m *MockRateLimitServer) Service(stream ratelimiter.RateLimitGRPCV2_ServiceServer) error {
 	for {
 		request, err := stream.Recv()
 		if err != nil {
@@ -209,8 +209,8 @@ func (m *MockRateLimitServer) Service(stream rlimitV2.RateLimitGRPCV2_ServiceSer
 
 // 时间对齐接口
 func (m *MockRateLimitServer) TimeAdjust(ctx context.Context,
-	adjustReq *rlimitV2.TimeAdjustRequest) (*rlimitV2.TimeAdjustResponse, error) {
-	return &rlimitV2.TimeAdjustResponse{
+	adjustReq *ratelimiter.TimeAdjustRequest) (*ratelimiter.TimeAdjustResponse, error) {
+	return &ratelimiter.TimeAdjustResponse{
 		ServerTimestamp: model.CurrentMillisecond(),
 	}, nil
 }
