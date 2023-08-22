@@ -19,13 +19,12 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/polarismesh/specification v1.4.0-alpha.5
+	github.com/polarismesh/specification v1.4.0
 	github.com/prometheus/client_golang v1.12.2
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.8.2
 	go.uber.org/zap v1.21.0
-	golang.org/x/net v0.2.0
 	google.golang.org/genproto v0.0.0-20221014213838-99cd37c6964a // indirect
 	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1

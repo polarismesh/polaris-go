@@ -20,7 +20,6 @@ package quota
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"io"
 	"net"
 	"strings"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -37,7 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
+	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
 
 // ResponseCallBack 应答回调函数
@@ -55,7 +55,7 @@ type RateLimitMsgSender interface {
 	// SendInitRequest 发送初始化请求
 	SendInitRequest(request *ratelimiter.RateLimitInitRequest, callback ResponseCallBack)
 	// SendReportRequest 发送上报请求
-	SendReportRequest(request *rlimitV2.ClientRateLimitReportRequest) error
+	SendReportRequest(request *limitpb.ClientRateLimitReportRequest) error
 	// AdjustTime 同步时间
 	AdjustTime() int64
 }
@@ -510,7 +510,7 @@ func (s *StreamCounterSet) processResponse(serviceStream ratelimiter.RateLimitGR
 }
 
 // SendReportRequest 发送上报请求
-func (s *StreamCounterSet) SendReportRequest(clientReportReq *rlimitV2.ClientRateLimitReportRequest) error {
+func (s *StreamCounterSet) SendReportRequest(clientReportReq *limitpb.ClientRateLimitReportRequest) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	if reflect2.IsNil(s.serviceStream) {
