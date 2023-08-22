@@ -18,10 +18,9 @@
 package v2
 
 import (
-	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"time"
 
-	rlimitV2 "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 )
 
 // ClientRateLimitReportRequest 客户端视角的上报请求

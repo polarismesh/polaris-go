@@ -20,7 +20,6 @@ package quota
 import (
 	"context"
 	"fmt"
-	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"io"
 	"net"
 	"strings"
@@ -30,7 +29,7 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/modern-go/reflect2"
-	rlimitV2 "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"

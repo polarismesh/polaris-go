@@ -19,10 +19,11 @@ package ratelimit
 
 import (
 	"context"
-	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
