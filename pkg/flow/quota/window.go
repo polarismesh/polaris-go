@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
-	rlimitV2 "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
+	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
@@ -563,8 +563,8 @@ func (r *RateLimitWindow) EnsureDeleted(value interface{}) bool {
 }
 
 // acquireRequest 转换成限流PB上报消息
-func (r *RateLimitWindow) acquireRequest() *rlimitV2.ClientRateLimitReportRequest {
-	reportReq := &rlimitV2.ClientRateLimitReportRequest{
+func (r *RateLimitWindow) acquireRequest() *limitpb.ClientRateLimitReportRequest {
+	reportReq := &limitpb.ClientRateLimitReportRequest{
 		Service:   r.SvcKey.Service,
 		Namespace: r.SvcKey.Namespace,
 		Labels:    r.Labels,

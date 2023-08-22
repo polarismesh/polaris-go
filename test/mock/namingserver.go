@@ -450,7 +450,7 @@ func (n *namingServer) Heartbeat(ctx context.Context, req *service_manage.Instan
 	}, nil
 }
 
-func (n *namingServer) BatchHeartbeat(server service_manage.PolarisHeartbeatGRPC_BatchHeartbeatClient) error {
+func (n *namingServer) BatchHeartbeat(server service_manage.PolarisHeartbeatGRPC_BatchHeartbeatServer) error {
 	// TODO
 	return nil
 }
