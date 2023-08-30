@@ -98,7 +98,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	registerRequest.SetTTL(10)
+	registerRequest.SetTTL(1)
 	// 实例id不是必填，如果不填，服务端会默认生成一个唯一Id，否则当提供实例id时，需要保证实例id是唯一的
 	registerRequest.InstanceId = providedInstanceId(namespace, service, svr.host, svr.port)
 	resp, err := svr.provider.RegisterInstance(registerRequest)

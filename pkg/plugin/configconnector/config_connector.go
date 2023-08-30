@@ -30,6 +30,12 @@ type ConfigConnector interface {
 	GetConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
 	// WatchConfigFiles Watch config files
 	WatchConfigFiles(configFileList []*ConfigFile) (*ConfigFileResponse, error)
+	// CreateConfigFile Create config file
+	CreateConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
+	// UpdateConfigFile Update config file
+	UpdateConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
+	// PublishConfigFile Publish config file
+	PublishConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
 }
 
 // init

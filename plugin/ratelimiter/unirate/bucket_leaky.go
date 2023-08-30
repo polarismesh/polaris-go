@@ -156,6 +156,11 @@ func (l *LeakyBucket) GetQuota(curTimeMs int64, token uint32) *model.QuotaRespon
 	return l.allocateQuota()
 }
 
+// GetQuotaWithRelease 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
+func (l *LeakyBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaResponse, func()) {
+	return l.allocateQuota(), nil
+}
+
 // Release 释放配额（仅对于并发数限流有用）
 func (l *LeakyBucket) Release() {
 

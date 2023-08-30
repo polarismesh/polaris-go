@@ -26,20 +26,23 @@ type LocationProviderConfigImpl struct {
 	Options map[string]interface{} `yaml:"options" json:"options"`
 }
 
-func (l LocationProviderConfigImpl) GetType() string {
+func (l *LocationProviderConfigImpl) GetType() string {
 	return l.Type
 }
 
-func (l LocationProviderConfigImpl) GetOptions() map[string]interface{} {
+func (l *LocationProviderConfigImpl) GetOptions() map[string]interface{} {
 	return l.Options
 }
 
-func (l LocationProviderConfigImpl) Verify() error {
+func (l *LocationProviderConfigImpl) Verify() error {
 	if l.Type == "" {
 		return errors.New("type is empty")
 	}
 	return nil
 }
 
-func (l LocationProviderConfigImpl) SetDefault() {
+func (l *LocationProviderConfigImpl) SetDefault() {
+	if len(l.Options) == 0 {
+		l.Options = map[string]interface{}{}
+	}
 }

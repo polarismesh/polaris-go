@@ -35,6 +35,8 @@ type ServiceRateLimiter interface {
 type QuotaBucket interface {
 	// GetQuota 在令牌桶/漏桶中进行单个配额的划扣，并返回本次分配的结果
 	GetQuota(curTimeMs int64, token uint32) *model.QuotaResponse
+	// GetQuotaWithRelease 判断限流结果，并返回配额释放函数（对并发数限流、CPU自适应限流有用）
+	GetQuotaWithRelease(curTimeMs int64, token uint32) (*model.QuotaResponse, func())
 	// Release 释放配额（仅对于并发数限流有用）
 	Release()
 	// OnRemoteUpdate 远程配额更新

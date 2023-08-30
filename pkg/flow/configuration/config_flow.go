@@ -19,12 +19,12 @@ package configuration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -47,13 +47,24 @@ type ConfigFileFlow struct {
 	chain         configfilter.Chain
 	configuration config.Configuration
 
+	persistHandler *CachePersistHandler
+
 	startLongPollingTaskOnce sync.Once
 }
 
 // NewConfigFileFlow 创建配置中心服务
-func NewConfigFileFlow(connector configconnector.ConfigConnector,
-	chain configfilter.Chain,
-	configuration config.Configuration) *ConfigFileFlow {
+func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
+	configuration config.Configuration) (*ConfigFileFlow, error) {
+	persistHandler, err := NewCachePersistHandler(
+		configuration.GetConfigFile().GetLocalCache().GetPersistDir(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistMaxReadRetry(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistRetryInterval(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	configFileService := &ConfigFileFlow{
 		connector:       connector,
 		chain:           chain,
@@ -62,9 +73,10 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector,
 		configFileCache: map[string]model.ConfigFile{},
 		configFilePool:  map[string]*ConfigFileRepo{},
 		notifiedVersion: map[string]uint64{},
+		persistHandler:  persistHandler,
 	}
 
-	return configFileService
+	return configFileService, nil
 }
 
 // Destroy 销毁服务
@@ -100,7 +112,7 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 		return configFile, nil
 	}
 
-	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration)
+	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration, c.persistHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +124,116 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 	return configFile, nil
 }
 
+// CreateConfigFile 创建配置文件
+func (c *ConfigFileFlow) CreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	// 校验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.CreateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
+// UpdateConfigFile 更新配置文件
+func (c *ConfigFileFlow) UpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	// 校验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.UpdateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
+// PublishConfigFile 发布配置文件
+func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string) error {
+	// 检验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.PublishConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
 func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo) {
 	configFileMetadata := fileRepo.configFileMetadata
 	version := fileRepo.getVersion()
 
-	log.GetBaseLogger().Infof("[Config] add long polling config file.",
-		zap.Any("file", configFileMetadata), zap.Uint64("version", version))
+	log.GetBaseLogger().Infof("[Config] add long polling config file. metadata %#v, version: %+v",
+		configFileMetadata, version)
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
 	c.configFilePool[cacheKey] = fileRepo
@@ -147,19 +263,21 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 				continue
 			}
 
+			remoteConfigFile := repo.loadRemoteFile()
+
 			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
-			if !(repo.remoteConfigFile == nil || repo.GetNotifiedVersion() > repo.remoteConfigFile.GetVersion()) {
+			if !(remoteConfigFile == nil || repo.GetNotifiedVersion() > remoteConfigFile.GetVersion()) {
 				continue
 			}
 
-			if repo.remoteConfigFile == nil {
+			if remoteConfigFile == nil {
 				log.GetBaseLogger().Warnf("[Config] client does not pull the configuration, it will be pulled again."+
 					"file = %+v, notified version = %d",
 					repo.configFileMetadata, repo.notifiedVersion)
 			} else {
 				log.GetBaseLogger().Warnf("[Config] notified version greater than pulled version, will pull config file again. "+
 					"file = %+v, notified version = %d, pulled version = %d",
-					repo.configFileMetadata, repo.notifiedVersion, repo.remoteConfigFile.GetVersion())
+					repo.configFileMetadata, repo.notifiedVersion, remoteConfigFile.GetVersion())
 			}
 
 			if err := repo.pull(); err != nil {

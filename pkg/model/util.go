@@ -18,6 +18,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"hash/crc64"
 	"hash/fnv"
@@ -148,6 +149,11 @@ func HashMessage(message proto.Message) uint64 {
 
 // ToDurationPtr 转换时间指针
 func ToDurationPtr(v time.Duration) *time.Duration {
+	return &v
+}
+
+// ToBoolPtr .
+func ToBoolPtr(v bool) *bool {
 	return &v
 }
 
@@ -314,4 +320,24 @@ func GetCrc64Hash(value string) (uint64, error) {
 		return 0, err
 	}
 	return h.Sum64(), nil
+}
+
+func CheckConfigFileMetadata(configFileMetadata ConfigFileMetadata) error {
+	if configFileMetadata == nil {
+		return errors.New("configFileMetadata is nil")
+	}
+
+	if configFileMetadata.GetNamespace() == "" {
+		return errors.New("namespace connot be empty")
+	}
+
+	if configFileMetadata.GetFileGroup() == "" {
+		return errors.New("fileGroup cannot be empty")
+	}
+
+	if configFileMetadata.GetFileName() == "" {
+		return errors.New("fileName cannot be empty")
+	}
+
+	return nil
 }

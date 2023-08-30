@@ -207,8 +207,8 @@ const (
 	DefaultUniformRateLimiter = "unirate"
 	// DefaultWarmUpWaitLimiter 默认限流插件，预热匀速.
 	DefaultWarmUpWaitLimiter = "warmup-wait"
-	// DefaultCpuBbrRateLimiter 默认的CPU自适应限流器.
-	DefaultCpuBbrRateLimiter = "cpuBbr"
+	// DefaultBBRRateLimiter 默认的 CPU 自适应限流器. 使用 BBR 算法
+	DefaultBBRRateLimiter = "bbr"
 	// SubscribeLocalChannel 默认订阅事件处理插件.
 	SubscribeLocalChannel = "subscribeLocalChannel"
 

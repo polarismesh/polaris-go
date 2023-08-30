@@ -338,6 +338,20 @@ config:
   propertiesValueCacheSize: 100
   # 类型转化缓存的过期时间，默认为1分钟
   propertiesValueExpireTime: 60000
+  # 本地缓存配置
+  localCache:
+    #描述: 配置文件持久化到本地开关
+    persistEnable: true
+    #描述: 配置文件持久化目录，SDK在配置文件变更后，把相关的配置持久化到本地磁盘
+    persistDir: ./polaris/backup/config
+    #描述: 配置文件写盘失败的最大重试次数
+    persistMaxWriteRetry: 1
+    #描述: 配置文件从磁盘读取失败的最大重试次数
+    persistMaxReadRetry: 0
+    #描述: 缓存读写磁盘的重试间隔
+    persistRetryInterval: 500ms
+    #描述: 远端获取配置文件失败，兜底降级到本地文件缓存
+    fallbackToLocalCache: true
   # 连接器配置，默认为北极星服务端
   configConnector:
     id: polaris-config

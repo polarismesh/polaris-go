@@ -57,6 +57,21 @@ func (c *configFileAPI) GetConfigFile(namespace, fileGroup, fileName string) (mo
 	return c.context.GetEngine().SyncGetConfigFile(namespace, fileGroup, fileName)
 }
 
+// CreateConfigFile 创建配置文件
+func (c *configFileAPI) CreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.context.GetEngine().SyncCreateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// UpdateConfigFile 更新配置文件
+func (c *configFileAPI) UpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.context.GetEngine().SyncUpdateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// PublishConfigFile 发布配置文件
+func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string) error {
+	return c.context.GetEngine().SyncPublishConfigFile(namespace, fileGroup, fileName)
+}
+
 // SDKContext 获取SDK上下文
 func (c *configFileAPI) SDKContext() SDKContext {
 	return c.context

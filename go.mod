@@ -1,13 +1,10 @@
 module github.com/polarismesh/polaris-go
 
-replace github.com/polarismesh/specification => ../../wtifs/specification
-
 go 1.15
 
 require (
 	github.com/agiledragon/gomonkey v2.0.2+incompatible
 	github.com/dlclark/regexp2 v1.7.0
-	github.com/go-kratos/aegis v0.2.0
 	github.com/golang/protobuf v1.5.2
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82 // indirect
@@ -22,11 +19,12 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/polarismesh/specification v1.4.0
+	github.com/polarismesh/specification v1.4.1
 	github.com/prometheus/client_golang v1.12.2
+	github.com/shirou/gopsutil/v3 v3.23.8
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.21.0
 	google.golang.org/genproto v0.0.0-20221014213838-99cd37c6964a // indirect
 	google.golang.org/grpc v1.51.0
