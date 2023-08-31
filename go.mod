@@ -1,6 +1,6 @@
 module github.com/polarismesh/polaris-go
 
-replace github.com/polarismesh/specification => github.com/wtifs/specification v0.0.0-20230830085724-801965a1128e
+replace github.com/polarismesh/specification => github.com/wtifs/specification v0.0.0-20230831024849-64d2e8b00303
 
 go 1.15
 
