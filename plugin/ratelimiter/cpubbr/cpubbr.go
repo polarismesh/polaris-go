@@ -42,7 +42,7 @@ func (g *RateLimiterCpuBbr) IsEnable(cfg config.Configuration) bool {
 // InitQuota 初始化并创建限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterCpuBbr) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
-	return createCpuBbrLimiter(criteria.DstRule.SystemResourceAmount)
+	return createCpuBbrLimiter(criteria.DstRule)
 }
 
 // init 注册插件
