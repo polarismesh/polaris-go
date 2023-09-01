@@ -9,76 +9,75 @@ import (
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
-type BbrQuota struct {
+type BbrQuotaBucket struct {
 	aegislimiter.Limiter
 }
 
 // GetQuota 获取限额
-func (b *BbrQuota) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
-	// 默认返回 ok
-	resp := &model.QuotaResponse{Code: model.QuotaResultOk}
-
+func (b *BbrQuotaBucket) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
 	// 如果触发限流，err 值将等于 aegislimiter.ErrLimitExceed
 	done, err := b.Limiter.Allow()
 	if err != nil {
-		resp.Code = model.QuotaResultLimited
-		return resp
+		return &model.QuotaResponse{
+			Code: model.QuotaResultLimited,
+		}
 	}
 
-	// 返回函数执行
+	// 如果未触发限流，则执行一些后续函数
 	done(aegislimiter.DoneInfo{})
 
-	return resp
+	return &model.QuotaResponse{Code: model.QuotaResultOk}
 }
 
 // Release 释放资源
-func (b *BbrQuota) Release() {}
+func (b *BbrQuotaBucket) Release() {}
 
-// OnRemoteUpdate 远端更新的时候通知，cpu限流策略是本地模式，不用实现
-func (b *BbrQuota) OnRemoteUpdate(_ ratelimiter.RemoteQuotaResult) {
+// OnRemoteUpdate 远端更新的时候通知。CPU限流为单机限流策略，不实现该函数
+func (b *BbrQuotaBucket) OnRemoteUpdate(_ ratelimiter.RemoteQuotaResult) {
 
 }
 
-// GetQuotaUsed 返回本地限流信息用于上报，cpu限流策略本地模式，不用实现
-func (b *BbrQuota) GetQuotaUsed(_ int64) ratelimiter.UsageInfo {
+// GetQuotaUsed 返回本地限流信息用于上报
+func (b *BbrQuotaBucket) GetQuotaUsed(_ int64) ratelimiter.UsageInfo {
 	return ratelimiter.UsageInfo{}
 }
 
 // GetAmountInfos 获取规则的限流阈值信息，用于与服务端pb交互
-func (b *BbrQuota) GetAmountInfos() []ratelimiter.AmountInfo {
+func (b *BbrQuotaBucket) GetAmountInfos() []ratelimiter.AmountInfo {
 	return nil
 }
 
-// createBbrLimiter 初始化一个CPU策略桶
-func createBbrLimiter(rule *apitraffic.Rule) *BbrQuota {
+// createBbrLimiter 初始化
+func createBbrLimiter(rule *apitraffic.Rule) *BbrQuotaBucket {
 	options := make([]bbr.Option, 0)
 
 	if amounts := rule.GetAmounts(); len(amounts) > 0 {
 		var amount = amounts[0]
-		var minThreshold = amount.GetStartAmount().GetValue()
+		var threshold = amount.GetMaxAmount().GetValue()
 
 		// 有多条规则时，只允许cpu使用率最低的规则生效
 		for i := 1; i < len(amounts); i++ {
-			if curThreshold := amounts[i].GetStartAmount().GetValue(); curThreshold < minThreshold {
-				minThreshold = curThreshold
+			if curThreshold := amounts[i].GetMaxAmount().GetValue(); curThreshold < threshold {
+				threshold = curThreshold
 				amount = amounts[i]
 			}
 		}
 		// CPU使用率阈值，默认80%
-		if minThreshold > 0 {
-			options = append(options, bbr.WithCPUThreshold(minThreshold))
+		if threshold > 0 {
+			// bbr 的参数为 800‰ 的形式，要从 rule 中的百分号转到千分号，乘10
+			options = append(options, bbr.WithCPUThreshold(int64(threshold*10)))
 		}
 		// 统计时间窗口，默认 10s
 		if window, _ := pb.ConvertDuration(amount.GetValidDuration()); window > 0 {
 			options = append(options, bbr.WithWindow(window))
 		}
 		// 观测时间窗口内 计数桶 的个数（控制滑动窗口精度），默认100个
-		if precision := int(amount.GetPrecision().GetValue()); precision > 0 {
-			options = append(options, bbr.WithBucket(precision))
+		if precision := amount.GetPrecision().GetValue(); precision > 0 {
+			options = append(options, bbr.WithBucket(int(precision)))
 		}
 	}
 
-	return &BbrQuota{
+	return &BbrQuotaBucket{
 		bbr.NewLimiter(options...),
 	}
 }
