@@ -56,7 +56,7 @@ func createBbrLimiter(rule *apitraffic.Rule) *BbrQuotaBucket {
 		// 如果有多条规则：
 		// 1. 先按CPU阈值比较，阈值小的生效
 		// 2. 阈值相同时，按时间窗口比较，窗口小的生效
-		// 3. 窗口也相同时，按精度比较，精度大的生效
+		// 3. 窗口也相同时，按精度比较，精度大的生效（polaris-server 做了校验，不会出现窗口相同的情况。这里也可以不用判断）
 		sort.Slice(amounts, func(i, j int) bool {
 			a, b := amounts[i], amounts[j]
 			threshold1, threshold2 := a.GetMaxAmount().GetValue(), b.GetMaxAmount().GetValue()
