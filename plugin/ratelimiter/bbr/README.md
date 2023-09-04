@@ -5,7 +5,9 @@ Kratos 是 bilibili 开源的一套 Go 微服务框架。BBR 是其中的一个�
 
 BBR 的思路为：根据应用的请求处理时间、请求成功数、最大并发数这些指标，计算当前应用能承载的最大并发请求量，再对比当前系统并发量，判断是否应当拦截本次流量，即所谓"自适应"。
 
-BBR 的源码实现可参考此解析：[yuemoxi - 从kratos分析BBR限流源码实现](https://juejin.cn/post/7004848252109455368)
+BBR 的源码实现可参考：
+- [乔卓越 - 深入理解云原生下自适应限流技术原理与应用](https://mp.weixin.qq.com/s?__biz=MzA4ODg0NDkzOA==&mid=2247493581&idx=1&sn=62feb928915eaeb9082b58737829cf19&chksm=90215828a756d13e36cf77fe980f90810236296e5289259e085ccda7a539979c0716b5c8a601&scene=126&sessionid=1634901423&key=92c891f823e779d59fb069c1f73467971e77ea57597e6305cd46077c5115f63362682acb7d71e10dce269b227d3823d11ef9e5ce4116448fda19babccca00938bb97159b2d212d3a739c461a317a413867734e4ff39439da6d669943638ebb44fb5d44b939ae294b9b2eb42fa68fe939e1e4b21d8d806bf0299ecfea6bfa0c80&ascene=0&uin=MTg4NzU0NzUzNw%3D%3D&devicetype=Windows+10+x64&version=63040026&lang=zh_CN&exportkey=AyWZkGTg8xpxVEKYWHzdFvE%3D&pass_ticket=aPS1JJrPDslKIxzL8eyKwCG9loYdUIDyJU6iO22glE0yHlC3foSNMEFaklAFVWTj&wx_header=0&fontgear=2#)
+- [yuemoxi - 从kratos分析BBR限流源码实现](https://juejin.cn/post/7004848252109455368)
 
 
 
@@ -43,4 +45,8 @@ func (l *BBR) maxInFlight() int64 {
 - `maxPass * bucketPerSecond / 1000` 为每毫秒处理的请求数
 - `l.minRT()` 为 单个采样窗口中最小的响应时间
 - 0.5为向上取整
-- 则上述公式表示每毫秒能同时处理的最多请求数。用当前并发请求数 `inFlight` 与计算值比较，判断是否触发限流
+- 当CPU利用率过载时，就需要通过上述预期公式进行干预。在服务运行期间持续统计当前服务的请求数，即 `inflight`，通过在滑动窗口内的所有buckets中比较得出最多请求完成数 `maxPass`，以及最小的耗时 `minRT`，相乘就得出了预期的最佳请求数 `maxFlight`。
+- `maxFlight` 表示系统能同时处理的最多请求数，这个水位是一个平衡点，保持该水位可以最大化系统的处理能力，超过该水位则会导致请求堆积。
+- 通过 `inflight` 与 `maxFlight` 对比，如果前者大于后者那么就已经过载，进而拒绝后续到来的请求防止服务过载。
+
+
