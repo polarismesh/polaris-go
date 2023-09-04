@@ -100,7 +100,8 @@ func (svr *PolarisProvider) runWebServer() {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm RateLimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
 
-		time.Sleep(time.Millisecond * 100)
+		// 模拟远端处理耗时
+		time.Sleep(time.Millisecond * 500)
 		resp.Release()
 	})
 

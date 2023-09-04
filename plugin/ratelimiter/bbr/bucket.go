@@ -1,6 +1,7 @@
 package bbr
 
 import (
+	"fmt"
 	aegislimiter "github.com/go-kratos/aegis/ratelimit"
 	"github.com/go-kratos/aegis/ratelimit/bbr"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -20,7 +21,7 @@ func (b *BbrQuotaBucket) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
 
 // GetQuota 获取限额
 func (b *BbrQuotaBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaResponse, func()) {
-	//fmt.Printf("%+v\n", b.Limiter.(*bbr.BBR).Stat())
+	fmt.Printf("%+v\n", b.Limiter.(*bbr.BBR).Stat())
 
 	// 如果触发限流，err 值将等于 aegislimiter.ErrLimitExceed，且不计入资源占用
 	done, err := b.Limiter.Allow()
