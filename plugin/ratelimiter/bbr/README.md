@@ -10,7 +10,9 @@ BBR 的源码实现可参考此解析：[yuemoxi - 从kratos分析BBR限流源�
 
 
 # 插件设计
-本插件使用了 kratos 的 BBR 限流器，将其适配成 `QuotaBucket` 接口（主要实现 `GetQuota` 判断限流方法），以及 `ServiceRateLimiter` 接口（实现 `InitQuota` 初始化方法）。
+本插件使用了 kratos 的 BBR 限流器，将其适配成 `QuotaBucket` 接口（主要实现 `GetQuotaWithRelease` 判断限流方法），以及 `ServiceRateLimiter` 接口（实现 `InitQuota` 初始化方法）。
+
+由于 BBR 限流需要记录请求通过数、当前并发数、请求耗时，因此没有复用原来 `QuotaBucket` 接口中的 `GetQuota` 方法，而是新增了一个方法 `GetQuotaWithRelease`，该方法相比于 `GetQuota` 方法，返回参数中多了一个 `func()`，供业务方在业务逻辑处理完成后调用。
 
 由于 CPU 使用率指标为实例单机指标，因此 CPU 限流只适用于单机限流，不适用于分布式限流，未实现分布式限流器需要实现的接口。
 
@@ -22,16 +24,23 @@ CPUThreshold: CPU使用率阈值，超过该阈值时，根据应用过去能承
 window: 窗口采样时长，控制采样多久的数据
 bucket: 桶数，BBR 会把 window 分成多个 bucket，沿时间轴向前滑动。如 window=1s, bucket=10 时，整个滑动窗口用来保存最近 1s 的采样数据，每个小的桶用来保存 100ms 的采样数据。当时间流动之后，过期的桶会自动被新桶的数据覆盖掉
 ```
-这三个入参，从 `apitraffic.Rule` 结构体中解析
-
-分别对应结构体中的 `MaxAmount`、`ValidDuration`、`Precision` 字段
+这三个入参，从 `apitraffic.Rule` 结构体中解析，直接使用了结构体中的 `MaxAmount`、`ValidDuration`、`Precision` 字段
 
 
-## 判断限流 GetQuota
+## 判断限流 GetQuotaWithRelease
 调用了 BBR 的 `Allow()` 方法
 
-其内部执行 `shouldDrop()` 方法，判断是否超过设定的 CPU使用率阈值，以及对比当前请求数 `inFlight` 和历史请求数 `maxInFlight`，来决定是否拦截本次请求
-
-关键执行流程如下：
+其内部执行 `shouldDrop()` 方法，其执行流程如下：
 
 ![img.jpg](img.jpg)
+
+流程中比较关键的一步是计算应用可承受的最大请求量，由下列方法计算：
+```go
+func (l *BBR) maxInFlight() int64 {
+	return int64(math.Floor(float64(l.maxPASS()*l.minRT()*l.bucketPerSecond)/1000.0) + 0.5)
+}
+```
+- `maxPass * bucketPerSecond / 1000` 为每毫秒处理的请求数
+- `l.minRT()` 为 单个采样窗口中最小的响应时间
+- 0.5为向上取整
+- 则上述公式表示每毫秒能同时处理的最多请求数。用当前并发请求数 `inFlight` 与计算值比较，判断是否触发限流

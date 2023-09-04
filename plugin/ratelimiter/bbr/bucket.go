@@ -14,11 +14,12 @@ type BbrQuotaBucket struct {
 	aegislimiter.Limiter
 }
 
+// GetQuota 获取限额
 func (b *BbrQuotaBucket) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
 	return nil
 }
 
-// GetQuota 获取限额
+// GetQuotaWithRelease 判断是否限流，并返回释放资源函数
 func (b *BbrQuotaBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaResponse, func()) {
 	// 如果触发限流，err 值将等于 aegislimiter.ErrLimitExceed，且不计入资源占用
 	done, err := b.Limiter.Allow()
@@ -32,6 +33,7 @@ func (b *BbrQuotaBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaRes
 	return &model.QuotaResponse{
 			Code: model.QuotaResultOk,
 		}, func() {
+			// 记录通过请求数、耗时、并发数
 			done(aegislimiter.DoneInfo{})
 		}
 }
