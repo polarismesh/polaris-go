@@ -241,7 +241,7 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 			Code: model.QuotaResultOk,
 			Info: Disabled,
 		}
-		return model.QuotaFutureWithResponse(resp), nil
+		return model.QuotaFutureWithResponse(resp, nil), nil
 	}
 	windows, err := f.lookupRateLimitWindow(commonRequest)
 	if err != nil {
@@ -253,15 +253,25 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 			Code: model.QuotaResultOk,
 			Info: RuleNotExists,
 		}
-		return model.QuotaFutureWithResponse(resp), nil
+		return model.QuotaFutureWithResponse(resp, nil), nil
 	}
 	var maxWaitMs int64 = 0
+	var releaseFuncs = make([]func(), 0, len(windows))
 	for _, window := range windows {
 		window.Init()
-		quotaResult := window.AllocateQuota(commonRequest)
-		if quotaResult.Code == model.QuotaResultLimited {
-			return model.QuotaFutureWithResponse(quotaResult), nil
+		quotaResult, releaseFunc := window.AllocateQuotaWithRelease(commonRequest)
+		if releaseFunc != nil {
+			releaseFuncs = append(releaseFuncs, releaseFunc)
 		}
+		// 触发限流，提前返回
+		if quotaResult.Code == model.QuotaResultLimited {
+			// 先释放资源
+			for i := range releaseFuncs {
+				releaseFuncs[i]()
+			}
+			return model.QuotaFutureWithResponse(quotaResult, nil), nil
+		}
+		// 未触发限流，记录令牌桶的最大排队时间
 		if quotaResult.WaitMs > maxWaitMs {
 			maxWaitMs = quotaResult.WaitMs
 		}
@@ -269,7 +279,7 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 	return model.QuotaFutureWithResponse(&model.QuotaResponse{
 		Code:   model.QuotaResultOk,
 		WaitMs: maxWaitMs,
-	}), nil
+	}, releaseFuncs), nil
 }
 
 // lookupRateLimitWindow 计算限流窗口

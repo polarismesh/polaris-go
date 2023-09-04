@@ -20,6 +20,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/model"
 	"log"
 	"net"
 	"net/http"
@@ -28,9 +30,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/polarismesh/polaris-go"
-	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -81,22 +80,16 @@ func (svr *PolarisProvider) runWebServer() {
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)
 
-		log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
-			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
-		start := time.Now()
+		//log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
+		//	quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
+		//start := time.Now()
 		resp, err := svr.limiter.GetQuota(quotaReq)
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
 			return
 		}
-		log.Printf("[info] %s get quota resp : code=%d, info=%s", time.Since(start).String(), resp.Get().Code, resp.Get().Info)
-
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
-			return
-		}
+		//log.Printf("[info] %s get quota resp : code=%d, info=%s", time.Since(start).String(), resp.Get().Code, resp.Get().Info)
 
 		if resp.Get().Code != model.QuotaResultOk {
 			rw.WriteHeader(http.StatusTooManyRequests)
@@ -106,6 +99,9 @@ func (svr *PolarisProvider) runWebServer() {
 
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm RateLimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+
+		time.Sleep(time.Millisecond * 100)
+		resp.Release()
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
@@ -117,7 +113,9 @@ func (svr *PolarisProvider) runWebServer() {
 
 	go func() {
 		log.Printf("[INFO] start http server, listen port is %v", svr.port)
-		if err := http.Serve(ln, nil); err != nil {
+		s := &http.Server{}
+		s.SetKeepAlivesEnabled(false)
+		if err := s.Serve(ln); err != nil {
 			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 		}
 	}()

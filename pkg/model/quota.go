@@ -168,19 +168,24 @@ type QuotaResponse struct {
 
 // QuotaFutureImpl 异步获取配额的future.
 type QuotaFutureImpl struct {
-	resp        *QuotaResponse
-	deadlineCtx context.Context
-	cancel      context.CancelFunc
+	resp         *QuotaResponse
+	deadlineCtx  context.Context
+	cancel       context.CancelFunc
+	releaseFuncs []func()
 }
 
-func QuotaFutureWithResponse(resp *QuotaResponse) *QuotaFutureImpl {
+func QuotaFutureWithResponse(resp *QuotaResponse, releaseFuncs []func()) *QuotaFutureImpl {
 	var deadlineCtx context.Context
 	var cancel context.CancelFunc
 	if resp.WaitMs > 0 {
 		deadlineCtx, cancel = context.WithTimeout(context.Background(), time.Duration(resp.WaitMs)*time.Millisecond)
 	}
 	return &QuotaFutureImpl{
-		resp: resp, deadlineCtx: deadlineCtx, cancel: cancel}
+		resp:         resp,
+		deadlineCtx:  deadlineCtx,
+		cancel:       cancel,
+		releaseFuncs: releaseFuncs,
+	}
 }
 
 // Done 分配是否结束.
@@ -206,6 +211,9 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 
 // Release 释放资源，仅用于并发数限流的场景.
 func (q *QuotaFutureImpl) Release() {
+	for i := range q.releaseFuncs {
+		q.releaseFuncs[i]()
+	}
 }
 
 const (

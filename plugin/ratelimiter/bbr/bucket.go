@@ -14,20 +14,28 @@ type BbrQuotaBucket struct {
 	aegislimiter.Limiter
 }
 
-// GetQuota 获取限额
 func (b *BbrQuotaBucket) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
-	// 如果触发限流，err 值将等于 aegislimiter.ErrLimitExceed
+	return nil
+}
+
+// GetQuota 获取限额
+func (b *BbrQuotaBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaResponse, func()) {
+	//fmt.Printf("%+v\n", b.Limiter.(*bbr.BBR).Stat())
+
+	// 如果触发限流，err 值将等于 aegislimiter.ErrLimitExceed，且不计入资源占用
 	done, err := b.Limiter.Allow()
 	if err != nil {
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
-		}
+		}, nil
 	}
 
-	// 如果未触发限流，则执行一些后续函数
-	done(aegislimiter.DoneInfo{})
-
-	return &model.QuotaResponse{Code: model.QuotaResultOk}
+	// 如果未触发限流，则需要返回释放资源函数，业务方再执行完业务逻辑后释放
+	return &model.QuotaResponse{
+			Code: model.QuotaResultOk,
+		}, func() {
+			done(aegislimiter.DoneInfo{})
+		}
 }
 
 // Release 释放资源
@@ -77,7 +85,7 @@ func createBbrLimiter(rule *apitraffic.Rule) *BbrQuotaBucket {
 		// CPU使用率阈值，默认80%
 		if threshold := amount.GetMaxAmount().GetValue(); threshold > 0 {
 			// bbr 的参数为 800‰ 的形式，需要从 rule 中的百分号转到千分号，乘10
-			options = append(options, bbr.WithCPUThreshold(int64(threshold*10)))
+			options = append(options, bbr.WithCPUThreshold(int64(threshold)))
 		}
 		// 统计时间窗口，默认 10s
 		if window := amount.GetValidDuration().AsDuration(); window > 0 {
