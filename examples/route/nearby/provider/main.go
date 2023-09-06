@@ -19,10 +19,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -90,6 +92,7 @@ func (svr *PolarisProvider) Run() {
 		host = tmpHost
 		svr.host = tmpHost
 	}
+	svr.runWebServer()
 	svr.registerService()
 	svr.runMainLoop()
 }
@@ -123,6 +126,31 @@ func (svr *PolarisProvider) deregisterService() {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
 	log.Printf("deregister successfully.")
+}
+
+func (svr *PolarisProvider) runWebServer() {
+	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		loc := svr.provider.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
+		locStr, _ := json.Marshal(loc)
+		msg := fmt.Sprintf("Hello, I'm RouteNearbyEchoServer Provider, MyLocInfo's : %s, host : %s:%d", string(locStr), svr.host, svr.port)
+		_, _ = rw.Write([]byte(msg))
+	})
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", svr.port))
+	if err != nil {
+		log.Fatalf("[ERROR]fail to listen tcp, err is %v", err)
+	}
+
+	svr.port = ln.Addr().(*net.TCPAddr).Port
+
+	go func() {
+		log.Printf("[INFO] start http server, listen port is %v", svr.port)
+		if err := http.Serve(ln, nil); err != nil {
+			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+		}
+	}()
+
 }
 
 func (svr *PolarisProvider) runMainLoop() {
