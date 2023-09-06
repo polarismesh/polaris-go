@@ -1,14 +1,15 @@
 global:
   serverConnector:
     addresses:
-      - 183.47.111.80:8091
+      - 127.0.0.1:8091
+  # 地址提供插件，用于获取当前SDK所在的地域信息
   location:
-    # 设置 polaris-go 进程地理信息的提供插件
-    # 设置为 env 时，可以在 linux 中注入以下环境变量
-    # POLARIS_INSTANCE_REGION: 设置 region 信息, 例如 china
-    # POLARIS_INSTANCE_ZONE: 设置 zone 信息, 例如 ap-guangzhou
-    # POLARIS_INSTANCE_CAMPUS: 设置 IDC 信息, 例如 ap-guangzhou-3
-    provider: env
+    providers:
+      - type: local
+        region: ${REGION}
+        zone: ${ZONE}
+        campus: ${CAMPUS}
+#描述:主调端配置
   statReporter:
     enable: true
     chain:
