@@ -42,4 +42,7 @@ func (l LocationProviderConfigImpl) Verify() error {
 }
 
 func (l LocationProviderConfigImpl) SetDefault() {
+	if len(l.Options) == 0 {
+		l.Options = map[string]interface{}{}
+	}
 }

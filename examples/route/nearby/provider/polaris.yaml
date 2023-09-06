@@ -1,14 +1,15 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - 119.91.66.223:8091
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location:
     providers:
       - type: local
-        region: ${REGION}
-        zone: ${ZONE}
-        campus: ${CAMPUS}
+        options:
+          region: ${REGION}
+          zone: ${ZONE}
+          campus: ${CAMPUS}
 #描述:主调端配置
   statReporter:
     enable: true
