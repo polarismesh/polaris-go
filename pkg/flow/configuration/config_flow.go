@@ -24,7 +24,6 @@ import (
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -116,8 +115,8 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 	configFileMetadata := fileRepo.configFileMetadata
 	version := fileRepo.getVersion()
 
-	log.GetBaseLogger().Infof("[Config] add long polling config file.",
-		zap.Any("file", configFileMetadata), zap.Uint64("version", version))
+	log.GetBaseLogger().Infof("[Config] add long polling config file. metadata %#v, version: %+v",
+		configFileMetadata, version)
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
 	c.configFilePool[cacheKey] = fileRepo
