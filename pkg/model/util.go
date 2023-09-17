@@ -151,6 +151,11 @@ func ToDurationPtr(v time.Duration) *time.Duration {
 	return &v
 }
 
+// ToBoolPtr .
+func ToBoolPtr(v bool) *bool {
+	return &v
+}
+
 // ToMilliSeconds 时间转换成毫秒
 func ToMilliSeconds(v time.Duration) int64 {
 	return ParseMilliSeconds(v.Nanoseconds())

@@ -252,14 +252,14 @@ func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfig
 		})
 	}
 	return &configconnector.ConfigFile{
-		Namespace: configFileInfo.GetNamespace().GetValue(),
-		FileGroup: configFileInfo.GetGroup().GetValue(),
-		FileName:  configFileInfo.GetFileName().GetValue(),
-		Content:   configFileInfo.GetContent().GetValue(),
-		Version:   configFileInfo.GetVersion().GetValue(),
-		Md5:       configFileInfo.GetMd5().GetValue(),
-		Encrypted: configFileInfo.GetEncrypted().GetValue(),
-		Tags:      tags,
+		Namespace:     configFileInfo.GetNamespace().GetValue(),
+		FileGroup:     configFileInfo.GetGroup().GetValue(),
+		FileName:      configFileInfo.GetFileName().GetValue(),
+		SourceContent: configFileInfo.GetContent().GetValue(),
+		Version:       configFileInfo.GetVersion().GetValue(),
+		Md5:           configFileInfo.GetMd5().GetValue(),
+		Encrypted:     configFileInfo.GetEncrypted().GetValue(),
+		Tags:          tags,
 	}
 }
 

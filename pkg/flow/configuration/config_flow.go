@@ -46,13 +46,26 @@ type ConfigFileFlow struct {
 	chain         configfilter.Chain
 	configuration config.Configuration
 
+	persistHandler *CachePersistHandler
+
 	startLongPollingTaskOnce sync.Once
 }
 
 // NewConfigFileFlow 创建配置中心服务
 func NewConfigFileFlow(connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
-	configuration config.Configuration) *ConfigFileFlow {
+	configuration config.Configuration) (*ConfigFileFlow, error) {
+
+	persistHandler, err := NewCachePersistHandler(
+		configuration.GetConfigFile().GetLocalCache().GetPersistDir(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistMaxReadRetry(),
+		configuration.GetConfigFile().GetLocalCache().GetPersistRetryInterval(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	configFileService := &ConfigFileFlow{
 		connector:       connector,
 		chain:           chain,
@@ -61,9 +74,10 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector,
 		configFileCache: map[string]model.ConfigFile{},
 		configFilePool:  map[string]*ConfigFileRepo{},
 		notifiedVersion: map[string]uint64{},
+		persistHandler:  persistHandler,
 	}
 
-	return configFileService
+	return configFileService, nil
 }
 
 // Destroy 销毁服务
@@ -99,7 +113,7 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 		return configFile, nil
 	}
 
-	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration)
+	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration, c.persistHandler)
 	if err != nil {
 		return nil, err
 	}
