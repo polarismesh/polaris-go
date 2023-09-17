@@ -26,6 +26,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
