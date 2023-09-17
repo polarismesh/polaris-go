@@ -20,6 +20,7 @@ package configuration
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -89,7 +90,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 	var lastErr error
 	var retryTimes int
 	for retryTimes = 0; retryTimes <= maxRetry; retryTimes++ {
-		cacheJson, err := os.ReadFile(cacheFile)
+		cacheJson, err := ioutil.ReadFile(cacheFile)
 		if err != nil {
 			lastErr = model.NewSDKError(model.ErrCodeDiskError, err, "fail to read file cache")
 			// 文件打开失败的话，重试没有意义，直接失败

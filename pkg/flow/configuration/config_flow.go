@@ -52,10 +52,8 @@ type ConfigFileFlow struct {
 }
 
 // NewConfigFileFlow 创建配置中心服务
-func NewConfigFileFlow(connector configconnector.ConfigConnector,
-	chain configfilter.Chain,
+func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
 	configuration config.Configuration) (*ConfigFileFlow, error) {
-
 	persistHandler, err := NewCachePersistHandler(
 		configuration.GetConfigFile().GetLocalCache().GetPersistDir(),
 		configuration.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),

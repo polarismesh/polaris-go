@@ -56,6 +56,7 @@ func (c *ConfigFile) String() string {
 	_, _ = bf.WriteString("file_name=" + c.FileName)
 	_, _ = bf.WriteString("version=" + strconv.FormatUint(c.Version, 10))
 	_, _ = bf.WriteString("encrypt=" + strconv.FormatBool(c.Encrypted))
+	//nolint: errchkjson
 	data, _ := json.Marshal(c.Tags)
 	_, _ = bf.WriteString("tags=" + string(data))
 	return bf.String()
