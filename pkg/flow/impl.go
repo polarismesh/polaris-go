@@ -180,7 +180,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		flowEngine.configFileFlow = configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
+		configFileFlow, err := configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
+		if err != nil {
+			return err
+		}
+		flowEngine.configFileFlow = configFileFlow
 	}
 
 	// 初始注册状态管理器

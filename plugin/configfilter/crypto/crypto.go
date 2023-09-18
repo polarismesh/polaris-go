@@ -20,7 +20,6 @@ package crypto
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -45,9 +44,8 @@ func init() {
 // CryptoFilter crypto filter plugin
 type CryptoFilter struct {
 	*plugin.PluginBase
-	cfg          *Config
-	cryptos      map[string]Crypto
-	dataKeyCache *sync.Map
+	cfg     *Config
+	cryptos map[string]Crypto
 }
 
 // Type plugin type
@@ -64,7 +62,6 @@ func (c *CryptoFilter) Name() string {
 func (c *CryptoFilter) Init(ctx *plugin.InitContext) error {
 	c.PluginBase = plugin.NewPluginBase(ctx)
 	c.cryptos = make(map[string]Crypto)
-	c.dataKeyCache = new(sync.Map)
 
 	cfgValue := ctx.Config.GetConfigFile().GetConfigFilterConfig().GetPluginConfig(c.Name())
 	if cfgValue != nil {
@@ -100,14 +97,12 @@ func (c *CryptoFilter) IsEnable(cfg config.Configuration) bool {
 // DoFilter do crypto filter
 func (c *CryptoFilter) DoFilter(configFile *configconnector.ConfigFile, next configfilter.ConfigFileHandleFunc) configfilter.ConfigFileHandleFunc {
 	return func(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
-		// 查询缓存的数据密钥
-		cacheKey := genCacheKey(configFile.Namespace, configFile.FileGroup, configFile.FileName)
-		cacheEncryptInfo := c.getEncryptInfo(cacheKey)
-
-		var privateKey *rsa.RSAKey
-		var err error
+		var (
+			privateKey *rsa.RSAKey
+			err        error
+		)
 		// 如果是加密配置并且缓存密钥为空
-		if configFile.GetEncrypted() && cacheEncryptInfo == nil {
+		if configFile.GetEncrypted() {
 			// 生成公钥和私钥请求数据密钥
 			privateKey, err = rsa.GenerateRSAKey()
 			if err != nil {
@@ -121,47 +116,34 @@ func (c *CryptoFilter) DoFilter(configFile *configconnector.ConfigFile, next con
 			return resp, err
 		}
 		// 如果是加密配置
-		if resp.GetConfigFile().GetEncrypted() && resp.GetConfigFile().GetContent() != "" {
-			cipherContent := resp.GetConfigFile().GetContent()
-			cipherDataKey := resp.GetConfigFile().GetDataKey()
-			encryptAlgo := resp.GetConfigFile().GetEncryptAlgo()
+		if !resp.GetConfigFile().GetEncrypted() {
+			// 删除掉之前保存的 token cache
+			return resp, err
+		}
+		cipherContent := resp.GetConfigFile().GetSourceContent()
+		cipherDataKey := resp.GetConfigFile().GetDataKey()
+		encryptAlgo := resp.GetConfigFile().GetEncryptAlgo()
 
-			// 返回了数据密钥，解密配置
-			if cipherDataKey != "" && privateKey != nil {
-				crypto, err := c.GetCrypto(encryptAlgo)
-				if err != nil {
-					return nil, err
-				}
-				dataKey, err := rsa.DecryptFromBase64(cipherDataKey, privateKey.PrivateKey)
-				if err != nil {
-					return nil, err
-				}
-				plainContent, err := crypto.Decrypt(cipherContent, dataKey)
-				if err != nil {
-					return nil, err
-				}
-				resp.ConfigFile.Content = string(plainContent)
-				// 缓存数据密钥
-				c.setEncryptInfo(cacheKey, &encryptInfo{
-					Key:  dataKey,
-					Algo: encryptAlgo,
-				})
-			} else if cacheEncryptInfo != nil {
-				// 有缓存的数据密钥和加密算法
-				crypto, err := c.GetCrypto(cacheEncryptInfo.Algo)
-				if err != nil {
-					return nil, err
-				}
-				plainContent, err := crypto.Decrypt(cipherContent, cacheEncryptInfo.Key)
-				if err != nil {
-					return nil, err
-				}
-				resp.ConfigFile.Content = string(plainContent)
-			} else {
-				// 没有返回数据密钥，设置为加密配置重新请求
-				configFile.Encrypted = true
-				return c.DoFilter(configFile, next)(configFile)
+		// 返回了数据密钥，解密配置
+		if cipherDataKey != "" && privateKey != nil {
+			crypto, err := c.GetCrypto(encryptAlgo)
+			if err != nil {
+				return nil, err
 			}
+			dataKey, err := rsa.DecryptFromBase64(cipherDataKey, privateKey.PrivateKey)
+			if err != nil {
+				return nil, err
+			}
+			plainContent, err := crypto.Decrypt(cipherContent, dataKey)
+			if err != nil {
+				return nil, err
+			}
+			resp.ConfigFile.SetContent(string(plainContent))
+			// 缓存数据密钥
+		} else {
+			// 没有返回数据密钥，设置为加密配置重新请求
+			configFile.Encrypted = true
+			return c.DoFilter(configFile, next)(configFile)
 		}
 		return resp, err
 	}
@@ -175,27 +157,6 @@ func (c *CryptoFilter) GetCrypto(algo string) (Crypto, error) {
 		return nil, fmt.Errorf("plugin Crypto not found target: %s", algo)
 	}
 	return crypto, nil
-}
-
-type encryptInfo struct {
-	Key  []byte
-	Algo string
-}
-
-func (c *CryptoFilter) getEncryptInfo(key string) *encryptInfo {
-	obj, ok := c.dataKeyCache.Load(key)
-	if ok {
-		return obj.(*encryptInfo)
-	}
-	return nil
-}
-
-func (c *CryptoFilter) setEncryptInfo(key string, value *encryptInfo) {
-	c.dataKeyCache.Store(key, value)
-}
-
-func genCacheKey(namespace, fileGroup, fileName string) string {
-	return namespace + separator + fileGroup + separator + fileName
 }
 
 // Crypto Crypto interface

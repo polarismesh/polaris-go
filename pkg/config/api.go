@@ -85,6 +85,8 @@ type ConfigFileConfig interface {
 	GetPropertiesValueCacheSize() int32
 	// GetPropertiesValueExpireTime 缓存的过期时间，默认为 60s
 	GetPropertiesValueExpireTime() int64
+	// GetLocalCache .
+	GetLocalCache() ConfigLocalCacheConfig
 }
 
 // RateLimitConfig 限流相关配置.
@@ -486,6 +488,39 @@ type ServiceSpecificConfig interface {
 	GetServiceCircuitBreaker() CircuitBreakerConfig
 
 	GetServiceRouter() ServiceRouterConfig
+}
+
+type ConfigLocalCacheConfig interface {
+	BaseConfig
+	// IsPersistEnable consumer.localCache.persistEnable
+	// 是否启用本地缓存
+	IsPersistEnable() bool
+	// SetPersistEnable 设置是否启用本地缓存
+	SetPersistEnable(enable bool)
+	// GetPersistDir consumer.localCache.persistDir
+	// 本地缓存持久化路径
+	GetPersistDir() string
+	// SetPersistDir 设置本地缓存持久化路径
+	SetPersistDir(string)
+	// GetPersistMaxWriteRetry consumer.localCache.persistMaxWriteRetry
+	// 缓存最大写重试次数
+	GetPersistMaxWriteRetry() int
+	// SetPersistMaxWriteRetry 设置缓存最大写重试次数
+	SetPersistMaxWriteRetry(int)
+	// GetPersistMaxReadRetry consumer.localCache.persistMaxReadRetry
+	// 缓存最大读重试次数
+	GetPersistMaxReadRetry() int
+	// SetPersistMaxReadRetry 设置缓存最大读重试次数
+	SetPersistMaxReadRetry(int)
+	// GetPersistRetryInterval consumer.localCache.persistRetryInterval
+	// 缓存持久化重试间隔
+	GetPersistRetryInterval() time.Duration
+	// SetPersistRetryInterval 设置缓存持久化重试间隔
+	SetPersistRetryInterval(time.Duration)
+	// SetFallbackToLocalCache .
+	SetFallbackToLocalCache(enable bool)
+	// IsFallbackToLocalCache .
+	IsFallbackToLocalCache() bool
 }
 
 // ConfigConnectorConfig 配置中心连接相关的配置.

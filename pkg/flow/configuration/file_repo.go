@@ -19,6 +19,7 @@ package configuration
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
@@ -47,6 +48,8 @@ type ConfigFileRepo struct {
 	remoteConfigFile   *configconnector.ConfigFile // 从服务端获取的原始配置对象
 	retryPolicy        retryPolicy
 	listeners          []ConfigFileRepoChangeListener
+
+	persistHandler *CachePersistHandler
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
@@ -56,7 +59,8 @@ type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetada
 func newConfigFileRepo(metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
-	configuration config.Configuration) (*ConfigFileRepo, error) {
+	configuration config.Configuration,
+	persistHandler *CachePersistHandler) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
 		chain:              chain,
@@ -73,6 +77,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 			FileName:  metadata.GetFileName(),
 			Version:   initVersion,
 		},
+		persistHandler: persistHandler,
 	}
 	// 1. 同步从服务端拉取配置
 	if err := repo.pull(); err != nil {
@@ -145,7 +150,7 @@ func (r *ConfigFileRepo) pull() error {
 			pulledConfigFileVersion = int64(pulledConfigFile.GetVersion())
 		}
 		log.GetBaseLogger().Infof("[Config] pull config file finished. config file = %+v, code = %d, version = %d, duration = %d ms",
-			pulledConfigFile, responseCode, pulledConfigFileVersion, time.Since(startTime).Milliseconds())
+			pulledConfigFile.String(), responseCode, pulledConfigFileVersion, time.Since(startTime).Milliseconds())
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
@@ -153,6 +158,8 @@ func (r *ConfigFileRepo) pull() error {
 			if r.remoteConfigFile == nil || pulledConfigFile.Version >= r.remoteConfigFile.Version {
 				r.remoteConfigFile = deepCloneConfigFile(pulledConfigFile)
 				r.fireChangeEvent(pulledConfigFile.GetContent())
+				// save into local_cache
+				r.saveCacheConfigFile(pulledConfigFile)
 			}
 			return nil
 		}
@@ -161,6 +168,11 @@ func (r *ConfigFileRepo) pull() error {
 		if responseCode == uint32(apimodel.Code_NotFoundResource) {
 			log.GetBaseLogger().Warnf("[Config] config file not found, please check whether config file released. %+v", r.configFileMetadata)
 			// 删除配置文件
+			r.removeCacheConfigFile(&configconnector.ConfigFile{
+				Namespace: pullConfigFileReq.Namespace,
+				FileGroup: pullConfigFileReq.FileGroup,
+				FileName:  pullConfigFileReq.FileName,
+			})
 			if r.remoteConfigFile != nil {
 				r.remoteConfigFile = nil
 				r.fireChangeEvent(NotExistedFileContent)
@@ -179,6 +191,18 @@ func (r *ConfigFileRepo) pull() error {
 	return err
 }
 
+func (r *ConfigFileRepo) saveCacheConfigFile(file *configconnector.ConfigFile) {
+	fileName := fmt.Sprintf(PatternService, url.QueryEscape(file.Namespace), url.QueryEscape(file.FileGroup),
+		url.QueryEscape(file.FileName)) + CacheSuffix
+	r.persistHandler.SaveMessageToFile(fileName, file)
+}
+
+func (r *ConfigFileRepo) removeCacheConfigFile(file *configconnector.ConfigFile) {
+	fileName := fmt.Sprintf(PatternService, url.QueryEscape(file.Namespace), url.QueryEscape(file.FileGroup),
+		url.QueryEscape(file.FileName)) + CacheSuffix
+	r.persistHandler.DeleteCacheFromFile(fileName)
+}
+
 func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configconnector.ConfigFile {
 	tags := make([]*configconnector.ConfigFileTag, 0, len(sourceConfigFile.Tags))
 	for _, tag := range sourceConfigFile.Tags {
@@ -187,16 +211,18 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 			Value: tag.Value,
 		})
 	}
-	return &configconnector.ConfigFile{
-		Namespace: sourceConfigFile.GetNamespace(),
-		FileGroup: sourceConfigFile.GetFileGroup(),
-		FileName:  sourceConfigFile.GetFileName(),
-		Content:   sourceConfigFile.GetContent(),
-		Version:   sourceConfigFile.GetVersion(),
-		Md5:       sourceConfigFile.GetMd5(),
-		Encrypted: sourceConfigFile.GetEncrypted(),
-		Tags:      tags,
+	ret := &configconnector.ConfigFile{
+		Namespace:     sourceConfigFile.GetNamespace(),
+		FileGroup:     sourceConfigFile.GetFileGroup(),
+		FileName:      sourceConfigFile.GetFileName(),
+		SourceContent: sourceConfigFile.GetSourceContent(),
+		Version:       sourceConfigFile.GetVersion(),
+		Md5:           sourceConfigFile.GetMd5(),
+		Encrypted:     sourceConfigFile.GetEncrypted(),
+		Tags:          tags,
 	}
+	ret.SetContent(sourceConfigFile.GetContent())
+	return ret
 }
 
 func (r *ConfigFileRepo) onLongPollingNotified(newVersion uint64) {
