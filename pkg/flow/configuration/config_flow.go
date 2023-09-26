@@ -19,11 +19,13 @@ package configuration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -121,6 +123,157 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 	configFile = newDefaultConfigFile(configFileMetadata, fileRepo)
 	c.configFileCache[cacheKey] = configFile
 	return configFile, nil
+}
+
+// CreateConfigFile 创建配置文件
+func (c *ConfigFileFlow) CreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	configFileMetadata := &model.DefaultConfigFileMetadata{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+
+	cacheKey := genCacheKeyByMetadata(configFileMetadata)
+
+	c.fclock.RLock()
+	_, ok := c.configFileCache[cacheKey]
+	c.fclock.RUnlock()
+	if ok {
+		return fmt.Errorf("config file already exists")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	// double check
+	_, ok = c.configFileCache[cacheKey]
+	if ok {
+		return fmt.Errorf("config file already exists")
+	}
+
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	resp, err := c.connector.CreateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode == uint32(apimodel.Code_ExecuteSuccess) && resp.GetConfigFile() != nil {
+		return nil
+	}
+
+	log.GetBaseLogger().Infof("[Config] create config file with unexpected code.",
+		zap.Uint32("code", responseCode))
+	err = fmt.Errorf("create config file with unexpected code. %d", responseCode)
+	return err
+}
+
+// UpdateConfigFile 更新配置文件
+func (c *ConfigFileFlow) UpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.UpdateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode == uint32(apimodel.Code_ExecuteSuccess) && resp.GetConfigFile() != nil {
+		version := resp.GetConfigFile().GetVersion()
+
+		configFileMetadata := &model.DefaultConfigFileMetadata{
+			Namespace: namespace,
+			FileGroup: fileGroup,
+			FileName:  fileName,
+		}
+		cacheKey := genCacheKeyByMetadata(configFileMetadata)
+
+		// 存在缓存, 手动触发更新
+		_, ok := c.configFileCache[cacheKey]
+		if ok {
+			fileRepo := c.configFilePool[cacheKey]
+			fileRepo.onLongPollingNotified(version)
+			return nil
+		}
+
+		return nil
+	} else {
+		log.GetBaseLogger().Errorf("[Config] update config file with unexpected code.",
+			zap.Int32("code", int32(responseCode)))
+		err = fmt.Errorf("update config file with unexpected code. %d", responseCode)
+		return err
+	}
+}
+
+// PublishConfigFile 发布配置文件
+func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.PublishConfigFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode == uint32(apimodel.Code_ExecuteSuccess) && resp.GetConfigFile() != nil {
+		version := resp.GetConfigFile().GetVersion()
+
+		configFileMetadata := &model.DefaultConfigFileMetadata{
+			Namespace: namespace,
+			FileGroup: fileGroup,
+			FileName:  fileName,
+		}
+		cacheKey := genCacheKeyByMetadata(configFileMetadata)
+
+		// 存在缓存, 手动触发更新
+		cacheFile, ok := c.configFileCache[cacheKey]
+		if ok {
+			fileRepo := c.configFilePool[cacheKey]
+			fileRepo.onLongPollingNotified(version)
+			return cacheFile, nil
+		}
+
+		fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration, c.persistHandler)
+		if err != nil {
+			return nil, err
+		}
+
+		c.addConfigFileToLongPollingPool(fileRepo)
+		c.repos = append(c.repos, fileRepo)
+
+		defaultConfigFile := newDefaultConfigFile(configFileMetadata, fileRepo)
+		c.configFileCache[cacheKey] = defaultConfigFile
+		return defaultConfigFile, nil
+	} else {
+		log.GetBaseLogger().Errorf("[Config] publish config file with unexpected code.",
+			zap.Int32("code", int32(responseCode)))
+		err = fmt.Errorf("publish config file with unexpected code. %d", responseCode)
+		return nil, err
+	}
 }
 
 func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo) {

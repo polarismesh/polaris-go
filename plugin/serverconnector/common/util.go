@@ -49,6 +49,9 @@ const (
 	reqIDPrefixRateLimitAcquire
 	reqIDPrefixGetConfigFile
 	reqIDPrefixWatchConfigFiles
+	reqIDPrefixCreateConfigFile
+	reqIDPrefixUpdateConfigFile
+	reqIDPrefixPublishConfigFile
 )
 
 const (
@@ -63,6 +66,9 @@ const (
 	OpKeyRateLimitMetricReport = "RateLimitMetricReport"
 	OpKeyGetConfigFile         = "GetConfigFile"
 	OpKeyWatchConfigFiles      = "WatchConfigFiles"
+	OpKeyCreateConfigFile      = "CreateConfigFile"
+	OpKeyUpdateConfigFile      = "UpdateConfigFile"
+	OpKeyPublishConfigFile     = "PublishConfigFile"
 )
 
 // NextDiscoverReqID 生成GetInstances调用的请求Id
@@ -108,6 +114,21 @@ func NextGetConfigFileReqID() string {
 // NextWatchConfigFilesReqID 生成WatchConfigFiles调用的请求Id
 func NextWatchConfigFilesReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixWatchConfigFiles, uuid.New().ID())
+}
+
+// NextCreateConfigFileReqID 生成CreateConfigFile调用的请求Id
+func NextCreateConfigFileReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixCreateConfigFile, uuid.New().ID())
+}
+
+// NextUpdateConfigFileReqID 生成UpdateConfigFile调用的请求Id
+func NextUpdateConfigFileReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixUpdateConfigFile, uuid.New().ID())
+}
+
+// NextPublishConfigFileReqID 生成PublishConfigFile调用的请求Id
+func NextPublishConfigFileReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixPublishConfigFile, uuid.New().ID())
 }
 
 // GetConnErrorCode 获取连接错误码

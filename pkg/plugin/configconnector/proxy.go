@@ -48,6 +48,24 @@ func (p *Proxy) WatchConfigFiles(configFileList []*ConfigFile) (*ConfigFileRespo
 	return response, err
 }
 
+// CreateConfigFile Create config file
+func (p *Proxy) CreateConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error) {
+	response, err := p.ConfigConnector.CreateConfigFile(configFile)
+	return response, err
+}
+
+// UpdateConfigFile Update config file
+func (p *Proxy) UpdateConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error) {
+	response, err := p.ConfigConnector.UpdateConfigFile(configFile)
+	return response, err
+}
+
+// PublishConfigFile Publish config file
+func (p *Proxy) PublishConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error) {
+	response, err := p.ConfigConnector.PublishConfigFile(configFile)
+	return response, err
+}
+
 // init 注册proxy
 func init() {
 	plugin.RegisterPluginProxy(common.TypeConfigConnector, &Proxy{})

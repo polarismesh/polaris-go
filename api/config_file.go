@@ -24,6 +24,12 @@ type ConfigFileAPI interface {
 	SDKOwner
 	// GetConfigFile 获取配置文件
 	GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error)
+	// CreateConfigFile 创建配置文件
+	CreateConfigFile(namespace, fileGroup, fileName, content string) error
+	// UpdateConfigFile 更新配置文件
+	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
+	// PublishConfigFile 发布配置文件
+	PublishConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error)
 }
 
 var (

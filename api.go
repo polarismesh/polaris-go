@@ -139,6 +139,12 @@ type ConfigAPI interface {
 	api.SDKOwner
 	// GetConfigFile obtaining the configuration file
 	GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+	// CreateConfigFile create configuration file
+	CreateConfigFile(namespace, fileGroup, fileName, content string) error
+	// UpdateConfigFile update configuration file
+	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
+	// PublishConfigFile publish configuration file
+	PublishConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
 }
 
 // RouterAPI routing api methods
