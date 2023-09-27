@@ -144,7 +144,7 @@ type ConfigAPI interface {
 	// UpdateConfigFile update configuration file
 	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
 	// PublishConfigFile publish configuration file
-	PublishConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+	PublishConfigFile(namespace, fileGroup, fileName string) error
 }
 
 // RouterAPI routing api methods

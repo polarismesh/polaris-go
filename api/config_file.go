@@ -29,7 +29,7 @@ type ConfigFileAPI interface {
 	// UpdateConfigFile 更新配置文件
 	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
 	// PublishConfigFile 发布配置文件
-	PublishConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error)
+	PublishConfigFile(namespace, fileGroup, fileName string) error
 }
 
 var (

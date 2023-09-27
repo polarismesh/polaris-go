@@ -19,11 +19,8 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/polarismesh/polaris-go"
-	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 func main() {
@@ -57,22 +54,17 @@ func main() {
 
 	fmt.Println("[Update] Success")
 
-	configFile, err := configAPI.PublishConfigFile(namespace, fileGroup, fileName)
+	err = configAPI.PublishConfigFile(namespace, fileGroup, fileName)
 	if err != nil {
 		fmt.Println("failed to publish config file.", err)
 		return
 	}
-	fmt.Printf("[Publish] namespace=%s, group=%s, name=%s, content=%v\n",
-		configFile.GetNamespace(),
-		configFile.GetFileGroup(),
-		configFile.GetFileName(),
-		configFile.GetContent(),
-	)
-	configFile.AddChangeListener(changeListener)
 
-	time.Sleep(10 * time.Second)
-}
+	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
+	if err != nil {
+		fmt.Println("failed to get config file.", err)
+		return
+	}
 
-func changeListener(event model.ConfigFileChangeEvent) {
-	log.Printf("received change event. %+v", event)
+	fmt.Printf("config file is %#v\n", configFile)
 }

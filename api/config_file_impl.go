@@ -68,7 +68,7 @@ func (c *configFileAPI) UpdateConfigFile(namespace, fileGroup, fileName, content
 }
 
 // PublishConfigFile 发布配置文件
-func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string) error {
 	return c.context.GetEngine().SyncPublishConfigFile(namespace, fileGroup, fileName)
 }
 

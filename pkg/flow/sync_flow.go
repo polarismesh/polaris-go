@@ -643,7 +643,7 @@ func (e *Engine) SyncUpdateConfigFile(namespace, fileGroup, fileName, content st
 }
 
 // SyncPublishConfigFile 同步发布配置文件
-func (e *Engine) SyncPublishConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+func (e *Engine) SyncPublishConfigFile(namespace, fileGroup, fileName string) error {
 	return e.configFileFlow.PublishConfigFile(namespace, fileGroup, fileName)
 }
 

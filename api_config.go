@@ -83,7 +83,7 @@ func (c *configAPI) UpdateConfigFile(namespace, fileGroup, fileName, content str
 }
 
 // PublishConfigFile 发布配置文件
-func (c *configAPI) PublishConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error) {
+func (c *configAPI) PublishConfigFile(namespace, fileGroup, fileName string) error {
 	return c.rawAPI.PublishConfigFile(namespace, fileGroup, fileName)
 }
 
