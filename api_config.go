@@ -72,6 +72,21 @@ func (c *configAPI) GetConfigFile(namespace, fileGroup, fileName string) (Config
 	return c.rawAPI.GetConfigFile(namespace, fileGroup, fileName)
 }
 
+// CreateConfigFile 创建配置文件
+func (c *configAPI) CreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.rawAPI.CreateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// UpdateConfigFile 更新配置文件
+func (c *configAPI) UpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.rawAPI.UpdateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// PublishConfigFile 发布配置文件
+func (c *configAPI) PublishConfigFile(namespace, fileGroup, fileName string) error {
+	return c.rawAPI.PublishConfigFile(namespace, fileGroup, fileName)
+}
+
 // SDKContext 获取SDK上下文
 func (c *configAPI) SDKContext() api.SDKContext {
 	return c.rawAPI.SDKContext()

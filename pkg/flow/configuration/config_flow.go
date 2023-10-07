@@ -19,6 +19,7 @@ package configuration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -121,6 +122,110 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 	configFile = newDefaultConfigFile(configFileMetadata, fileRepo)
 	c.configFileCache[cacheKey] = configFile
 	return configFile, nil
+}
+
+// CreateConfigFile 创建配置文件
+func (c *ConfigFileFlow) CreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	// 校验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.CreateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
+// UpdateConfigFile 更新配置文件
+func (c *ConfigFileFlow) UpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	// 校验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.UpdateConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
+// PublishConfigFile 发布配置文件
+func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string) error {
+	// 检验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.PublishConfigFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		errMsg := fmt.Sprintf("failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+			namespace, fileGroup, fileName, responseCode)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
 }
 
 func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo) {

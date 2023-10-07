@@ -632,6 +632,21 @@ func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model
 	return e.configFileFlow.GetConfigFile(namespace, fileGroup, fileName)
 }
 
+// SyncCreateConfigFile 同步创建配置文件
+func (e *Engine) SyncCreateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return e.configFileFlow.CreateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// SyncUpdateConfigFile 同步更新配置文件
+func (e *Engine) SyncUpdateConfigFile(namespace, fileGroup, fileName, content string) error {
+	return e.configFileFlow.UpdateConfigFile(namespace, fileGroup, fileName, content)
+}
+
+// SyncPublishConfigFile 同步发布配置文件
+func (e *Engine) SyncPublishConfigFile(namespace, fileGroup, fileName string) error {
+	return e.configFileFlow.PublishConfigFile(namespace, fileGroup, fileName)
+}
+
 // WatchAllInstances 监听所有的实例
 func (e *Engine) WatchAllInstances(request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	return e.watchEngine.WatchAllInstances(request)
