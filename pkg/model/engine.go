@@ -133,7 +133,7 @@ type Engine interface {
 	// Report
 	Report(*ResourceStat) error
 	// MakeFunctionDecorator
-	MakeFunctionDecorator(*RequestContext) CustomerFunction
+	MakeFunctionDecorator(CustomerFunction, *RequestContext) DecoratorFunction
 	// MakeInvokeHandler
 	MakeInvokeHandler(*RequestContext) InvokeHandler
 }

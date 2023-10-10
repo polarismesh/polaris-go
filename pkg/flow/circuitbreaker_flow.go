@@ -1,9 +1,11 @@
 package flow
 
 import (
+	"context"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 )
 
 // Check
@@ -17,8 +19,8 @@ func (e *Engine) Report(reportStat *model.ResourceStat) error {
 }
 
 // MakeFunctionDecorator
-func (e *Engine) MakeFunctionDecorator(reqCtx *model.RequestContext) model.CustomerFunction {
-	return e.circuitBreakerFlow.MakeFunctionDecorator(reqCtx)
+func (e *Engine) MakeFunctionDecorator(f model.CustomerFunction, reqCtx *model.RequestContext) model.DecoratorFunction {
+	return e.circuitBreakerFlow.MakeFunctionDecorator(f, reqCtx)
 }
 
 // MakeInvokeHandler
@@ -27,26 +29,113 @@ func (e *Engine) MakeInvokeHandler(reqCtx *model.RequestContext) model.InvokeHan
 }
 
 type CircuitBreakerFlow struct {
-	engine *Engine
+	engine          *Engine
+	resourceBreaker circuitbreaker.CircuitBreaker
+}
+
+func newCircuitBreakerFlow(e *Engine) (*CircuitBreakerFlow, error) {
+	return nil, nil
 }
 
 func (e *CircuitBreakerFlow) Check(resource model.Resource) (*model.CheckResult, error) {
+	if e.resourceBreaker == nil {
+		return nil, model.NewSDKError(model.ErrCodeInternalError, nil, "circuitbreaker not found")
+	}
 
+	status := e.resourceBreaker.CheckResource(resource)
+	if status != nil {
+		return circuitBreakerStatusToResult(status), nil
+	}
+
+	return &model.CheckResult{
+		Pass:         true,
+		RuleName:     "",
+		FallbackInfo: nil,
+	}, nil
+}
+
+func circuitBreakerStatusToResult(breakerStatus model.CircuitBreakerStatus) *model.CheckResult {
+	status := breakerStatus.GetStatus()
+	if status == model.Open {
+		return &model.CheckResult{
+			Pass:         false,
+			RuleName:     breakerStatus.GetCircuitBreaker(),
+			FallbackInfo: breakerStatus.GetFallbackInfo(),
+		}
+	}
+	return &model.CheckResult{
+		Pass:         true,
+		RuleName:     breakerStatus.GetCircuitBreaker(),
+		FallbackInfo: breakerStatus.GetFallbackInfo(),
+	}
 }
 
 func (e *CircuitBreakerFlow) Report(reportStat *model.ResourceStat) error {
-
+	if e.resourceBreaker == nil {
+		return model.NewSDKError(model.ErrCodeInternalError, nil, "circuitbreaker not found")
+	}
+	return e.resourceBreaker.Report(reportStat)
 }
 
-func (e *CircuitBreakerFlow) MakeFunctionDecorator(reqCtx *model.RequestContext) model.CustomerFunction {
-
+func (e *CircuitBreakerFlow) MakeFunctionDecorator(f model.CustomerFunction, reqCtx *model.RequestContext) model.DecoratorFunction {
+	decorator := &DefaultFunctionalDecorator{
+		invoke: &DefaultInvokeHandler{
+			flow:   e,
+			reqCtx: reqCtx,
+		},
+		customerFunc: f,
+	}
+	return decorator.Decorator
 }
 
 func (e *CircuitBreakerFlow) MakeInvokeHandler(reqCtx *model.RequestContext) model.InvokeHandler {
-
+	return &DefaultInvokeHandler{
+		flow:   e,
+		reqCtx: reqCtx,
+	}
 }
 
 type DefaultFunctionalDecorator struct {
+	invoke       model.InvokeHandler
+	customerFunc model.CustomerFunction
+}
+
+func (df *DefaultFunctionalDecorator) Decorator(ctx context.Context, args interface{}) (interface{}, *model.CallAborted, error) {
+	invoke := df.invoke
+	aborted, err := invoke.AcquirePermission()
+	if err != nil {
+		return nil, nil, err
+	}
+	if aborted != nil {
+		return nil, aborted, nil
+	}
+	var (
+		ret   interface{}
+		start = time.Now()
+	)
+
+	defer func() {
+		delay := time.Since(start)
+		if err != nil {
+			rspCtx := &model.ResponseContext{
+				Duration: delay,
+				Err:      err,
+			}
+			invoke.OnError(rspCtx)
+		} else {
+			rspCtx := &model.ResponseContext{
+				Duration: delay,
+				Result:   ret,
+			}
+			invoke.OnError(rspCtx)
+		}
+	}()
+
+	ret, err = df.customerFunc(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ret, nil, nil
 }
 
 type DefaultInvokeHandler struct {

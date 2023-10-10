@@ -18,6 +18,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -167,6 +168,8 @@ type CircuitBreakerStatus interface {
 	AcquireStatusLock() bool
 	// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
 	AllocatedRequestsAfterHalfOpen() int32
+	// GetFallbackInfo 获取熔断器的降级信息
+	GetFallbackInfo() *FallbackInfo
 }
 
 // Status 断路器状态
@@ -321,7 +324,9 @@ func (c *CircuitBreakerStatusImpl) Allocate() bool {
 	return allocated
 }
 
-type CustomerFunction func(args interface{}) (interface{}, error)
+type CustomerFunction func(ctx context.Context, args interface{}) (interface{}, error)
+
+type DecoratorFunction func(ctx context.Context, args interface{}) (interface{}, *CallAborted, error)
 
 type FallbackInfo struct {
 	Code    int

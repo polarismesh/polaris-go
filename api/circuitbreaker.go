@@ -24,9 +24,13 @@ import (
 
 type CircuitBreakerAPI interface {
 	SDKOwner
+	// Check
 	Check(model.Resource) (*model.CheckResult, error)
+	// Report
 	Report(*model.ResourceStat) error
-	MakeFunctionDecorator(*RequestContext) model.CustomerFunction
+	// MakeFunctionDecorator
+	MakeFunctionDecorator(model.CustomerFunction, *RequestContext) model.DecoratorFunction
+	// MakeInvokeHandler
 	MakeInvokeHandler(*RequestContext) model.InvokeHandler
 }
 
@@ -53,12 +57,12 @@ var (
 	NewCircuitBreakerByContext = newCircuitBreakerAPIByContext
 )
 
-// 通过以默认域名为埋点server的默认配置创建ConsumerAPI
+// 通过以默认域名为埋点server的默认配置创建 CircuitBreakerAPI
 func newCircuitBreakerAPI() (CircuitBreakerAPI, error) {
 	return newCircuitBreakerAPIByConfig(config.NewDefaultConfigurationWithDomain())
 }
 
-// newCircuitBreakerAPIByFile 通过配置文件创建SDK ConsumerAPI对象
+// newCircuitBreakerAPIByFile 通过配置文件创建SDK CircuitBreakerAPI 对象
 func newCircuitBreakerAPIByFile(path string) (CircuitBreakerAPI, error) {
 	context, err := InitContextByFile(path)
 	if err != nil {
@@ -67,7 +71,7 @@ func newCircuitBreakerAPIByFile(path string) (CircuitBreakerAPI, error) {
 	return &circuitBreakerAPI{context}, nil
 }
 
-// newCircuitBreakerAPIByConfig 通过配置对象创建SDK ConsumerAPI对象
+// newCircuitBreakerAPIByConfig 通过配置对象创建SDK CircuitBreakerAPI 对象
 func newCircuitBreakerAPIByConfig(cfg config.Configuration) (CircuitBreakerAPI, error) {
 	context, err := InitContextByConfig(cfg)
 	if err != nil {
@@ -76,7 +80,7 @@ func newCircuitBreakerAPIByConfig(cfg config.Configuration) (CircuitBreakerAPI, 
 	return &circuitBreakerAPI{context}, nil
 }
 
-// newCircuitBreakerAPIByContext 通过上下文创建SDK ConsumerAPI对象
+// newCircuitBreakerAPIByContext 通过上下文创建SDK CircuitBreakerAPI 对象
 func newCircuitBreakerAPIByContext(context SDKContext) CircuitBreakerAPI {
 	return &circuitBreakerAPI{context}
 }

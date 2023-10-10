@@ -39,8 +39,8 @@ func (c *circuitBreakerAPI) Report(reportStat *model.ResourceStat)  error {
 	return c.context.GetEngine().Report(reportStat)
 }
 
-func (c *circuitBreakerAPI) MakeFunctionDecorator(reqCtx *RequestContext) model.CustomerFunction {
-	return c.context.GetEngine().MakeFunctionDecorator(&reqCtx.RequestContext)
+func (c *circuitBreakerAPI) MakeFunctionDecorator(f model.CustomerFunction, reqCtx *RequestContext) model.DecoratorFunction {
+	return c.context.GetEngine().MakeFunctionDecorator(f, &reqCtx.RequestContext)
 }
 
 func (c *circuitBreakerAPI) MakeInvokeHandler(reqCtx *RequestContext) model.InvokeHandler {

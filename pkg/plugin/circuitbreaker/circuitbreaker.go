@@ -28,9 +28,9 @@ import (
 // CircuitBreaker 【扩展点接口】资源熔断（实例熔断、方法熔断、服务熔断）
 type CircuitBreaker interface {
 	// CheckResource get the resource circuitbreaker status
-	CheckResource(Resource) model.CircuitBreakerStatus
+	CheckResource(model.Resource) model.CircuitBreakerStatus
 	// Report report resource invoke result stat
-	Report(*ResourceStat)
+	Report(*model.ResourceStat) error
 }
 
 // InstanceCircuitBreaker 【扩展点接口】节点熔断
