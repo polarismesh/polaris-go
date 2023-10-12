@@ -221,7 +221,7 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 		Encrypted:     sourceConfigFile.GetEncrypted(),
 		Tags:          tags,
 	}
-	ret.SetContent(sourceConfigFile.GetContent())
+	ret.SetContent(sourceConfigFile.GetSourceContent())
 	return ret
 }
 
