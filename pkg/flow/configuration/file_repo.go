@@ -20,6 +20,7 @@ package configuration
 import (
 	"fmt"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
@@ -37,6 +38,13 @@ const (
 	delayMaxTime = 120 // 120s
 )
 
+var (
+	_notExistFile = &configconnector.ConfigFile{
+		SourceContent: NotExistedFileContent,
+		NotExist:      true,
+	}
+)
+
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
 type ConfigFileRepo struct {
 	connector     configconnector.ConfigConnector
@@ -44,12 +52,16 @@ type ConfigFileRepo struct {
 	configuration config.Configuration
 
 	configFileMetadata model.ConfigFileMetadata
-	notifiedVersion    uint64                      // 长轮询通知的版本号
-	remoteConfigFile   *configconnector.ConfigFile // 从服务端获取的原始配置对象
-	retryPolicy        retryPolicy
-	listeners          []ConfigFileRepoChangeListener
+	// 长轮询通知的版本号
+	notifiedVersion uint64
+	// 从服务端获取的原始配置对象 *configconnector.ConfigFile
+	remoteConfigFileRef *atomic.Value
+	retryPolicy         retryPolicy
+	listeners           []ConfigFileRepoChangeListener
 
 	persistHandler *CachePersistHandler
+
+	fallbackToLocalCache bool
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
@@ -71,14 +83,16 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 			delayMinTime: delayMinTime,
 			delayMaxTime: delayMaxTime,
 		},
-		remoteConfigFile: &configconnector.ConfigFile{
-			Namespace: metadata.GetNamespace(),
-			FileGroup: metadata.GetFileGroup(),
-			FileName:  metadata.GetFileName(),
-			Version:   initVersion,
-		},
-		persistHandler: persistHandler,
+		remoteConfigFileRef:  &atomic.Value{},
+		persistHandler:       persistHandler,
+		fallbackToLocalCache: configuration.GetConfigFile().GetLocalCache().IsFallbackToLocalCache(),
 	}
+	repo.remoteConfigFileRef.Store(&configconnector.ConfigFile{
+		Namespace: metadata.GetNamespace(),
+		FileGroup: metadata.GetFileGroup(),
+		FileName:  metadata.GetFileName(),
+		Version:   initVersion,
+	})
 	// 1. 同步从服务端拉取配置
 	if err := repo.pull(); err != nil {
 		return nil, err
@@ -90,26 +104,37 @@ func (r *ConfigFileRepo) GetNotifiedVersion() uint64 {
 	return r.notifiedVersion
 }
 
+func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
+	val := r.remoteConfigFileRef.Load()
+	if val == nil {
+		return nil
+	}
+	return val.(*configconnector.ConfigFile)
+}
+
 // GetContent 获取配置文件内容
 func (r *ConfigFileRepo) GetContent() string {
-	if r.remoteConfigFile == nil {
+	remoteFile := r.loadRemoteFile()
+	if remoteFile == nil {
 		return NotExistedFileContent
 	}
-	return r.remoteConfigFile.GetContent()
+	return remoteFile.GetContent()
 }
 
 func (r *ConfigFileRepo) getVersion() uint64 {
-	if r.remoteConfigFile == nil {
+	remoteConfigFile := r.loadRemoteFile()
+	if remoteConfigFile == nil {
 		return initVersion
 	}
-	return r.remoteConfigFile.GetVersion()
+	return remoteConfigFile.GetVersion()
 }
 
 func (r *ConfigFileRepo) getDataKey() string {
-	if r.remoteConfigFile == nil {
+	remoteConfigFile := r.loadRemoteFile()
+	if remoteConfigFile == nil {
 		return ""
 	}
-	return r.remoteConfigFile.GetDataKey()
+	return remoteConfigFile.GetDataKey()
 }
 
 func (r *ConfigFileRepo) pull() error {
@@ -154,12 +179,12 @@ func (r *ConfigFileRepo) pull() error {
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
+			remoteConfigFile := r.loadRemoteFile()
 			// 本地配置文件落后，更新内存缓存
-			if r.remoteConfigFile == nil || pulledConfigFile.Version >= r.remoteConfigFile.Version {
-				r.remoteConfigFile = deepCloneConfigFile(pulledConfigFile)
-				r.fireChangeEvent(pulledConfigFile.GetContent())
+			if remoteConfigFile == nil || pulledConfigFile.Version >= remoteConfigFile.Version {
 				// save into local_cache
 				r.saveCacheConfigFile(pulledConfigFile)
+				r.fireChangeEvent(pulledConfigFile)
 			}
 			return nil
 		}
@@ -173,9 +198,8 @@ func (r *ConfigFileRepo) pull() error {
 				FileGroup: pullConfigFileReq.FileGroup,
 				FileName:  pullConfigFileReq.FileName,
 			})
-			if r.remoteConfigFile != nil {
-				r.remoteConfigFile = nil
-				r.fireChangeEvent(NotExistedFileContent)
+			if remoteConfigFile := r.loadRemoteFile(); remoteConfigFile != nil {
+				r.fireChangeEvent(_notExistFile)
 			}
 			return nil
 		}
@@ -188,7 +212,49 @@ func (r *ConfigFileRepo) pull() error {
 		retryTimes++
 		r.retryPolicy.delay()
 	}
+	r.fallbackIfNecessary(retryTimes, pullConfigFileReq)
 	return err
+}
+
+const (
+	PullConfigMaxRetryTimes = 3
+)
+
+func (r *ConfigFileRepo) fallbackIfNecessary(retryTimes int, req *configconnector.ConfigFile) {
+	if !(retryTimes >= PullConfigMaxRetryTimes && r.fallbackToLocalCache) {
+		return
+	}
+	cacheVal := &configconnector.ConfigFile{}
+	fileName := fmt.Sprintf(PatternService, url.QueryEscape(req.Namespace), url.QueryEscape(req.FileGroup),
+		url.QueryEscape(req.FileName)) + CacheSuffix
+	if err := r.persistHandler.LoadMessageFromFile(fileName, cacheVal); err != nil {
+		return
+	}
+	log.GetBaseLogger().Errorf("[Config] fallback to local cache success.")
+
+	response, err := r.chain.Execute(req, func(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
+		return &configconnector.ConfigFileResponse{
+			Code: uint32(apimodel.Code_ExecuteSuccess),
+			ConfigFile: &configconnector.ConfigFile{
+				Namespace:     cacheVal.Namespace,
+				FileGroup:     cacheVal.FileGroup,
+				FileName:      cacheVal.FileName,
+				SourceContent: cacheVal.SourceContent,
+				Version:       cacheVal.Version,
+				Md5:           cacheVal.Md5,
+				Encrypted:     cacheVal.Encrypted,
+				Tags:          cacheVal.Tags,
+			},
+		}, nil
+	})
+	if err != nil {
+		log.GetBaseLogger().Errorf("[Config] fallback to local cache fail. %+v", err)
+		return
+	}
+	localFile := response.ConfigFile
+	localFile.SetContent(localFile.GetSourceContent())
+
+	r.fireChangeEvent(localFile)
 }
 
 func (r *ConfigFileRepo) saveCacheConfigFile(file *configconnector.ConfigFile) {
@@ -221,12 +287,12 @@ func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configco
 		Encrypted:     sourceConfigFile.GetEncrypted(),
 		Tags:          tags,
 	}
-	ret.SetContent(sourceConfigFile.GetContent())
 	return ret
 }
 
 func (r *ConfigFileRepo) onLongPollingNotified(newVersion uint64) {
-	if r.remoteConfigFile != nil && r.remoteConfigFile.GetVersion() >= newVersion {
+	remoteConfigFile := r.loadRemoteFile()
+	if remoteConfigFile != nil && remoteConfigFile.GetVersion() >= newVersion {
 		return
 	}
 	r.notifiedVersion = newVersion
@@ -240,9 +306,18 @@ func (r *ConfigFileRepo) AddChangeListener(listener ConfigFileRepoChangeListener
 	r.listeners = append(r.listeners, listener)
 }
 
-func (r *ConfigFileRepo) fireChangeEvent(newContent string) {
+func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
+	if f.GetContent() == "" {
+		f.SetContent(f.GetSourceContent())
+	}
+	if f.NotExist {
+		r.remoteConfigFileRef.Store(nil)
+	} else {
+		r.remoteConfigFileRef.Store(f)
+	}
+
 	for _, listener := range r.listeners {
-		if err := listener(r.configFileMetadata, newContent); err != nil {
+		if err := listener(r.configFileMetadata, f.GetContent()); err != nil {
 			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed.",
 				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}

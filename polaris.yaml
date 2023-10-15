@@ -350,6 +350,8 @@ config:
     persistMaxReadRetry: 0
     #描述: 缓存读写磁盘的重试间隔
     persistRetryInterval: 500ms
+    #描述: 远端获取配置文件失败，兜底降级到本地文件缓存
+    fallbackToLocalCache: true
   # 连接器配置，默认为北极星服务端
   configConnector:
     id: polaris-config

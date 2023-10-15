@@ -45,6 +45,7 @@ func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHa
 // ConfigFilter 配置过滤器接口
 type ConfigFilter interface {
 	plugin.Plugin
+	// DoFilter
 	DoFilter(configFile *configconnector.ConfigFile, next ConfigFileHandleFunc) ConfigFileHandleFunc
 }
 

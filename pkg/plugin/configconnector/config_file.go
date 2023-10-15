@@ -47,6 +47,8 @@ type ConfigFile struct {
 
 	// 实际暴露给应用的配置内容数据
 	content string
+	// 该配置文件是否为不存在的场景下的占位信息
+	NotExist bool
 }
 
 func (c *ConfigFile) String() string {

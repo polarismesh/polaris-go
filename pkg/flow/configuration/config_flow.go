@@ -263,19 +263,21 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 				continue
 			}
 
+			remoteConfigFile := repo.loadRemoteFile()
+
 			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
-			if !(repo.remoteConfigFile == nil || repo.GetNotifiedVersion() > repo.remoteConfigFile.GetVersion()) {
+			if !(remoteConfigFile == nil || repo.GetNotifiedVersion() > remoteConfigFile.GetVersion()) {
 				continue
 			}
 
-			if repo.remoteConfigFile == nil {
+			if remoteConfigFile == nil {
 				log.GetBaseLogger().Warnf("[Config] client does not pull the configuration, it will be pulled again."+
 					"file = %+v, notified version = %d",
 					repo.configFileMetadata, repo.notifiedVersion)
 			} else {
 				log.GetBaseLogger().Warnf("[Config] notified version greater than pulled version, will pull config file again. "+
 					"file = %+v, notified version = %d, pulled version = %d",
-					repo.configFileMetadata, repo.notifiedVersion, repo.remoteConfigFile.GetVersion())
+					repo.configFileMetadata, repo.notifiedVersion, remoteConfigFile.GetVersion())
 			}
 
 			if err := repo.pull(); err != nil {
