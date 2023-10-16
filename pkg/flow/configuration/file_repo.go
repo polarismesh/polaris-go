@@ -252,8 +252,6 @@ func (r *ConfigFileRepo) fallbackIfNecessary(retryTimes int, req *configconnecto
 		return
 	}
 	localFile := response.ConfigFile
-	localFile.SetContent(localFile.GetSourceContent())
-
 	r.fireChangeEvent(localFile)
 }
 
@@ -311,7 +309,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 		f.SetContent(f.GetSourceContent())
 	}
 	if f.NotExist {
-		r.remoteConfigFileRef.Store(nil)
+		r.remoteConfigFileRef = &atomic.Value{}
 	} else {
 		r.remoteConfigFileRef.Store(f)
 	}
