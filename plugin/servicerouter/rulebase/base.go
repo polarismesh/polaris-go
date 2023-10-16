@@ -177,8 +177,14 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 					allMetaMatched = false
 				}
 			case apimodel.MatchString_NOT_EQUALS:
+				if rawMetaValue == matchAll {
+					return false, "", nil
+				}
 				allMetaMatched = srcMetaValue != rawMetaValue
 			case apimodel.MatchString_EXACT:
+				if rawMetaValue == matchAll {
+					return true, "", nil
+				}
 				allMetaMatched = srcMetaValue == rawMetaValue
 			case apimodel.MatchString_IN:
 				find := false
@@ -401,7 +407,9 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, nil) {
 				return nil, false, "", nil
 			}
-			if composedValue, ok := metaValues[ruleMetaValueStr]; ok {
+			if ruleMetaValueStr == matchAll {
+				metaChanged = true
+			} else if composedValue, ok := metaValues[ruleMetaValueStr]; ok {
 				if cls.RuleAddMetadata(ruleMetaKey, ruleMetaValueStr, composedValue) {
 					metaChanged = true
 				}
