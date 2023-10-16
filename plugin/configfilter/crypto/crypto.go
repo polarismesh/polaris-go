@@ -19,6 +19,7 @@
 package crypto
 
 import (
+	"encoding/base64"
 	"fmt"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -132,11 +133,18 @@ func (c *CryptoFilter) DoFilter(configFile *configconnector.ConfigFile, next con
 			}
 			dataKey, err := rsa.DecryptFromBase64(cipherDataKey, privateKey.PrivateKey)
 			if err != nil {
-				return nil, err
+				log.GetBaseLogger().Errorf("cipher datakey use rsa decrypt fail: %s", err)
+				// 可能就没有走 RSA 加密, 直接用数据里面的 dataKey 进行获取
+				dataKey, _ = base64.StdEncoding.DecodeString(cipherDataKey)
 			}
 			plainContent, err := crypto.Decrypt(cipherContent, dataKey)
 			if err != nil {
 				return nil, err
+			}
+			for i := range resp.ConfigFile.Tags {
+				if resp.ConfigFile.Tags[i].Key == "internal-datakey" {
+					resp.ConfigFile.Tags[i].Value = base64.StdEncoding.EncodeToString(dataKey)
+				}
 			}
 			resp.ConfigFile.SetContent(string(plainContent))
 			// 缓存数据密钥
