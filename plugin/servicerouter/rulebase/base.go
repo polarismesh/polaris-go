@@ -401,6 +401,9 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, nil) {
 				return nil, false, "", nil
 			}
+			if ruleMetaValueStr == matchAll && ruleMetaValue.ValueType == apimodel.MatchString_TEXT {
+				return cls, true, "", nil
+			}
 			if composedValue, ok := metaValues[ruleMetaValueStr]; ok {
 				if cls.RuleAddMetadata(ruleMetaKey, ruleMetaValueStr, composedValue) {
 					metaChanged = true
