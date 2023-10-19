@@ -158,7 +158,7 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 			if ruleMetaValue.GetValue().GetValue() == matchAll {
 				continue
 			}
-			rawMetaValue, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue)
+			rawMetaValue, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue, false)
 			if !exist {
 				return false, "", nil
 			}
@@ -354,7 +354,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 	cls = model.NewCluster(svcCache, inCluster)
 	var metaChanged bool
 	for ruleMetaKey, ruleMetaValue := range ruleMeta {
-		ruleMetaValueStr, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue)
+		ruleMetaValueStr, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue, true)
 		if !exist {
 			// 首先如果元数据的value无法获取，直接匹配失败
 			return nil, false, "", nil
@@ -419,7 +419,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 
 // 获取具体用于匹配的元数据的value
 func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.RouteInfo, ruleMetaKey string,
-	ruleMetaValue *apimodel.MatchString) (string, bool) {
+	ruleMetaValue *apimodel.MatchString, dst bool) (string, bool) {
 	var srcMeta map[string]string
 	if routeInfo.SourceService != nil {
 		srcMeta = routeInfo.SourceService.GetMetadata()
@@ -434,7 +434,20 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 		if len(srcMeta) == 0 {
 			exist = false
 		} else {
-			processedRuleMetaValue, exist = srcMeta[ruleMetaKey]
+			// dst 获取需要从上下文中获取请求值
+			// source 作为变量识别src标签值，并将值写入上下文
+			if dst {
+				str, ok := g.valueCtx.GetValue(ruleMetaValue.GetValue().GetValue())
+				if ok {
+					processedRuleMetaValue = str.(string)
+					exist = true
+				}
+			} else {
+				processedRuleMetaValue, exist = srcMeta[ruleMetaKey]
+				if exist {
+					g.valueCtx.SetValue(ruleMetaKey, processedRuleMetaValue)
+				}
+			}
 		}
 	case apimodel.MatchString_VARIABLE:
 		processedRuleMetaValue, exist = g.getVariable(ruleMetaValue.GetValue().GetValue())
