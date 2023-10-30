@@ -359,6 +359,10 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			// 首先如果元数据的value无法获取，直接匹配失败
 			return nil, false, "", nil
 		}
+		// 全匹配类型直接返回全量实例
+		if ruleMetaValueStr == matchAll && ruleMetaValue.ValueType == apimodel.MatchString_TEXT {
+			return cls, true, "", nil
+		}
 		metaValues := svcCache.GetInstanceMetaValues(cls.Location, ruleMetaKey)
 		if len(metaValues) == 0 {
 			// 不匹配
