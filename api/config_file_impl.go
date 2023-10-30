@@ -76,3 +76,43 @@ func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string)
 func (c *configFileAPI) SDKContext() SDKContext {
 	return c.context
 }
+
+type configGroupAPI struct {
+	context SDKContext
+}
+
+func newConfigGroupAPI() (ConfigGroupAPI, error) {
+	return newConfigGroupAPIByConfig(config.NewDefaultConfigurationWithDomain())
+}
+
+func newConfigGroupAPIByConfig(cfg config.Configuration) (ConfigGroupAPI, error) {
+	context, err := InitContextByConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &configGroupAPI{context}, nil
+}
+
+func newConfigGroupAPIByFile(path string) (ConfigGroupAPI, error) {
+	context, err := InitContextByFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &configGroupAPI{context}, nil
+}
+
+func newConfigGroupAPIBySDKContext(context SDKContext) ConfigGroupAPI {
+	return &configGroupAPI{
+		context: context,
+	}
+}
+
+// GetConfigGroup 获取配置分组
+func (c *configGroupAPI) GetConfigGroup(namespace, group string) (model.ConfigFileGroup, error) {
+	return c.context.GetEngine().SyncGetConfigGroup(namespace, group)
+}
+
+// SDKContext 获取SDK上下文
+func (c *configGroupAPI) SDKContext() SDKContext {
+	return c.context
+}

@@ -17,6 +17,8 @@
 
 package model
 
+import "time"
+
 // ChangeType 配置文件变更类型
 type ChangeType int
 
@@ -31,19 +33,37 @@ const (
 	NotChanged
 )
 
-// OnConfigFileChange 配置文件变更回调监听器
-type OnConfigFileChange func(event ConfigFileChangeEvent)
+type (
+	// OnConfigFileChange 配置文件变更回调监听器
+	OnConfigFileChange func(event ConfigFileChangeEvent)
+	// OnConfigGroupChange .
+	OnConfigGroupChange func(event *ConfigGroupChangeEvent)
+)
 
 // ConfigFileChangeEvent 配置文件变更事件
 type ConfigFileChangeEvent struct {
 	ConfigFileMetadata ConfigFileMetadata
-
 	// OldValue 变更之前的值
 	OldValue string
 	// NewValue 变更之后的值
 	NewValue string
 	// ChangeType 变更类型
 	ChangeType ChangeType
+}
+
+type SimpleConfigFile struct {
+	Namespace   string
+	FileGroup   string
+	FileName    string
+	Version     uint64
+	Md5         string
+	ReleaseTime time.Time
+}
+
+// ConfigGroupChangeEvent 配置文件变更事件
+type ConfigGroupChangeEvent struct {
+	Before []*SimpleConfigFile
+	After  []*SimpleConfigFile
 }
 
 // ConfigFileMetadata 配置文件元信息
@@ -89,4 +109,11 @@ func (m *DefaultConfigFileMetadata) GetFileGroup() string {
 // GetFileName 获取配置文件值
 func (m *DefaultConfigFileMetadata) GetFileName() string {
 	return m.FileName
+}
+
+type ConfigFileGroup interface {
+	// GetFiles
+	GetFiles() ([]*SimpleConfigFile, string, bool)
+	// AddChangeListener 增加配置文件变更监听器
+	AddChangeListener(cb OnConfigGroupChange)
 }

@@ -268,6 +268,61 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
 }
 
+func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configconnector.ConfigGroupResponse, error) {
+	var err error
+	if err = c.waitDiscoverReady(); err != nil {
+		return nil, err
+	}
+	opKey := connector.OpKeyGetConfigGroup
+	startTime := clock.GetClock().Now()
+	// 获取server连接
+	conn, err := c.connManager.GetConnection(opKey, config.ConfigCluster)
+	if err != nil {
+		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
+			fmt.Sprintf("failed to get connection, opKey: %s", opKey))
+	}
+
+	reqID := connector.NextPublishConfigFileReqID()
+	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	// 释放server连接
+	defer conn.Release(opKey)
+	stub := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
+	request := req.ToSpecQuery()
+	response, err := stub.GetConfigFileMetadataList(ctx, request)
+	endTime := clock.GetClock().Now()
+	if err != nil {
+		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
+			fmt.Sprintf("fail to %s, request %s, "+
+				"reason is fail to send request, reqID %s, server %s", opKey, request, reqID, conn.ConnID))
+	}
+	// 打印应答报文
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(response)
+		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+	}
+	serverCodeType := pb.ConvertServerErrorToRpcError(response.GetCode().GetValue())
+	code := apimodel.Code(response.GetCode().GetValue())
+	// 预期code，正常响应
+	if code == apimodel.Code_ExecuteSuccess || code == apimodel.Code_NotFoundResource || code == apimodel.Code_DataNoChange {
+		c.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
+		groupResp := &configconnector.ConfigGroupResponse{}
+		if err := groupResp.ParseFromSpec(response); err != nil {
+			return nil, model.NewSDKError(model.ErrCodeServerException, nil, err.Error())
+		}
+		return groupResp, nil
+	}
+	// 当server发生了内部错误时，上报调用服务失败
+	errMsg := fmt.Sprintf(
+		"fail to %s, request %s, server code %d, reason %s, server %s", opKey,
+		request, response.GetCode().GetValue(), response.GetInfo().GetValue(), conn.ConnID)
+	c.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
+	return nil, model.NewSDKError(model.ErrCodeServerException, nil, errMsg)
+}
+
 // IsEnable .插件开关.
 func (c *Connector) IsEnable(cfg config.Configuration) bool {
 	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
