@@ -360,7 +360,11 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			return nil, false, "", nil
 		}
 
-		// 如果类型是不等于，那应该单独获取实例
+		// 全匹配类型直接返回全量实例
+		if ruleMetaValueStr == matchAll && ruleMetaValue.ValueType == apimodel.MatchString_TEXT {
+			return cls, true, "", nil
+		}
+		// 如果是“不等于”类型，需要单独处理
 		var metaValues map[string]string
 		if ruleMetaValue.Type != apimodel.MatchString_NOT_EQUALS {
 			metaValues = svcCache.GetInstanceMetaValues(cls.Location, ruleMetaKey)
