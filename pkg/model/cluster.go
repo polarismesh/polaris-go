@@ -741,6 +741,7 @@ type ServiceClusters interface {
 type LocationBasedMetaKey struct {
 	location Location
 	metaKey  string
+	keyType  int // 0: equal, 1: not equal
 }
 
 // metaDataInService 标签缓存信息
@@ -1017,10 +1018,10 @@ func (c *clusterCache) SetExtendedCacheValue(pluginIndex int, value interface{})
 }
 
 // GetInstancesWithMetaValuesNotEqual 获取该标签不等于指定标签值的实例集合
-func (c *clusterCache) GetInstancesWithMetaValuesNotEqual(location Location, metaKey string, metavalue string) map[string]string {
+func (c *clusterCache) GetInstancesWithMetaValuesNotEqual(location Location, metaKey string, metaValue string) map[string]string {
 	var value interface{}
 	var exists bool
-	locationKey := LocationBasedMetaKey{location: location, metaKey: metaKey}
+	locationKey := LocationBasedMetaKey{location: location, metaKey: metaKey, keyType: 1}
 	value, exists = c.svcLevelMetadata.metaDataSet.Load(locationKey)
 	if exists {
 		return value.(map[string]string)
@@ -1043,7 +1044,7 @@ func (c *clusterCache) GetInstancesWithMetaValuesNotEqual(location Location, met
 		if !ok {
 			continue
 		}
-		if val == metavalue {
+		if val == metaValue {
 			continue
 		}
 		metaValueSet[val] = buildComposedValue(metaKey, val)
