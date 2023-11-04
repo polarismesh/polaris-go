@@ -260,6 +260,12 @@ func GetStatLogger() Logger {
 	return logContainer.GetStatLogger()
 }
 
+// GetCircuitBreakerEventLogger 获取全局统计日志对象
+func GetCircuitBreakerEventLogger() Logger {
+	return logContainer.GetStatLogger()
+}
+
+
 // GetStatReportLogger 获取统计上报日志对象
 func GetStatReportLogger() Logger {
 	return logContainer.GetStatReportLogger()

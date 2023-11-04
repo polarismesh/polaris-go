@@ -54,7 +54,7 @@ func (e *CircuitBreakerFlow) Check(resource model.Resource) (*model.CheckResult,
 	}, nil
 }
 
-func circuitBreakerStatusToResult(breakerStatus model.CircuitBreakerStatus) *model.CheckResult {
+func circuitBreakerStatusToResult(breakerStatus model.SpecCircuitBreakerStatus) *model.CheckResult {
 	status := breakerStatus.GetStatus()
 	if status == model.Open {
 		return &model.CheckResult{

@@ -41,6 +41,12 @@ type DetectResult interface {
 	GetDetectTime() time.Time
 	// GetDetectInstance 探测是实例
 	GetDetectInstance() model.Instance
+	// GetCode() return code
+	GetCode() string
+	// GetDelay
+	GetDelay() time.Duration
+	// GetRetStatus
+	GetRetStatus() model.RetStatus
 }
 
 // DetectResultImp 探活返回的结果，plugin.DetectResult的实现
@@ -48,6 +54,9 @@ type DetectResultImp struct {
 	Success        bool
 	DetectTime     time.Time      // 探测时间
 	DetectInstance model.Instance // 探测的实例
+	delay          time.Duration
+	code           string
+	status         model.RetStatus
 }
 
 // IsSuccess 探测类型，与探测插件名相同
@@ -63,6 +72,20 @@ func (r *DetectResultImp) GetDetectTime() time.Time {
 // GetDetectInstance 获取探活的实例
 func (r *DetectResultImp) GetDetectInstance() model.Instance {
 	return r.DetectInstance
+}
+
+// GetCode() return code
+func (r *DetectResultImp) GetCode() string {
+	return r.code
+}
+
+// GetDelay
+func (r *DetectResultImp) GetDelay() time.Duration {
+	return r.delay
+}
+
+func (r *DetectResultImp) GetRetStatus() model.RetStatus {
+	return r.status
 }
 
 // init 初始化

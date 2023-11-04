@@ -21,6 +21,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,8 +42,13 @@ type Node struct {
 	Port uint32
 }
 
+func (n Node) String() string {
+	return n.Host + ":" + strconv.FormatUint(uint64(n.Port), 10)
+}
+
 // Resource
 type Resource interface {
+	fmt.Stringer
 	// GetLevel
 	GetLevel() fault_tolerance.Level
 	// GetService
@@ -52,6 +59,11 @@ type Resource interface {
 
 type ServiceResource struct {
 	*abstractResource
+}
+
+func (r *ServiceResource) String() string {
+	return fmt.Sprintf("level=%s|service=%s|caller=%s", r.level.String(), r.service.String(),
+		r.callerService.String())
 }
 
 func NewServiceResource(svc, caller *ServiceKey) (*ServiceResource, error) {
@@ -69,6 +81,11 @@ func NewServiceResource(svc, caller *ServiceKey) (*ServiceResource, error) {
 type MethodResource struct {
 	*abstractResource
 	Method string
+}
+
+func (r *MethodResource) String() string {
+	return fmt.Sprintf("level=%s|method=%s|service=%s|caller=%s", r.level.String(), r.Method,
+		r.service.String(), r.callerService.String())
 }
 
 func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource, error) {
@@ -91,6 +108,11 @@ type InstanceResource struct {
 	*abstractResource
 	Protocol string
 	Node     Node
+}
+
+func (r *InstanceResource) String() string {
+	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.Node.String(),
+		r.service.String(), r.callerService.String())
 }
 
 func NewInstanceResource(svc, caller *ServiceKey, protocol, host string, port uint32) (*InstanceResource, error) {
@@ -168,8 +190,6 @@ type CircuitBreakerStatus interface {
 	AcquireStatusLock() bool
 	// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
 	AllocatedRequestsAfterHalfOpen() int32
-	// GetFallbackInfo 获取熔断器的降级信息
-	GetFallbackInfo() *FallbackInfo
 }
 
 // Status 断路器状态
@@ -236,6 +256,8 @@ type CircuitBreakerStatusImpl struct {
 
 	// 状态发生转变的锁
 	statusLock int32
+
+	fallbackInfo *FallbackInfo
 }
 
 // AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
@@ -369,4 +391,138 @@ type InvokeHandler interface {
 type CallAborted struct {
 	Rule     string
 	Fallback *FallbackInfo
+}
+
+// SpecCircuitBreakerStatus polarismesh/specification 熔断实现
+type SpecCircuitBreakerStatus interface {
+	// GetCircuitBreaker 标识被哪个熔断器熔断
+	GetCircuitBreaker() string
+	// GetStatus 熔断状态
+	GetStatus() Status
+	// GetStartTime 状态转换的时间
+	GetStartTime() time.Time
+	// GetFallbackInfo 获取熔断器的降级信息
+	GetFallbackInfo() *FallbackInfo
+	// SetFallbackInfo 获取熔断器的降级信息
+	SetFallbackInfo(*FallbackInfo)
+	// IsAvailable 是否可以分配请求
+	IsAvailable() bool
+}
+
+type InitCircuitBreakerStatus func(SpecCircuitBreakerStatus)
+
+func NewCircuitBreakerStatus(name string, status Status, startTime time.Time,
+	options ...InitCircuitBreakerStatus) SpecCircuitBreakerStatus {
+	impl := &BaseCircuitBreakerStatus{
+		name:      name,
+		status:    status,
+		startTime: startTime,
+	}
+	for i := range options {
+		options[i](impl)
+	}
+	return impl
+}
+
+type BaseCircuitBreakerStatus struct {
+	name         string
+	status       Status
+	startTime    time.Time
+	fallbackInfo *FallbackInfo
+}
+
+// GetCircuitBreaker 标识被哪个熔断器熔断
+func (c *BaseCircuitBreakerStatus) GetCircuitBreaker() string {
+	return c.name
+}
+
+// GetStatus 熔断状态
+func (c *BaseCircuitBreakerStatus) GetStatus() Status {
+	return c.status
+}
+
+// GetStartTime 状态转换的时间
+func (c *BaseCircuitBreakerStatus) GetStartTime() time.Time {
+	return c.startTime
+}
+
+func (c *BaseCircuitBreakerStatus) GetFallbackInfo() *FallbackInfo {
+	return c.fallbackInfo
+}
+
+func (c *BaseCircuitBreakerStatus) SetFallbackInfo(info *FallbackInfo) {
+	c.fallbackInfo = info
+}
+
+func (c *BaseCircuitBreakerStatus) IsAvailable() bool {
+	if c.status == Close {
+		return true
+	}
+	if c.status == Open {
+		return false
+	}
+	return true
+}
+
+type HalfOpenStatus struct {
+	BaseCircuitBreakerStatus
+	maxRequest   int
+	scheduled    int32
+	calledResult []bool
+	triggered    bool
+	lock         sync.Mutex
+}
+
+func NewHalfOpenStatus(name string, start time.Time, maxRequest int) SpecCircuitBreakerStatus {
+	return &HalfOpenStatus{
+		BaseCircuitBreakerStatus: BaseCircuitBreakerStatus{
+			name:      name,
+			status:    HalfOpen,
+			startTime: start,
+		},
+		maxRequest: maxRequest,
+	}
+}
+
+func (c *HalfOpenStatus) Report(success bool) bool {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.calledResult = append(c.calledResult, success)
+	needTrigger := !success || (len(c.calledResult) >= c.maxRequest)
+	if needTrigger && !c.triggered {
+		c.triggered = true
+		return true
+	}
+	return false
+}
+
+func (c *HalfOpenStatus) Schedule() bool {
+	return atomic.CompareAndSwapInt32(&c.scheduled, 0, 1)
+}
+
+func (c *HalfOpenStatus) CalNextStatus() Status {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if !c.triggered {
+		return HalfOpen
+	}
+
+	for _, ret := range c.calledResult {
+		if !ret {
+			return Open
+		}
+	}
+	return Close
+}
+
+func (c *HalfOpenStatus) IsAvailable() bool {
+	if c.status == Close {
+		return true
+	}
+	if c.status == Open {
+		return false
+	}
+	return true
 }

@@ -15,11 +15,18 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package composite
+package trigger
 
-type StatusChangeHandler interface {
-	CloseToOpen(breaker string)
-	OpenToHalfOpen()
-	HalfOpenToClose()
-	HalfOpenToOpen()
+import "context"
+
+type ConsecutiveCounter struct {
+	baseCounter
 }
+
+func NewConsecutiveCounter(name string, opt *Options) *ConsecutiveCounter {
+	return nil
+}
+
+func (c *ConsecutiveCounter) Init(ctx context.Context) {}
+
+func (c *ConsecutiveCounter) Report(success bool) {}

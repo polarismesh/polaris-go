@@ -17,6 +17,256 @@
 
 package composite
 
+import (
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	regexp "github.com/dlclark/regexp2"
+
+	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite/trigger"
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+)
+
+// ResourceCounters .
 type ResourceCounters struct {
-	
+	lock sync.RWMutex
+	// activeRuleRef
+	activeRule *fault_tolerance.CircuitBreakerRule
+	// counters
+	counters []trigger.TriggerCounter
+	// resource
+	resource model.Resource
+	// statusRef
+	statusRef atomic.Value
+	// fallbackInfo
+	fallbackInfo *model.FallbackInfo
+	// regexFunction
+	regexFunction func(string) *regexp.Regexp
+	// engineFlow
+	engineFlow model.Engine
+	//
+	log log.Logger
+}
+
+func NewResourceCounters(
+	res model.Resource,
+	activeRule *fault_tolerance.CircuitBreakerRule,
+	circuitBreaker *CompositeCircuitBreaker,
+) (*ResourceCounters, error) {
+	counters := &ResourceCounters{
+		activeRule: activeRule,
+		resource:   res,
+		regexFunction: func(s string) *regexp.Regexp {
+			if circuitBreaker == nil {
+				return regexp.MustCompile(s, regexp.RE2)
+			}
+			return circuitBreaker.loadOrStoreCompiledRegex(s)
+		},
+		statusRef:    atomic.Value{},
+		fallbackInfo: buildFallbackInfo(activeRule),
+		log:          log.GetCircuitBreakerEventLogger(),
+	}
+	counters.updateCircuitBreakerStatus(model.NewCircuitBreakerStatus(activeRule.Name, model.Close, time.Now()))
+	if circuitBreaker != nil {
+		counters.engineFlow = circuitBreaker.engineFlow
+	}
+	if err := counters.init(); err != nil {
+		return nil, err
+	}
+	return counters, nil
+}
+
+func (rc *ResourceCounters) init() error {
+	conditions := rc.activeRule.GetTriggerCondition()
+	for i := range conditions {
+		condition := conditions[i]
+		opt := trigger.Options{
+			Resource:      rc.resource,
+			Condition:     condition,
+			StatusHandler: rc,
+		}
+
+		switch condition.GetTriggerType() {
+		case fault_tolerance.TriggerCondition_CONSECUTIVE_ERROR:
+			rc.counters = append(rc.counters, trigger.NewConsecutiveCounter(rc.activeRule.Name, &opt))
+		case fault_tolerance.TriggerCondition_ERROR_RATE:
+			rc.counters = append(rc.counters, trigger.NewErrRateCounter(rc.activeRule.Name, &opt))
+		}
+	}
+	return nil
+}
+
+func (rc *ResourceCounters) CurrentActiveRule() *fault_tolerance.CircuitBreakerRule {
+	return rc.activeRule
+}
+
+func (rc *ResourceCounters) updateCircuitBreakerStatus(status model.SpecCircuitBreakerStatus) {
+	rc.statusRef.Store(status)
+}
+
+func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.SpecCircuitBreakerStatus {
+	val := rc.statusRef.Load()
+	if val == nil {
+		return nil
+	}
+	return val.(model.SpecCircuitBreakerStatus)
+}
+
+func (rc *ResourceCounters) CloseToOpen(breaker string) {
+	rc.lock.Lock()
+	defer rc.lock.Unlock()
+
+	status := rc.CurrentCircuitBreakerStatus()
+	if status.GetStatus() == model.Close {
+		rc.toOpen(status, breaker)
+	}
+}
+
+func (rc *ResourceCounters) toOpen(before model.SpecCircuitBreakerStatus, name string) {
+	newStatus := model.NewCircuitBreakerStatus(name, model.Open, time.Now(),
+		func(cbs model.SpecCircuitBreakerStatus) {
+			cbs.SetFallbackInfo(rc.fallbackInfo)
+		})
+	rc.updateCircuitBreakerStatus(newStatus)
+	rc.reportCircuitStatus()
+	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
+		newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
+	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
+	timer := time.NewTimer(time.Duration(sleepWindow) * time.Second)
+	go func(timer *time.Timer) {
+		rc.OpenToHalfOpen()
+	}(timer)
+}
+
+func (rc *ResourceCounters) OpenToHalfOpen() {
+	rc.lock.Lock()
+	defer rc.lock.Unlock()
+
+	status := rc.CurrentCircuitBreakerStatus()
+	if status.GetStatus() != model.Open {
+		return
+	}
+	consecutiveSuccess := rc.activeRule.GetRecoverCondition().ConsecutiveSuccess
+	halfOpenStatus := model.NewHalfOpenStatus(status.GetCircuitBreaker(), time.Now(), int(consecutiveSuccess))
+	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
+		halfOpenStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
+	rc.updateCircuitBreakerStatus(halfOpenStatus)
+	rc.reportCircuitStatus()
+}
+
+func (rc *ResourceCounters) HalfOpenToClose() {
+	rc.lock.Lock()
+	defer rc.lock.Unlock()
+
+	status := rc.CurrentCircuitBreakerStatus()
+	if status.GetStatus() != model.HalfOpen {
+		return
+	}
+	newStatus := model.NewCircuitBreakerStatus(status.GetCircuitBreaker(), model.Close, time.Now())
+	rc.updateCircuitBreakerStatus(newStatus)
+	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
+		newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
+	rc.reportCircuitStatus()
+}
+
+func (rc *ResourceCounters) HalfOpenToOpen() {
+	rc.lock.Lock()
+	defer rc.lock.Unlock()
+
+	status := rc.CurrentCircuitBreakerStatus()
+	if status.GetStatus() == model.HalfOpen {
+		rc.toOpen(status, status.GetCircuitBreaker())
+	}
+}
+
+func (rc *ResourceCounters) Report(stat model.ResourceStat) {
+	retStatus := rc.parseRetStatus(stat)
+	isSuccess := retStatus != model.RetFail && retStatus != model.RetTimeout
+	curStatus := rc.CurrentCircuitBreakerStatus()
+	if curStatus != nil && curStatus.GetStatus() == model.HalfOpen {
+		halfOpenStatus := curStatus.(*model.HalfOpenStatus)
+		checked := halfOpenStatus.Report(isSuccess)
+		if !checked {
+			return
+		}
+		nextStatus := halfOpenStatus.CalNextStatus()
+		switch nextStatus {
+		case model.Close:
+			go func() {
+				rc.HalfOpenToClose()
+			}()
+		case model.Open:
+			go func() {
+				rc.HalfOpenToOpen()
+			}()
+		}
+	} else {
+		log.GetBaseLogger().Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
+		for _, counter := range rc.counters {
+			counter.Report(isSuccess)
+		}
+	}
+}
+
+func (rc *ResourceCounters) parseRetStatus(stat model.ResourceStat) model.RetStatus {
+	errConditions := rc.activeRule.GetErrorConditions()
+	if len(errConditions) == 0 {
+		return stat.RetStatus
+	}
+	for i := range errConditions {
+		errCondition := errConditions[i]
+		condition := errCondition.GetCondition()
+		switch errCondition.GetInputType() {
+		case fault_tolerance.ErrorCondition_RET_CODE:
+			codeMatched := match.MatchString(stat.RetCode, condition, rc.regexFunction)
+			if codeMatched {
+				return model.RetFail
+			}
+		case fault_tolerance.ErrorCondition_DELAY:
+			delayVal, err := strconv.ParseInt(condition.GetValue().GetValue(), 10, 64)
+			if err == nil {
+				if stat.Delay.Milliseconds() > delayVal {
+					return model.RetTimeout
+				}
+			}
+		}
+	}
+	return model.RetSuccess
+}
+
+func (rc *ResourceCounters) reportCircuitStatus() {
+	// TODO wait impl
+}
+
+func buildFallbackInfo(rule *fault_tolerance.CircuitBreakerRule) *model.FallbackInfo {
+	if rule == nil {
+		return nil
+	}
+	if rule.GetLevel() != fault_tolerance.Level_METHOD && rule.GetLevel() != fault_tolerance.Level_SERVICE {
+		return nil
+	}
+	fallbackInfo := rule.GetFallbackConfig()
+	if fallbackInfo == nil {
+		return nil
+	}
+	if fallbackInfo.GetResponse() == nil {
+		return nil
+	}
+	ret := &model.FallbackInfo{
+		Code:    int(fallbackInfo.GetResponse().GetCode()),
+		Body:    fallbackInfo.GetResponse().GetBody(),
+		Headers: map[string]string{},
+	}
+
+	headers := fallbackInfo.GetResponse().GetHeaders()
+	for i := range headers {
+		header := headers[i]
+		ret.Headers[header.Key] = header.Value
+	}
+	return ret
 }
