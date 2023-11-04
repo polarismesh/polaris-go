@@ -158,7 +158,7 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 			if ruleMetaValue.GetValue().GetValue() == matchAll {
 				continue
 			}
-			rawMetaValue, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue)
+			rawMetaValue, exist := g.getRuleMetaValueForSource(routeInfo, ruleMetaKey, ruleMetaValue)
 			if !exist {
 				return false, "", nil
 			}
@@ -354,7 +354,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 	cls = model.NewCluster(svcCache, inCluster)
 	var metaChanged bool
 	for ruleMetaKey, ruleMetaValue := range ruleMeta {
-		ruleMetaValueStr, exist := g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue)
+		ruleMetaValueStr, exist := g.getRuleMetaValueForDest(routeInfo, ruleMetaKey, ruleMetaValue)
 		if !exist {
 			// 首先如果元数据的value无法获取，直接匹配失败
 			return nil, false, "", nil
@@ -421,9 +421,21 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 	return cls, true, "", nil
 }
 
+// getRuleMetaValueForSource 针对 Source 方向的标签 value 匹配获取
+func (g *RuleBasedInstancesFilter) getRuleMetaValueForSource(routeInfo *servicerouter.RouteInfo, ruleMetaKey string,
+	ruleMetaValue *apimodel.MatchString) (string, bool) {
+	return g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue, false)
+}
+
+// getRuleMetaValueForDest 针对 Destination 方向的标签 value 匹配获取
+func (g *RuleBasedInstancesFilter) getRuleMetaValueForDest(routeInfo *servicerouter.RouteInfo, ruleMetaKey string,
+	ruleMetaValue *apimodel.MatchString) (string, bool) {
+	return g.getRuleMetaValueStr(routeInfo, ruleMetaKey, ruleMetaValue, true)
+}
+
 // 获取具体用于匹配的元数据的value
 func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.RouteInfo, ruleMetaKey string,
-	ruleMetaValue *apimodel.MatchString) (string, bool) {
+	ruleMetaValue *apimodel.MatchString, forDest bool) (string, bool) {
 	var srcMeta map[string]string
 	if routeInfo.SourceService != nil {
 		srcMeta = routeInfo.SourceService.GetMetadata()
@@ -435,10 +447,17 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 		processedRuleMetaValue = ruleMetaValue.GetValue().GetValue()
 		exist = true
 	case apimodel.MatchString_PARAMETER:
-		if len(srcMeta) == 0 {
-			exist = false
+		if forDest {
+			if len(srcMeta) == 0 {
+				exist = false
+			} else {
+				// 对于参数场景，实例标签的 value 来自 source metadata 中的 value
+				processedRuleMetaValue, exist = srcMeta[ruleMetaValue.GetValue().GetValue()]
+			}
 		} else {
-			processedRuleMetaValue, exist = srcMeta[ruleMetaKey]
+			// 如果是参数类型，并且当前是针对 Source 方向的标签匹配，默认直接放通
+			exist = true
+			processedRuleMetaValue = matchAll
 		}
 	case apimodel.MatchString_VARIABLE:
 		processedRuleMetaValue, exist = g.getVariable(ruleMetaValue.GetValue().GetValue())

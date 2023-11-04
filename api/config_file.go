@@ -32,6 +32,12 @@ type ConfigFileAPI interface {
 	PublishConfigFile(namespace, fileGroup, fileName string) error
 }
 
+type ConfigGroupAPI interface {
+	SDKOwner
+	// GetConfigGroup 获取配置分组
+	GetConfigGroup(namespace, group string) (model.ConfigFileGroup, error)
+}
+
 var (
 	// NewConfigFileAPIBySDKContext 通过 SDKContext 创建 ConfigFileAPI
 	NewConfigFileAPIBySDKContext = newConfigFileAPIBySDKContext
@@ -41,4 +47,13 @@ var (
 	NewConfigFileAPIByConfig = newConfigFileAPIByConfig
 	// NewConfigFileAPIByFile 通过配置文件创建 ConfigFileAPI
 	NewConfigFileAPIByFile = newConfigFileAPIByFile
+
+	// NewConfigGroupAPIBySDKContext 通过 SDKContext 创建 ConfigGroupAPI
+	NewConfigGroupAPIBySDKContext = newConfigGroupAPIBySDKContext
+	// NewConfigGroupAPI 通过 polaris.yaml 创建 ConfigGroupAPI
+	NewConfigGroupAPI = newConfigGroupAPI
+	// NewConfigGroupAPIByConfig 通过 Configuration 创建 ConfigGroupAPI
+	NewConfigGroupAPIByConfig = newConfigGroupAPIByConfig
+	// NewConfigGroupAPIByFile 通过配置文件创建 ConfigGroupAPI
+	NewConfigGroupAPIByFile = newConfigGroupAPIByFile
 )

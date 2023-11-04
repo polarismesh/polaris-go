@@ -36,6 +36,8 @@ type ConfigConnector interface {
 	UpdateConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
 	// PublishConfigFile Publish config file
 	PublishConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
+	// GetConfigGroup query config_group release file list
+	GetConfigGroup(req *ConfigGroup) (*ConfigGroupResponse, error)
 }
 
 // init

@@ -147,6 +147,13 @@ type ConfigAPI interface {
 	PublishConfigFile(namespace, fileGroup, fileName string) error
 }
 
+// ConfigGroupAPI .
+type ConfigGroupAPI interface {
+	api.SDKOwner
+	// GetConfigGroup .
+	GetConfigGroup(namesapce, group string) (model.ConfigFileGroup, error)
+}
+
 // RouterAPI routing api methods
 type RouterAPI interface {
 	api.SDKOwner

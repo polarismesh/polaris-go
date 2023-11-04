@@ -22,6 +22,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
 
 type defaultConfigFile struct {
@@ -117,5 +118,62 @@ func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
 
 	for _, changeListener := range c.changeListeners {
 		changeListener(event)
+	}
+}
+
+type defaultConfigGroup struct {
+	namespace       string
+	group           string
+	repo            *ConfigGroupRepo
+	lock            sync.RWMutex
+	changeListeners []model.OnConfigGroupChange
+}
+
+func newDefaultConfigGroup(ns, group string, repo *ConfigGroupRepo) *defaultConfigGroup {
+	configGroup := &defaultConfigGroup{
+		namespace:       ns,
+		group:           group,
+		repo:            repo,
+		changeListeners: []model.OnConfigGroupChange{},
+	}
+	repo.AddChangeListener(configGroup.repoChangeListener)
+	return configGroup
+}
+
+// AddChangeListener 增加配置文件变更监听器
+func (c *defaultConfigGroup) AddChangeListener(cb model.OnConfigGroupChange) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.changeListeners = append(c.changeListeners, cb)
+}
+
+func (c *defaultConfigGroup) GetFiles() ([]*model.SimpleConfigFile, string, bool) {
+	val := c.repo.loadRemoteGroup()
+	if val == nil {
+		return nil, "", false
+	}
+	files := val.ReleaseFiles
+	if len(files) == 0 {
+		return nil, "", false
+	}
+	return files, val.Revision, true
+}
+
+func (c *defaultConfigGroup) repoChangeListener(val *configconnector.ConfigGroupResponse) {
+	oldVal := c.repo.loadRemoteGroup()
+
+	event := &model.ConfigGroupChangeEvent{
+		After: val.ReleaseFiles,
+	}
+	if oldVal != nil {
+		event.Before = oldVal.ReleaseFiles
+	}
+
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	for i := range c.changeListeners {
+		c.changeListeners[i](event)
 	}
 }

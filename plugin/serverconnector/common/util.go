@@ -69,6 +69,7 @@ const (
 	OpKeyCreateConfigFile      = "CreateConfigFile"
 	OpKeyUpdateConfigFile      = "UpdateConfigFile"
 	OpKeyPublishConfigFile     = "PublishConfigFile"
+	OpKeyGetConfigGroup        = "GetConfigGroup"
 )
 
 // NextDiscoverReqID 生成GetInstances调用的请求Id
