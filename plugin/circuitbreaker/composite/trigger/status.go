@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package composite
+package trigger
 
 type StatusChangeHandler interface {
 	CloseToOpen(breaker string)
