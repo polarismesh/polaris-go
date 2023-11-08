@@ -29,7 +29,7 @@ import (
 type CircuitBreaker interface {
 	plugin.Plugin
 	// CheckResource get the resource circuitbreaker status
-	CheckResource(model.Resource) model.SpecCircuitBreakerStatus
+	CheckResource(model.Resource) model.CircuitBreakerStatus
 	// Report report resource invoke result stat
 	Report(*model.ResourceStat) error
 }

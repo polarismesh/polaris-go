@@ -23,6 +23,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // Proxy .proxy of HealthChecker
