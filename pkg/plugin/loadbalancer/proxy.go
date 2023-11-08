@@ -44,29 +44,8 @@ type SelectStatus struct {
 // ChooseInstance proxy LoadBalancer ChooseInstance
 func (p *Proxy) ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error) {
 	// 第一次进行负载均衡，包括半开实例
-	criteria.Cluster.IncludeHalfOpen = true
-	firstResult, firstErr := p.LoadBalancer.ChooseInstance(criteria, instances)
-	// 如果出错了，直接返回错误
-	if firstErr != nil {
-		return firstResult, firstErr
-	}
-	// 熔断状态分配流量成功，返回结果
-	cbStatus := firstResult.GetCircuitBreakerStatus()
-	if cbStatus == nil || cbStatus.Allocate() {
-		return firstResult, nil
-	}
-
-	// 第一次因为熔断状态分配流量不成功，进行第二次负载均衡，这一次不包括半开实例
-	criteria.Cluster.IncludeHalfOpen = false
-	secondResult, secondErr := p.LoadBalancer.ChooseInstance(criteria, instances)
-	// 如果没有出现错误，那么直接返回第二次的结果
-	if secondErr == nil {
-		return secondResult, secondErr
-	}
-	// 否则，直接返回第一次的结果
-	// 目前可能的情况是，所有实例都是半开，所以第二次负载均衡会返回实例权重为0的错误，第一次返回了一个半开实例；
-	// 在这种情况下，选择返回第一次的结果，即一个配额用完的半开实例
-	return firstResult, nil
+	result, err := p.LoadBalancer.ChooseInstance(criteria, instances)
+	return result, err
 }
 
 // init 注册proxy

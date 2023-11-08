@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -33,8 +34,11 @@ type CircuitBreakerFlow struct {
 	resourceBreaker circuitbreaker.CircuitBreaker
 }
 
-func newCircuitBreakerFlow(e *Engine) (*CircuitBreakerFlow, error) {
-	return nil, nil
+func newCircuitBreakerFlow(e *Engine, breaker circuitbreaker.CircuitBreaker) *CircuitBreakerFlow {
+	return &CircuitBreakerFlow{
+		engine:          e,
+		resourceBreaker: breaker,
+	}
 }
 
 func (e *CircuitBreakerFlow) Check(resource model.Resource) (*model.CheckResult, error) {
@@ -54,7 +58,7 @@ func (e *CircuitBreakerFlow) Check(resource model.Resource) (*model.CheckResult,
 	}, nil
 }
 
-func circuitBreakerStatusToResult(breakerStatus model.SpecCircuitBreakerStatus) *model.CheckResult {
+func circuitBreakerStatusToResult(breakerStatus model.CircuitBreakerStatus) *model.CheckResult {
 	status := breakerStatus.GetStatus()
 	if status == model.Open {
 		return &model.CheckResult{
@@ -168,7 +172,16 @@ func (h *DefaultInvokeHandler) OnSuccess(respCtx *model.ResponseContext) {
 }
 
 func (h *DefaultInvokeHandler) OnError(respCtx *model.ResponseContext) {
-
+	delay := respCtx.Duration
+	code := "-1"
+	retStatus := model.RetUnknown
+	if h.reqCtx.CodeConvert != nil {
+		code = h.reqCtx.CodeConvert.OnError(respCtx.Err)
+	}
+	if errors.Is(respCtx.Err, model.CallAbortedError) {
+		retStatus = model.RetReject
+	}
+	h.commonReport(h.reqCtx, delay, code, retStatus)
 }
 
 func (h *DefaultInvokeHandler) commonCheck(reqCtx *model.RequestContext) (*model.CheckResult, error) {

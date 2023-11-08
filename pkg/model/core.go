@@ -35,6 +35,10 @@ const (
 	EventRateLimiting EventType = 0x2003
 	// EventServices 批量服务
 	EventServices EventType = 0x2005
+	// EventCircuitBreaker 熔断规则
+	EventCircuitBreaker EventType = 0x2006
+	// EventFaultDetect 探测规则
+	EventFaultDetect EventType = 0x2007
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由

@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
@@ -174,22 +173,10 @@ type CircuitBreakerStatus interface {
 	GetStatus() Status
 	// GetStartTime 状态转换的时间
 	GetStartTime() time.Time
-	// IsAvailable 是否可以分配请求
-	IsAvailable() bool
-	// Allocate 执行请求分配
-	Allocate() bool
-	// GetRequestsAfterHalfOpen 获取进入半开状态之后分配的请求数
-	GetRequestsAfterHalfOpen() int32
-	// GetFailRequestsAfterHalfOpen 获取进入半开状态之后的失败请求数
-	GetFailRequestsAfterHalfOpen() int32
-	// AddRequestCountAfterHalfOpen 添加半开状态下面的请求数
-	AddRequestCountAfterHalfOpen(n int32, success bool) int32
-	// GetFinalAllocateTimeInt64 获取分配了最后配额的时间
-	GetFinalAllocateTimeInt64() int64
-	// AcquireStatusLock 获取状态转换锁，主要是避免状态重复发生转变，如多个协程上报调用失败时，每个stat方法都返回需要转化为熔断状态
-	AcquireStatusLock() bool
-	// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
-	AllocatedRequestsAfterHalfOpen() int32
+	// GetFallbackInfo 获取熔断器的降级信息
+	GetFallbackInfo() *FallbackInfo
+	// SetFallbackInfo 获取熔断器的降级信息
+	SetFallbackInfo(*FallbackInfo)
 }
 
 // Status 断路器状态
@@ -240,52 +227,7 @@ type CircuitBreakerStatusImpl struct {
 	CircuitBreaker string
 	Status         Status
 	StartTime      time.Time
-	finalAllocTime int64
-
-	// 半开后最多请求此数
-	MaxHalfOpenAllowReqTimes int
-	// 半开后配个分配 初始化为maxHalfOpenAllowReqTimes
-	HalfOpenQuota int32
-	// 半开后，分配的个数
-	allocatedRequestsAfterHalfOpen int32
-
-	// 半开后发生请求的次数
-	halfOpenRequests int32
-	// 半开后发生的失败请求数
-	halfOpenFailRequests int32
-
-	// 状态发生转变的锁
-	statusLock int32
-
-	fallbackInfo *FallbackInfo
-}
-
-// AllocatedRequestsAfterHalfOpen 获取在半开之后，分配出去的请求数，即getOneInstance接口返回这个实例的次数
-func (c *CircuitBreakerStatusImpl) AllocatedRequestsAfterHalfOpen() int32 {
-	return atomic.LoadInt32(&c.allocatedRequestsAfterHalfOpen)
-}
-
-// AcquireStatusLock 获取状态转换锁
-func (c *CircuitBreakerStatusImpl) AcquireStatusLock() bool {
-	return atomic.CompareAndSwapInt32(&c.statusLock, 0, 1)
-}
-
-// GetRequestsAfterHalfOpen 获取进入半开状态之后分配的请求数
-func (c *CircuitBreakerStatusImpl) GetRequestsAfterHalfOpen() int32 {
-	return atomic.LoadInt32(&c.halfOpenRequests)
-}
-
-// GetFailRequestsAfterHalfOpen 获取进入半开状态之后的成功请求数
-func (c *CircuitBreakerStatusImpl) GetFailRequestsAfterHalfOpen() int32 {
-	return atomic.LoadInt32(&c.halfOpenFailRequests)
-}
-
-// AddRequestCountAfterHalfOpen 添加半开状态下面的请求数
-func (c *CircuitBreakerStatusImpl) AddRequestCountAfterHalfOpen(n int32, success bool) int32 {
-	if !success {
-		atomic.AddInt32(&c.halfOpenFailRequests, n)
-	}
-	return atomic.AddInt32(&c.halfOpenRequests, n)
+	fallbackInfo   *FallbackInfo
 }
 
 // GetCircuitBreaker 标识被哪个熔断器熔断
@@ -307,43 +249,6 @@ func (c *CircuitBreakerStatusImpl) GetStartTime() time.Time {
 func (c CircuitBreakerStatusImpl) String() string {
 	return fmt.Sprintf("{circuitBreaker:%s, status:%v, startTime:%v}",
 		c.CircuitBreaker, c.Status, c.StartTime)
-}
-
-// IsAvailable 是否可以分配请求
-func (c *CircuitBreakerStatusImpl) IsAvailable() bool {
-	if nil == c || Close == c.Status {
-		return true
-	}
-	if Open == c.Status {
-		return false
-	}
-	return atomic.LoadInt32(&c.HalfOpenQuota) > 0
-}
-
-// GetFinalAllocateTimeInt64 获取分配了最后配额的时间
-func (c *CircuitBreakerStatusImpl) GetFinalAllocateTimeInt64() int64 {
-	return atomic.LoadInt64(&c.finalAllocTime)
-}
-
-// Allocate 执行实例到请求的分配
-func (c *CircuitBreakerStatusImpl) Allocate() bool {
-	if nil == c || Close == c.Status {
-		return true
-	}
-	if Open == c.Status {
-		return false
-	}
-	left := atomic.AddInt32(&c.HalfOpenQuota, -1)
-	// 如果刚好是0，即分配了最后一个半开配额，记录时间
-	if left == 0 {
-		atomic.StoreInt64(&c.finalAllocTime, clock.GetClock().Now().UnixNano())
-	}
-	// 如果进行了分配的话，那么只要left大于等于0即可
-	allocated := left >= 0
-	if allocated {
-		atomic.AddInt32(&c.allocatedRequestsAfterHalfOpen, 1)
-	}
-	return allocated
 }
 
 type CustomerFunction func(ctx context.Context, args interface{}) (interface{}, error)
@@ -393,26 +298,14 @@ type CallAborted struct {
 	Fallback *FallbackInfo
 }
 
-// SpecCircuitBreakerStatus polarismesh/specification 熔断实现
-type SpecCircuitBreakerStatus interface {
-	// GetCircuitBreaker 标识被哪个熔断器熔断
-	GetCircuitBreaker() string
-	// GetStatus 熔断状态
-	GetStatus() Status
-	// GetStartTime 状态转换的时间
-	GetStartTime() time.Time
-	// GetFallbackInfo 获取熔断器的降级信息
-	GetFallbackInfo() *FallbackInfo
-	// SetFallbackInfo 获取熔断器的降级信息
-	SetFallbackInfo(*FallbackInfo)
-	// IsAvailable 是否可以分配请求
-	IsAvailable() bool
+func (c *CallAborted) GetError() error {
+	return CallAbortedError
 }
 
-type InitCircuitBreakerStatus func(SpecCircuitBreakerStatus)
+type InitCircuitBreakerStatus func(CircuitBreakerStatus)
 
 func NewCircuitBreakerStatus(name string, status Status, startTime time.Time,
-	options ...InitCircuitBreakerStatus) SpecCircuitBreakerStatus {
+	options ...InitCircuitBreakerStatus) CircuitBreakerStatus {
 	impl := &BaseCircuitBreakerStatus{
 		name:      name,
 		status:    status,
@@ -473,7 +366,7 @@ type HalfOpenStatus struct {
 	lock         sync.Mutex
 }
 
-func NewHalfOpenStatus(name string, start time.Time, maxRequest int) SpecCircuitBreakerStatus {
+func NewHalfOpenStatus(name string, start time.Time, maxRequest int) CircuitBreakerStatus {
 	return &HalfOpenStatus{
 		BaseCircuitBreakerStatus: BaseCircuitBreakerStatus{
 			name:      name,
@@ -526,3 +419,5 @@ func (c *HalfOpenStatus) IsAvailable() bool {
 	}
 	return true
 }
+
+var CallAbortedError = errors.New("call aborted")

@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // Proxy .proxy of HealthChecker
@@ -39,6 +40,11 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 func (p *Proxy) DetectInstance(inst model.Instance) (DetectResult, error) {
 	result, err := p.HealthChecker.DetectInstance(inst)
 	return result, err
+}
+
+// Protocol .
+func (p *Proxy) Protocol() fault_tolerance.FaultDetectRule_Protocol {
+	return p.HealthChecker.Protocol()
 }
 
 // init 注册proxy

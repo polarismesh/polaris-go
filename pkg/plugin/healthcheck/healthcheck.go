@@ -23,14 +23,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // HealthChecker 【扩展点接口】主动健康探测策略
 type HealthChecker interface {
 	plugin.Plugin
-	// DetectInstance 对单个实例进行探测，返回探测结果
-	// DetectInstance 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
+	// DetectInstance 对单个实例进行探测，返回探测结果, 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
 	DetectInstance(model.Instance) (DetectResult, error)
+	// Protocol .
+	Protocol() fault_tolerance.FaultDetectRule_Protocol
 }
 
 // DetectResult 健康探测结果

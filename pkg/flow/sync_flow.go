@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -468,37 +467,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	if err := e.reportSvcStat(result); err != nil {
 		return err
 	}
-	if nil == e.rtCircuitBreakChan || len(e.circuitBreakerChain) == 0 {
-		return nil
-	}
-	var rtTask *cbcheck.RealTimeLimitTask
-	for _, cbreaker := range e.circuitBreakerChain {
-		cbName := cbreaker.Name()
-		rtLimit, err := cbreaker.Stat(result)
-		if err != nil {
-			return model.NewSDKError(model.ErrCodeCircuitBreakerError, err,
-				"fail to do real time circuitBreak in %s", cbName)
-		}
-		if rtLimit && nil == rtTask {
-			rtTask = &cbcheck.RealTimeLimitTask{
-				SvcKey: model.ServiceKey{
-					Namespace: result.GetNamespace(),
-					Service:   result.GetService()},
-				InstID: result.GetID(),
-				Host:   result.GetHost(),
-				Port:   result.GetPort(),
-				CbName: cbName}
-		}
-	}
-	if nil == rtTask {
-		return nil
-	}
-	rtCircuitBreakTask := &model.PriorityTask{
-		Name:     fmt.Sprintf("real-time-cb-%s", result.GetID()),
-		CallBack: cbcheck.NewCircuitBreakRealTimeCallBack(e.circuitBreakTask, rtTask),
-	}
-	log.GetDetectLogger().Debugf("realTime circuit break task %s for %s generated", rtCircuitBreakTask.Name, rtTask.SvcKey)
-	e.rtCircuitBreakChan <- rtCircuitBreakTask
+	// TODO 用新的熔断实现进行适配
 	return nil
 }
 

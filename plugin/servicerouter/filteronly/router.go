@@ -91,6 +91,10 @@ func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.Route
 	return result, nil
 }
 
+func checkCircuitBreakerPassing() bool {
+	return true
+}
+
 // init 注册插件
 func init() {
 	plugin.RegisterPlugin(&InstancesFilter{})

@@ -22,6 +22,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
+// CircuitBreakerAPI .
 type CircuitBreakerAPI interface {
 	SDKOwner
 	// Check

@@ -19,7 +19,6 @@ package composite
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,7 +44,7 @@ type ResourceHealthChecker struct {
 	resource       model.Resource
 	faultDetector  *fault_tolerance.FaultDetector
 	stopped        int32
-	healthCheckers map[string]healthcheck.HealthChecker
+	healthCheckers map[fault_tolerance.FaultDetectRule_Protocol]healthcheck.HealthChecker
 	circuitBreaker *CompositeCircuitBreaker
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
@@ -53,11 +52,11 @@ type ResourceHealthChecker struct {
 	cancels []context.CancelFunc
 	// lock
 	lock sync.RWMutex
-	//
+	// instances
 	instances map[string]*ProtocolInstance
 	// instanceExpireIntervalMill .
 	instanceExpireIntervalMill int64
-	//
+	// log
 	log log.Logger
 }
 
@@ -170,7 +169,8 @@ func (c *ResourceHealthChecker) createCheckJob(protocol string, rule *fault_tole
 		if c.isStopped() {
 			return
 		}
-		c.checkResource(protocol, rule)
+		name := fault_tolerance.FaultDetectRule_Protocol_value[protocol]
+		c.checkResource(fault_tolerance.FaultDetectRule_Protocol(name), rule)
 	}
 }
 
@@ -211,7 +211,7 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 }
 
 func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol, rule *fault_tolerance.FaultDetectRule) bool {
-	checker, ok := c.healthCheckers[strings.ToLower(protocol.String())]
+	checker, ok := c.healthCheckers[protocol]
 	if !ok {
 		c.log.Infof("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
 			ins.GetHost(), ins.GetPort(), c.resource.String(), protocol.String())
@@ -248,56 +248,8 @@ func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record 
 	}
 }
 
-func (c *ResourceHealthChecker) sortFaultDetectRules(srcRules []*fault_tolerance.FaultDetectRule) []*fault_tolerance.FaultDetectRule {
-	rules := make([]*fault_tolerance.FaultDetectRule, 0, len(srcRules))
-	copy(rules, srcRules)
-	sort.Slice(rules, func(i, j int) bool {
-		rule1 := rules[i]
-		rule2 := rules[j]
-
-		targetSvc1 := rule1.GetTargetService()
-		destNamespace1 := targetSvc1.GetNamespace()
-		destService1 := targetSvc1.GetService()
-		destMethod1 := targetSvc1.GetMethod().GetValue().GetValue()
-
-		targetSvc2 := rule2.GetTargetService()
-		destNamespace2 := targetSvc2.GetNamespace()
-		destService2 := targetSvc2.GetService()
-		destMethod2 := targetSvc2.GetMethod().GetValue().GetValue()
-
-		if v := compareService(destNamespace1, destService1, destNamespace2, destService2); v != 0 {
-			return v < 0
-		}
-		return compareStringValue(destMethod1, destMethod2) < 0
-	})
-	return rules
-}
-
-func compareService(ns1, svc1, ns2, svc2 string) int {
-	if v := compareStringValue(ns1, ns2); v != 0 {
-		return v
-	}
-	return compareStringValue(svc1, svc2)
-}
-
-func compareStringValue(v1, v2 string) int {
-	isMatchAllV1 := match.IsMatchAll(v1)
-	isMatchAllV2 := match.IsMatchAll(v2)
-
-	if isMatchAllV1 && isMatchAllV2 {
-		return 0
-	}
-	if isMatchAllV1 {
-		return 1
-	}
-	if isMatchAllV2 {
-		return -1
-	}
-	return strings.Compare(v1, v2)
-}
-
 func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource, faultDetector *fault_tolerance.FaultDetector) map[string]*fault_tolerance.FaultDetectRule {
-	sortedRules := c.sortFaultDetectRules(faultDetector.GetRules())
+	sortedRules := sortFaultDetectRules(faultDetector.GetRules())
 	matchRule := map[string]*fault_tolerance.FaultDetectRule{}
 
 	for i := range sortedRules {

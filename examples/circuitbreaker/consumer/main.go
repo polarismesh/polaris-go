@@ -43,9 +43,10 @@ func initArgs() {
 
 // PolarisConsumer is a consumer of the circuit breaker service.
 type PolarisConsumer struct {
-	consumer  polaris.ConsumerAPI
-	namespace string
-	service   string
+	consumer     polaris.ConsumerAPI
+	circuitbreak polaris.CircuitBreakerAPI
+	namespace    string
+	service      string
 }
 
 // Run is the consumer's main function.
@@ -129,19 +130,21 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := polaris.NewConsumerAPI()
-	// 或者使用以下方法,则不需要创建配置文件
-	// consumer, err = polaris.NewConsumerAPIByAddress("127.0.0.1:8091")
-
+	sdkCtx, err := polaris.NewSDKContext()
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
-	defer consumer.Destroy()
+	consumer := polaris.NewConsumerAPIByContext(sdkCtx)
+	circuitBreaker := polaris.NewCircuitBreakerAPIByContext(sdkCtx)
+	defer func() {
+		sdkCtx.Destroy()
+	}()
 
 	svr := &PolarisConsumer{
-		consumer:  consumer,
-		namespace: namespace,
-		service:   service,
+		consumer:     consumer,
+		circuitbreak: circuitBreaker,
+		namespace:    namespace,
+		service:      service,
 	}
 
 	svr.Run()

@@ -28,13 +28,15 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite/trigger"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // ResourceCounters .
 type ResourceCounters struct {
-	lock sync.RWMutex
+	circuitBreaker *CompositeCircuitBreaker
+	lock           sync.RWMutex
 	// activeRuleRef
 	activeRule *fault_tolerance.CircuitBreakerRule
 	// counters
@@ -49,15 +51,18 @@ type ResourceCounters struct {
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow
 	engineFlow model.Engine
-	//
+	// log
 	log log.Logger
+	// isInsRes
+	isInsRes bool
 }
 
-func NewResourceCounters(
+func newResourceCounters(
 	res model.Resource,
 	activeRule *fault_tolerance.CircuitBreakerRule,
 	circuitBreaker *CompositeCircuitBreaker,
 ) (*ResourceCounters, error) {
+	_, isInsRes := res.(*model.InstanceResource)
 	counters := &ResourceCounters{
 		activeRule: activeRule,
 		resource:   res,
@@ -67,9 +72,11 @@ func NewResourceCounters(
 			}
 			return circuitBreaker.loadOrStoreCompiledRegex(s)
 		},
-		statusRef:    atomic.Value{},
-		fallbackInfo: buildFallbackInfo(activeRule),
-		log:          log.GetCircuitBreakerEventLogger(),
+		circuitBreaker: circuitBreaker,
+		statusRef:      atomic.Value{},
+		fallbackInfo:   buildFallbackInfo(activeRule),
+		log:            log.GetCircuitBreakerEventLogger(),
+		isInsRes:       isInsRes,
 	}
 	counters.updateCircuitBreakerStatus(model.NewCircuitBreakerStatus(activeRule.Name, model.Close, time.Now()))
 	if circuitBreaker != nil {
@@ -105,16 +112,16 @@ func (rc *ResourceCounters) CurrentActiveRule() *fault_tolerance.CircuitBreakerR
 	return rc.activeRule
 }
 
-func (rc *ResourceCounters) updateCircuitBreakerStatus(status model.SpecCircuitBreakerStatus) {
+func (rc *ResourceCounters) updateCircuitBreakerStatus(status model.CircuitBreakerStatus) {
 	rc.statusRef.Store(status)
 }
 
-func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.SpecCircuitBreakerStatus {
+func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.CircuitBreakerStatus {
 	val := rc.statusRef.Load()
 	if val == nil {
 		return nil
 	}
-	return val.(model.SpecCircuitBreakerStatus)
+	return val.(model.CircuitBreakerStatus)
 }
 
 func (rc *ResourceCounters) CloseToOpen(breaker string) {
@@ -127,13 +134,13 @@ func (rc *ResourceCounters) CloseToOpen(breaker string) {
 	}
 }
 
-func (rc *ResourceCounters) toOpen(before model.SpecCircuitBreakerStatus, name string) {
+func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name string) {
 	newStatus := model.NewCircuitBreakerStatus(name, model.Open, time.Now(),
-		func(cbs model.SpecCircuitBreakerStatus) {
+		func(cbs model.CircuitBreakerStatus) {
 			cbs.SetFallbackInfo(rc.fallbackInfo)
 		})
 	rc.updateCircuitBreakerStatus(newStatus)
-	rc.reportCircuitStatus()
+	rc.reportCircuitStatus(newStatus)
 	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
@@ -156,7 +163,7 @@ func (rc *ResourceCounters) OpenToHalfOpen() {
 	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
 		halfOpenStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
 	rc.updateCircuitBreakerStatus(halfOpenStatus)
-	rc.reportCircuitStatus()
+	rc.reportCircuitStatus(halfOpenStatus)
 }
 
 func (rc *ResourceCounters) HalfOpenToClose() {
@@ -171,7 +178,7 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	rc.updateCircuitBreakerStatus(newStatus)
 	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
-	rc.reportCircuitStatus()
+	rc.reportCircuitStatus(newStatus)
 }
 
 func (rc *ResourceCounters) HalfOpenToOpen() {
@@ -184,7 +191,7 @@ func (rc *ResourceCounters) HalfOpenToOpen() {
 	}
 }
 
-func (rc *ResourceCounters) Report(stat model.ResourceStat) {
+func (rc *ResourceCounters) Report(stat *model.ResourceStat) {
 	retStatus := rc.parseRetStatus(stat)
 	isSuccess := retStatus != model.RetFail && retStatus != model.RetTimeout
 	curStatus := rc.CurrentCircuitBreakerStatus()
@@ -213,7 +220,7 @@ func (rc *ResourceCounters) Report(stat model.ResourceStat) {
 	}
 }
 
-func (rc *ResourceCounters) parseRetStatus(stat model.ResourceStat) model.RetStatus {
+func (rc *ResourceCounters) parseRetStatus(stat *model.ResourceStat) model.RetStatus {
 	errConditions := rc.activeRule.GetErrorConditions()
 	if len(errConditions) == 0 {
 		return stat.RetStatus
@@ -239,8 +246,25 @@ func (rc *ResourceCounters) parseRetStatus(stat model.ResourceStat) model.RetSta
 	return model.RetSuccess
 }
 
-func (rc *ResourceCounters) reportCircuitStatus() {
-	// TODO wait impl
+func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerStatus) {
+	if !rc.isInsRes {
+		return
+	}
+	insRes := rc.resource.(*model.InstanceResource)
+	// 构造请求，更新探测结果
+	updateRequest := &localregistry.ServiceUpdateRequest{
+		ServiceKey: *insRes.GetService(),
+		Properties: []localregistry.InstanceProperties{
+			{
+				Host:       insRes.Node.Host,
+				Port:       insRes.Node.Port,
+				Service:    insRes.GetService(),
+				Properties: map[string]interface{}{localregistry.PropertyCircuitBreakerStatus: newStatus},
+			},
+		},
+	}
+	// 调用 localCache
+	rc.circuitBreaker.localCache.UpdateInstances(updateRequest)
 }
 
 func buildFallbackInfo(rule *fault_tolerance.CircuitBreakerRule) *model.FallbackInfo {

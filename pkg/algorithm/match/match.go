@@ -18,6 +18,7 @@
 package match
 
 import (
+	"strconv"
 	"strings"
 
 	regexp "github.com/dlclark/regexp2"
@@ -90,6 +91,25 @@ func MatchString(srcMetaValue string, matchValule *apimodel.MatchString, regexTo
 			}
 		}
 		return true
+	case apimodel.MatchString_RANGE:
+		// range 模式只支持数字
+		tokens := strings.Split(rawMetaValue, "~")
+		if len(tokens) != 2 {
+			return false
+		}
+		left, err := strconv.ParseInt(tokens[0], 10, 64)
+		if err != nil {
+			return false
+		}
+		right, err := strconv.ParseInt(tokens[1], 10, 64)
+		if err != nil {
+			return false
+		}
+		srcVal, err := strconv.ParseInt(srcMetaValue, 10, 64)
+		if err != nil {
+			return false
+		}
+		return srcVal >= left && srcVal <= right
 	}
 	return true
 }

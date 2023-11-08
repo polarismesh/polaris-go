@@ -39,6 +39,8 @@ const (
 type InstanceProperties struct {
 	Service    *model.ServiceKey
 	ID         string
+	Host       string
+	Port       uint32
 	Properties map[string]interface{}
 }
 

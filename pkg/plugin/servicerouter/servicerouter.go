@@ -54,6 +54,8 @@ type RouteInfo struct {
 	// 对于全死全活插件，以及就近路由插件等，已经做了最小实例数检查，则可以设置该属性为true
 	// 需要插件内部进行设置
 	ignoreFilterOnlyOnEndChain bool
+	// includeCircuitBreakInstances
+	includeCircuitBreakInstances bool
 	// 可动态调整路由插件是否启用，不存在或者为true代表启用
 	// key为路由插件的id
 	chainEnables map[int32]bool
