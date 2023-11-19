@@ -235,7 +235,6 @@ func (h *DefaultInvokeHandler) commonCheck(reqCtx *model.RequestContext) (*model
 
 func (h *DefaultInvokeHandler) commonReport(reqCtx *model.RequestContext, delay time.Duration, code string,
 	retStatus model.RetStatus) error {
-
 	svcRes, err := model.NewServiceResource(reqCtx.Callee, reqCtx.Caller)
 	if err != nil {
 		return err
