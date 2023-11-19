@@ -33,6 +33,13 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
+const (
+	_stateCloseToOpen = iota
+	_stateOpenToHalfOpen
+	_stateHalfOpenToOpen
+	_stateHalfOpenToClose
+)
+
 // ResourceCounters .
 type ResourceCounters struct {
 	circuitBreaker *CompositeCircuitBreaker
@@ -55,13 +62,13 @@ type ResourceCounters struct {
 	log log.Logger
 	// isInsRes
 	isInsRes bool
+	//
+	executor *TaskExecutor
 }
 
-func newResourceCounters(
-	res model.Resource,
-	activeRule *fault_tolerance.CircuitBreakerRule,
-	circuitBreaker *CompositeCircuitBreaker,
-) (*ResourceCounters, error) {
+func newResourceCounters(res model.Resource, activeRule *fault_tolerance.CircuitBreakerRule,
+	circuitBreaker *CompositeCircuitBreaker) (*ResourceCounters, error) {
+
 	_, isInsRes := res.(*model.InstanceResource)
 	counters := &ResourceCounters{
 		activeRule: activeRule,
@@ -77,6 +84,7 @@ func newResourceCounters(
 		fallbackInfo:   buildFallbackInfo(activeRule),
 		log:            log.GetCircuitBreakerEventLogger(),
 		isInsRes:       isInsRes,
+		executor:       circuitBreaker.executor,
 	}
 	counters.updateCircuitBreakerStatus(model.NewCircuitBreakerStatus(activeRule.Name, model.Close, time.Now()))
 	if circuitBreaker != nil {
@@ -96,6 +104,8 @@ func (rc *ResourceCounters) init() error {
 			Resource:      rc.resource,
 			Condition:     condition,
 			StatusHandler: rc,
+			DelayExecutor: rc.executor.DelayExecute,
+			Log:           rc.log,
 		}
 
 		switch condition.GetTriggerType() {
@@ -144,10 +154,9 @@ func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name strin
 	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
-	timer := time.NewTimer(time.Duration(sleepWindow) * time.Second)
-	go func(timer *time.Timer) {
-		rc.OpenToHalfOpen()
-	}(timer)
+	delay := time.Duration(sleepWindow) * time.Second
+
+	rc.executor.AffinityDelayExecute(rc.activeRule.Id, delay, rc.OpenToHalfOpen)
 }
 
 func (rc *ResourceCounters) OpenToHalfOpen() {
@@ -204,13 +213,9 @@ func (rc *ResourceCounters) Report(stat *model.ResourceStat) {
 		nextStatus := halfOpenStatus.CalNextStatus()
 		switch nextStatus {
 		case model.Close:
-			go func() {
-				rc.HalfOpenToClose()
-			}()
+			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToClose)
 		case model.Open:
-			go func() {
-				rc.HalfOpenToOpen()
-			}()
+			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToOpen)
 		}
 	} else {
 		log.GetBaseLogger().Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
@@ -256,8 +261,8 @@ func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerSt
 		ServiceKey: *insRes.GetService(),
 		Properties: []localregistry.InstanceProperties{
 			{
-				Host:       insRes.Node.Host,
-				Port:       insRes.Node.Port,
+				Host:       insRes.GetNode().Host,
+				Port:       insRes.GetNode().Port,
 				Service:    insRes.GetService(),
 				Properties: map[string]interface{}{localregistry.PropertyCircuitBreakerStatus: newStatus},
 			},

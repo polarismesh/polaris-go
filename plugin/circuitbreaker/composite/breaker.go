@@ -18,6 +18,7 @@
 package composite
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,40 +66,55 @@ type CompositeCircuitBreaker struct {
 	localCache localregistry.LocalRegistry
 	// log .
 	log log.Logger
+	// start
+	start int32
 	// destroy .
 	destroy int32
-}
-
-func NewCompositeCircuitBreaker() (*CompositeCircuitBreaker, error) {
-	breaker := &CompositeCircuitBreaker{
-		countersCache:           make(map[fault_tolerance.Level]*CountersBucket),
-		healthCheckers:          make(map[fault_tolerance.FaultDetectRule_Protocol]healthcheck.HealthChecker),
-		healthCheckCache:        &sync.Map{},
-		serviceHealthCheckCache: &sync.Map{},
-		regexpCache:             make(map[string]*regexp.Regexp),
-	}
-	return breaker, nil
+	// cancel
+	cancel context.CancelFunc
+	// taskCtx
+	taskCtx context.Context
+	// executor
+	executor *TaskExecutor
 }
 
 // Init 初始化插件
 func (c *CompositeCircuitBreaker) Init(ctx *plugin.InitContext) error {
 	c.PluginBase = plugin.NewPluginBase(ctx)
 	c.pluginCtx = ctx
-	c.countersCache[fault_tolerance.Level_SERVICE] = newCountersBucket()
-	c.countersCache[fault_tolerance.Level_METHOD] = newCountersBucket()
-	c.countersCache[fault_tolerance.Level_INSTANCE] = newCountersBucket()
-	c.countersCache[fault_tolerance.Level_GROUP] = newCountersBucket()
-	c.checkPeriod = ctx.Config.GetConsumer().GetCircuitBreaker().GetCheckPeriod()
-	if c.checkPeriod == 0 {
-		c.checkPeriod = defaultCheckPeriod
+	// 监听规则
+	callbackHandler := common.PluginEventHandler{
+		Callback: c.OnEvent,
 	}
-	c.healthCheckInstanceExpireInterval = c.checkPeriod * defaultCheckPeriodMultiple
-	c.engineFlow = ctx.ValueCtx.GetEngine()
+	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceAdded, callbackHandler)
+	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
+	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceDeleted, callbackHandler)
 	return nil
 }
 
 // Start 启动插件，对于需要依赖外部资源，以及启动协程的操作，在Start方法里面做
 func (c *CompositeCircuitBreaker) Start() error {
+	c.taskCtx, c.cancel = context.WithCancel(context.Background())
+	c.countersCache = make(map[fault_tolerance.Level]*CountersBucket)
+	c.healthCheckers = make(map[fault_tolerance.FaultDetectRule_Protocol]healthcheck.HealthChecker)
+	c.healthCheckCache = &sync.Map{}
+	c.serviceHealthCheckCache = &sync.Map{}
+	c.containers = &sync.Map{}
+	c.regexpCache = make(map[string]*regexp.Regexp)
+	c.executor = newTaskExecutor(8)
+	c.checkPeriod = c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetCheckPeriod()
+	if c.checkPeriod == 0 {
+		c.checkPeriod = defaultCheckPeriod
+	}
+	c.healthCheckInstanceExpireInterval = c.checkPeriod * defaultCheckPeriodMultiple
+	c.engineFlow = c.pluginCtx.ValueCtx.GetEngine()
+	c.start = 1
+
+	c.countersCache[fault_tolerance.Level_SERVICE] = newCountersBucket()
+	c.countersCache[fault_tolerance.Level_METHOD] = newCountersBucket()
+	c.countersCache[fault_tolerance.Level_INSTANCE] = newCountersBucket()
+	c.countersCache[fault_tolerance.Level_GROUP] = newCountersBucket()
+
 	plugins, err := c.pluginCtx.Plugins.GetPlugins(common.TypeHealthCheck)
 	if err != nil {
 		return err
@@ -113,14 +129,7 @@ func (c *CompositeCircuitBreaker) Start() error {
 		return err
 	}
 	c.localCache = registryPlugin.(localregistry.LocalRegistry)
-
-	// 监听规则
-	callbackHandler := common.PluginEventHandler{
-		Callback: c.OnEvent,
-	}
-	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceAdded, callbackHandler)
-	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
-	c.pluginCtx.Plugins.RegisterEventSubscriber(common.OnServiceDeleted, callbackHandler)
+	c.log = log.GetBaseLogger()
 	return nil
 }
 
@@ -129,7 +138,7 @@ func (c *CompositeCircuitBreaker) Destroy() error {
 	if atomic.CompareAndSwapInt32(&c.destroy, 0, 1) {
 		return nil
 	}
-
+	c.cancel()
 	c.healthCheckCache.Range(func(key, value interface{}) bool {
 		checker, ok := value.(*ResourceHealthChecker)
 		if !ok {
@@ -167,7 +176,7 @@ func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool
 	}
 	counters, exist := c.getResourceCounters(resource)
 	if !exist {
-		c.containers.LoadOrStore(resource, newRuleContainer(resource, c))
+		c.containers.LoadOrStore(resource.String(), newRuleContainer(c.taskCtx, resource, c))
 	} else {
 		counters.Report(stat)
 	}
@@ -222,7 +231,7 @@ func (c *CompositeCircuitBreaker) Name() string {
 }
 
 func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
-	if c.isDestroyed() {
+	if c.isDestroyed() || c.start == 0 {
 		return nil
 	}
 
@@ -236,11 +245,26 @@ func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 	if eventObject.SvcEventKey.Type != model.EventCircuitBreaker && eventObject.SvcEventKey.Type != model.EventFaultDetect {
 		return nil
 	}
-	c.doSchedule(&eventObject.SvcEventKey)
+	c.doSchedule(eventObject.SvcEventKey)
 	return nil
 }
 
-func (c *CompositeCircuitBreaker) doSchedule(key *model.ServiceEventKey) {
+func (c *CompositeCircuitBreaker) doSchedule(expectKey model.ServiceEventKey) {
+	c.containers.Range(func(key, value interface{}) bool {
+		ruleC := value.(*RuleContainer)
+		resource := ruleC.res
+
+		actualKey := resource.GetService()
+		if actualKey.Namespace == expectKey.Namespace && actualKey.Service == expectKey.Service {
+			switch expectKey.Type {
+			case model.EventCircuitBreaker:
+				ruleC.scheduleCircuitBreaker()
+			case model.EventFaultDetect:
+				ruleC.scheduleHealthCheck()
+			}
+		}
+		return true
+	})
 }
 
 func (c *CompositeCircuitBreaker) loadServiceHealthCheck(key model.ServiceKey) (*HealthCheckersBucket, bool) {
@@ -285,20 +309,25 @@ func (c *CompositeCircuitBreaker) isDestroyed() bool {
 	return atomic.LoadInt32(&c.destroy) == 1
 }
 
+// init 注册插件信息.
+func init() {
+	plugin.RegisterConfigurablePlugin(&CompositeCircuitBreaker{}, &circuitbreakConfig{})
+}
+
 func newCountersBucket() *CountersBucket {
-	return &CountersBucket{m: make(map[model.Resource]*ResourceCounters)}
+	return &CountersBucket{m: make(map[string]*ResourceCounters)}
 }
 
 type CountersBucket struct {
 	lock sync.RWMutex
-	m    map[model.Resource]*ResourceCounters
+	m    map[string]*ResourceCounters
 }
 
 func (c *CountersBucket) get(key model.Resource) (*ResourceCounters, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	v, ok := c.m[key]
+	v, ok := c.m[key.String()]
 	return v, ok
 }
 
@@ -306,32 +335,32 @@ func (c *CountersBucket) put(key model.Resource, counter *ResourceCounters) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.m[key] = counter
+	c.m[key.String()] = counter
 }
 
 func (c *CountersBucket) remove(key model.Resource) (*ResourceCounters, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	v, ok := c.m[key]
-	delete(c.m, key)
+	v, ok := c.m[key.String()]
+	delete(c.m, key.String())
 	return v, ok
 }
 
 func newHealthCheckersBucket() *HealthCheckersBucket {
-	return &HealthCheckersBucket{m: make(map[model.Resource]*ResourceHealthChecker)}
+	return &HealthCheckersBucket{m: make(map[string]*ResourceHealthChecker)}
 }
 
 type HealthCheckersBucket struct {
 	lock sync.RWMutex
-	m    map[model.Resource]*ResourceHealthChecker
+	m    map[string]*ResourceHealthChecker
 }
 
 func (c *HealthCheckersBucket) get(key model.Resource) (*ResourceHealthChecker, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	v, ok := c.m[key]
+	v, ok := c.m[key.String()]
 	return v, ok
 }
 
@@ -339,15 +368,15 @@ func (c *HealthCheckersBucket) put(key model.Resource, counter *ResourceHealthCh
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.m[key] = counter
+	c.m[key.String()] = counter
 }
 
 func (c *HealthCheckersBucket) remove(key model.Resource) (*ResourceHealthChecker, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	v, ok := c.m[key]
-	delete(c.m, key)
+	v, ok := c.m[key.String()]
+	delete(c.m, key.String())
 	return v, ok
 }
 

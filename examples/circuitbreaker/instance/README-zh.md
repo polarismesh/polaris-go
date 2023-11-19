@@ -2,7 +2,7 @@
 
 [English](./README.md) | 中文
 
-## 使用故障熔断
+## 使用实例故障熔断
 
 北极星支持及时熔断异常的服务、接口、实例或者实例分组，降低请求失败率。
 ## 如何使用
@@ -83,27 +83,27 @@ global:
 -- 第一次发起请求
 curl -H 'user-id: polaris' http://127.0.0.1:18080/echo
 
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:8888
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
+Hello, My host : 127.0.0.1:8888
+Hello, My host : 127.0.0.1:9999
 ...
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
+Hello, My host : 127.0.0.1:9999
 
 -- 关闭某些provider，在发起请求
 
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 27.0.0.1:9999
+Hello, My host : 127.0.0.1:9999
+Hello, My host : 27.0.0.1:9999
 [errot] send request to 127.0.0.1:8888 fail : %s
 [errot] send request to 127.0.0.1:8888 fail : %s
 ...
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 27.0.0.1:9999
+Hello, My host : 27.0.0.1:9999
 
 ...
 
 -- 触发熔断的 curl 请求, 被熔断的实例不会再被访问
 curl -H 'user-id: polaris' http://127.0.0.1:18080/echo
 
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 27.0.0.1:9999
+Hello, My host : 127.0.0.1:9999
+Hello, My host : 27.0.0.1:9999
 ...
-Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
+Hello, My host : 127.0.0.1:9999
 ```

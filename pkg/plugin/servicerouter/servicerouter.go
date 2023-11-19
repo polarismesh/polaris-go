@@ -55,7 +55,7 @@ type RouteInfo struct {
 	// 需要插件内部进行设置
 	ignoreFilterOnlyOnEndChain bool
 	// includeCircuitBreakInstances
-	includeCircuitBreakInstances bool
+	IncludeCircuitBreakInstances bool
 	// 可动态调整路由插件是否启用，不存在或者为true代表启用
 	// key为路由插件的id
 	chainEnables map[int32]bool

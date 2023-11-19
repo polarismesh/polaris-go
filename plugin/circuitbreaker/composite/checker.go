@@ -18,7 +18,6 @@
 package composite
 
 import (
-	"context"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,14 +47,14 @@ type ResourceHealthChecker struct {
 	circuitBreaker *CompositeCircuitBreaker
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
-	// cancels
-	cancels []context.CancelFunc
 	// lock
 	lock sync.RWMutex
 	// instances
 	instances map[string]*ProtocolInstance
 	// instanceExpireIntervalMill .
 	instanceExpireIntervalMill int64
+	// executor
+	executor *TaskExecutor
 	// log
 	log log.Logger
 }
@@ -70,7 +69,6 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 			return breaker.loadOrStoreCompiledRegex(s)
 		},
 		healthCheckers: breaker.healthCheckers,
-		cancels:        make([]context.CancelFunc, 0, 4),
 		instances:      make(map[string]*ProtocolInstance, 16),
 	}
 	if insRes, ok := res.(*model.InstanceResource); ok {
@@ -90,45 +88,18 @@ func (c *ResourceHealthChecker) start() {
 		}
 		c.log.Infof("[CircuitBreaker] schedule task: resource=%s, protocol=%s, interval=%+v, rule=%s",
 			c.resource.String(), protocol, interval, rule.GetName())
-		ctx, cancel := context.WithCancel(context.Background())
-		c.cancels = append(c.cancels, cancel)
-		go func(ctx context.Context, f func()) {
-			ticker := time.NewTicker(interval)
-			for {
-				select {
-				case <-ctx.Done():
-					ticker.Stop()
-				case <-ticker.C:
-					f()
-				}
-			}
-		}(ctx, checkFunc)
+		c.executor.IntervalExecute(interval, checkFunc)
 	}
 	if c.resource.GetLevel() != fault_tolerance.Level_INSTANCE {
 		checkPeriod := c.circuitBreaker.checkPeriod
 		c.log.Infof("[CircuitBreaker] schedule expire task: resource=%s, interval=%+v", c.resource.String(), checkPeriod)
-		ctx, cancel := context.WithCancel(context.Background())
-		c.cancels = append(c.cancels, cancel)
-		go func(ctx context.Context, f func()) {
-			ticker := time.NewTicker(checkPeriod)
-			for {
-				select {
-				case <-ctx.Done():
-					ticker.Stop()
-				case <-ticker.C:
-					f()
-				}
-			}
-		}(ctx, c.cleanInstances)
+		c.executor.IntervalExecute(checkPeriod, c.cleanInstances)
 	}
 }
 
 func (c *ResourceHealthChecker) stop() {
 	c.log.Infof("[CircuitBreaker] health checker for resource=%s has stopped", c.resource.String())
 	atomic.StoreInt32(&c.stopped, 1)
-	for i := range c.cancels {
-		c.cancels[i]()
-	}
 }
 
 func (c *ResourceHealthChecker) isStopped() bool {
@@ -186,8 +157,8 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 			}
 			hosts[k] = struct{}{}
 			ins := pb.NewInstanceInProto(&service_manage.Instance{
-				Host: wrapperspb.String(v.insRes.Node.Host),
-				Port: wrapperspb.UInt32(v.insRes.Node.Port),
+				Host: wrapperspb.String(v.insRes.GetNode().Host),
+				Port: wrapperspb.UInt32(v.insRes.GetNode().Port),
 			}, defaultServiceKey(v.insRes.GetService()), nil)
 			isSuccess := c.doCheck(ins, v.protocol, rule)
 			v.setCheckResult(isSuccess)
@@ -202,15 +173,17 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 			continue
 		}
 		ins := pb.NewInstanceInProto(&service_manage.Instance{
-			Host: wrapperspb.String(v.insRes.Node.Host),
-			Port: wrapperspb.UInt32(v.insRes.Node.Port),
+			Host: wrapperspb.String(v.insRes.GetNode().Host),
+			Port: wrapperspb.UInt32(v.insRes.GetNode().Port),
 		}, defaultServiceKey(v.insRes.GetService()), nil)
 		isSuccess := c.doCheck(ins, v.protocol, rule)
 		v.setCheckResult(isSuccess)
 	}
 }
 
-func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol, rule *fault_tolerance.FaultDetectRule) bool {
+func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol,
+	rule *fault_tolerance.FaultDetectRule) bool {
+
 	checker, ok := c.healthCheckers[protocol]
 	if !ok {
 		c.log.Infof("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
@@ -234,10 +207,10 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	saveIns, ok := c.instances[res.Node.String()]
+	saveIns, ok := c.instances[res.GetNode().String()]
 	if !ok {
-		c.instances[res.Node.String()] = &ProtocolInstance{
-			protocol:        parseProtocol(res.Protocol),
+		c.instances[res.GetNode().String()] = &ProtocolInstance{
+			protocol:        parseProtocol(res.GetProtocol()),
 			insRes:          res,
 			lastReportMilli: time.Now().UnixMilli(),
 		}
@@ -248,7 +221,9 @@ func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record 
 	}
 }
 
-func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource, faultDetector *fault_tolerance.FaultDetector) map[string]*fault_tolerance.FaultDetectRule {
+func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource,
+	faultDetector *fault_tolerance.FaultDetector) map[string]*fault_tolerance.FaultDetectRule {
+
 	sortedRules := sortFaultDetectRules(faultDetector.GetRules())
 	matchRule := map[string]*fault_tolerance.FaultDetectRule{}
 

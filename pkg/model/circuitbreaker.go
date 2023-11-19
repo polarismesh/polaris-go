@@ -61,8 +61,12 @@ type ServiceResource struct {
 }
 
 func (r *ServiceResource) String() string {
+	callerSvc := r.callerService
+	if callerSvc == nil {
+		callerSvc = EmptyServiceKey
+	}
 	return fmt.Sprintf("level=%s|service=%s|caller=%s", r.level.String(), r.service.String(),
-		r.callerService.String())
+		callerSvc.String())
 }
 
 func NewServiceResource(svc, caller *ServiceKey) (*ServiceResource, error) {
@@ -83,8 +87,12 @@ type MethodResource struct {
 }
 
 func (r *MethodResource) String() string {
+	callerSvc := r.callerService
+	if callerSvc == nil {
+		callerSvc = EmptyServiceKey
+	}
 	return fmt.Sprintf("level=%s|method=%s|service=%s|caller=%s", r.level.String(), r.Method,
-		r.service.String(), r.callerService.String())
+		r.service.String(), callerSvc.String())
 }
 
 func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource, error) {
@@ -105,13 +113,25 @@ func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource,
 
 type InstanceResource struct {
 	*abstractResource
-	Protocol string
-	Node     Node
+	protocol string
+	node     Node
+}
+
+func (r *InstanceResource) GetProtocol() string {
+	return r.protocol
+}
+
+func (r *InstanceResource) GetNode() Node {
+	return r.node
 }
 
 func (r *InstanceResource) String() string {
-	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.Node.String(),
-		r.service.String(), r.callerService.String())
+	callerSvc := r.callerService
+	if callerSvc == nil {
+		callerSvc = EmptyServiceKey
+	}
+	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.node.String(),
+		r.service.String(), callerSvc.String())
 }
 
 func NewInstanceResource(svc, caller *ServiceKey, protocol, host string, port uint32) (*InstanceResource, error) {
@@ -125,8 +145,8 @@ func NewInstanceResource(svc, caller *ServiceKey, protocol, host string, port ui
 	abstractRes.level = fault_tolerance.Level_INSTANCE
 	res := &InstanceResource{
 		abstractResource: abstractRes,
-		Protocol:         protocol,
-		Node:             Node{Host: host, Port: port},
+		protocol:         protocol,
+		node:             Node{Host: host, Port: port},
 	}
 	return res, nil
 }
@@ -141,10 +161,10 @@ func newAbstractResource(service, caller *ServiceKey) (*abstractResource, error)
 	if service == nil {
 		return nil, errors.New("service can not be empty")
 	}
-	if caller.Namespace == "" {
+	if service.Namespace == "" {
 		return nil, errors.New("namespace can not be blank")
 	}
-	if caller.Service == "" {
+	if service.Service == "" {
 		return nil, errors.New("service can not be blank")
 	}
 	return &abstractResource{
@@ -287,19 +307,59 @@ type ResponseContext struct {
 	Err      error
 }
 
+// InvokeHandler .
 type InvokeHandler interface {
+	// AcquirePermission .
 	AcquirePermission() (*CallAborted, error)
+	// OnSuccess .
 	OnSuccess(*ResponseContext)
+	// OnError .
 	OnError(*ResponseContext)
 }
 
+func NewCallAborted(err error,
+	rule string,
+	fallback *FallbackInfo) *CallAborted {
+	return &CallAborted{
+		err:      err,
+		rule:     rule,
+		fallback: fallback,
+	}
+}
+
 type CallAborted struct {
-	Rule     string
-	Fallback *FallbackInfo
+	err      error
+	rule     string
+	fallback *FallbackInfo
+}
+
+func (c *CallAborted) HasFallback() bool {
+	return c.fallback != nil
+}
+
+func (c *CallAborted) GetFallbackCode() int {
+	if !c.HasFallback() {
+		return 0
+	}
+	return c.fallback.Code
+}
+
+func (c *CallAborted) GetFallbackBody() string {
+	if !c.HasFallback() {
+		return ""
+	}
+	return c.fallback.Body
+}
+
+func (c *CallAborted) GetFallbackHeaders() map[string]string {
+	if !c.HasFallback() {
+		return map[string]string{}
+	}
+	return c.fallback.Headers
 }
 
 func (c *CallAborted) GetError() error {
-	return CallAbortedError
+	return c.err
 }
 
 type InitCircuitBreakerStatus func(CircuitBreakerStatus)

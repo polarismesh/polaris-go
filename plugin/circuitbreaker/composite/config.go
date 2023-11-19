@@ -15,11 +15,17 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package trigger
+package composite
 
-type StatusChangeHandler interface {
-	CloseToOpen(breaker string)
-	OpenToHalfOpen()
-	HalfOpenToClose()
-	HalfOpenToOpen()
+type circuitbreakConfig struct {
+}
+
+// Verify 校验配置是否OK
+func (c *circuitbreakConfig) Verify() error {
+	return nil
+}
+
+// SetDefault 对关键值设置默认值
+func (c *circuitbreakConfig) SetDefault() {
+
 }

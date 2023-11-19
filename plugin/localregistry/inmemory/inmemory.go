@@ -162,6 +162,8 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers[model.EventInstances] = g.newServiceCacheHandler()
 	g.eventToCacheHandlers[model.EventRouting] = g.newRuleCacheHandler()
 	g.eventToCacheHandlers[model.EventRateLimiting] = g.newRateLimitCacheHandler()
+	g.eventToCacheHandlers[model.EventCircuitBreaker] = g.newCircuitBreakerCacheHandler()
+	g.eventToCacheHandlers[model.EventFaultDetect] = g.newFaultDetectCacheHandler()
 	// 批量服务
 	g.eventToCacheHandlers[model.EventServices] = g.newServicesHandler()
 	g.cachePersistHandler, err = lrplug.NewCachePersistHandler(
@@ -724,6 +726,24 @@ func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
 
 // 创建限流规则缓存操作回调集合
 func (g *LocalCache) newRateLimitCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建熔断规则缓存操作回调集合
+func (g *LocalCache) newCircuitBreakerCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建探测规则缓存操作回调集合
+func (g *LocalCache) newFaultDetectCacheHandler() CacheHandlers {
 	return CacheHandlers{
 		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,

@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-circuitbreaker-consumer
+module github.com/polarismesh/polaris-go-circuitbreaker-provider
 
 go 1.17
 
@@ -17,7 +17,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/polarismesh/specification v1.3.2-alpha.2 // indirect
+	github.com/polarismesh/specification v1.4.1 // indirect
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
@@ -35,4 +35,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace github.com/polarismesh/polaris-go => ../../../
+replace github.com/polarismesh/polaris-go => ../../../../

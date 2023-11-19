@@ -17,16 +17,41 @@
 
 package trigger
 
-import "context"
+import (
+	"sync/atomic"
+)
 
 type ConsecutiveCounter struct {
-	baseCounter
+	*baseCounter
+	maxCount          int64
+	consecutiveErrors int32
 }
 
 func NewConsecutiveCounter(name string, opt *Options) *ConsecutiveCounter {
-	return nil
+	c := &ConsecutiveCounter{
+		baseCounter: newBaseCounter(name, opt),
+	}
+	c.init()
+	return c
 }
 
-func (c *ConsecutiveCounter) Init(ctx context.Context) {}
+func (c *ConsecutiveCounter) init() {
+	c.log.Infof("[CircuitBreaker][Counter] consecutiveCounter(%s) initialized, resource(%s)", c.ruleName, c.res.String())
+	c.maxCount = int64(c.triggerCondition.GetErrorCount())
+}
 
-func (c *ConsecutiveCounter) Report(success bool) {}
+func (c *ConsecutiveCounter) Report(success bool) {
+	if c.isSuspend() {
+		return
+	}
+	if !success {
+		currentSum := atomic.AddInt32(&c.consecutiveErrors, 1)
+		if currentSum == int32(c.maxCount) {
+			c.suspend()
+			atomic.StoreInt32(&c.consecutiveErrors, 0)
+			c.handler.CloseToOpen(c.ruleName)
+		}
+	} else {
+		atomic.StoreInt32(&c.consecutiveErrors, 0)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 )
@@ -116,14 +117,15 @@ func (df *DefaultFunctionalDecorator) Decorator(ctx context.Context, args interf
 	var (
 		ret   interface{}
 		start = time.Now()
+		cerr  error
 	)
 
 	defer func() {
 		delay := time.Since(start)
-		if err != nil {
+		if cerr != nil {
 			rspCtx := &model.ResponseContext{
 				Duration: delay,
-				Err:      err,
+				Err:      cerr,
 			}
 			invoke.OnError(rspCtx)
 		} else {
@@ -135,9 +137,9 @@ func (df *DefaultFunctionalDecorator) Decorator(ctx context.Context, args interf
 		}
 	}()
 
-	ret, err = df.customerFunc(ctx, args)
-	if err != nil {
-		return nil, nil, err
+	ret, cerr = df.customerFunc(ctx, args)
+	if cerr != nil {
+		return nil, nil, cerr
 	}
 	return ret, nil, nil
 }
@@ -153,10 +155,7 @@ func (h *DefaultInvokeHandler) AcquirePermission() (*model.CallAborted, error) {
 		return nil, err
 	}
 	if check != nil {
-		return &model.CallAborted{
-			Rule:     check.RuleName,
-			Fallback: check.FallbackInfo,
-		}, nil
+		return model.NewCallAborted(model.CallAbortedError, check.RuleName, check.FallbackInfo), nil
 	}
 	return nil, nil
 }
@@ -168,7 +167,9 @@ func (h *DefaultInvokeHandler) OnSuccess(respCtx *model.ResponseContext) {
 	if h.reqCtx.CodeConvert != nil {
 		code = h.reqCtx.CodeConvert.OnSuccess(respCtx.Result)
 	}
-	h.commonReport(h.reqCtx, delay, code, retStatus)
+	if err := h.commonReport(h.reqCtx, delay, code, retStatus); err != nil {
+		log.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnSuccess: %v", err)
+	}
 }
 
 func (h *DefaultInvokeHandler) OnError(respCtx *model.ResponseContext) {
@@ -181,7 +182,9 @@ func (h *DefaultInvokeHandler) OnError(respCtx *model.ResponseContext) {
 	if errors.Is(respCtx.Err, model.CallAbortedError) {
 		retStatus = model.RetReject
 	}
-	h.commonReport(h.reqCtx, delay, code, retStatus)
+	if err := h.commonReport(h.reqCtx, delay, code, retStatus); err != nil {
+		log.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnError: %v", err)
+	}
 }
 
 func (h *DefaultInvokeHandler) commonCheck(reqCtx *model.RequestContext) (*model.CheckResult, error) {
@@ -214,6 +217,7 @@ func (h *DefaultInvokeHandler) commonCheck(reqCtx *model.RequestContext) (*model
 
 func (h *DefaultInvokeHandler) commonReport(reqCtx *model.RequestContext, delay time.Duration, code string,
 	retStatus model.RetStatus) error {
+
 	svcRes, err := model.NewServiceResource(reqCtx.Callee, reqCtx.Caller)
 	if err != nil {
 		return err

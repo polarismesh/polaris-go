@@ -118,6 +118,10 @@ type RuleFilter struct {
 
 // RuleRegistry ConfigRegistry 配置缓存
 type RuleRegistry interface {
+	// GetServiceRule 非阻塞获取配置信息
+	GetServiceRule(key *model.ServiceEventKey, includeCache bool) model.ServiceRule
+	// LoadServiceRule 非阻塞发起配置加载
+	LoadServiceRule(key *model.ServiceEventKey) (*common.Notifier, error)
 	// GetServiceRouteRule 非阻塞获取配置信息
 	GetServiceRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
 	// LoadServiceRouteRule 非阻塞发起配置加载

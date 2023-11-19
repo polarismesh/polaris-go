@@ -185,7 +185,7 @@ func (c *CircuitBreakerConfigImpl) SetDefault() {
 		c.CheckPeriod = model.ToDurationPtr(DefaultCircuitBreakerCheckPeriod)
 	}
 	if len(c.Chain) == 0 {
-		c.Chain = []string{DefaultCircuitBreakerErrCount, DefaultCircuitBreakerErrRate}
+		c.Chain = []string{DefaultCircuitBreaker}
 	}
 	if nil == c.Enable {
 		enable := DefaultCircuitBreakerEnabled

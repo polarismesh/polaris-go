@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/polarismesh/polaris-go"
@@ -39,7 +40,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "CircuitBreakerEchoServer", "service")
+	flag.StringVar(&service, "service", "CircuitBreakerInterfaceServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
@@ -52,6 +53,7 @@ type PolarisProvider struct {
 	service   string
 	host      string
 	port      int
+	needErr   int32
 }
 
 // Run . execute
@@ -68,8 +70,24 @@ func (svr *PolarisProvider) Run() {
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+		if atomic.LoadInt32(&svr.needErr) == 1 {
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("Fatal, My host : %s:%d", svr.host, svr.port)))
+			return
+		}
+
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm CircuitBreakerEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, My host : %s:%d", svr.host, svr.port)))
+	})
+
+	http.HandleFunc("/switch", func(rw http.ResponseWriter, r *http.Request) {
+		val := r.URL.Query().Get("openError")
+		if val == "true" {
+			atomic.StoreInt32(&svr.needErr, 1)
+		} else {
+			atomic.StoreInt32(&svr.needErr, 0)
+		}
+		rw.WriteHeader(http.StatusOK)
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))

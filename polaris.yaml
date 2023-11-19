@@ -201,11 +201,6 @@ consumer:
     #范围:[true: false]
     #默认值:true
     startUseFileCache: true
-    #描述:实例推空保护
-    #类型:bool
-    #范围:[true: false]
-    #默认值:false
-    pushEmptyProtection: false
   #描述:服务路由相关配置
   serviceRouter:
     # 服务路由链

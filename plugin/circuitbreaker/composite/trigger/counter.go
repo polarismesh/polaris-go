@@ -18,24 +18,71 @@
 package trigger
 
 import (
-	"context"
+	"sync/atomic"
+	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
-type Dimension string
+// StatusChangeHandler
+type StatusChangeHandler interface {
+	// CloseToOpen
+	CloseToOpen(breaker string)
+	// OpenToHalfOpen
+	OpenToHalfOpen()
+	// HalfOpenToClose
+	HalfOpenToClose()
+	// HalfOpenToOpen
+	HalfOpenToOpen()
+}
 
+// Options
 type Options struct {
 	Resource      model.Resource
 	Condition     *fault_tolerance.TriggerCondition
 	StatusHandler StatusChangeHandler
+	Log           log.Logger
+	DelayExecutor func(delay time.Duration, f func())
 }
 
+// TriggerCounter .
 type TriggerCounter interface {
-	Init(ctx context.Context)
+	// Report .
 	Report(success bool)
 }
 
+func newBaseCounter(rule string, opt *Options) *baseCounter {
+	return &baseCounter{
+		ruleName:         rule,
+		triggerCondition: opt.Condition,
+		res:              opt.Resource,
+		handler:          opt.StatusHandler,
+		suspended:        0,
+		log:              opt.Log,
+		delayExecutor:    opt.DelayExecutor,
+	}
+}
+
 type baseCounter struct {
+	ruleName         string
+	triggerCondition *fault_tolerance.TriggerCondition
+	res              model.Resource
+	handler          StatusChangeHandler
+	suspended        int32
+	log              log.Logger
+	delayExecutor    func(delay time.Duration, f func())
+}
+
+func (bc *baseCounter) isSuspend() bool {
+	return atomic.LoadInt32(&bc.suspended) == 1
+}
+
+func (bc *baseCounter) suspend() {
+	atomic.StoreInt32(&bc.suspended, 1)
+}
+
+func (bc *baseCounter) resume() {
+	atomic.StoreInt32(&bc.suspended, 0)
 }

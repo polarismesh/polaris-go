@@ -18,6 +18,7 @@
 package composite
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
@@ -27,6 +28,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+)
+
+const (
+	_triggerCircuitBreaker = 1
+	_triggerFaultDetect    = 0
 )
 
 // RuleContainer
@@ -41,10 +47,12 @@ type RuleContainer struct {
 	engineFlow model.Engine
 	// log
 	log log.Logger
+	//
+	executor *TaskExecutor
 }
 
-func newRuleContainer(res model.Resource, breaker *CompositeCircuitBreaker) *RuleContainer {
-	return &RuleContainer{
+func newRuleContainer(ctx context.Context, res model.Resource, breaker *CompositeCircuitBreaker) *RuleContainer {
+	c := &RuleContainer{
 		res:     res,
 		breaker: breaker,
 		regexFunction: func(s string) *regexp.Regexp {
@@ -52,10 +60,21 @@ func newRuleContainer(res model.Resource, breaker *CompositeCircuitBreaker) *Rul
 		},
 		engineFlow: breaker.engineFlow,
 		log:        breaker.log,
+		executor:   breaker.executor,
 	}
+	c.scheduleCircuitBreaker()
+	return c
 }
 
 func (c *RuleContainer) scheduleCircuitBreaker() {
+	c.executor.AffinityExecute(c.res.String(), c.realRefreshCircuitBreaker)
+}
+
+func (c *RuleContainer) scheduleHealthCheck() {
+	c.executor.AffinityExecute(c.res.String(), c.realRefreshHealthCheck)
+}
+
+func (c *RuleContainer) realRefreshCircuitBreaker() {
 	engineFlow := c.engineFlow
 	resp, err := engineFlow.SyncGetServiceRule(model.EventCircuitBreaker, &model.GetServiceRuleRequest{
 		Namespace: c.res.GetService().Namespace,
@@ -69,7 +88,7 @@ func (c *RuleContainer) scheduleCircuitBreaker() {
 	cbRule := selectCircuitBreakerRule(c.res, resp, c.regexFunction)
 	if cbRule == nil {
 		if _, exist := resourceCounters.remove(c.res); exist {
-			go c.scheduleHealthCheck()
+			c.scheduleHealthCheck()
 		}
 		return
 	}
@@ -79,17 +98,17 @@ func (c *RuleContainer) scheduleCircuitBreaker() {
 		if activeRule.Id == cbRule.Id && activeRule.Revision == cbRule.Revision {
 			return
 		}
-		counters, err := newResourceCounters(c.res, cbRule, c.breaker)
-		if err != nil {
-			c.log.Errorf("[CircuitBreaker] new resource counters fail: %+v", err)
-			return
-		}
-		resourceCounters.put(c.res, counters)
-		go c.scheduleHealthCheck()
 	}
+	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
+	if err != nil {
+		c.log.Errorf("[CircuitBreaker] new resource counters fail: %+v", err)
+		return
+	}
+	resourceCounters.put(c.res, counters)
+	c.scheduleHealthCheck()
 }
 
-func (c *RuleContainer) scheduleHealthCheck() {
+func (c *RuleContainer) realRefreshHealthCheck() {
 	c.log.Infof("[FaultDetect] start to pull fault detect rule for resource=%s", c.res.String())
 	counters, exist := c.breaker.getLevelResourceCounters(c.res.GetLevel()).get(c.res)
 	faultDetectEnabled := false
@@ -105,12 +124,7 @@ func (c *RuleContainer) scheduleHealthCheck() {
 		})
 		if err != nil {
 			c.log.Errorf("[FaultDetect] get %s rule fail: %+v", c.res.GetService().String(), err)
-			go func() {
-				timer := time.NewTimer(5 * time.Second)
-				defer timer.Stop()
-				<-timer.C
-				c.scheduleHealthCheck()
-			}()
+			c.executor.AffinityDelayExecute(c.res.String(), 5*time.Second, c.realRefreshHealthCheck)
 			return
 		}
 		if faultDetector := selectFaultDetector(c.res, resp, c.regexFunction); faultDetector != nil {
@@ -187,9 +201,10 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 
 func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fault_tolerance.CircuitBreakerRule {
 	ret := make([]*fault_tolerance.CircuitBreakerRule, 0, len(rules))
-	sort.Slice(rules, func(i, j int) bool {
-		rule1 := rules[i]
-		rule2 := rules[j]
+	ret = append(ret, rules...)
+	sort.Slice(ret, func(i, j int) bool {
+		rule1 := ret[i]
+		rule2 := ret[j]
 
 		// 1. compare destination service
 		destNamespace1 := rule1.RuleMatcher.Destination.Namespace

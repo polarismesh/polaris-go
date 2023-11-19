@@ -43,7 +43,7 @@ type LocalCacheConfigImpl struct {
 	// 本地缓存类型，默认inmemory，可修改成具体的缓存插件名
 	Type string `yaml:"type" json:"type"`
 	// 是否启用本地缓存
-	PersistEnable bool `yaml:"persistEnable" json:"persistEnable"`
+	PersistEnable *bool `yaml:"persistEnable" json:"persistEnable"`
 	// consumer.localCache.persistMaxWriteRetry
 	PersistMaxWriteRetry int `yaml:"persistMaxWriteRetry" json:"persistMaxWriteRetry"`
 	// consumer.localCache.persistReadRetry
@@ -92,12 +92,12 @@ func (l *LocalCacheConfigImpl) SetServiceRefreshInterval(interval time.Duration)
 // IsPersistEnable consumer.localCache.persistEnable
 // 是否启用本地缓存
 func (l *LocalCacheConfigImpl) IsPersistEnable() bool {
-	return l.PersistEnable
+	return *l.PersistEnable
 }
 
 // SetPersistEnable 设置是否启用本地缓存
 func (l *LocalCacheConfigImpl) SetPersistEnable(enable bool) {
-	l.PersistEnable = enable
+	l.PersistEnable = &enable
 }
 
 // GetPersistDir consumer.localCache.persist.path
@@ -221,6 +221,9 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 	if nil == l.ServiceRefreshInterval {
 		l.ServiceRefreshInterval = model.ToDurationPtr(DefaultServiceRefreshIntervalDuration)
 	}
+	if nil == l.PersistEnable {
+		l.PersistEnable = model.ToBoolPtr(DefaultCachePersistEnable)
+	}
 	if len(l.PersistDir) == 0 {
 		l.PersistDir = DefaultCachePersistDir
 	}
@@ -240,7 +243,7 @@ func (l *LocalCacheConfigImpl) SetDefault() {
 		l.PersistAvailableInterval = model.ToDurationPtr(DefaultPersistAvailableInterval)
 	}
 	if nil == l.StartUseFileCache {
-		l.StartUseFileCache = &DefaultUseFileCacheFlag
+		l.StartUseFileCache = model.ToBoolPtr(DefaultUseFileCacheFlag)
 	}
 	if nil == l.PushEmptyProtection {
 		l.PushEmptyProtection = &DefaultPushEmptyProtection

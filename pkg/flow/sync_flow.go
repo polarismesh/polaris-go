@@ -330,21 +330,18 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 		commonRequest.DstService, targetCls, instances, totalWeight, commonRequest.DstInstances), nil
 }
 
-// SyncRegisterV2 async-regis
-func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	request.SetDefaultTTL()
-
-	resp, err := e.doSyncRegister(request, registerstate.CreateRegisterV2Header())
-	if err != nil {
-		return nil, err
-	}
-
-	e.registerStates.PutRegister(request, e.doSyncRegister, e.SyncHeartbeat)
-	return resp, nil
-}
-
 // SyncRegister 同步进行服务注册
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	if instance.AutoHeartbeat {
+		instance.SetDefaultTTL()
+		resp, err := e.doSyncRegister(instance, registerstate.CreateRegisterV2Header())
+		if err != nil {
+			return nil, err
+		}
+
+		e.registerStates.PutRegister(instance, e.doSyncRegister, e.SyncHeartbeat)
+		return resp, nil
+	}
 	return e.doSyncRegister(instance, nil)
 }
 
@@ -512,13 +509,13 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 	apiStartTime := e.globalCtx.Now()
 	for retryTimes < maxRetryTimes {
 		startTime := e.globalCtx.Now()
-		svcRule := e.registry.GetServiceRouteRule(&commonRequest.DstService.ServiceKey, false)
+		svcRule := e.registry.GetServiceRule(&commonRequest.DstService, false)
 		if svcRule.IsInitialized() {
 			commonRequest.CallResult.SetSuccess(e.globalCtx.Since(startTime))
 			return commonRequest.BuildServiceRuleResponse(svcRule), nil
 		}
 		var notifier *common.Notifier
-		if notifier, err = e.registry.LoadServiceRouteRule(&commonRequest.DstService.ServiceKey); err != nil {
+		if notifier, err = e.registry.LoadServiceRule(&commonRequest.DstService); err != nil {
 			(&commonRequest.CallResult).SetFail(
 				model.GetErrorCodeFromError(err), e.globalCtx.Since(apiStartTime))
 			return nil, err

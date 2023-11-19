@@ -200,6 +200,8 @@ type GetOneInstanceRequest struct {
 	LbPolicy string
 	// 金丝雀
 	Canary string
+	// 可选，是否包含被熔断的服务实例，默认false
+	IncludeCircuitBreakInstances bool
 }
 
 // SetTimeout 设置超时时间
@@ -1200,6 +1202,8 @@ type InstanceRegisterRequest struct {
 	RetryCount *int
 	// 可选，指定实例id
 	InstanceId string
+	// 可选, 是否将心跳上报交由 SDK 内部定时任务进行处理
+	AutoHeartbeat bool
 }
 
 // String 打印消息内容
