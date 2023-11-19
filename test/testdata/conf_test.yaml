@@ -45,25 +45,7 @@ consumer:
     successCountAfterHalfOpen: 2
     # 熔断插件配置
     chain:
-      # 按照错误率进行熔断
-      - errorRate
-      # 按照连续请求错误进行熔断
-      - errorCount
-    plugin:
-      errorRate:
-        # 只有请求数达到某个阈值才执行熔断计算，默认10
-        requestVolumeThreshold: 10
-        # 触发熔断的错误率阈值，默认0.5
-        errorRateThreshold: 0.5
-        # 错误率统计时间窗口，默认1分钟
-        metricStatTimeWindow: 5s
-        # 统计窗口细分的桶数量，默认12
-        metricNumBuckets: 12
-      errorCount:
-        # 连续错误数阈值
-        continuousErrorThreshold: 10
-        # 连续错误数统计时间窗口，默认1秒
-        metricStatTimeWindow: 1s
+      - composite
   outlierDetection:
     # 是否开启探测
     enable: true
