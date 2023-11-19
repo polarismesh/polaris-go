@@ -39,11 +39,6 @@ const (
 	defaultCheckPeriodMultiple = 20
 )
 
-const (
-	defaultCheckPeriod         = 60 * time.Second
-	defaultCheckPeriodMultiple = 20
-)
-
 type CompositeCircuitBreaker struct {
 	*plugin.PluginBase
 	// pluginCtx

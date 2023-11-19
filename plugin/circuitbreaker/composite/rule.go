@@ -36,11 +36,6 @@ const (
 	_triggerFaultDetect    = 0
 )
 
-const (
-	_triggerCircuitBreaker = 1
-	_triggerFaultDetect    = 0
-)
-
 // RuleContainer
 type RuleContainer struct {
 	// res
