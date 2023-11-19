@@ -359,14 +359,19 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			// 首先如果元数据的value无法获取，直接匹配失败
 			return nil, false, "", nil
 		}
+
 		// 全匹配类型直接返回全量实例
 		if ruleMetaValueStr == matchAll && ruleMetaValue.ValueType == apimodel.MatchString_TEXT {
 			return cls, true, "", nil
 		}
-		metaValues := svcCache.GetInstanceMetaValues(cls.Location, ruleMetaKey)
-		if len(metaValues) == 0 {
-			// 不匹配
-			return nil, false, "", nil
+		// 如果是“不等于”类型，需要单独处理
+		var metaValues map[string]string
+		if ruleMetaValue.Type != apimodel.MatchString_NOT_EQUALS {
+			metaValues = svcCache.GetInstanceMetaValues(cls.Location, ruleMetaKey)
+			if len(metaValues) == 0 {
+				// 不匹配
+				return nil, false, "", nil
+			}
 		}
 		switch ruleMetaValue.Type {
 		case apimodel.MatchString_REGEX:
@@ -399,6 +404,17 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			if !hasMatchedValue {
 				return nil, false, "", nil
 			}
+
+		case apimodel.MatchString_NOT_EQUALS:
+			metaValues = svcCache.GetInstancesWithMetaValuesNotEqual(cls.Location, ruleMetaKey, ruleMetaValueStr)
+			if len(metaValues) == 0 {
+				return cls, false, "", nil
+			}
+			for k, v := range metaValues {
+				cls.RuleAddMetadata(ruleMetaKey, k, v)
+			}
+			metaChanged = true
+
 		// parameter、variable、text 的 exact 最终都是要精确匹配，只是匹配的值来源不同
 		default:
 			// 校验从上一个路由插件继承下来的规则是否符合该目标规则
