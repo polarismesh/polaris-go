@@ -135,8 +135,12 @@ func (r *InstanceResource) String() string {
 }
 
 func (r *InstanceResource) String() string {
-	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.Node.String(),
-		r.service.String(), r.callerService.String())
+	callerSvc := r.callerService
+	if callerSvc == nil {
+		callerSvc = EmptyServiceKey
+	}
+	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.node.String(),
+		r.service.String(), callerSvc.String())
 }
 
 func NewInstanceResource(svc, caller *ServiceKey, protocol, host string, port uint32) (*InstanceResource, error) {

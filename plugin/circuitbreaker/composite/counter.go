@@ -40,6 +40,13 @@ const (
 	_stateHalfOpenToClose
 )
 
+const (
+	_stateCloseToOpen = iota
+	_stateOpenToHalfOpen
+	_stateHalfOpenToOpen
+	_stateHalfOpenToClose
+)
+
 // ResourceCounters .
 type ResourceCounters struct {
 	circuitBreaker *CompositeCircuitBreaker
