@@ -68,7 +68,6 @@ type ResourceCounters struct {
 
 func newResourceCounters(res model.Resource, activeRule *fault_tolerance.CircuitBreakerRule,
 	circuitBreaker *CompositeCircuitBreaker) (*ResourceCounters, error) {
-
 	_, isInsRes := res.(*model.InstanceResource)
 	counters := &ResourceCounters{
 		activeRule: activeRule,
@@ -269,7 +268,10 @@ func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerSt
 		},
 	}
 	// 调用 localCache
-	rc.circuitBreaker.localCache.UpdateInstances(updateRequest)
+	if err := rc.circuitBreaker.localCache.UpdateInstances(updateRequest); err != nil {
+		log.GetBaseLogger().Errorf("update instance circuitbreaker status fail, resource %s, rule %s, err %s",
+			insRes.String(), rc.activeRule.Id, err.Error())
+	}
 }
 
 func buildFallbackInfo(rule *fault_tolerance.CircuitBreakerRule) *model.FallbackInfo {

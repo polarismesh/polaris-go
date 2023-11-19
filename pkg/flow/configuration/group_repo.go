@@ -46,10 +46,8 @@ type ConfigGroupRepo struct {
 	listeners []func(*configconnector.ConfigGroupResponse)
 }
 
-func newConfigGroupRepo(namespace, group string,
-	connector configconnector.ConfigConnector,
+func newConfigGroupRepo(namespace, group string, connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigGroupRepo, error) {
-
 	repo := &ConfigGroupRepo{
 		namespace:       namespace,
 		groupName:       group,

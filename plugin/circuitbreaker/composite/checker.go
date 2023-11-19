@@ -184,7 +184,6 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 
 func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol,
 	rule *fault_tolerance.FaultDetectRule) bool {
-
 	checker, ok := c.healthCheckers[protocol]
 	if !ok {
 		c.log.Infof("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
@@ -201,7 +200,9 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 		Delay:     ret.GetDelay(),
 		RetStatus: ret.GetRetStatus(),
 	}
-	c.circuitBreaker.Report(stat)
+	if err := c.circuitBreaker.Report(stat); err != nil {
+		c.log.Errorf("[CircuitBreaker] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
+	}
 	return stat.RetStatus == model.RetSuccess
 }
 
@@ -224,7 +225,6 @@ func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record 
 
 func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource,
 	faultDetector *fault_tolerance.FaultDetector) map[string]*fault_tolerance.FaultDetectRule {
-
 	sortedRules := sortFaultDetectRules(faultDetector.GetRules())
 	matchRule := map[string]*fault_tolerance.FaultDetectRule{}
 

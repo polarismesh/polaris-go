@@ -480,4 +480,4 @@ func (c *HalfOpenStatus) IsAvailable() bool {
 	return true
 }
 
-var CallAbortedError = errors.New("call aborted")
+var ErrorCallAborted = errors.New("call aborted")

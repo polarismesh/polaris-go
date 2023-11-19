@@ -596,7 +596,7 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 	}
 	for _, route := range routes {
 		// 匹配source规则
-		sourceMatched, match, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType, ruleCache)
+		sourceMatched, matchSource, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType, ruleCache)
 
 		if invalidRegex != nil {
 			// summary.invalidRegexSources = append(summary.invalidRegexSources, invalidRegex.invalidRegexes...)
@@ -608,7 +608,7 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 		}
 
 		if sourceMatched {
-			summary.matchedSource = append(summary.matchedSource, match)
+			summary.matchedSource = append(summary.matchedSource, matchSource)
 		} else {
 			// 没有匹配成功，继续下一轮匹配
 			continue

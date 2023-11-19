@@ -220,10 +220,12 @@ func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fau
 		if svcResult != 0 {
 			return svcResult < 0
 		}
-		if rule1.Level == fault_tolerance.Level_METHOD && rule1.Level == rule2.Level {
-			methodResult := compareStringValue(destMethod1, destMethod2)
-			if methodResult != 0 {
-				return methodResult < 0
+		if rule1.Level == rule2.Level {
+			if rule1.Level == fault_tolerance.Level_METHOD {
+				methodResult := compareStringValue(destMethod1, destMethod2)
+				if methodResult != 0 {
+					return methodResult < 0
+				}
 			}
 		}
 
