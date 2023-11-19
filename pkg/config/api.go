@@ -422,16 +422,16 @@ type CircuitBreakerConfig interface {
 	// Deprecated: 不在使用
 	GetSuccessCountAfterHalfOpen() int
 	// SetSuccessCountAfterHalfOpen 设置半开状态后多少个成功请求则恢复
-		// Deprecated: 不在使用
+	// Deprecated: 不在使用
 	SetSuccessCountAfterHalfOpen(count int)
 	// GetRecoverWindow 获取半开后的恢复周期，按周期来进行半开放量的统计
-		// Deprecated: 不在使用
+	// Deprecated: 不在使用
 	GetRecoverWindow() time.Duration
 	// SetRecoverWindow 设置半开后的恢复周期，按周期来进行半开放量的统计
-		// Deprecated: 不在使用
+	// Deprecated: 不在使用
 	SetRecoverWindow(value time.Duration)
 	// GetRecoverNumBuckets 半开后请求数统计滑桶数量
-		// Deprecated: 不在使用
+	// Deprecated: 不在使用
 	GetRecoverNumBuckets() int
 	// SetRecoverNumBuckets 设置半开后请求数统计滑桶数量
 	// Deprecated: 不在使用
