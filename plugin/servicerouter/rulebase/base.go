@@ -20,13 +20,14 @@ package rulebase
 import (
 	"os"
 	"sort"
-	"strings"
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/modern-go/reflect2"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -137,8 +138,7 @@ func (g *RuleBasedInstancesFilter) poolReturnPrioritySubsets(set *prioritySubset
 
 // 匹配metadata
 func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apimodel.MatchString,
-	routeInfo *servicerouter.RouteInfo, ruleCache model.RuleCache) (match bool,
-	invalidRegex string, invalidRegexError error) {
+	routeInfo *servicerouter.RouteInfo, ruleCache model.RuleCache) (bool, string, error) {
 	var srcMeta map[string]string
 	if routeInfo.SourceService != nil {
 		srcMeta = routeInfo.SourceService.GetMetadata()
@@ -147,7 +147,6 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 	if len(srcMeta) == 0 {
 		return false, "", nil
 	}
-	var err error
 	// metadata是否全部匹配
 	allMetaMatched := true
 	for ruleMetaKey, ruleMetaValue := range ruleMeta {
@@ -162,43 +161,16 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 			if !exist {
 				return false, "", nil
 			}
-			switch ruleMetaValue.Type {
-			case apimodel.MatchString_REGEX:
-				var matchExp *regexp.Regexp
-				matchExp, err = regexp.Compile(rawMetaValue, regexp.RE2)
+			allMetaMatched = match.MatchString(srcMetaValue, &apimodel.MatchString{
+				Type:  ruleMetaValue.Type,
+				Value: wrapperspb.String(rawMetaValue),
+			}, func(s string) *regexp.Regexp {
+				matchExp, err := regexp.Compile(rawMetaValue, regexp.RE2)
 				if err != nil {
-					return false, rawMetaValue, err
+					return nil
 				}
-				m, err := matchExp.FindStringMatch(srcMetaValue)
-				if err != nil {
-					return false, rawMetaValue, err
-				}
-				if m == nil || m.String() == "" {
-					allMetaMatched = false
-				}
-			case apimodel.MatchString_NOT_EQUALS:
-				allMetaMatched = srcMetaValue != rawMetaValue
-			case apimodel.MatchString_EXACT:
-				allMetaMatched = srcMetaValue == rawMetaValue
-			case apimodel.MatchString_IN:
-				find := false
-				tokens := strings.Split(rawMetaValue, ",")
-				for _, token := range tokens {
-					if token == srcMetaValue {
-						find = true
-						break
-					}
-				}
-				allMetaMatched = find
-			case apimodel.MatchString_NOT_IN:
-				tokens := strings.Split(rawMetaValue, ",")
-				for _, token := range tokens {
-					if token == srcMetaValue {
-						allMetaMatched = false
-						break
-					}
-				}
-			}
+				return matchExp
+			})
 		} else {
 			// 假如不存在规则要求的KEY，则直接返回匹配失败
 			allMetaMatched = false
@@ -640,7 +612,7 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 	}
 	for _, route := range routes {
 		// 匹配source规则
-		sourceMatched, match, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType, ruleCache)
+		sourceMatched, matchSource, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType, ruleCache)
 
 		if invalidRegex != nil {
 			// summary.invalidRegexSources = append(summary.invalidRegexSources, invalidRegex.invalidRegexes...)
@@ -652,7 +624,7 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 		}
 
 		if sourceMatched {
-			summary.matchedSource = append(summary.matchedSource, match)
+			summary.matchedSource = append(summary.matchedSource, matchSource)
 		} else {
 			// 没有匹配成功，继续下一轮匹配
 			continue

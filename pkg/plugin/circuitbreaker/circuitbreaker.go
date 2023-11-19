@@ -25,14 +25,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
-// InstanceCircuitBreaker 【扩展点接口】节点熔断
-type InstanceCircuitBreaker interface {
+// CircuitBreaker 【扩展点接口】资源熔断（实例熔断、方法熔断、服务熔断）
+type CircuitBreaker interface {
 	plugin.Plugin
-	// Stat 进行调用统计，返回当前实例是否需要进行立即熔断
-	Stat(model.InstanceGauge) (bool, error)
-	// CircuitBreak 进行熔断计算，返回需要进行状态转换的实例ID
-	// 入参包括全量服务实例，以及当前周期的健康探测结果
-	CircuitBreak(instances []model.Instance) (*Result, error)
+	// CheckResource get the resource circuitbreaker status
+	CheckResource(model.Resource) model.CircuitBreakerStatus
+	// Report report resource invoke result stat
+	Report(*model.ResourceStat) error
 }
 
 // Result 熔断结算结果
@@ -83,5 +82,5 @@ func (r *Result) IsEmpty() bool {
 
 // 初始化
 func init() {
-	plugin.RegisterPluginInterface(common.TypeCircuitBreaker, new(InstanceCircuitBreaker))
+	plugin.RegisterPluginInterface(common.TypeCircuitBreaker, new(CircuitBreaker))
 }

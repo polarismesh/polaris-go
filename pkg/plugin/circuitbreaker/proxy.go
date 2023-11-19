@@ -25,25 +25,23 @@ import (
 
 // Proxy .proxy of InstanceCircuitBreaker
 type Proxy struct {
-	InstanceCircuitBreaker
+	CircuitBreaker
 	engine model.Engine
 }
 
 // Stat proxy InstanceCircuitBreaker stat
-func (p *Proxy) Stat(gauge model.InstanceGauge) (bool, error) {
-	toCb, err := p.InstanceCircuitBreaker.Stat(gauge)
-	return toCb, err
+func (p *Proxy) CheckResource(res model.Resource) model.CircuitBreakerStatus {
+	return p.CircuitBreaker.CheckResource(res)
 }
 
 // CircuitBreak proxy InstanceCircuitBreaker CircuitBreak
-func (p *Proxy) CircuitBreak(instances []model.Instance) (*Result, error) {
-	cbResult, err := p.InstanceCircuitBreaker.CircuitBreak(instances)
-	return cbResult, err
+func (p *Proxy) Report(stat *model.ResourceStat) error {
+	return p.CircuitBreaker.Report(stat)
 }
 
 // SetRealPlugin 设置
 func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
-	p.InstanceCircuitBreaker = plug.(InstanceCircuitBreaker)
+	p.CircuitBreaker = plug.(CircuitBreaker)
 	p.engine = engine
 }
 

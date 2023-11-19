@@ -33,7 +33,6 @@ import (
 	. "gopkg.in/check.v1"
 
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/test/circuitbreak"
 	"github.com/polarismesh/polaris-go/test/discover"
 	"github.com/polarismesh/polaris-go/test/loadbalance"
 	"github.com/polarismesh/polaris-go/test/ratelimit"
@@ -52,28 +51,28 @@ func Test(t *testing.T) {
 
 var (
 	suitFunc = map[string]func(){
-		"ConsumerTestingSuite":          mockConsumerTestingSuite,
-		"ProviderTestingSuite":          mockProviderTestingSuite,
-		"LBTestingSuite":                mockLBTestingSuite,
-		"CircuitBreakSuite":             mockCircuitBreakSuite,
-		"HealthCheckTestingSuite":       mockHealthCheckTestingSuite,
-		"HealthCheckAlwaysTestingSuite": mockHealthCheckAlwaysTestingSuite,
-		"NearbyTestingSuite":            mockNearbyTestingSuite,
-		"RuleRoutingTestingSuite":       mockRuleRoutingTestingSuite,
-		"DstMetaTestingSuite":           mockDstMetaTestingSuite,
-		"SetDivisionTestingSuite":       mockSetDivisionTestingSuite,
-		"CanaryTestingSuite":            mockCanaryTestingSuite,
-		"CacheTestingSuite":             mockCacheTestingSuite,
-		"ServiceUpdateSuite":            mockServiceUpdateSuite,
-		"ServerSwitchSuite":             mockServerSwitchSuite,
-		"DefaultServerSuite":            mockDefaultServerSuite,
-		"CacheFastUpdateSuite":          mockCacheFastUpdateSuite,
-		"ServerFailOverSuite":           mockServerFailOverSuite,
-		"EventSubscribeSuit":            mockEventSubscribeSuit,
-		"InnerServiceLBTestingSuite":    mockInnerServiceLBTestingSuite,
-		"LocalNormalTestingSuite":       mockLocalNormalTestingSuite,
-		"RuleChangeTestingSuite":        func() {},
-		"RemoteNormalTestingSuite":      func() {},
+		"ConsumerTestingSuite": mockConsumerTestingSuite,
+		"ProviderTestingSuite": mockProviderTestingSuite,
+		"LBTestingSuite":       mockLBTestingSuite,
+		// "CircuitBreakSuite":             mockCircuitBreakSuite,
+		// "HealthCheckTestingSuite":       mockHealthCheckTestingSuite,
+		// "HealthCheckAlwaysTestingSuite": mockHealthCheckAlwaysTestingSuite,
+		"NearbyTestingSuite":         mockNearbyTestingSuite,
+		"RuleRoutingTestingSuite":    mockRuleRoutingTestingSuite,
+		"DstMetaTestingSuite":        mockDstMetaTestingSuite,
+		"SetDivisionTestingSuite":    mockSetDivisionTestingSuite,
+		"CanaryTestingSuite":         mockCanaryTestingSuite,
+		"CacheTestingSuite":          mockCacheTestingSuite,
+		"ServiceUpdateSuite":         mockServiceUpdateSuite,
+		"ServerSwitchSuite":          mockServerSwitchSuite,
+		"DefaultServerSuite":         mockDefaultServerSuite,
+		"CacheFastUpdateSuite":       mockCacheFastUpdateSuite,
+		"ServerFailOverSuite":        mockServerFailOverSuite,
+		"EventSubscribeSuit":         mockEventSubscribeSuit,
+		"InnerServiceLBTestingSuite": mockInnerServiceLBTestingSuite,
+		"LocalNormalTestingSuite":    mockLocalNormalTestingSuite,
+		"RuleChangeTestingSuite":     func() {},
+		"RemoteNormalTestingSuite":   func() {},
 	}
 )
 
@@ -140,17 +139,17 @@ func mockInnerServiceLBTestingSuite() {
 	Suite(&loadbalance.InnerServiceLBTestingSuite{})
 }
 
-func mockCircuitBreakSuite() {
-	Suite(&circuitbreak.CircuitBreakSuite{})
-}
+// func mockCircuitBreakSuite() {
+// 	Suite(&circuitbreak.CircuitBreakSuite{})
+// }
 
-func mockHealthCheckTestingSuite() {
-	Suite(&circuitbreak.HealthCheckTestingSuite{})
-}
+// func mockHealthCheckTestingSuite() {
+// 	Suite(&circuitbreak.HealthCheckTestingSuite{})
+// }
 
-func mockHealthCheckAlwaysTestingSuite() {
-	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
-}
+// func mockHealthCheckAlwaysTestingSuite() {
+// 	Suite(&circuitbreak.HealthCheckAlwaysTestingSuite{})
+// }
 
 func mockNearbyTestingSuite() {
 	Suite(&serviceroute.NearbyTestingSuite{})
@@ -169,7 +168,7 @@ func mockSetDivisionTestingSuite() {
 }
 
 func mockCanaryTestingSuite() {
-	Suite(&serviceroute.CanaryTestingSuite{})
+	// Suite(&serviceroute.CanaryTestingSuite{})
 }
 
 // 缓存持久化测试

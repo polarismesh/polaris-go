@@ -162,6 +162,8 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers[model.EventInstances] = g.newServiceCacheHandler()
 	g.eventToCacheHandlers[model.EventRouting] = g.newRuleCacheHandler()
 	g.eventToCacheHandlers[model.EventRateLimiting] = g.newRateLimitCacheHandler()
+	g.eventToCacheHandlers[model.EventCircuitBreaker] = g.newCircuitBreakerCacheHandler()
+	g.eventToCacheHandlers[model.EventFaultDetect] = g.newFaultDetectCacheHandler()
 	// 批量服务
 	g.eventToCacheHandlers[model.EventServices] = g.newServicesHandler()
 	g.cachePersistHandler, err = lrplug.NewCachePersistHandler(
@@ -589,14 +591,18 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 		property := svcUpdateReq.Properties[i]
 		instances := g.GetInstances(property.Service, true, true)
 		svcInstancesInProto := instances.(*pb.ServiceInstancesInProto)
-		localValuesIntf := svcInstancesInProto.GetInstanceLocalValue(property.ID)
+		var localValuesIntf local.InstanceLocalValue
+		if len(property.ID) != 0 {
+			localValuesIntf = svcInstancesInProto.GetInstanceLocalValue(property.ID)
+		} else {
+			localValuesIntf = svcInstancesInProto.GetInstanceLocalValueByEndpoint(property.Host, property.Port)
+		}
 		if nil == localValuesIntf {
 			log.GetBaseLogger().Warnf(
 				"instance %s for service %s has been expired, update ignored", property.ID, *property.Service)
 			continue
 		}
 		localValues := localValuesIntf.(*local.DefaultInstanceLocalValue)
-		updateInstance := svcInstancesInProto.GetInstance(property.ID)
 		for k, v := range property.Properties {
 			switch k {
 			case localregistry.PropertyCircuitBreakerStatus:
@@ -607,11 +613,6 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 				if (nil != preCBStatus && preCBStatus.GetStatus() == nextCBStatus.GetStatus()) ||
 					(nil == preCBStatus && nextCBStatus.GetStatus() == model.Close) {
 					cbStatusUpdated = false
-				}
-				err := g.engine.SyncReportStat(model.CircuitBreakStat,
-					&model.CircuitBreakGauge{ChangeInstance: updateInstance, CBStatus: nextCBStatus})
-				if err != nil {
-					log.GetBaseLogger().Errorf("fail to report circuitbreak change, error %v", err)
 				}
 			case localregistry.PropertyHealthCheckStatus:
 				localValues.SetActiveDetectStatus(v.(model.ActiveDetectStatus))
@@ -725,6 +726,24 @@ func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
 
 // 创建限流规则缓存操作回调集合
 func (g *LocalCache) newRateLimitCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建熔断规则缓存操作回调集合
+func (g *LocalCache) newCircuitBreakerCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建探测规则缓存操作回调集合
+func (g *LocalCache) newFaultDetectCacheHandler() CacheHandlers {
 	return CacheHandlers{
 		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,

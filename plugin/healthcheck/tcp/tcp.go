@@ -21,6 +21,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -88,6 +90,11 @@ func (g *Detector) doTCPDetect(address string) bool {
 	}
 	_ = conn.Close()
 	return true
+}
+
+// Protocol .
+func (g *Detector) Protocol() fault_tolerance.FaultDetectRule_Protocol {
+	return fault_tolerance.FaultDetectRule_TCP
 }
 
 // IsEnable enable

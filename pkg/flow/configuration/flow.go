@@ -31,7 +31,6 @@ type ConfigFlow struct {
 // NewConfigFlow 创建配置中心服务
 func NewConfigFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
 	configuration config.Configuration) (*ConfigFlow, error) {
-
 	fileFlow, err := NewConfigFileFlow(connector, chain, configuration)
 	if err != nil {
 		return nil, err

@@ -77,7 +77,12 @@ func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.Route
 	// 至少要返回多少实例
 	allInstancesCount := clsValue.Count()
 	minInstances := int(percentOfMinInstances * float64(allInstancesCount))
-	healthyInstances := clsValue.GetInstancesSet(false, false)
+	var healthyInstances *model.InstanceSet
+	if routeInfo.IncludeCircuitBreakInstances {
+		healthyInstances = clsValue.GetInstancesSet(false, true)
+	} else {
+		healthyInstances = clsValue.GetInstancesSet(false, false)
+	}
 	healthyCount := healthyInstances.Count()
 	hasLimitedInstances := false
 	if recoverAll && allInstancesCount > 0 && healthyCount <= minInstances {
@@ -89,6 +94,10 @@ func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.Route
 	result.OutputCluster = outCluster
 	routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
 	return result, nil
+}
+
+func checkCircuitBreakerPassing() bool {
+	return true
 }
 
 // init 注册插件

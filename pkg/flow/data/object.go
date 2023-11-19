@@ -215,6 +215,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	c.DstService.Service = request.Service
 	c.DstService.Namespace = request.Namespace
 	c.RouteInfo.DestService = request
+	c.RouteInfo.IncludeCircuitBreakInstances = request.IncludeCircuitBreakInstances
 	c.RouteInfo.EnableFailOverDefaultMeta = request.EnableFailOverDefaultMeta
 	c.RouteInfo.FailOverDefaultMeta = request.FailOverDefaultMeta
 	c.RouteInfo.Canary = request.Canary

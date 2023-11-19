@@ -19,12 +19,9 @@ package flow
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
-	"github.com/polarismesh/polaris-go/pkg/flow/detect"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
 	"github.com/polarismesh/polaris-go/pkg/flow/startup"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
 const (
@@ -40,28 +37,6 @@ func (e *Engine) ScheduleTask(task *model.PeriodicTask) (chan<- *model.PriorityT
 	routine := schedule.NewTaskRoutine(task)
 	e.taskRoutines = append(e.taskRoutines, routine)
 	return routine.Schedule()
-}
-
-// addPeriodicCircuitBreakTask 添加定时熔断任务
-func (e *Engine) addPeriodicCircuitBreakTask() (chan<- *model.PriorityTask, *cbcheck.CircuitBreakCallBack, error) {
-	callback, err := cbcheck.NewCircuitBreakCallBack(e.configuration, e.plugins)
-	if err != nil {
-		return nil, nil, err
-	}
-	rtChan, taskValues := e.ScheduleTask(&model.PeriodicTask{
-		Name:         taskCircuitBreak,
-		CallBack:     callback,
-		TakePriority: true,
-		LongRun:      false,
-		Period:       e.configuration.GetConsumer().GetCircuitBreaker().GetCheckPeriod() / 2,
-	})
-	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
-	// 注入服务回调函数
-	e.plugins.RegisterEventSubscriber(common.OnServiceAdded, common.PluginEventHandler{
-		Callback: svcEventHandler.OnServiceAdded})
-	e.plugins.RegisterEventSubscriber(common.OnServiceDeleted, common.PluginEventHandler{
-		Callback: svcEventHandler.OnServiceDeleted})
-	return rtChan, callback, nil
 }
 
 // addClientReportTask 添加客户端定期上报任务
@@ -109,26 +84,4 @@ func (e *Engine) addLoadServerServiceTask() (model.TaskValues, error) {
 		Period:       config.DefaultDiscoverServiceRetryInterval / 2,
 	})
 	return taskValues, nil
-}
-
-// addHealthCheckTask 添加客户端主动健康检查任务
-func (e *Engine) addHealthCheckTask() error {
-	callback, err := detect.NewHealthCheckCallBack(e.configuration, e.plugins)
-	if err != nil {
-		return err
-	}
-	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
-		Name:         taskHealthCheck,
-		CallBack:     callback,
-		TakePriority: false,
-		LongRun:      false,
-		Period:       e.configuration.GetConsumer().GetHealthCheck().GetInterval() / 2,
-	})
-	svcEventHandler := &schedule.ServiceEventHandler{TaskValues: taskValues}
-	// 注入服务回调函数
-	e.plugins.RegisterEventSubscriber(common.OnServiceAdded, common.PluginEventHandler{
-		Callback: svcEventHandler.OnServiceAdded})
-	e.plugins.RegisterEventSubscriber(common.OnServiceDeleted, common.PluginEventHandler{
-		Callback: svcEventHandler.OnServiceDeleted})
-	return nil
 }

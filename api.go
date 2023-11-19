@@ -154,6 +154,20 @@ type ConfigGroupAPI interface {
 	GetConfigGroup(namesapce, group string) (model.ConfigFileGroup, error)
 }
 
+type CircuitBreakerAPI interface {
+	api.SDKOwner
+	// Check
+	Check(model.Resource) (*model.CheckResult, error)
+	// Report
+	Report(*model.ResourceStat) error
+	// MakeFunctionDecorator
+	MakeFunctionDecorator(model.CustomerFunction, *api.RequestContext) model.DecoratorFunction
+	// MakeInvokeHandler
+	MakeInvokeHandler(*api.RequestContext) model.InvokeHandler
+	// Destroy the api is destroyed and cannot be called again
+	Destroy()
+}
+
 // RouterAPI routing api methods
 type RouterAPI interface {
 	api.SDKOwner

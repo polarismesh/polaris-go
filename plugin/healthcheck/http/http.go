@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -121,6 +123,11 @@ func (g *Detector) doHttpDetect(address string) bool {
 		}
 	}
 	return false
+}
+
+// Protocol .
+func (g *Detector) Protocol() fault_tolerance.FaultDetectRule_Protocol {
+	return fault_tolerance.FaultDetectRule_HTTP
 }
 
 // init 注册插件信息

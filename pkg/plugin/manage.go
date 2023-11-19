@@ -66,6 +66,8 @@ func IsPluginRegistered(typ common.Type, name string) bool {
 type Supplier interface {
 	// GetPlugin 获取插件实例
 	GetPlugin(typ common.Type, name string) (Plugin, error)
+	// GetPlugins 获取插件实例列表
+	GetPlugins(typ common.Type) ([]Plugin, error)
 	// GetPluginById 通过id获取插件实例
 	GetPluginById(id int32) (Plugin, error)
 	// GetPluginsByType 获取一个类型的加载了的插件名字
@@ -318,6 +320,20 @@ func (m *manager) GetPlugin(typ common.Type, name string) (Plugin, error) {
 			"GetPlugin: plugin name %s not registered", name)
 	}
 	return plug.instance, nil
+}
+
+// GetPlugins .
+func (m *manager) GetPlugins(typ common.Type) ([]Plugin, error) {
+	plugins, exists := m.plugins[typ]
+	if !exists {
+		return nil, model.NewSDKError(model.ErrCodePluginError, nil,
+			"GetPlugin: invalid plugin type %v", typ)
+	}
+	ret := make([]Plugin, 0, len(plugins))
+	for _, i := range plugins {
+		ret = append(ret, i.instance)
+	}
+	return ret, nil
 }
 
 // GetPluginsByType 获取一个类型的加载的插件名字

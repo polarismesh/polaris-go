@@ -55,6 +55,8 @@ const (
 	DefaultRequestQueueSize int = 1000
 	// DefaultServerSwitchInterval 默认server的切换时间时间.
 	DefaultServerSwitchInterval = 10 * time.Minute
+	// DefaultCachePersistEnable 默认缓存持久化存储开启.
+	DefaultCachePersistEnable bool = true
 	// DefaultCachePersistDir 默认缓存持久化存储目录.
 	DefaultCachePersistDir string = "./polaris/backup"
 	// DefaultPersistMaxWriteRetry 持久化缓存写文件的默认重试次数.
@@ -188,6 +190,8 @@ const (
 	DefaultLoadBalancerL5CST string = "l5cst"
 	// DefaultLoadBalancerHash 负载均衡器,普通hash.
 	DefaultLoadBalancerHash string = "hash"
+	// DefaultCircuitBreaker 默认错误率熔断器.
+	DefaultCircuitBreaker string = "composite"
 	// DefaultCircuitBreakerErrRate 默认错误率熔断器.
 	DefaultCircuitBreakerErrRate string = "errorRate"
 	// DefaultCircuitBreakerErrCount 默认持续错误熔断器.

@@ -19,13 +19,13 @@ package flow
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
@@ -35,7 +35,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -75,19 +74,15 @@ type Engine struct {
 	plugins plugin.Supplier
 	// 任务调度协程
 	taskRoutines []schedule.TaskRoutine
-	// 实时熔断任务队列
-	rtCircuitBreakChan chan<- *model.PriorityTask
-	// 实时熔断公共任务信息
-	circuitBreakTask *cbcheck.CircuitBreakCallBack
-	// 熔断插件链
-	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
+	// 熔断引擎
+	circuitBreakerFlow *CircuitBreakerFlow
 	// 修改消息订阅插件链
 	subscribe *subscribeChannel
 	// 配置中心门面类
 	configFlow *configuration.ConfigFlow
 	// 注册状态管理器
 	registerStates *registerstate.RegisterStateManager
-
+	// watchEngine .
 	watchEngine *WatchEngine
 	// 配置过滤链
 	configFilterChain configfilter.Chain
@@ -146,25 +141,16 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); err != nil {
 		return err
 	}
-	// 启动健康探测
-	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
-	disableHealthCheck := when == config.HealthCheckNever
-	if !disableHealthCheck {
-		if err = flowEngine.addHealthCheckTask(); err != nil {
-			return err
-		}
-	}
 	// 加载熔断器插件
-	enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable()
-	if enable {
-		flowEngine.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, plugins)
+	if enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable(); enable {
+		breakers, err := data.GetCircuitBreakers(cfg, flowEngine.plugins)
 		if err != nil {
 			return err
 		}
-		flowEngine.rtCircuitBreakChan, flowEngine.circuitBreakTask, err = flowEngine.addPeriodicCircuitBreakTask()
-		if err != nil {
-			return err
+		if len(breakers) == 0 {
+			return fmt.Errorf("consumer.circuitBreaker.chain not set")
 		}
+		flowEngine.circuitBreakerFlow = newCircuitBreakerFlow(flowEngine, breakers[0])
 	}
 	flowEngine.watchEngine = NewWatchEngine(flowEngine.registry)
 	flowEngine.subscribe = &subscribeChannel{
@@ -258,6 +244,10 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 // GetContext 获取上下文
 func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
+}
+
+func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
+	return e.circuitBreakerFlow
 }
 
 // ServiceEventCallback serviceUpdate消息订阅回调

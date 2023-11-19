@@ -39,9 +39,7 @@ type ConfigGroupFlow struct {
 	configuration config.Configuration
 }
 
-func newConfigGroupFlow(connector configconnector.ConfigConnector,
-	configuration config.Configuration) (*ConfigGroupFlow, error) {
-
+func newConfigGroupFlow(connector configconnector.ConfigConnector, configuration config.Configuration) (*ConfigGroupFlow, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	groupFlow := &ConfigGroupFlow{

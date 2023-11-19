@@ -36,7 +36,8 @@ func (p *providerAPI) SDKContext() api.SDKContext {
 // RegisterInstance
 // minimum supported version of polaris-server is v1.10.0
 func (p *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	return p.rawAPI.RegisterInstance((*api.InstanceRegisterRequest)(instance))
+	instance.AutoHeartbeat = true
+	return p.rawAPI.Register((*api.InstanceRegisterRequest)(instance))
 }
 
 // Register

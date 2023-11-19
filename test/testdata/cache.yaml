@@ -42,22 +42,8 @@ consumer:
     plugin: {}
   circuitBreaker:
     enable: true
-    checkPeriod: 5s
-    requestCountAfterHalfOpen: 3
-    sleepWindow: 5s
-    successCountAfterHalfOpen: 2
     chain:
-      - errorCount
-      - errorRate
-    plugin:
-      errorCount:
-        continuousErrorThreshold: 10
-        metricStatTimeWindow: 1s
-      errorRate:
-        errorRateThreshold: 0.5
-        metricNumBuckets: 12
-        metricStatTimeWindow: 1m0s
-        requestVolumeThreshold: 10
+      - composite
   outlierDetection:
     enable: true
     checkPeriod: 10s
