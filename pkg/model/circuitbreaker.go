@@ -310,7 +310,7 @@ type ResponseContext struct {
 // InvokeHandler .
 type InvokeHandler interface {
 	// AcquirePermission .
-	AcquirePermission() (*CallAborted, error)
+	AcquirePermission() (bool, *CallAborted, error)
 	// OnSuccess .
 	OnSuccess(*ResponseContext)
 	// OnError .

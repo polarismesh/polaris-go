@@ -124,18 +124,19 @@ type DefaultFunctionalDecorator struct {
 
 func (df *DefaultFunctionalDecorator) Decorator(ctx context.Context, args interface{}) (interface{}, *model.CallAborted, error) {
 	invoke := df.invoke
-	aborted, err := invoke.AcquirePermission()
+	pass, aborted, err := invoke.AcquirePermission()
 	if err != nil {
 		return nil, nil, err
-	}
-	if aborted != nil {
-		return nil, aborted, nil
 	}
 	var (
 		ret   interface{}
 		start = time.Now()
 		cerr  error
 	)
+	if !pass {
+		cerr = aborted.GetError()
+		return nil, aborted, cerr
+	}
 
 	defer func() {
 		delay := time.Since(start)
@@ -166,15 +167,15 @@ type DefaultInvokeHandler struct {
 	reqCtx *model.RequestContext
 }
 
-func (h *DefaultInvokeHandler) AcquirePermission() (*model.CallAborted, error) {
+func (h *DefaultInvokeHandler) AcquirePermission() (bool, *model.CallAborted, error) {
 	check, err := h.commonCheck(h.reqCtx)
 	if err != nil {
-		return nil, err
+		return true, nil, err
 	}
 	if check != nil {
-		return model.NewCallAborted(model.ErrorCallAborted, check.RuleName, check.FallbackInfo), nil
+		return false, model.NewCallAborted(model.ErrorCallAborted, check.RuleName, check.FallbackInfo), nil
 	}
-	return nil, nil
+	return true, nil, nil
 }
 
 func (h *DefaultInvokeHandler) OnSuccess(respCtx *model.ResponseContext) {

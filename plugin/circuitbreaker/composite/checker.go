@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
+	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	pb "github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -108,7 +109,7 @@ func (c *ResourceHealthChecker) isStopped() bool {
 }
 
 func (c *ResourceHealthChecker) cleanInstances() {
-	curTimeMill := time.Now().UnixMilli()
+	curTimeMill := clock.CurrentMillis()
 	expireIntervalMill := c.instanceExpireIntervalMill
 
 	waitDel := make([]string, 0, 4)
@@ -214,7 +215,7 @@ func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record 
 		c.instances[res.GetNode().String()] = &ProtocolInstance{
 			protocol:        parseProtocol(res.GetProtocol()),
 			insRes:          res,
-			lastReportMilli: time.Now().UnixMilli(),
+			lastReportMilli: clock.CurrentMillis(),
 		}
 		return
 	}
@@ -282,7 +283,7 @@ func (p *ProtocolInstance) setCheckResult(v bool) {
 }
 
 func (p *ProtocolInstance) doReport() {
-	atomic.StoreInt64(&p.lastReportMilli, time.Now().UnixMilli())
+	atomic.StoreInt64(&p.lastReportMilli, clock.CurrentMillis())
 }
 
 func parseProtocol(s string) fault_tolerance.FaultDetectRule_Protocol {
