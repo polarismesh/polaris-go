@@ -31,11 +31,11 @@ func (c *circuitBreakerAPI) SDKContext() SDKContext {
 	return c.context
 }
 
-func (c *circuitBreakerAPI) Check(resource model.Resource)  (*model.CheckResult, error) {
+func (c *circuitBreakerAPI) Check(resource model.Resource) (*model.CheckResult, error) {
 	return c.context.GetEngine().Check(resource)
 }
 
-func (c *circuitBreakerAPI) Report(reportStat *model.ResourceStat)  error {
+func (c *circuitBreakerAPI) Report(reportStat *model.ResourceStat) error {
 	return c.context.GetEngine().Report(reportStat)
 }
 

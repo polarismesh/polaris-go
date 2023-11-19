@@ -45,9 +45,9 @@ type SvcPluginValues struct {
 
 // ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
-	service      *apiservice.Service
-	notExists    bool
-	instances    []model.Instance
+	service   *apiservice.Service
+	notExists bool
+	instances []model.Instance
 	// instancesMap instanceId -> model.Instance
 	instancesMap map[string]model.Instance
 	// endpointMapping host:port -> instanceId

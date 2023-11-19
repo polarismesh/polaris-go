@@ -21,8 +21,9 @@ package configconnector
 import (
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/specification/source/go/api/v1/config_manage"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // ConfigFileResponse 配置文件响应体

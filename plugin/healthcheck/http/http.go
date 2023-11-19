@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -29,7 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
-	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // Detector TCP协议的实例健康探测器

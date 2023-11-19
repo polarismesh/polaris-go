@@ -77,7 +77,7 @@ func (e *TaskExecutor) AffinityExecute(key string, f func()) {
 	h.Write([]byte(key))
 	ret := h.Sum64()
 
-	index := int(ret % uint64(len(e.workers) - 1))
+	index := int(ret % uint64(len(e.workers)-1))
 	e.workers[index].add(f)
 }
 
@@ -86,7 +86,7 @@ func (e *TaskExecutor) AffinityDelayExecute(key string, delay time.Duration, f f
 	h.Write([]byte(key))
 	ret := h.Sum64()
 
-	index := int(ret % uint64(len(e.workers) - 1))
+	index := int(ret % uint64(len(e.workers)-1))
 	e.workers[index].addDelay(delay, f, false)
 }
 

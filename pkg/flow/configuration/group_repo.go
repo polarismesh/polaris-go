@@ -23,11 +23,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"go.uber.org/zap"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-	"go.uber.org/zap"
 )
 
 // ConfigGroupRepo 服务端配置文件代理类，从服务端拉取配置并同步数据

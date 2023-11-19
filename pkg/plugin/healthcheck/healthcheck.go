@@ -20,10 +20,11 @@ package healthcheck
 import (
 	"time"
 
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 )
 
 // HealthChecker 【扩展点接口】主动健康探测策略

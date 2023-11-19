@@ -265,7 +265,6 @@ func GetCircuitBreakerEventLogger() Logger {
 	return logContainer.GetStatLogger()
 }
 
-
 // GetStatReportLogger 获取统计上报日志对象
 func GetStatReportLogger() Logger {
 	return logContainer.GetStatReportLogger()
