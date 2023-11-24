@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/bbr/cpu"
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/bbr/window"
 	"math"
@@ -21,18 +22,16 @@ type (
 	Option func(*options)
 )
 
-func init() {
-	go collectCPUStat()
-}
-
-// collectCPUStat 定期采集并更新 CPU 使用率等指标
+// CollectCPUStat 定期采集并更新 CPU 使用率等指标
 // cpu = cpuᵗ⁻¹ * decay + cpuᵗ * (1 - decay)
-func collectCPUStat() {
+func CollectCPUStat() {
 	ticker := time.NewTicker(time.Millisecond * 500) // same to cpu sample rate
 	defer func() {
 		ticker.Stop()
-		if err := recover(); err != nil {
-			go collectCPUStat()
+		if r := recover(); r != nil {
+			buf := make([]byte, 1<<18)
+			n := runtime.Stack(buf, false)
+			log.GetBaseLogger().Errorf("bbr limiter panic recovered: %v.\nruntime stack: %s", r, buf[0:n])
 		}
 	}()
 

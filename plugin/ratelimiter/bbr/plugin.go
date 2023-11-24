@@ -6,6 +6,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
+	"github.com/polarismesh/polaris-go/plugin/ratelimiter/bbr/core"
 )
 
 // BBRPlugin 基于 CPU BBR 策略的限流控制器
@@ -26,6 +27,7 @@ func (g *BBRPlugin) Name() string {
 // Init 初始化插件
 func (g *BBRPlugin) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
+	go core.CollectCPUStat()
 	return nil
 }
 

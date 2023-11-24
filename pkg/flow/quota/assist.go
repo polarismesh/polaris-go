@@ -263,14 +263,16 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		if quotaResult == nil {
 			continue
 		}
-		for i := range quotaResult.ReleaseFuncs {
-			releaseFuncs = append(releaseFuncs, quotaResult.ReleaseFuncs[i])
+		for _, releaseFunc := range quotaResult.ReleaseFuncs {
+			if releaseFunc != nil {
+				releaseFuncs = append(releaseFuncs, releaseFunc)
+			}
 		}
 		// 触发限流，提前返回
 		if quotaResult.Code == model.QuotaResultLimited {
 			// 先释放资源
 			for i := range releaseFuncs {
-				releaseFuncs[i](0)
+				releaseFuncs[i]()
 			}
 			return model.QuotaFutureWithResponse(quotaResult), nil
 		}
