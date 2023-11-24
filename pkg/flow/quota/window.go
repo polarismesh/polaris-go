@@ -608,15 +608,6 @@ func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitReque
 	return r.trafficShapingBucket.GetQuota(curTimeMs, commonRequest.Token)
 }
 
-// AllocateQuotaWithRelease 分配配额，并返回释放资源函数
-func (r *RateLimitWindow) AllocateQuotaWithRelease(commonRequest *data.CommonRateLimitRequest) (*model.QuotaResponse, func()) {
-	nowMilli := model.CurrentMillisecond()
-	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
-	// 获取服务端时间
-	curTimeMs := r.toServerTimeMilli(nowMilli)
-	return r.trafficShapingBucket.GetQuotaWithRelease(curTimeMs, commonRequest.Token)
-}
-
 // GetLastAccessTimeMilli 获取最近访问时间
 func (r *RateLimitWindow) GetLastAccessTimeMilli() int64 {
 	return atomic.LoadInt64(&r.lastAccessTimeMilli)

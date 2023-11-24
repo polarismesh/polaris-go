@@ -1,19 +1,32 @@
+/**
+ * Tencent is pleased to support the open source community by making polaris-go available.
+ *
+ * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
+ *
+ * Licensed under the BSD 3-Clause License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://opensource.org/licenses/BSD-3-Clause
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed
+ * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
+
 package bbr
 
 import (
-	"sort"
-
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/bbr/core"
+	"sort"
 
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 )
 
 var (
-	allowResp = &model.QuotaResponse{
-		Code: model.QuotaResultOk,
-	}
 	denyResp = &model.QuotaResponse{
 		Code: model.QuotaResultLimited,
 	}
@@ -26,20 +39,18 @@ type BBRQuotaBucket struct {
 
 // GetQuota 获取限额
 func (b *BBRQuotaBucket) GetQuota(_ int64, _ uint32) *model.QuotaResponse {
-	return nil
-}
-
-// GetQuotaWithRelease 判断是否限流，并返回释放资源函数
-func (b *BBRQuotaBucket) GetQuotaWithRelease(_ int64, _ uint32) (*model.QuotaResponse, func()) {
 	release, allow := b.BBR.Allow()
 	if allow {
-		return allowResp, release
+		return &model.QuotaResponse{
+			Code:         model.QuotaResultOk,
+			ReleaseFuncs: []model.ReleaseFunc{release},
+		}
 	}
-	return denyResp, nil
+	return denyResp
 }
 
-// Release 释放资源
-func (b *BBRQuotaBucket) Release() {
+// Release 释放配额（仅对于并发数限流有用）
+func (l *BBRQuotaBucket) Release() {
 
 }
 
