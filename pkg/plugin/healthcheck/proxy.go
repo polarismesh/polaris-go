@@ -38,8 +38,8 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 }
 
 // DetectInstance proxy HealthChecker DetectInstance
-func (p *Proxy) DetectInstance(inst model.Instance) (DetectResult, error) {
-	result, err := p.HealthChecker.DetectInstance(inst)
+func (p *Proxy) DetectInstance(inst model.Instance, rule *fault_tolerance.FaultDetectRule) (DetectResult, error) {
+	result, err := p.HealthChecker.DetectInstance(inst, rule)
 	return result, err
 }
 

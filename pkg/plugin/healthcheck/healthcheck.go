@@ -31,7 +31,7 @@ import (
 type HealthChecker interface {
 	plugin.Plugin
 	// DetectInstance 对单个实例进行探测，返回探测结果, 每个探测方法自己去判断当前周期是否需要探测，如果无需探测，则返回nil
-	DetectInstance(model.Instance) (DetectResult, error)
+	DetectInstance(model.Instance, *fault_tolerance.FaultDetectRule) (DetectResult, error)
 	// Protocol .
 	Protocol() fault_tolerance.FaultDetectRule_Protocol
 }
@@ -57,9 +57,7 @@ type DetectResultImp struct {
 	Success        bool
 	DetectTime     time.Time      // 探测时间
 	DetectInstance model.Instance // 探测的实例
-	delay          time.Duration
-	code           string
-	status         model.RetStatus
+	Code           string
 }
 
 // IsSuccess 探测类型，与探测插件名相同
@@ -79,16 +77,19 @@ func (r *DetectResultImp) GetDetectInstance() model.Instance {
 
 // GetCode() return code
 func (r *DetectResultImp) GetCode() string {
-	return r.code
+	return r.Code
 }
 
 // GetDelay
 func (r *DetectResultImp) GetDelay() time.Duration {
-	return r.delay
+	return time.Since(r.GetDetectTime())
 }
 
 func (r *DetectResultImp) GetRetStatus() model.RetStatus {
-	return r.status
+	if r.IsSuccess() {
+		return model.RetSuccess
+	}
+	return model.RetFail
 }
 
 // init 初始化

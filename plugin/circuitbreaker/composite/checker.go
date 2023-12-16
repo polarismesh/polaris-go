@@ -191,7 +191,7 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 			ins.GetHost(), ins.GetPort(), c.resource.String(), protocol.String())
 		return false
 	}
-	ret, err := checker.DetectInstance(ins)
+	ret, err := checker.DetectInstance(ins, rule)
 	if err != nil {
 		return false
 	}
