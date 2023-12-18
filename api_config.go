@@ -69,8 +69,13 @@ func NewConfigAPIByContext(context api.SDKContext) ConfigAPI {
 }
 
 // GetConfigFile 获取配置文件
-func (c *configAPI) GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error) {
+func (c *configAPI) GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
 	return c.rawAPI.GetConfigFile(namespace, fileGroup, fileName)
+}
+
+// FetchConfigFile .
+func (c *configAPI) FetchConfigFile(req *GetConfigFileRequest) (model.ConfigFile, error) {
+	return c.rawAPI.FetchConfigFile((*api.GetConfigFileRequest)(req))
 }
 
 // CreateConfigFile 创建配置文件

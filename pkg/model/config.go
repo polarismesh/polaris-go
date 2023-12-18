@@ -79,6 +79,8 @@ type ConfigFileMetadata interface {
 // ConfigFile 文本类型配置文件对象
 type ConfigFile interface {
 	ConfigFileMetadata
+	// GetLabels 获取配置文件标签
+	GetLabels() map[string]string
 	// GetContent 获取配置文件内容
 	GetContent() string
 	// HasContent 是否有配置内容
