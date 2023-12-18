@@ -117,3 +117,10 @@ type ConfigFileGroup interface {
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigGroupChange)
 }
+
+type GetConfigFileRequest struct {
+	Namespace string
+	FileGroup string
+	FileName  string
+	Subscribe bool
+}

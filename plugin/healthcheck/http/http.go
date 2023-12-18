@@ -18,8 +18,12 @@
 package http
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"net/http"
-	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
@@ -30,14 +34,18 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
-	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
 )
+
+type HttpSender interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 // Detector TCP协议的实例健康探测器
 type Detector struct {
 	*plugin.PluginBase
 	cfg     *Config
 	timeout time.Duration
+	client  HttpSender
 }
 
 // Type 插件类型
@@ -57,6 +65,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 	if cfgValue != nil {
 		g.cfg = cfgValue.(*Config)
 	}
+	g.client = &http.Client{}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
 	return nil
 }
@@ -67,15 +76,26 @@ func (g *Detector) Destroy() error {
 }
 
 // DetectInstance 探测服务实例健康
-func (g *Detector) DetectInstance(ins model.Instance) (result healthcheck.DetectResult, err error) {
+func (g *Detector) DetectInstance(ins model.Instance, rule *fault_tolerance.FaultDetectRule) (result healthcheck.DetectResult, err error) {
 	start := time.Now()
+	timeout := g.timeout
+	if rule != nil && rule.Protocol == fault_tolerance.FaultDetectRule_HTTP {
+		timeout = time.Duration(rule.GetTimeout()) * time.Millisecond
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	// 得到Http address
-	address := utils.GetAddressByInstance(ins)
-	success := g.doHttpDetect(address)
+	detReq, err := g.generateHttpRequest(ctx, ins, rule)
+	if err != nil {
+		return nil, err
+	}
+	code, success := g.doHttpDetect(detReq, rule)
 	result = &healthcheck.DetectResultImp{
 		Success:        success,
 		DetectTime:     start,
 		DetectInstance: ins,
+		Code:           code,
 	}
 	return result, nil
 }
@@ -86,48 +106,64 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 }
 
 // doHttpDetect 执行一次健康探测逻辑
-func (g *Detector) doHttpDetect(address string) bool {
-	c := &http.Client{
-		Timeout: g.timeout,
-	}
-	request := &http.Request{
-		Method: http.MethodGet,
-		URL: &url.URL{
-			Scheme: "http",
-			Host:   address,
-			Path:   g.cfg.Path,
-		},
-	}
-	header := http.Header{}
-	if len(g.cfg.Host) > 0 {
-		header.Add("Host", g.cfg.Host)
-	}
-	if len(g.cfg.RequestHeadersToAdd) > 0 {
-		for _, requestHeader := range g.cfg.RequestHeadersToAdd {
-			header.Add(requestHeader.Key, requestHeader.Value)
-		}
-	}
-	if len(header) > 0 {
-		request.Header = header
-	}
-	resp, err := c.Do(request)
+func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.FaultDetectRule) (string, bool) {
+	resp, err := g.client.Do(detReq)
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %s, err is %v", address, err)
-		return false
+		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+		return "", false
 	}
 	defer resp.Body.Close()
-	code := resp.StatusCode
-	for _, statusCodeRange := range g.cfg.ExpectedStatuses {
-		if code >= statusCodeRange.Start && code < statusCodeRange.End {
-			return true
-		}
+	if code := resp.StatusCode; code >= 200 && code < 500 {
+		return strconv.Itoa(resp.StatusCode), true
 	}
-	return false
+	return strconv.Itoa(resp.StatusCode), false
 }
 
 // Protocol .
 func (g *Detector) Protocol() fault_tolerance.FaultDetectRule_Protocol {
 	return fault_tolerance.FaultDetectRule_HTTP
+}
+
+func (g *Detector) generateHttpRequest(ctx context.Context, ins model.Instance, rule *fault_tolerance.FaultDetectRule) (*http.Request, error) {
+	var (
+		address   string
+		customUrl = g.cfg.Path
+		port      = ins.GetPort()
+	)
+	header := http.Header{}
+	if rule == nil {
+		customUrl = strings.TrimPrefix(customUrl, "/")
+		if len(g.cfg.Host) > 0 {
+			header.Add("Host", g.cfg.Host)
+		}
+		if len(g.cfg.RequestHeadersToAdd) > 0 {
+			for _, requestHeader := range g.cfg.RequestHeadersToAdd {
+				header.Add(requestHeader.Key, requestHeader.Value)
+			}
+		}
+	} else {
+		if rule.GetPort() > 0 {
+			port = rule.Port
+		}
+		customUrl = rule.GetHttpConfig().GetUrl()
+		customUrl = strings.TrimPrefix(customUrl, "/")
+		ruleHeaders := rule.GetHttpConfig().GetHeaders()
+		for i := range ruleHeaders {
+			header.Add(ruleHeaders[i].Key, ruleHeaders[i].Value)
+		}
+	}
+	address = fmt.Sprintf("http://%s:%d/%s", ins.GetHost(), port, customUrl)
+
+	request, err := http.NewRequestWithContext(ctx, rule.GetHttpConfig().Method, address, bytes.NewBufferString(rule.HttpConfig.GetBody()))
+	if err != nil {
+		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		return nil, err
+	}
+
+	if len(header) > 0 {
+		request.Header = header
+	}
+	return request, nil
 }
 
 // init 注册插件信息

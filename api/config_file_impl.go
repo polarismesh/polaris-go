@@ -54,7 +54,17 @@ func newConfigFileAPIBySDKContext(context SDKContext) ConfigFileAPI {
 
 // GetConfigFile 获取配置文件
 func (c *configFileAPI) GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
-	return c.context.GetEngine().SyncGetConfigFile(namespace, fileGroup, fileName)
+	return c.context.GetEngine().SyncGetConfigFile(&model.GetConfigFileRequest{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+		Subscribe: true,
+	})
+}
+
+// FetchConfigFile 获取配置文件
+func (c *configFileAPI) FetchConfigFile(req *GetConfigFileRequest) (model.ConfigFile, error) {
+	return c.context.GetEngine().SyncGetConfigFile(req.GetConfigFileRequest)
 }
 
 // CreateConfigFile 创建配置文件

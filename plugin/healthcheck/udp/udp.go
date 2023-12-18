@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package tcp
+package udp
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 )
 
-// Detector TCP协议的实例健康探测器
+// Detector UDP 协议的实例健康探测器
 type Detector struct {
 	*plugin.PluginBase
 	cfg                 *Config
@@ -76,58 +76,50 @@ func (g *Detector) DetectInstance(ins model.Instance, rule *fault_tolerance.Faul
 	if rule != nil && rule.GetPort() > 0 {
 		address = fmt.Sprintf("%s:%d", ins.GetHost(), rule.GetPort())
 	}
-	success := g.doTCPDetect(address, rule)
+	success := g.doUDPDetect(address, rule)
 	result = &healthcheck.DetectResultImp{
 		Success:        success,
 		DetectTime:     start,
 		DetectInstance: ins,
-		Code: func() string {
-			if success {
-				return "0"
-			}
-			return "-1"
-		}(),
 	}
 	return result, nil
 }
 
 // doTCPDetect 执行一次探测逻辑
-func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetectRule) bool {
+func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetectRule) bool {
 	timeout := g.timeout
 	if rule != nil {
 		timeout = time.Duration(rule.GetTimeout()) * time.Millisecond
 	}
 	// 建立连接
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := net.DialTimeout("udp", address, timeout)
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to check %s, err is %v", address, err)
 		return false
 	}
 	defer func() {
 		_ = conn.Close()
 	}()
-	if rule == nil || rule.GetTcpConfig() == nil {
+	if rule == nil || rule.GetUdpConfig() == nil {
 		return true
 	}
-	// 发送数据
-	tcpCfg := rule.GetTcpConfig()
-	if tcpCfg.Send == "" {
+	udpCfg := rule.GetUdpConfig()
+	if udpCfg.Send == "" {
 		return true
 	}
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return false
-	}
-	if _, err = conn.Write([]byte(tcpCfg.Send)); err != nil {
+	if _, err = conn.Write([]byte(udpCfg.Send)); err != nil {
+		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to write send body %s, err is %v", address, err)
 		return false
 	}
 	recvData, err := ioutil.ReadAll(conn)
 	if err != nil && err != io.EOF {
+		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to read receive data %s, err is %v", address, err)
 		return false
 	}
 	actualData := string(recvData)
 	found := false
-	for i := range tcpCfg.Receive {
-		if tcpCfg.Receive[i] == actualData {
+	for i := range udpCfg.Receive {
+		if udpCfg.Receive[i] == actualData {
 			found = true
 		}
 	}
@@ -136,7 +128,7 @@ func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetect
 
 // Protocol .
 func (g *Detector) Protocol() fault_tolerance.FaultDetectRule_Protocol {
-	return fault_tolerance.FaultDetectRule_TCP
+	return fault_tolerance.FaultDetectRule_UDP
 }
 
 // IsEnable enable

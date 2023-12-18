@@ -19,11 +19,18 @@ package api
 
 import "github.com/polarismesh/polaris-go/pkg/model"
 
+type GetConfigFileRequest struct {
+	*model.GetConfigFileRequest
+}
+
 // ConfigFileAPI 配置文件的 API
 type ConfigFileAPI interface {
 	SDKOwner
+	// Deprecated: please use FetchConfigFile
 	// GetConfigFile 获取配置文件
 	GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error)
+	// FetchConfigFile 获取配置文件
+	FetchConfigFile(*GetConfigFileRequest) (model.ConfigFile, error)
 	// CreateConfigFile 创建配置文件
 	CreateConfigFile(namespace, fileGroup, fileName, content string) error
 	// UpdateConfigFile 更新配置文件
