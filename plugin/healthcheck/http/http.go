@@ -36,12 +36,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 )
 
+type HttpSender interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // Detector TCP协议的实例健康探测器
 type Detector struct {
 	*plugin.PluginBase
 	cfg     *Config
 	timeout time.Duration
-	client  *http.Client
+	client  HttpSender
 }
 
 // Type 插件类型
@@ -148,7 +152,7 @@ func (g *Detector) generateHttpRequest(ctx context.Context, ins model.Instance, 
 			header.Add(ruleHeaders[i].Key, ruleHeaders[i].Value)
 		}
 	}
-	address = fmt.Sprintf("http://%s:%d", ins.GetHost(), port, customUrl)
+	address = fmt.Sprintf("http://%s:%d/%s", ins.GetHost(), port, customUrl)
 
 	request, err := http.NewRequestWithContext(ctx, rule.GetHttpConfig().Method, address, bytes.NewBufferString(rule.HttpConfig.GetBody()))
 	if err != nil {

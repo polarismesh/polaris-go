@@ -109,7 +109,7 @@ type Engine interface {
 	// InitCalleeService 所需的被调初始化
 	InitCalleeService(req *InitCalleeServiceRequest) error
 	// SyncGetConfigFile 同步获取配置文件
-	SyncGetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+	SyncGetConfigFile(req *GetConfigFileRequest) (ConfigFile, error)
 	// SyncGetConfigGroup 同步获取配置文件
 	SyncGetConfigGroup(namespace, fileGroup string) (ConfigFileGroup, error)
 	// SyncCreateConfigFile 同步创建配置文件

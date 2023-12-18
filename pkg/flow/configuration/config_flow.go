@@ -87,11 +87,11 @@ func (c *ConfigFileFlow) Destroy() {
 }
 
 // GetConfigFile 获取配置文件
-func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.ConfigFile, error) {
 	configFileMetadata := &model.DefaultConfigFileMetadata{
-		Namespace: namespace,
-		FileGroup: fileGroup,
-		FileName:  fileName,
+		Namespace: req.Namespace,
+		FileGroup: req.FileGroup,
+		FileName:  req.FileName,
 	}
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
@@ -116,11 +116,13 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 	if err != nil {
 		return nil, err
 	}
-	c.addConfigFileToLongPollingPool(fileRepo)
-	c.repos = append(c.repos, fileRepo)
-
 	configFile = newDefaultConfigFile(configFileMetadata, fileRepo)
-	c.configFileCache[cacheKey] = configFile
+
+	if req.Subscribe {
+		c.addConfigFileToLongPollingPool(fileRepo)
+		c.repos = append(c.repos, fileRepo)
+		c.configFileCache[cacheKey] = configFile
+	}
 	return configFile, nil
 }
 

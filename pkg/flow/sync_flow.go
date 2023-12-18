@@ -594,8 +594,8 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 }
 
 // SyncGetConfigFile 同步获取配置文件
-func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
-	return e.configFlow.GetConfigFile(namespace, fileGroup, fileName)
+func (e *Engine) SyncGetConfigFile(req *model.GetConfigFileRequest) (model.ConfigFile, error) {
+	return e.configFlow.GetConfigFile(req)
 }
 
 // SyncGetConfigGroup 同步获取配置文件
