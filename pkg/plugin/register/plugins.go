@@ -36,6 +36,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/configfilter/crypto/aes"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/http"
 	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/tcp"
+	_ "github.com/polarismesh/polaris-go/plugin/healthcheck/udp"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/hash"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/maglev"
 	_ "github.com/polarismesh/polaris-go/plugin/loadbalancer/ringhash"

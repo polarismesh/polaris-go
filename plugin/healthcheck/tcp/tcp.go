@@ -81,7 +81,7 @@ func (g *Detector) DetectInstance(ins model.Instance, rule *fault_tolerance.Faul
 		Success:        success,
 		DetectTime:     start,
 		DetectInstance: ins,
-		Code: func () string {
+		Code: func() string {
 			if success {
 				return "0"
 			}
