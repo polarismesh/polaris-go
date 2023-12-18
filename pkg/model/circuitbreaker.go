@@ -134,15 +134,6 @@ func (r *InstanceResource) String() string {
 		r.service.String(), callerSvc.String())
 }
 
-func (r *InstanceResource) String() string {
-	callerSvc := r.callerService
-	if callerSvc == nil {
-		callerSvc = EmptyServiceKey
-	}
-	return fmt.Sprintf("level=%s|instance=%s|service=%s|caller=%s", r.level.String(), r.node.String(),
-		r.service.String(), callerSvc.String())
-}
-
 func NewInstanceResource(svc, caller *ServiceKey, protocol, host string, port uint32) (*InstanceResource, error) {
 	if host == "" {
 		return nil, errors.New("host can not be empty")
