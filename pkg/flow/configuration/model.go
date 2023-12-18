@@ -49,6 +49,15 @@ func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *ConfigFileRep
 	return configFile
 }
 
+// GetLabels 获取标签
+func (c *defaultConfigFile) GetLabels() map[string]string {
+	remote := c.fileRepo.loadRemoteFile()
+	if remote == nil {
+		return map[string]string{}
+	}
+	return remote.GetLabels()
+}
+
 // GetContent 获取配置文件内容
 func (c *defaultConfigFile) GetContent() string {
 	if c.content == NotExistedFileContent {

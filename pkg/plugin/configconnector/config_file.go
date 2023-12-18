@@ -73,6 +73,14 @@ type ConfigFileTag struct {
 	Value string
 }
 
+func (c *ConfigFile) GetLabels() map[string]string {
+	ret := make(map[string]string, len(c.Tags))
+	for i := range c.Tags {
+		ret[c.Tags[i].Key] = c.Tags[i].Value
+	}
+	return ret
+}
+
 // GetNamespace 获取配置文件命名空间
 func (c *ConfigFile) GetNamespace() string {
 	return c.Namespace

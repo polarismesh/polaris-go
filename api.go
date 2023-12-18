@@ -131,14 +131,19 @@ func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
 
+type GetConfigFileRequest api.GetConfigFileRequest
+
 // ConfigFile config
 type ConfigFile model.ConfigFile
 
 // ConfigAPI api for configuration files.
 type ConfigAPI interface {
 	api.SDKOwner
-	// GetConfigFile obtaining the configuration file
-	GetConfigFile(namespace, fileGroup, fileName string) (ConfigFile, error)
+	// Deprecated: please use FetchConfigFile
+	// GetConfigFile 获取配置文件
+	GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error)
+	// FetchConfigFile 获取配置文件
+	FetchConfigFile(*GetConfigFileRequest) (model.ConfigFile, error)
 	// CreateConfigFile create configuration file
 	CreateConfigFile(namespace, fileGroup, fileName, content string) error
 	// UpdateConfigFile update configuration file
