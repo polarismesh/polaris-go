@@ -21,16 +21,14 @@ type CPU interface {
 	Info() Info
 }
 
-func init() {
-	var (
-		err error
-	)
+func Init() error {
+	var err error
 	stats, err = newCgroupCPU()
 	if err != nil {
 		// fmt.Printf("cgroup cpu init failed(%v),switch to psutil cpu\n", err)
 		stats, err = newPsutilCPU(interval)
 		if err != nil {
-			panic(fmt.Sprintf("cgroup cpu init failed!err:=%v", err))
+			return fmt.Errorf("cgroup cpu init failed. err: %w", err)
 		}
 	}
 	go func() {
@@ -44,6 +42,7 @@ func init() {
 			}
 		}
 	}()
+	return nil
 }
 
 // Stat cpu stat.
