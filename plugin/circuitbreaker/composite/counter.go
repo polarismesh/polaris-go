@@ -122,8 +122,8 @@ func (rc *ResourceCounters) CurrentActiveRule() *fault_tolerance.CircuitBreakerR
 }
 
 func (rc *ResourceCounters) updateCircuitBreakerStatus(status model.CircuitBreakerStatus) {
-	rc.statusRef.Store(&circuitBreakerStatusWrapper{
-		val: status,
+	rc.statusRef.Store(&model.CircuitBreakerStatusWrapper{
+		Val: status,
 	})
 }
 
@@ -132,8 +132,10 @@ func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.CircuitBreakerSt
 	if val == nil {
 		return nil
 	}
-	wrapper := val.(circuitBreakerStatusWrapper)
-	return wrapper.val
+	if wrapper, ok := val.(*model.CircuitBreakerStatusWrapper); ok {
+		return wrapper.Val
+	}
+	return nil
 }
 
 func (rc *ResourceCounters) CloseToOpen(breaker string) {
@@ -303,8 +305,4 @@ func buildFallbackInfo(rule *fault_tolerance.CircuitBreakerRule) *model.Fallback
 		ret.Headers[header.Key] = header.Value
 	}
 	return ret
-}
-
-type circuitBreakerStatusWrapper struct {
-	val model.CircuitBreakerStatus
 }

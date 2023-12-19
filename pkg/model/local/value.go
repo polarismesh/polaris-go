@@ -82,7 +82,7 @@ func (lv *DefaultInstanceLocalValue) SetSliceWindows(pluginIndex int32, windows 
 
 // SetCircuitBreakerStatus 设置熔断信息
 func (lv *DefaultInstanceLocalValue) SetCircuitBreakerStatus(st model.CircuitBreakerStatus) {
-	lv.cbStatus.Store(st)
+	lv.cbStatus.Store(model.CircuitBreakerStatusWrapper{Val: st})
 }
 
 // SetActiveDetectStatus 设置健康检测信息
@@ -96,7 +96,10 @@ func (lv *DefaultInstanceLocalValue) GetCircuitBreakerStatus() model.CircuitBrea
 	if nil == res {
 		return nil
 	}
-	return res.(model.CircuitBreakerStatus)
+	if wrapper, ok := res.(model.CircuitBreakerStatusWrapper); ok {
+		return wrapper.Val.(model.CircuitBreakerStatus)
+	}
+	return nil
 }
 
 // GetActiveDetectStatus 返回健康检测信息

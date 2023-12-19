@@ -19,8 +19,10 @@ package composite
 
 import (
 	"context"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"hash/fnv"
 	"math/rand"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -102,6 +104,14 @@ type worker struct {
 	delayQueue sync.Map
 }
 
+func recovery() {
+	if r := recover(); r != nil {
+		buf := make([]byte, 1<<18)
+		n := runtime.Stack(buf, false)
+		log.GetBaseLogger().Errorf("[CircuitBreaker] panic recovered: %v\nruntime stack: %s", r, buf[0:n])
+	}
+}
+
 func (w *worker) add(f func()) {
 	w.lock.RLock()
 	defer w.lock.RUnlock()
@@ -111,11 +121,7 @@ func (w *worker) add(f func()) {
 	}
 
 	w.queue <- func() {
-		defer func() {
-			if err := recover(); err != nil {
-				panic(err)
-			}
-		}()
+		defer recovery()
 		f()
 	}
 }
@@ -129,11 +135,7 @@ func (w *worker) addDelay(delay time.Duration, f func(), isInterval bool) {
 	}
 
 	wf := func() {
-		defer func() {
-			if err := recover(); err != nil {
-				// do nothing
-			}
-		}()
+		defer recovery()
 		f()
 	}
 
