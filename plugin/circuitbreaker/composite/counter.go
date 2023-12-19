@@ -132,8 +132,10 @@ func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.CircuitBreakerSt
 	if val == nil {
 		return nil
 	}
-	wrapper := val.(*model.CircuitBreakerStatusWrapper)
-	return wrapper.Val
+	if wrapper, ok := val.(*model.CircuitBreakerStatusWrapper); ok {
+		return wrapper.Val
+	}
+	return nil
 }
 
 func (rc *ResourceCounters) CloseToOpen(breaker string) {
