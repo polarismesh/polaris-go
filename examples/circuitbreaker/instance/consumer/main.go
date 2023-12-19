@@ -56,6 +56,23 @@ func (svr *PolarisConsumer) Run() {
 }
 
 func (svr *PolarisConsumer) discoverInstance() (string, model.Resource, error) {
+	req := &polaris.GetInstancesRequest{}
+	req.Namespace = namespace
+	req.Service = service
+
+	instancesResp, err := svr.consumer.GetInstances(req)
+	if err != nil {
+		log.Printf("[error] fail to getInstances, err is %v", err)
+		return "", nil, err
+	}
+	for _, ins := range instancesResp.GetInstances() {
+		cbStatus := "close"
+		if ins.GetCircuitBreakerStatus() != nil {
+			cbStatus = ins.GetCircuitBreakerStatus().GetStatus().String()
+		}
+		log.Printf("%s:%d. cb status: %s", ins.GetHost(), ins.GetPort(), cbStatus)
+	}
+
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = namespace
 	getOneRequest.Service = service

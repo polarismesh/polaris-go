@@ -199,6 +199,11 @@ type CircuitBreakerStatus interface {
 	SetFallbackInfo(*FallbackInfo)
 }
 
+// CircuitBreakerStatusWrapper 上方熔断管理器的包装，用于存入 atomic.Value
+type CircuitBreakerStatusWrapper struct {
+	Val CircuitBreakerStatus
+}
+
 // Status 断路器状态
 type Status int
 
