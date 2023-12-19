@@ -105,3 +105,6 @@ Hello, I'm CircuitBreakerEchoServer Provider, My host : 27.0.0.1:9999
 ...
 Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
 ```
+
+可启动 provider 两次，使北极星上有两个 CircuitBreakerEchoServer 服务（其中一个正常，一个不正常）
+然后启动 consumer，并通过 webUI 访问 http://localhost:18080/echo 接口，观察控制台输出，判断路由结果是否正确
