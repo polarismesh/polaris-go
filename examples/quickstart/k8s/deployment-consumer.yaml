@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  namespace: examples-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      containers:
+        - image: polarismesh/examples-go-consumer:latest
+          imagePullPolicy: Always
+          name: polaris-consumer
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 1000Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /root/polaris.yaml
+              name: polaris-consumer-config
+              subPath: polaris.yaml
+      restartPolicy: Always
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: polaris-consumer-config
+          name: polaris-consumer-config

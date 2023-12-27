@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider
+  namespace: examples-go
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: provider
+  template:
+    metadata:
+      labels:
+        app: provider
+    spec:
+      containers:
+      - image: polarismesh/examples-go-provider:latest
+        imagePullPolicy: Always
+        name: polaris-provider
+        env:
+        - name: INSTANCE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: INSTANCE_PORT
+          value: "28080"
+        - name: "INSTANCE_SERVICE"
+          value: "DiscoverEchoServer"
+        - name: "INSTANCE_NAMESPACE"
+          value: "default"
+        - name: "POLARIS_OPEN_API"
+          value: ""
+        - name: "POLARIS_TOKEN"
+          value: ""
+        resources:
+          limits:
+            cpu: "500m"
+            memory: 1000Mi
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/bash", "-c", "cd /root; bash ./isolate.sh; sleep 30; exit 0;"]
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /root/polaris.yaml
+          name: polaris-provider-config
+          subPath: polaris.yaml
+      restartPolicy: Always
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: polaris-provider-config
+        name: polaris-provider-config
