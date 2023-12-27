@@ -43,7 +43,8 @@ type SelectStatus struct {
 
 // ChooseInstance proxy LoadBalancer ChooseInstance
 func (p *Proxy) ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error) {
-	// 第一次进行负载均衡，包括半开实例
+	// 包括处于半开的实例
+	criteria.Cluster.IncludeHalfOpen = true
 	result, err := p.LoadBalancer.ChooseInstance(criteria, instances)
 	return result, err
 }
