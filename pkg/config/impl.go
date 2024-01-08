@@ -64,6 +64,7 @@ type GlobalConfigImpl struct {
 	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector" json:"serverConnector"`
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
 	Location        *LocationConfigImpl        `yaml:"location" json:"location"`
+	Client          *ClientConfigImpl          `yaml:"client" json:"client"`
 }
 
 // GetSystem 获取系统配置.
@@ -89,6 +90,11 @@ func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 // GetLocation cl5.global.location前缀开头的所有配置项.
 func (g *GlobalConfigImpl) GetLocation() LocationConfig {
 	return g.Location
+}
+
+// GetClient global.client前缀开头的所有配置项.
+func (g *GlobalConfigImpl) GetClient() ClientConfig {
+	return g.Client
 }
 
 // ConsumerConfigImpl 消费者配置.

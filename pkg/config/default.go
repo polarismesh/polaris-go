@@ -461,6 +461,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.StatReporter.Init()
 	g.Location = &LocationConfigImpl{}
 	g.Location.Init()
+	g.Client = &ClientConfigImpl{}
+	g.Client.Init()
 }
 
 // Init 初始化ConsumerConfigImpl.
@@ -615,4 +617,52 @@ func (s *ServerClusterConfigImpl) Verify() error {
 			fmt.Errorf("refreshInterval can not be empty and must greater than %v", DefaultMinTimingInterval))
 	}
 	return errs
+}
+
+type ClientConfigImpl struct {
+	ID     string            `yaml:"id" json:"id"`
+	Labels map[string]string `yaml:"labels" json:"labels"`
+}
+
+// Init 初始化
+func (c *ClientConfigImpl) Init() {
+}
+
+func (c *ClientConfigImpl) SetId(id string) {
+	c.ID = id
+}
+
+func (c *ClientConfigImpl) GetId() string {
+	return c.ID
+}
+
+func (c *ClientConfigImpl) SetLabels(m map[string]string) {
+	c.Labels = m
+}
+
+func (c *ClientConfigImpl) AddLabels(m map[string]string) {
+	if len(c.Labels) == 0 {
+		c.Labels = map[string]string{}
+	}
+	for k, v := range m {
+		c.Labels[k] = v
+	}
+}
+
+func (c *ClientConfigImpl) GetLabels() map[string]string {
+	copyM := map[string]string{}
+	for k, v := range c.Labels {
+		copyM[k] = v
+	}
+	return copyM
+}
+
+func (c *ClientConfigImpl) SetDefault() {
+	if len(c.Labels) == 0 {
+		c.Labels = map[string]string{}
+	}
+}
+
+func (c *ClientConfigImpl) Verify() error {
+	return nil
 }
