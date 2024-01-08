@@ -44,6 +44,8 @@ type GlobalConfig interface {
 	GetStatReporter() StatReporterConfig
 	// GetLocation global.location前缀开头的所有配置项
 	GetLocation() LocationConfig
+	// GetClient global.client前缀开头的所有配置项
+	GetClient() ClientConfig
 }
 
 // ConsumerConfig consumer config object.
@@ -213,8 +215,16 @@ type LocationConfig interface {
 	BaseConfig
 	// GetProvider 获取地理位置的提供者插件名称
 	GetProviders() []*LocationProviderConfigImpl
-
+	// GetProvider 根据类型名称获取对应插件的配置内容信息
 	GetProvider(typ string) *LocationProviderConfigImpl
+}
+
+type ClientConfig interface {
+	BaseConfig
+	// GetId 获取客户端ID
+	GetId() string
+	// GetLabels 获取客户端标签
+	GetLabels() map[string]string
 }
 
 // ServerConnectorConfig 与名字服务服务端的连接配置.

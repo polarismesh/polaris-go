@@ -2,6 +2,9 @@ global:
   serverConnector:
     addresses:
       - 127.0.0.1:8091
+  client:
+    labels:
+      env: pre
 config:
   configConnector:
     addresses:
