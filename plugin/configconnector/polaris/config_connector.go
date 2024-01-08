@@ -385,12 +385,20 @@ func (c *Connector) handleResponse(request string, reqID string, opKey string, r
 }
 
 func transferToClientConfigFileInfo(configFile *configconnector.ConfigFile) *config_manage.ClientConfigFileInfo {
+	tags := make([]*config_manage.ConfigFileTag, 0, len(configFile.GetLabels()))
+	for key, val := range configFile.GetLabels() {
+		tags = append(tags, &config_manage.ConfigFileTag{
+			Key:   wrapperspb.String(key),
+			Value: wrapperspb.String(val),
+		})
+	}
 	return &config_manage.ClientConfigFileInfo{
 		Namespace: wrapperspb.String(configFile.Namespace),
 		Group:     wrapperspb.String(configFile.GetFileGroup()),
 		FileName:  wrapperspb.String(configFile.GetFileName()),
 		Version:   wrapperspb.UInt64(configFile.GetVersion()),
 		PublicKey: wrapperspb.String(configFile.GetPublicKey()),
+		Tags:      tags,
 	}
 }
 
