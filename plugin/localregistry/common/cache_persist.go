@@ -47,6 +47,7 @@ const (
 
 // CachePersistHandler 持久化工具类
 type CachePersistHandler struct {
+	persistEnable bool
 	persistDir    string
 	maxWriteRetry int
 	maxReadRetry  int
@@ -61,9 +62,10 @@ type CacheFileInfo struct {
 }
 
 // NewCachePersistHandler create persistence handler
-func NewCachePersistHandler(persistDir string, maxWriteRetry int,
+func NewCachePersistHandler(persistEnable bool, persistDir string, maxWriteRetry int,
 	maxReadRetry int, retryInterval time.Duration) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
+	handler.persistEnable = persistEnable
 	handler.persistDir = persistDir
 	handler.maxReadRetry = maxReadRetry
 	handler.maxWriteRetry = maxWriteRetry
@@ -79,8 +81,8 @@ func (cph *CachePersistHandler) init() error {
 	if nil == cph.marshaler {
 		cph.marshaler = &jsonpb.Marshaler{}
 	}
-	if err := model.EnsureAndVerifyDir(cph.persistDir); err != nil {
-		return err
+	if cph.persistEnable {
+		return model.EnsureAndVerifyDir(cph.persistDir)
 	}
 	return nil
 }

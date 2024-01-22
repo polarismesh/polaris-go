@@ -166,12 +166,13 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers[model.EventFaultDetect] = g.newFaultDetectCacheHandler()
 	// 批量服务
 	g.eventToCacheHandlers[model.EventServices] = g.newServicesHandler()
+	g.cacheFromPersistAvailableInterval = ctx.Config.GetConsumer().GetLocalCache().GetPersistAvailableInterval()
 	g.cachePersistHandler, err = lrplug.NewCachePersistHandler(
+		g.persistEnable,
 		g.persistDir,
 		ctx.Config.GetConsumer().GetLocalCache().GetPersistMaxWriteRetry(),
 		ctx.Config.GetConsumer().GetLocalCache().GetPersistMaxReadRetry(),
 		ctx.Config.GetConsumer().GetLocalCache().GetPersistRetryInterval())
-	g.cacheFromPersistAvailableInterval = ctx.Config.GetConsumer().GetLocalCache().GetPersistAvailableInterval()
 	if err != nil {
 		return err
 	}
