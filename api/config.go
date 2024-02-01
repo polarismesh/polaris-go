@@ -334,7 +334,8 @@ func initSelfIP(cfg config.Configuration) {
 		return
 	}
 
-	conn, _ := net.Dial("tcp", address[0])
+	timeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
+	conn, _ := net.DialTimeout("tcp", address[0], timeout)
 	if conn != nil {
 		localAddr := conn.LocalAddr().String()
 		colonIdx := strings.LastIndex(localAddr, ":")
