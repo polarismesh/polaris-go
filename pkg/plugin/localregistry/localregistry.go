@@ -86,7 +86,7 @@ type InstancesRegistry interface {
 	// LoadInstances 非阻塞发起一次缓存远程加载操作
 	// 如果已经加载过了，那就直接进行notify
 	// 否则，加载完毕后调用notify函数
-	LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error)
+	LoadInstances(svcKey *model.ServiceKey, authToken string) (*common.Notifier, error)
 	// UpdateInstances 批量更新服务实例状态，properties存放的是状态值，当前支持2个key
 	// 1. ReadyToServe: 故障熔断标识，true or false
 	// 2. DynamicWeight：动态权重值

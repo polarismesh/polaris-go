@@ -506,17 +506,21 @@ func (g *LocalCache) newServiceCacheHandler() CacheHandlers {
 }
 
 // LoadInstances 发起实例查询
-func (g *LocalCache) LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error) {
-	log.GetBaseLogger().Debugf("LoadInstances: %s", svcKey)
+func (g *LocalCache) LoadInstances(svcKey *model.ServiceKey, authToken string) (*common.Notifier, error) {
+	log.GetBaseLogger().Debugf("[LoadInstances]: %s, token: %s", svcKey, authToken)
 	svcEvKey := &model.ServiceEventKey{
-		ServiceKey: model.ServiceKey{Service: svcKey.Service, Namespace: svcKey.Namespace},
-		Type:       model.EventInstances}
+		ServiceKey: model.ServiceKey{
+			Service:   svcKey.Service,
+			Namespace: svcKey.Namespace,
+		},
+		Type: model.EventInstances,
+	}
 	svcEvKey.Type = model.EventInstances
-	return g.loadRemoteValue(svcEvKey, g.eventToCacheHandlers[svcEvKey.Type])
+	return g.loadRemoteValue(svcEvKey, g.eventToCacheHandlers[svcEvKey.Type], authToken)
 }
 
 // loadRemoteValue 通用远程查询逻辑
-func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler CacheHandlers) (*common.Notifier, error) {
+func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler CacheHandlers, authToken string) (*common.Notifier, error) {
 	if g.IsDestroyed() {
 		return nil, model.NewSDKError(model.ErrCodeInvalidStateError, nil,
 			"loadRemoteValue: LocalCache %s has been destroyed", name)
@@ -554,6 +558,7 @@ func (g *LocalCache) loadRemoteValue(svcKey *model.ServiceEventKey, handler Cach
 	svcEventHandler := &serverconnector.ServiceEventHandler{
 		ServiceEventKey: svcKey,
 		Handler:         actualSvcObject,
+		AuthToken:       authToken,
 	}
 	g.enhanceServiceEventHandler(svcEventHandler)
 	log.GetBaseLogger().Infof("%s, start to register event handler for %s", g.GetSDKContextID(), svcKey)
@@ -1024,7 +1029,7 @@ func (g *LocalCache) LoadServiceRateLimitRule(key *model.ServiceKey) (*common.No
 // LoadServiceRule 非阻塞发起规则加载
 func (g *LocalCache) LoadServiceRule(svcEventKey *model.ServiceEventKey) (*common.Notifier, error) {
 	log.GetBaseLogger().Debugf("LoadServiceRule: serviceEvent %s", *svcEventKey)
-	return g.loadRemoteValue(svcEventKey, g.eventToCacheHandlers[svcEventKey.Type])
+	return g.loadRemoteValue(svcEventKey, g.eventToCacheHandlers[svcEventKey.Type], "")
 }
 
 // 从持久化文件中读取缓存

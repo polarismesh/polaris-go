@@ -58,6 +58,8 @@ type ServiceEventHandler struct {
 	RefreshInterval time.Duration
 	// 服务事件处理句柄
 	Handler EventHandler
+	// 鉴权token
+	AuthToken string
 }
 
 // MessageCallBack stream模式的PB消息回调

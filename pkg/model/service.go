@@ -171,6 +171,8 @@ type GetOneInstanceRequest struct {
 	Service string
 	// 必选，命名空间
 	Namespace string
+	// 鉴权用的令牌
+	AuthToken string
 	// 可选，元数据信息，仅用于dstMetadata路由插件的过滤
 	Metadata map[string]string
 	// 是否开启元数据匹配不到时启用自定义匹配规则，仅用于dstMetadata路由插件
@@ -282,6 +284,8 @@ type GetAllInstancesRequest struct {
 	Service string
 	// 必选，命名空间
 	Namespace string
+	// 鉴权用的令牌
+	AuthToken string
 	// 可选，单次查询超时时间，默认直接获取全局的超时配置
 	// 用户总最大超时时间为(1+RetryCount) * Timeout
 	Timeout *time.Duration

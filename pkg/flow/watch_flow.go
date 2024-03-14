@@ -300,7 +300,7 @@ func (w *WatchEngine) notifyAllInstances(
 	w.watchContexts[nextId] = notifyCtx
 	w.rwMutex.Unlock()
 	if !svcInstances.IsInitialized() {
-		_, err := w.registry.LoadInstances(&request.ServiceKey)
+		_, err := w.registry.LoadInstances(&request.ServiceKey, request.AuthToken)
 		if err != nil {
 			return nil, err
 		}
@@ -332,7 +332,7 @@ func (w *WatchEngine) longPullAllInstances(
 		w.rwMutex.Unlock()
 	}()
 	if !svcInstances.IsInitialized() {
-		_, err := w.registry.LoadInstances(&request.ServiceKey)
+		_, err := w.registry.LoadInstances(&request.ServiceKey, request.AuthToken)
 		if err != nil {
 			return nil, err
 		}

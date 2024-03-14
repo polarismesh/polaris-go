@@ -134,7 +134,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		if load && (instances.IsCacheLoaded() || !instances.IsInitialized()) {
 			dstInstKey := &ContextKey{ServiceKey: dstService, Operation: keyDstInstances}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstInstKey)
-			notifier, err := registry.LoadInstances(dstService)
+			notifier, err := registry.LoadInstances(dstService, request.GetAuthToken())
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
@@ -221,7 +221,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 	dstService := request.GetDstService()
 	srcService := request.GetSrcService()
 	if trigger.EnableDstInstances {
-		_, err := registry.LoadInstances(dstService)
+		_, err := registry.LoadInstances(dstService, request.GetAuthToken())
 		if err != nil {
 			return false, err.(model.SDKError)
 		}

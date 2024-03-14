@@ -68,6 +68,8 @@ type CacheValueQuery interface {
 	GetCallResult() *APICallResult
 	// SetServices 设置服务列表
 	SetServices(mc Services)
+	// GetAuthToken 获取token
+	GetAuthToken() string
 }
 
 // Engine 编排调度引擎，API相关逻辑在这里执行

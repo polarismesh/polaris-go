@@ -38,8 +38,8 @@ func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
 }
 
 // LoadInstances proxy LocalRegistry LoadInstances
-func (p *Proxy) LoadInstances(svcKey *model.ServiceKey) (*common.Notifier, error) {
-	result, err := p.LocalRegistry.LoadInstances(svcKey)
+func (p *Proxy) LoadInstances(svcKey *model.ServiceKey, authToken string) (*common.Notifier, error) {
+	result, err := p.LocalRegistry.LoadInstances(svcKey, authToken)
 	return result, err
 }
 

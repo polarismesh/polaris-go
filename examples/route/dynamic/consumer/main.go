@@ -48,7 +48,7 @@ func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
-	flag.StringVar(&token, "token", "", "token")
+	flag.StringVar(&token, "token", "FPI+K9USIvHYU8JUljM3TqAg1Wizxta7i+WEi73RkDMQl1HhIBoIc+EKYinqiViTx7TJlBJSY2/R/tXfZkGv8mGB", "token")
 }
 
 // PolarisConsumer .
@@ -93,6 +93,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		getAllRequest := &polaris.GetAllInstancesRequest{}
 		getAllRequest.Namespace = namespace
 		getAllRequest.Service = service
+		getAllRequest.AuthToken = token
 		instancesResp, err := svr.consumer.GetAllInstances(getAllRequest)
 		if nil != err {
 			log.Printf("[error] fail to getAllInstances, err is %v", err)
@@ -177,6 +178,7 @@ func main() {
 	if nil != err {
 		log.Fatalf("fail to create sdk context, err is %v", err)
 	}
+
 	defer sdkCtx.Destroy()
 
 	svr := &PolarisConsumer{
