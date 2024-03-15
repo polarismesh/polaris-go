@@ -48,7 +48,7 @@ func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
-	flag.StringVar(&token, "token", "FPI+K9USIvHYU8JUljM3TqAg1Wizxta7i+WEi73RkDMQl1HhIBoIc+EKYinqiViTx7TJlBJSY2/R/tXfZkGv8mGB", "token")
+	flag.StringVar(&token, "token", "", "token")
 }
 
 // PolarisConsumer .
