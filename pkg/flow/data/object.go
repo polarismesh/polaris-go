@@ -109,7 +109,6 @@ type BaseRequest struct {
 	Trigger      model.NotifyTrigger
 	ControlParam model.ControlParam
 	CallResult   model.APICallResult
-	AuthToken    string
 }
 
 func (br *BaseRequest) clearValues() {
@@ -169,7 +168,7 @@ func (br *BaseRequest) SetServices(mc model.Services) {
 
 // GetAuthToken 获取token
 func (br *BaseRequest) GetAuthToken() string {
-	return br.AuthToken
+	return ""
 }
 
 // CommonInstancesRequest 通用请求对象，主要用于在消息过程减少GC
@@ -564,7 +563,6 @@ type CommonRateLimitRequest struct {
 	QuotaRequest  *model.QuotaRequestImpl
 	DstService    model.ServiceKey
 	Token         uint32
-	AuthToken     string
 	Method        string
 	Arguments     map[int]map[string]string
 	RateLimitRule model.ServiceRule
@@ -680,7 +678,7 @@ func (cl *CommonRateLimitRequest) SetServices(mc model.Services) {
 
 // GetToken 获取token
 func (cl *CommonRateLimitRequest) GetAuthToken() string {
-	return cl.AuthToken
+	return ""
 }
 
 // CommonServiceCallResultRequest 公共服务调用结果请求
