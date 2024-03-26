@@ -70,7 +70,8 @@ type InstanceDeleteEvent struct {
 
 // WatchServiceRequest WatchService req
 type WatchServiceRequest struct {
-	Key ServiceKey
+	Key       ServiceKey
+	AuthToken string
 }
 
 // Validate WatchServiceRequest 校验

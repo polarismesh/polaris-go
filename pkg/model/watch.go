@@ -37,8 +37,6 @@ type WatchAllServicesRequest struct {
 	WaitTime time.Duration
 	// ServicesListener listener for service listeners
 	ServicesListener ServicesListener
-	// AuthToken
-	AuthToken string
 }
 
 func (req *WatchAllServicesRequest) Validate() error {

@@ -225,6 +225,7 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 	allInsReq := &model.GetAllInstancesRequest{}
 	allInsReq.Namespace = req.Key.Namespace
 	allInsReq.Service = req.Key.Service
+	allInsReq.AuthToken = req.AuthToken
 	allInsRsp, err := e.SyncGetAllInstances(allInsReq)
 	if err != nil {
 		return nil, err

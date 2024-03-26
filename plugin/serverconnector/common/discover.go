@@ -387,7 +387,6 @@ type StreamingClient struct {
 
 // CloseStream 关闭流并释放连接
 func (s *StreamingClient) CloseStream(closeSend bool) bool {
-	return true
 	endStreamOk := atomic.CompareAndSwapUint32(&s.endStream, 0, 1)
 	if endStreamOk {
 		// 进行closeStream操作
@@ -486,7 +485,10 @@ func (s *StreamingClient) receiveAndNotify() {
 			log.GetNetworkLogger().Errorf("%s, receiveAndNotify: fail to receive message from connection %s,"+
 				" streamingClient %s, err %v",
 				s.connector.ServiceConnector.GetSDKContextID(), s.connection, s.reqID, grpcErr)
+		} else {
+			log.GetBaseLogger().Infof("[receiveAndNotify] %+v", resp.Instances)
 		}
+
 		report, code, discoverErr := s.checkErrorReport(grpcErr, resp)
 		// 处理与discover连接出现的问题
 		if nil != discoverErr {
@@ -739,7 +741,7 @@ func (g *DiscoverConnector) asyncUpdateTask(
 			return nil
 		}
 	}
-	log.GetNetworkLogger().Debugf("send request(id=%s) to %s for service %v",
+	log.GetNetworkLogger().Infof("send request(id=%s) to %s for service %v",
 		streamingClient.reqID, streamingClient.connection.Address, task.ServiceEventKey)
 	task.msgSendTime.Store(curTime)
 	taskType := atomic.LoadUint32(&task.longRun)
@@ -864,11 +866,11 @@ func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
 	}
-	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
-		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
-		log.GetNetworkLogger().Debugf(
-			"discover request to send is %s", reqJSON)
-	}
+	//if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
+	reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
+	log.GetNetworkLogger().Infof(
+		"[discover request] to send is %s", reqJSON)
+	//}
 	return request
 }
 

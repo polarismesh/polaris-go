@@ -35,11 +35,13 @@ var (
 	service   string
 	waitIndex uint64
 	waitTime  time.Duration
+	token     string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "WatchInstanceNotify", "service")
+	flag.StringVar(&token, "token", "", "token")
 	flag.Uint64Var(&waitIndex, "waitIndex", 0, "waitIndex")
 	flag.DurationVar(&waitTime, "waitTime", 10*time.Second, "waitTime")
 }
@@ -51,6 +53,7 @@ func registerInstance(svcName string, host string, port int32, provider polaris.
 	registerRequest.Namespace = namespace
 	registerRequest.Host = host
 	registerRequest.Port = int(port)
+	registerRequest.ServiceToken = token
 	resp, err := provider.Register(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance to service %s, err is %v", svcName, err)
@@ -63,13 +66,14 @@ func deregisterService(svcName string, instanceId string, provider polaris.Provi
 	log.Printf("start to invoke deregister operation")
 	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
 	deregisterRequest.InstanceID = instanceId
+	deregisterRequest.ServiceToken = token
 	if err := provider.Deregister(deregisterRequest); err != nil {
 		log.Fatalf("fail to deregister instance to service %s, err is %v", svcName, err)
 	}
 	log.Printf("deregister successfully to service %s, id=%s", svcName, instanceId)
 }
 
-const svcCount = 1
+const svcCount = 2
 
 var port int32 = 1000
 
@@ -89,7 +93,8 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := polaris.NewConsumerAPI()
+	//consumer, err := polaris.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPIByAddress("localhost:8091")
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
@@ -118,6 +123,7 @@ func main() {
 			req := &polaris.WatchAllInstancesRequest{}
 			req.Service = svcName
 			req.Namespace = namespace
+			req.AuthToken = token + "x"
 			req.WatchMode = api.WatchModeNotify
 			req.InstancesListener = &TestListener{}
 			resp, err := consumer.WatchAllInstances(req)
@@ -131,6 +137,5 @@ func main() {
 			resp.CancelWatch()
 		}(fmt.Sprintf("%s-%d", service, j))
 	}
-	log.Printf("start to wait finish")
 	wg.Wait()
 }

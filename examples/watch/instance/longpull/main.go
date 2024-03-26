@@ -34,6 +34,7 @@ var (
 	service   string
 	waitIndex uint64
 	waitTime  time.Duration
+	token     string
 )
 
 func initArgs() {
@@ -41,6 +42,7 @@ func initArgs() {
 	flag.StringVar(&service, "service", "", "service")
 	flag.Uint64Var(&waitIndex, "waitIndex", 0, "waitIndex")
 	flag.DurationVar(&waitTime, "waitTime", 10*time.Second, "waitTime")
+	flag.StringVar(&token, "token", "", "token")
 }
 
 func registerInstance(svcName string, host string, port int32, provider polaris.ProviderAPI) string {
@@ -48,6 +50,7 @@ func registerInstance(svcName string, host string, port int32, provider polaris.
 	registerRequest := &polaris.InstanceRegisterRequest{}
 	registerRequest.Service = svcName
 	registerRequest.Namespace = namespace
+	registerRequest.ServiceToken = token
 	registerRequest.Host = host
 	registerRequest.Port = int(port)
 	resp, err := provider.Register(registerRequest)
@@ -62,13 +65,14 @@ func deregisterService(svcName string, instanceId string, provider polaris.Provi
 	log.Printf("start to invoke deregister operation")
 	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
 	deregisterRequest.InstanceID = instanceId
+	deregisterRequest.ServiceToken = token
 	if err := provider.Deregister(deregisterRequest); err != nil {
 		log.Fatalf("fail to deregister instance to service %s, err is %v", svcName, err)
 	}
 	log.Printf("deregister successfully to service %s, id=%s", svcName, instanceId)
 }
 
-const svcCount = 10
+const svcCount = 2
 
 var port int32 = 1000
 
@@ -79,7 +83,8 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	consumer, err := polaris.NewConsumerAPI()
+	//consumer, err := polaris.NewConsumerAPI()
+	consumer, err := polaris.NewConsumerAPIByAddress("localhost:8091")
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
@@ -88,6 +93,8 @@ func main() {
 	var index uint64 = waitIndex
 
 	provider := polaris.NewProviderAPIByContext(consumer.SDKContext())
+
+	// 服务端：随机启停节点
 	for i := 0; i < svcCount; i++ {
 		go func(svcName string) {
 			time.Sleep(5 * time.Second)
@@ -111,6 +118,7 @@ func main() {
 				req := &polaris.WatchAllInstancesRequest{}
 				req.Service = svcName
 				req.Namespace = namespace
+				req.AuthToken = token
 				req.WaitTime = waitTime
 				req.WaitIndex = index
 				req.WatchMode = api.WatchModeLongPull
