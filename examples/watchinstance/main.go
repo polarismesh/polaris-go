@@ -83,8 +83,6 @@ func watchInstance(consumer polaris.ConsumerAPI) {
 		log.Fatal(err)
 	}
 
-	log.Printf("receive instance list : %+v", resp.GetAllInstancesResp.GetInstances())
-
 	for event := range resp.EventChannel {
 		insEvent, ok := event.(*model.InstanceEvent)
 		if !ok {
@@ -94,9 +92,6 @@ func watchInstance(consumer polaris.ConsumerAPI) {
 		if insEvent.AddEvent != nil {
 			log.Printf("[consumer] receive instance add event : %+v", insEvent.AddEvent.Instances[0].GetInstanceKey())
 		}
-		if insEvent.UpdateEvent != nil {
-			log.Printf("[consumer] receive instance update event : %+v", insEvent.UpdateEvent)
-		}
 		if insEvent.DeleteEvent != nil {
 			log.Printf("[consumer] receive instance delete event : %+v", insEvent.DeleteEvent.Instances[0].GetInstanceKey())
 		}
@@ -104,7 +99,7 @@ func watchInstance(consumer polaris.ConsumerAPI) {
 	}
 }
 
-// addAndRemoveInstance 注册实例并注销实例
+// addAndRemoveInstance 注册实例并稍后注销实例
 func addAndRemoveInstance(provider polaris.ProviderAPI) {
 	registerRequest := &polaris.InstanceRegisterRequest{}
 	registerRequest.Service = service
@@ -116,17 +111,17 @@ func addAndRemoveInstance(provider polaris.ProviderAPI) {
 	registerRequest.ServiceToken = token
 	resp, err := provider.Register(registerRequest)
 	if err != nil {
-		log.Fatalf("[provider] fail to register instance to service %s, err is %v", service, err)
+		log.Fatalf("provider fail to register instance to service %s, err is %v", service, err)
 	}
-	log.Printf("[provider] register response: service %s, instanceId %s", service, resp.InstanceID)
+	log.Printf("register successfully: %s", resp.InstanceID)
 	time.Sleep(3 * time.Second)
 
 	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
 	deregisterRequest.InstanceID = resp.InstanceID
 	deregisterRequest.ServiceToken = token
 	if err = provider.Deregister(deregisterRequest); err != nil {
-		log.Fatalf("[provider] fail to deregister instance to service %s, err is %v", service, err)
+		log.Fatalf("fail to deregister instance to service %s, err is %v", service, err)
 	}
-	log.Printf("[provider] deregister successfully to service %s, id=%s", service, resp.InstanceID)
+	log.Printf("dereregister successfully: %s", resp.InstanceID)
 	time.Sleep(2 * time.Second)
 }

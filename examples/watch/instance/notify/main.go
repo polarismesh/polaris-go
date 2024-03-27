@@ -93,8 +93,8 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	//consumer, err := polaris.NewConsumerAPI()
-	consumer, err := polaris.NewConsumerAPIByAddress("localhost:8091")
+
+	consumer, err := polaris.NewConsumerAPI()
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
@@ -123,7 +123,7 @@ func main() {
 			req := &polaris.WatchAllInstancesRequest{}
 			req.Service = svcName
 			req.Namespace = namespace
-			req.AuthToken = token + "x"
+			req.AuthToken = token
 			req.WatchMode = api.WatchModeNotify
 			req.InstancesListener = &TestListener{}
 			resp, err := consumer.WatchAllInstances(req)

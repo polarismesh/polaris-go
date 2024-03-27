@@ -38,8 +38,8 @@ var (
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "", "namespace")
-	flag.StringVar(&service, "service", "", "service")
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
+	flag.StringVar(&service, "service", "WatchInstanceServer", "service")
 	flag.Uint64Var(&waitIndex, "waitIndex", 0, "waitIndex")
 	flag.DurationVar(&waitTime, "waitTime", 10*time.Second, "waitTime")
 	flag.StringVar(&token, "token", "", "token")
@@ -83,8 +83,7 @@ func main() {
 		log.Print("namespace and service are required")
 		return
 	}
-	//consumer, err := polaris.NewConsumerAPI()
-	consumer, err := polaris.NewConsumerAPIByAddress("localhost:8091")
+	consumer, err := polaris.NewConsumerAPI()
 	if err != nil {
 		log.Fatalf("fail to create consumerAPI, err is %v", err)
 	}
