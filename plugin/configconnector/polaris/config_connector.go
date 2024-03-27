@@ -57,6 +57,7 @@ type Connector struct {
 	valueCtx              model.ValueContext
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
+	token           string
 }
 
 // Type 插件类型.
@@ -77,6 +78,7 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		c.cfg = cfgValue.(*networkConfig)
 	}
+	c.token = ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetToken()
 	connManager, err := network.NewConfigConnectionManager(ctx.Config, ctx.ValueCtx)
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create config connectionManager")
@@ -121,7 +123,8 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -153,7 +156,8 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextWatchConfigFilesReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -190,7 +194,8 @@ func (c *Connector) CreateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextCreateConfigFileReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -222,7 +227,8 @@ func (c *Connector) UpdateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextUpdateConfigFileReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -254,7 +260,8 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextPublishConfigFileReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -283,7 +290,8 @@ func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configcon
 	}
 
 	reqID := connector.NextPublishConfigFileReqID()
-	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}

@@ -52,6 +52,7 @@ type Connector struct {
 	discoverConnector     *connector.DiscoverConnector
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
+	token           string
 }
 
 // Type 插件类型
@@ -72,6 +73,7 @@ func (g *Connector) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		g.cfg = cfgValue.(*networkConfig)
 	}
+	g.token = ctx.Config.GetGlobal().GetServerConnector().GetToken()
 	g.connManager = ctx.ConnManager
 	g.connectionIdleTimeout = ctx.Config.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	g.valueCtx = ctx.ValueCtx
