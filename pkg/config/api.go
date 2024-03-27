@@ -270,6 +270,10 @@ type ServerConnectorConfig interface {
 	GetConnectionIdleTimeout() time.Duration
 	// SetConnectionIdleTimeout 设置连接会被释放的空闲的时长
 	SetConnectionIdleTimeout(time.Duration)
+	// GetToken .
+	GetToken() string
+	// SetToken .
+	SetToken(string)
 }
 
 // LocalCacheConfig 本地缓存相关配置项.

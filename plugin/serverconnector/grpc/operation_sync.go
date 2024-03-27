@@ -56,7 +56,7 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 	var (
 		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextRegisterInstanceReqID()
-		ctx, cancel  = connector.CreateHeaderContext(*req.Timeout, connector.AppendHeaderWithReqId(header, reqID))
+		ctx, cancel  = connector.CreateHeadersContext(*req.Timeout, connector.AppendHeaderWithReqId(reqID))
 	)
 
 	if cancel != nil {
@@ -120,7 +120,7 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 	var (
 		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextDeRegisterInstanceReqID()
-		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+		ctx, cancel  = connector.CreateHeadersContext(*req.Timeout, connector.AppendHeaderWithReqId(reqID))
 	)
 	if cancel != nil {
 		defer cancel()
@@ -181,7 +181,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	var (
 		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextHeartbeatReqID()
-		ctx, cancel  = connector.CreateHeaderContextWithReqId(*req.Timeout, reqID)
+		ctx, cancel  = connector.CreateHeadersContext(*req.Timeout, connector.AppendHeaderWithReqId(reqID))
 	)
 	if cancel != nil {
 		defer cancel()
@@ -269,7 +269,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	var (
 		namingClient = apiservice.NewPolarisGRPCClient(network.ToGRPCConn(conn.Conn))
 		reqID        = connector.NextReportClientReqID()
-		ctx, cancel  = connector.CreateHeaderContextWithReqId(req.Timeout, reqID)
+		ctx, cancel  = connector.CreateHeadersContext(req.Timeout, connector.AppendHeaderWithReqId(reqID))
 	)
 	if cancel != nil {
 		defer cancel()

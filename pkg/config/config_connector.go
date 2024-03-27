@@ -51,6 +51,8 @@ type ConfigConnectorConfigImpl struct {
 
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 
+	Token string `yaml:"token" json:"token"`
+
 	ConnectorType string `yaml:"connectorType" json:"connectorType"`
 }
 
@@ -156,6 +158,16 @@ func (c *ConfigConnectorConfigImpl) GetConnectorType() string {
 // SetConnectorType 设置连接器类型.
 func (c *ConfigConnectorConfigImpl) SetConnectorType(connectorType string) {
 	c.ConnectorType = connectorType
+}
+
+// GetToken .
+func (c *ConfigConnectorConfigImpl) GetToken() string {
+	return c.Token
+}
+
+// SetToken .
+func (c *ConfigConnectorConfigImpl) SetToken(token string) {
+	c.Token = token
 }
 
 // Verify 检验ConfigConnector配置.

@@ -121,7 +121,7 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -153,7 +153,7 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextWatchConfigFilesReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -190,7 +190,7 @@ func (c *Connector) CreateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextCreateConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -222,7 +222,7 @@ func (c *Connector) UpdateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextUpdateConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -254,7 +254,7 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextPublishConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -283,7 +283,7 @@ func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configcon
 	}
 
 	reqID := connector.NextPublishConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}

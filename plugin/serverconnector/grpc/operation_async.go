@@ -98,11 +98,13 @@ func (g *Connector) GetConnectionManager() network.ConnectionManager {
 }
 
 // 创建服务发现客户端
-func (g *Connector) createDiscoverClient(reqID string,
-	connection *network.Connection, timeout time.Duration) (connector.DiscoverClient, context.CancelFunc, error) {
+func (g *Connector) createDiscoverClient(args *connector.DiscoverClientCreatorArgs) (connector.DiscoverClient, context.CancelFunc, error) {
 	// 创建namingClient对象
-	client := apiservice.NewPolarisGRPCClient(network.ToGRPCConn(connection.Conn))
-	outgoingCtx, cancel := connector.CreateHeaderContextWithReqId(timeout, reqID)
+	client := apiservice.NewPolarisGRPCClient(network.ToGRPCConn(args.Connection.Conn))
+	outgoingCtx, cancel := connector.CreateHeadersContext(args.Timeout,
+		connector.AppendAuthHeader(args.AuthToken),
+		connector.AppendHeaderWithReqId(args.ReqId))
+
 	discoverClient, err := client.Discover(outgoingCtx)
 	return discoverClient, cancel, err
 }
