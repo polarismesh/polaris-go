@@ -305,6 +305,7 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 // InitByGetMultiRequest 通过获取多个请求初始化通用请求对象
 func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstancesRequest, cfg config.Configuration) {
 	c.clearValues(cfg)
+	c.AuthToken = request.AuthToken
 	c.FlowID = request.FlowID
 	c.DstService.Service = request.Service
 	c.DstService.Namespace = request.Namespace

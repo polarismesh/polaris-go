@@ -20,11 +20,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go"
 	"log"
 	"sync/atomic"
 	"time"
 
+	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 

@@ -159,25 +159,22 @@ func (z *zapLogger) Tracef(format string, args ...interface{}) {
 
 // Debugf 打印debug级别的日志
 func (z *zapLogger) Debugf(format string, args ...interface{}) {
-	//z.printf(z.logger.Debug, plog.DebugLog, format, args...)
+	z.printf(z.logger.Debug, plog.DebugLog, format, args...)
 }
 
 // Infof 打印info级别的日志
 func (z *zapLogger) Infof(format string, args ...interface{}) {
-	//fmt.Printf("[INFO] "+format+"\n", args...)
-	//z.printf(z.logger.Info, plog.InfoLog, format, args...)
+	z.printf(z.logger.Info, plog.InfoLog, format, args...)
 }
 
 // Warnf 打印warn级别的日志
 func (z *zapLogger) Warnf(format string, args ...interface{}) {
-	//fmt.Printf("[WARN] "+format+"\n", args...)
-	//z.printf(z.logger.Warn, plog.WarnLog, format, args...)
+	z.printf(z.logger.Warn, plog.WarnLog, format, args...)
 }
 
 // Errorf 打印error级别的日志
 func (z *zapLogger) Errorf(format string, args ...interface{}) {
-	//fmt.Printf("[ERROR] "+format+"\n", args...)
-	//z.printf(z.logger.Error, plog.ErrorLog, format, args...)
+	z.printf(z.logger.Error, plog.ErrorLog, format, args...)
 }
 
 // Fatalf 打印fatalf级别的日志

@@ -355,6 +355,8 @@ type GetInstancesRequest struct {
 	Service string
 	// 必选，命名空间
 	Namespace string
+	// 鉴权用的令牌
+	AuthToken string
 	// 可选，元数据信息，仅用于dstMetadata路由插件的过滤
 	Metadata map[string]string
 	// 主调方服务信息，只用于路由规则匹配
