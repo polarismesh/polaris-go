@@ -507,14 +507,10 @@ func (g *LocalCache) newServiceCacheHandler() CacheHandlers {
 
 // LoadInstances 发起实例查询
 func (g *LocalCache) LoadInstances(svcKey *model.ServiceKey, authToken string) (*common.Notifier, error) {
-	log.GetBaseLogger().Debugf("[LoadInstances]: %s, token: %s", svcKey, authToken)
+	log.GetBaseLogger().Debugf("LoadInstances: %s", svcKey)
 	svcEvKey := &model.ServiceEventKey{
-		ServiceKey: model.ServiceKey{
-			Service:   svcKey.Service,
-			Namespace: svcKey.Namespace,
-		},
-		Type: model.EventInstances,
-	}
+		ServiceKey: model.ServiceKey{Service: svcKey.Service, Namespace: svcKey.Namespace},
+		Type:       model.EventInstances}
 	svcEvKey.Type = model.EventInstances
 	return g.loadRemoteValue(svcEvKey, g.eventToCacheHandlers[svcEvKey.Type], authToken)
 }
