@@ -72,7 +72,7 @@ func deregisterService(svcName string, instanceId string, provider polaris.Provi
 	log.Printf("deregister successfully to service %s, id=%s", svcName, instanceId)
 }
 
-const svcCount = 2
+const svcCount = 10
 
 var port int32 = 1000
 
