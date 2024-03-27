@@ -44,6 +44,8 @@ import (
 const (
 	// 需要发往服务端的请求跟踪标识
 	headerRequestID = "request-id"
+	//
+	headerAuthToken = "X-Polaris-Token"
 	// 失败时的最大超时时间
 	maxConnTimeout = 100 * time.Millisecond
 	// 任务重试间隔
@@ -68,6 +70,8 @@ type DiscoverConnector struct {
 	ServiceConnector      *plugin.PluginBase
 	connectionIdleTimeout time.Duration
 	messageTimeout        time.Duration
+	// authToken
+	authToken string
 	// 普通任务队列
 	taskChannel chan *clientTask
 	// 高优先级重试任务队列，只会在系统服务未ready时候会往队列塞值
@@ -100,6 +104,7 @@ type clientTask struct {
 // Init 初始化插件
 func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverClientCreator) {
 	ctxConfig := ctx.Config
+	g.authToken = ctxConfig.GetGlobal().GetServerConnector().GetToken()
 	g.RunContext = common.NewRunContext()
 	g.scalableRand = rand.NewScalableRand()
 	g.discoverKey.Namespace = ctxConfig.GetGlobal().GetSystem().GetDiscoverCluster().GetNamespace()
@@ -587,8 +592,12 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 		goto finally
 	}
 	streamingClient.reqID = NextDiscoverReqID()
-	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(streamingClient.reqID,
-		streamingClient.connection, 0)
+	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(&DiscoverClientCreatorArgs{
+		ReqId:      streamingClient.reqID,
+		Connection: streamingClient.connection,
+		Timeout:    0,
+		AuthToken:  g.authToken,
+	})
 	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get streaming client from %s, reqID %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), streamingClient.connection, streamingClient.reqID, err)
@@ -953,7 +962,12 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) error {
 	}
 	defer connection.Release(OpKeyDiscover)
 	reqID := NextDiscoverReqID()
-	discoverClient, cancel, err := g.createClient(reqID, connection, g.messageTimeout)
+	discoverClient, cancel, err := g.createClient(&DiscoverClientCreatorArgs{
+		ReqId:      reqID,
+		Connection: connection,
+		Timeout:    g.messageTimeout,
+		AuthToken:  g.authToken,
+	})
 	if cancel != nil {
 		defer cancel()
 	}

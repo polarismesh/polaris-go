@@ -49,6 +49,8 @@ type ServerConnectorConfigImpl struct {
 	ReconnectInterval *time.Duration `yaml:"reconnectInterval" json:"reconnectInterval"`
 
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
+
+	Token string `yaml:"token" json:"token"`
 }
 
 // GetAddresses global.serverConnector.addresses
@@ -151,6 +153,18 @@ func (s *ServerConnectorConfigImpl) GetPluginConfig(pluginName string) BaseConfi
 func (s *ServerConnectorConfigImpl) SetPluginConfig(pluginName string, value BaseConfig) error {
 	return s.Plugin.SetPluginConfig(common.TypeServerConnector, pluginName, value)
 }
+
+// GetProtocol global.serverConnector.protocol
+// 与cl5 server对接的协议.
+func (s *ServerConnectorConfigImpl) GetToken() string {
+	return s.Token
+}
+
+// SetProtocol 设置与cl5 server对接的协议.
+func (s *ServerConnectorConfigImpl) SetToken(t string) {
+	s.Token = t
+}
+
 
 // Verify 检验ServerConnector配置.
 func (s *ServerConnectorConfigImpl) Verify() error {
