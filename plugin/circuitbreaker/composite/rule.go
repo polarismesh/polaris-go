@@ -210,11 +210,9 @@ func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fau
 		// 1. compare destination service
 		destNamespace1 := rule1.RuleMatcher.Destination.Namespace
 		destService1 := rule1.RuleMatcher.Destination.Service
-		destMethod1 := rule1.RuleMatcher.Destination.Method.Value.Value
 
 		destNamespace2 := rule2.RuleMatcher.Destination.Namespace
 		destService2 := rule2.RuleMatcher.Destination.Service
-		destMethod2 := rule2.RuleMatcher.Destination.Method.Value.Value
 
 		svcResult := compareService(destNamespace1, destService1, destNamespace2, destService2)
 		if svcResult != 0 {
@@ -222,6 +220,8 @@ func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fau
 		}
 		if rule1.Level == rule2.Level {
 			if rule1.Level == fault_tolerance.Level_METHOD {
+				destMethod1 := rule1.RuleMatcher.Destination.Method.Value.Value
+				destMethod2 := rule2.RuleMatcher.Destination.Method.Value.Value
 				methodResult := compareStringValue(destMethod1, destMethod2)
 				if methodResult != 0 {
 					return methodResult < 0
