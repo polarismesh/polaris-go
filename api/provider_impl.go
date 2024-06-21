@@ -38,6 +38,7 @@ func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*mode
 	if err := instance.Validate(); err != nil {
 		return nil, err
 	}
+	instance.AutoHeartbeat = true
 	return c.context.GetEngine().SyncRegister(&instance.InstanceRegisterRequest)
 }
 
