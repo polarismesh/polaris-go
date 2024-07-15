@@ -283,16 +283,19 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 	action := func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.GetBaseLogger().Errorf("stat metrics prometheus panic", zap.Any("error", err))
+				log.GetBaseLogger().Errorf("[metrics][pull] stat metrics prometheus panic", zap.Any("error", err))
 			}
 		}()
-		log.GetBaseLogger().Infof("start aggregation stat metrics prometheus")
+		log.GetBaseLogger().Infof("[metrics][pull] start aggregation stat metrics prometheus")
 
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 			pa.reporter.insCollector.GetCurrentRevision())
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.circuitBreakerCollector, 0)
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.rateLimitCollector,
 			pa.reporter.rateLimitCollector.GetCurrentRevision())
+
+		log.GetBaseLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
+		log.GetBaseLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
 	}
 
 	for {
@@ -313,7 +316,7 @@ func (pa *PullAction) Run(ctx context.Context) {
 	go func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort))
 		if err != nil {
-			log.GetBaseLogger().Errorf("start metrics http-server fail: %v", err)
+			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail: %v", err)
 			pa.bindPort = -1
 			return
 		}
@@ -323,9 +326,9 @@ func (pa *PullAction) Run(ctx context.Context) {
 			handler: promhttp.HandlerFor(pa.reporter.registry, promhttp.HandlerOpts{}),
 		}
 
-		log.GetBaseLogger().Infof("start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort))
+		log.GetBaseLogger().Infof("[metrics][push] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort))
 		if err := http.Serve(ln, &handler); err != nil {
-			log.GetBaseLogger().Errorf("start metrics http-server fail : %s", err)
+			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail : %s", err)
 			return
 		}
 	}()
@@ -365,11 +368,11 @@ func (pa *PushAction) Run(ctx context.Context) {
 		action := func() {
 			defer func() {
 				if err := recover(); err != nil {
-					log.GetBaseLogger().Errorf("stat metrics prometheus panic", zap.Any("error", err))
+					log.GetBaseLogger().Errorf("[metrics][push] stat metrics to pushgateway panic", zap.Any("error", err))
 				}
 			}()
 
-			log.GetBaseLogger().Infof("start push stat metrics prometheus")
+			log.GetBaseLogger().Infof("[metrics][push] start push stat metrics to pushgateway")
 
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 				pa.reporter.insCollector.GetCurrentRevision())
@@ -382,7 +385,11 @@ func (pa *PushAction) Run(ctx context.Context) {
 				Gatherer(pa.reporter.registry).
 				Push(); err != nil {
 				log.GetBaseLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
+				return
 			}
+
+			log.GetBaseLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
+			log.GetBaseLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
 		}
 
 		for {

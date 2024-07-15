@@ -92,7 +92,7 @@ func (svr *PolarisConsumer) runWebServer() {
 				},
 			}
 			ret.SetDelay(delay)
-			ret.SetRetCode(int32(resp.StatusCode))
+			ret.SetRetCode(int32(http.StatusInternalServerError))
 			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
 				log.Printf("do report service call result : %+v", err)
 			}

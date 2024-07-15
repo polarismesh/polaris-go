@@ -54,7 +54,6 @@ func (c *Config) SetDefault() {
 	}
 	if c.PortStr == "" {
 		c.port = defaultMetricPort
-		return
 	}
 	if c.Interval == 0 {
 		c.Interval = 15 * time.Second
