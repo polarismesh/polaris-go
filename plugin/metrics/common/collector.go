@@ -114,6 +114,10 @@ type StatInfoRevisionCollector struct {
 	currentRevision int64
 }
 
+func (src *StatInfoRevisionCollector) IncRevision() int64 {
+	return atomic.AddInt64(&src.currentRevision, 1)
+}
+
 func (src *StatInfoRevisionCollector) GetCurrentRevision() int64 {
 	return atomic.LoadInt64(&src.currentRevision)
 }
@@ -179,21 +183,26 @@ func PutDataFromContainerInOrder(metricVecCaches map[string]*prometheus.GaugeVec
 		if !ok {
 			continue
 		}
+		canReport := true
 		switch rs := metricValue.(type) {
 		case *StatRevisionMetric:
 			if rs.GetRevision() < currentRevision-RevisionMaxScope {
 				// 如果连续两个版本还没有数据，就清除该数据
 				gauge.Delete(rs.GetLabels())
 				collector.RemoveStatMetric(rs.GetSignature())
+				canReport = false
 				continue
 			}
 			if rs.GetRevision() < currentRevision {
 				// 如果版本为老版本，则清零数据
 				gauge.Delete(rs.GetLabels())
 				gauge.With(rs.GetLabels()).Set(0)
+				canReport = false
 				continue
 			}
 		}
-		gauge.With(metricValue.GetLabels()).Set(float64(metricValue.GetValue()))
+		if canReport {
+			gauge.With(metricValue.GetLabels()).Set(float64(metricValue.GetValue()))
+		}
 	}
 }
