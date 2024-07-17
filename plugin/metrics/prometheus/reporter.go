@@ -41,10 +41,11 @@ import (
 
 const (
 	// PluginName is the name of the plugin.
-	PluginName      = "prometheus"
-	_metricsPull    = "pull"
-	_metricsPush    = "push"
-	_defaultJobName = "polaris-client"
+	PluginName          = "prometheus"
+	_metricsPull        = "pull"
+	_metricsPush        = "push"
+	_defaultJobName     = "polaris-client"
+	_defaultJobInstance = "instance"
 )
 
 var _ statreporter.StatReporter = (*PrometheusReporter)(nil)
@@ -232,6 +233,9 @@ func (s *PrometheusReporter) Destroy() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	if s.action != nil {
+		s.action.Close()
+	}
 	return nil
 }
 
@@ -251,6 +255,7 @@ type ReportAction interface {
 	Init(initCtx *plugin.InitContext, reporter *PrometheusReporter)
 	Run(ctx context.Context)
 	Info() model.StatInfo
+	Close()
 }
 
 type PullAction struct {
@@ -275,6 +280,9 @@ func (pa *PullAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 		pa.bindIP = pa.cfg.IP
 	}
 	pa.bindPort = int32(pa.cfg.port)
+}
+
+func (pa *PullAction) Close() {
 }
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
@@ -351,6 +359,7 @@ type PushAction struct {
 	initCtx  *plugin.InitContext
 	reporter *PrometheusReporter
 	cfg      *Config
+	pusher   *push.Pusher
 }
 
 func (pa *PushAction) Init(initCtx *plugin.InitContext, reporter *PrometheusReporter) {
@@ -359,6 +368,13 @@ func (pa *PushAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 		return
 	}
 	pa.cfg = cfgValue.(*Config)
+	pa.pusher = push.
+		New(pa.cfg.Address, _defaultJobName).
+		Grouping(_defaultJobInstance, pa.initCtx.SDKContextID)
+}
+
+func (pa *PushAction) Close() {
+	pa.pusher.Delete()
 }
 
 func (pa *PushAction) Run(ctx context.Context) {
@@ -380,8 +396,7 @@ func (pa *PushAction) Run(ctx context.Context) {
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.rateLimitCollector,
 				pa.reporter.rateLimitCollector.GetCurrentRevision())
 
-			if err := push.
-				New(pa.cfg.Address, _defaultJobName).
+			if err := pa.pusher.
 				Gatherer(pa.reporter.registry).
 				Push(); err != nil {
 				log.GetBaseLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
