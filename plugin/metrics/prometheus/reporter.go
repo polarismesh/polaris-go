@@ -374,7 +374,9 @@ func (pa *PushAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 }
 
 func (pa *PushAction) Close() {
-	pa.pusher.Delete()
+	if pa.pusher != nil {
+		pa.pusher.Delete()
+	}
 }
 
 func (pa *PushAction) Run(ctx context.Context) {
