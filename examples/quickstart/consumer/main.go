@@ -149,7 +149,7 @@ func (svr *PolarisConsumer) runWebServer() {
 
 	log.Printf("start run web server, port : %d", port)
 
-	webSvr := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d"), Handler: nil}
+	webSvr := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", port), Handler: nil}
 	svr.webSvr = webSvr
 	if err := webSvr.ListenAndServe(); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)

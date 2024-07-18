@@ -74,7 +74,9 @@ func (svr *PolarisConsumer) runWebServer() {
 		}
 
 		start := time.Now()
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
+		req.Header = r.Header
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
