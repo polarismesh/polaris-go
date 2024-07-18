@@ -407,45 +407,11 @@ func (c *connectionManager) ConnectByAddr(clusterType config.ClusterType, addr s
 // ReportSuccess 上报服务成功
 func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout time.Duration) {
 	log.GetNetworkLogger().Debugf("service %s: reported success", connID.Service)
-	var err error
-	if !reflect2.IsNil(connID.instance) {
-		engineValue, ok := c.valueCtx.GetValue(model.ContextKeyEngine)
-		if ok {
-			engine := engineValue.(model.Engine)
-			result := &model.ServiceCallResult{
-				CalledInstance: connID.instance,
-				RetStatus:      model.RetSuccess}
-			result.SetDelay(timeout)
-			result.SetRetCode(retCode)
-			err = engine.SyncUpdateServiceCallResult(result)
-		}
-	}
-	if err != nil {
-		log.GetNetworkLogger().Errorf(
-			"error to update success call result for connection %s, %s", connID.String(), err)
-	}
 }
 
 // ReportFail 上报服务失败
 func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout time.Duration) {
 	log.GetNetworkLogger().Warnf("connection %s: reported fail", connID)
-	var err error
-	if !reflect2.IsNil(connID.instance) && connID.Service.ClusterType != config.BuiltinCluster {
-		engineValue, ok := c.valueCtx.GetValue(model.ContextKeyEngine)
-		if ok {
-			engine := engineValue.(model.Engine)
-			result := &model.ServiceCallResult{
-				CalledInstance: connID.instance,
-				RetStatus:      model.RetFail}
-			result.SetDelay(timeout)
-			result.SetRetCode(retCode)
-			err = engine.SyncUpdateServiceCallResult(result)
-		}
-	}
-	if err != nil {
-		log.GetNetworkLogger().Errorf(
-			"error to update fail call result for connection %s, %s", connID.String(), err)
-	}
 }
 
 // ReportConnectionDown 报告连接故障
