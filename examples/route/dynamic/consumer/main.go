@@ -62,28 +62,6 @@ type PolarisConsumer struct {
 
 // Run .
 func (svr *PolarisConsumer) Run() {
-	if selfService != "" && selfNamespace != "" {
-		tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
-		if nil != err {
-			panic(fmt.Errorf("error occur while fetching localhost: %v", err))
-		}
-		req := &polaris.InstanceRegisterRequest{}
-		req.Namespace = selfNamespace
-		req.Service = selfService
-		log.Printf("start to invoke register operation")
-		registerRequest := &polaris.InstanceRegisterRequest{}
-		registerRequest.Service = service
-		registerRequest.Namespace = namespace
-		registerRequest.Host = tmpHost
-		registerRequest.Port = int(port)
-		registerRequest.ServiceToken = token
-		resp, err := svr.provider.RegisterInstance(registerRequest)
-		if nil != err {
-			log.Fatalf("fail to register instance, err is %v", err)
-		}
-		log.Printf("register response: instanceId %s", resp.InstanceID)
-	}
-
 	svr.runWebServer()
 }
 
