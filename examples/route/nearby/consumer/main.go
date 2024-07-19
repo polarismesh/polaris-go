@@ -60,14 +60,12 @@ type PolarisConsumer struct {
 
 // Run .
 func (svr *PolarisConsumer) Run() {
-
 	tmpHost, err := getLocalHost(svr.consumer.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
 	if nil != err {
 		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
 	}
 
 	svr.host = tmpHost
-
 	svr.runWebServer()
 }
 

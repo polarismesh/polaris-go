@@ -43,7 +43,7 @@ var (
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "RouteEchoServer", "service")
-	flag.IntVar(&port, "port", 8888, "service port")
+	flag.IntVar(&port, "port", 0, "service port")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.StringVar(&metadata, "metadata", "", "key1=value1&key2=value2")
@@ -86,7 +86,7 @@ func (svr *PolarisProvider) Run() {
 	svr.host = tmpHost
 	svr.runWebServer()
 	svr.registerService()
-	runMainLoop()
+	svr.runMainLoop()
 }
 
 func (svr *PolarisProvider) registerService() {
@@ -103,6 +103,20 @@ func (svr *PolarisProvider) registerService() {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
+}
+
+func (svr *PolarisProvider) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	registerRequest := &polaris.InstanceDeRegisterRequest{}
+	registerRequest.Service = service
+	registerRequest.Namespace = namespace
+	registerRequest.Host = host
+	registerRequest.Port = svr.port
+	registerRequest.ServiceToken = token
+	if err := svr.provider.Deregister(registerRequest); nil != err {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister successfully")
 }
 
 func (svr *PolarisProvider) runWebServer() {
@@ -128,7 +142,7 @@ func (svr *PolarisProvider) runWebServer() {
 
 }
 
-func runMainLoop() {
+func (svr *PolarisProvider) runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
@@ -137,6 +151,7 @@ func runMainLoop() {
 
 	for s := range ch {
 		log.Printf("catch signal(%+v), stop servers", s)
+		svr.deregisterService()
 		return
 	}
 }

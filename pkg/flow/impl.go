@@ -367,8 +367,8 @@ func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 
 // loadLocation 上报服务数据
 func (e *Engine) loadLocation() {
-	providerName := e.configuration.GetGlobal().GetLocation().GetProviders()
-	if len(providerName) == 0 {
+	providers := e.configuration.GetGlobal().GetLocation().GetProviders()
+	if len(providers) == 0 {
 		return
 	}
 	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
@@ -382,6 +382,7 @@ func (e *Engine) loadLocation() {
 		return
 	}
 
+	log.GetBaseLogger().Infof("location provider get location result: %v", loc)
 	e.globalCtx.SetCurrentLocation(&model.Location{
 		Region: loc.Region,
 		Zone:   loc.Zone,
