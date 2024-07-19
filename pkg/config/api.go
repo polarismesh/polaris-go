@@ -79,6 +79,8 @@ type ConfigFileConfig interface {
 	BaseConfig
 	// IsEnable 是否启用配置中心
 	IsEnable() bool
+	// SetEnable 设置是否启用配置中心能力
+	SetEnable(bool)
 	// GetConfigConnectorConfig 配置文件连接器
 	GetConfigConnectorConfig() ConfigConnectorConfig
 	// GetConfigFilterConfig 配置文件加密器
