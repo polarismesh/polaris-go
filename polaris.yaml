@@ -50,7 +50,7 @@ global:
     #默认值:1s
     retryInterval: 1s
     #描述:客户端绑定的网卡地址
-    bindIf: 
+    bindIf:
   #描述:对接polaris server的相关配置
   serverConnector:
     #描述:访问server的连接协议，SDK会根据协议名称会加载对应的插件
@@ -118,7 +118,7 @@ global:
         #类型:string
         #默认值: ${global.api.bindIP}
         #默认使用SDK的绑定IP
-        metricHost: 
+        metricHost:
         #描述: 设置 prometheus http-server 的监听端口, 仅 type == pull 时生效
         #类型:int
         #默认值: 28080
@@ -287,12 +287,14 @@ config:
     serverSwitchInterval: 10m
     #描述：重连间隔时间
     reconnectInterval: 500ms
+    #描述: 开启客户端鉴权后，需要填写用户/用户组的访问凭据
+    token: ""
     #描述:连接器插件配置
     plugin:
       polaris:
-      #描述:GRPC客户端单次最大链路接收报文
-      #类型:int
-      #范围:(0:524288000]
+        #描述:GRPC客户端单次最大链路接收报文
+        #类型:int
+        #范围:(0:524288000]
         maxCallRecvMsgSize: 52428800
   # 配置过滤器
   configFilter:

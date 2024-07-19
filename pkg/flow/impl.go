@@ -355,7 +355,9 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 
 // reportAPIStat 上报api数据
 func (e *Engine) reportAPIStat(result *model.APICallResult) error {
-	return e.SyncReportStat(model.SDKAPIStat, result)
+	// TODO: SDK 本身和北极星 server 的服务调用监控数据不能和用户的监控数据混合在一起，这里可以打印在本地日志中
+	// return e.SyncReportStat(model.SDKAPIStat, result)
+	return nil
 }
 
 // reportSvcStat 上报服务数据
@@ -365,8 +367,8 @@ func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 
 // loadLocation 上报服务数据
 func (e *Engine) loadLocation() {
-	providerName := e.configuration.GetGlobal().GetLocation().GetProviders()
-	if len(providerName) == 0 {
+	providers := e.configuration.GetGlobal().GetLocation().GetProviders()
+	if len(providers) == 0 {
 		return
 	}
 	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
@@ -380,6 +382,7 @@ func (e *Engine) loadLocation() {
 		return
 	}
 
+	log.GetBaseLogger().Infof("location provider get location result: %v", loc)
 	e.globalCtx.SetCurrentLocation(&model.Location{
 		Region: loc.Region,
 		Zone:   loc.Zone,

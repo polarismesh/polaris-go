@@ -370,6 +370,7 @@ func (pa *PushAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 	pa.cfg = cfgValue.(*Config)
 	pa.pusher = push.
 		New(pa.cfg.Address, _defaultJobName).
+		Gatherer(pa.reporter.registry).
 		Grouping(_defaultJobInstance, pa.initCtx.SDKContextID)
 }
 
@@ -399,7 +400,6 @@ func (pa *PushAction) Run(ctx context.Context) {
 				pa.reporter.rateLimitCollector.GetCurrentRevision())
 
 			if err := pa.pusher.
-				Gatherer(pa.reporter.registry).
 				Push(); err != nil {
 				log.GetBaseLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
 				return

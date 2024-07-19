@@ -48,6 +48,7 @@ func initArgs() {
 
 // PolarisProvider is a provider for polaris
 type PolarisProvider struct {
+	webSvr    *http.Server
 	provider  polaris.ProviderAPI
 	namespace string
 	service   string
@@ -87,6 +88,7 @@ func (svr *PolarisProvider) runWebServer() {
 		} else {
 			atomic.StoreInt32(&svr.needErr, 0)
 		}
+		log.Printf("switch success openError:" + val)
 		rw.WriteHeader(http.StatusOK)
 	})
 
@@ -99,8 +101,9 @@ func (svr *PolarisProvider) runWebServer() {
 
 	go func() {
 		log.Printf("[INFO] start http server, listen port is %v", svr.port)
-		if err := http.Serve(ln, nil); err != nil {
-			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+		svr.webSvr = &http.Server{}
+		if err := svr.webSvr.Serve(ln); err != nil {
+			log.Printf("[ERROR]fail to run webServer, err is %v", err)
 		}
 	}()
 }
@@ -113,14 +116,28 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Host = svr.host
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
-	resp, err := svr.provider.Register(registerRequest)
+	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
 	}
 	log.Printf("register response: instanceId %s", resp.InstanceID)
 }
 
-func runMainLoop() {
+func (svr *PolarisProvider) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	registerRequest := &polaris.InstanceDeRegisterRequest{}
+	registerRequest.Service = service
+	registerRequest.Namespace = namespace
+	registerRequest.Host = svr.host
+	registerRequest.Port = svr.port
+	registerRequest.ServiceToken = token
+	if err := svr.provider.Deregister(registerRequest); err != nil {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister finished")
+}
+
+func (svr *PolarisProvider) runMainLoop() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, []os.Signal{
 		syscall.SIGINT, syscall.SIGTERM,
@@ -129,6 +146,8 @@ func runMainLoop() {
 
 	for s := range ch {
 		log.Printf("catch signal(%+v), stop servers", s)
+		_ = svr.webSvr.Close()
+		svr.deregisterService()
 		return
 	}
 }
@@ -156,8 +175,7 @@ func main() {
 	}
 
 	svr.Run()
-
-	runMainLoop()
+	svr.runMainLoop()
 }
 
 func getLocalHost(serverAddr string) (string, error) {

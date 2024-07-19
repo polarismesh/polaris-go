@@ -358,7 +358,7 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 }
 
 // lookupRule 寻址规则
-func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map[string]string) []*apitraffic.Rule {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string) []*apitraffic.Rule {
 	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
 		return nil
@@ -393,7 +393,7 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[int]map
 		matched := true
 		if len(argumentMatchers) > 0 {
 			for _, argumentMatcher := range argumentMatchers {
-				stringStringMap := arguments[int(argumentMatcher.Type)]
+				stringStringMap := arguments[argumentMatcher.Type]
 				if len(stringStringMap) == 0 {
 					matched = false
 					break
@@ -440,7 +440,7 @@ func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *apitraffic.Rul
 		if regexCombine && valueMatcher.GetType() != apimodel.MatchString_EXACT {
 			labelValue = valueMatcher.GetValue().GetValue()
 		} else {
-			stringStringMap := request.Arguments[int(argumentMatcher.GetType())]
+			stringStringMap := request.Arguments[argumentMatcher.GetType()]
 			labelValue, _ = getLabelValue(argumentMatcher, stringStringMap)
 			if valueMatcher.GetType() != apimodel.MatchString_EXACT {
 				regexSpread = true

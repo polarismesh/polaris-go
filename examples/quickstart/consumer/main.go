@@ -24,6 +24,9 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
@@ -47,11 +50,24 @@ type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
 	namespace string
 	service   string
+	webSvr    *http.Server
 }
 
 // Run starts the consumer
 func (svr *PolarisConsumer) Run() {
-	svr.runWebServer()
+	go svr.runWebServer()
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, []os.Signal{
+		syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGSEGV,
+	}...)
+
+	for s := range ch {
+		svr.consumer.Destroy()
+		log.Printf("catch signal(%+v), stop servers", s)
+		_ = svr.webSvr.Close()
+		return
+	}
 }
 
 func (svr *PolarisConsumer) runWebServer() {
@@ -133,7 +149,9 @@ func (svr *PolarisConsumer) runWebServer() {
 
 	log.Printf("start run web server, port : %d", port)
 
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
+	webSvr := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", port), Handler: nil}
+	svr.webSvr = webSvr
+	if err := webSvr.ListenAndServe(); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}
 }

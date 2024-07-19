@@ -76,7 +76,7 @@ func (svr *PolarisProvider) runWebServer() {
 		quotaReq.SetMethod("/echo")
 		headers := convertHeaders(r.Header)
 		for k, v := range headers {
-			quotaReq.AddArgument(model.BuildHeaderArgument(k, v))
+			quotaReq.AddArgument(model.BuildHeaderArgument(strings.ToLower(k), v))
 		}
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)

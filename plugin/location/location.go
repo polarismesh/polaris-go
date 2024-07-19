@@ -120,6 +120,12 @@ func (p *Provider) Init(ctx *plugin.InitContext) error {
 	sort.Slice(p.pluginChains, func(i, j int) bool {
 		return priority[p.pluginChains[i].Name()] < priority[p.pluginChains[j].Name()]
 	})
+
+	activeProviders := []string{}
+	for i := range p.pluginChains {
+		activeProviders = append(activeProviders, p.pluginChains[i].Name())
+	}
+	log.GetBaseLogger().Infof("active location provider: %+v", activeProviders)
 	return nil
 }
 

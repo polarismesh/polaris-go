@@ -76,6 +76,7 @@ func (svr *PolarisConsumer) discoverInstance() (string, model.Resource, error) {
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = namespace
 	getOneRequest.Service = service
+	// 允许返回熔断半开的实例
 	getOneRequest.IncludeCircuitBreakInstances = true
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {

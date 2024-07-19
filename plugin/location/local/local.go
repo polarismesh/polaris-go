@@ -29,6 +29,7 @@ const (
 
 // LocationProviderImpl 从环境变量获取地域信息
 type LocationProviderImpl struct {
+	ctx      *plugin.InitContext
 	locCache *model.Location
 }
 
@@ -39,9 +40,24 @@ func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
 
 // Init 初始化插件
 func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
+	p.ctx = ctx
+	return nil
+}
+
+// Name 插件名称
+func (p *LocationProviderImpl) Name() string {
+	return locationProviderLocal
+}
+
+// GetLocation 获取地理位置信息
+func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
+	if p.locCache != nil {
+		return p.locCache, nil
+	}
+
 	log.GetBaseLogger().Infof("start use env location provider")
 
-	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderLocal)
+	provider := p.ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderLocal)
 	options := provider.GetOptions()
 
 	region, _ := options["region"].(string)
@@ -53,16 +69,5 @@ func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
 		Zone:   zone,
 		Campus: campus,
 	}
-
-	return nil
-}
-
-// Name 插件名称
-func (p *LocationProviderImpl) Name() string {
-	return locationProviderLocal
-}
-
-// GetLocation 获取地理位置信息
-func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	return p.locCache, nil
 }
