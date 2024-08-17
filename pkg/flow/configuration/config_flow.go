@@ -336,7 +336,7 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 				changedConfigFile.GetFileName())
 
 			newNotifiedVersion := changedConfigFile.GetVersion()
-			oldNotifiedVersion := c.getConfigFileNotifiedVersion(cacheKey)
+			oldNotifiedVersion := c.getConfigFileNotifiedVersion(cacheKey, true)
 
 			maxVersion := oldNotifiedVersion
 			if newNotifiedVersion > oldNotifiedVersion {
@@ -382,7 +382,7 @@ func (c *ConfigFileFlow) assembleWatchConfigFiles() []*configconnector.ConfigFil
 			Namespace: configFileMetadata.GetNamespace(),
 			FileGroup: configFileMetadata.GetFileGroup(),
 			FileName:  configFileMetadata.GetFileName(),
-			Version:   c.getConfigFileNotifiedVersion(cacheKey),
+			Version:   c.getConfigFileNotifiedVersion(cacheKey, false),
 		})
 	}
 
@@ -395,9 +395,11 @@ func (c *ConfigFileFlow) updateNotifiedVersion(cacheKey string, version uint64) 
 	c.notifiedVersion[cacheKey] = version
 }
 
-func (c *ConfigFileFlow) getConfigFileNotifiedVersion(cacheKey string) uint64 {
-	c.fclock.RLock()
-	defer c.fclock.RUnlock()
+func (c *ConfigFileFlow) getConfigFileNotifiedVersion(cacheKey string, locking bool) uint64 {
+	if locking {
+		c.fclock.RLock()
+		defer c.fclock.RUnlock()
+	}
 	version, ok := c.notifiedVersion[cacheKey]
 	if !ok {
 		version = initVersion
