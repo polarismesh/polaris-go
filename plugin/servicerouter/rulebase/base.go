@@ -162,6 +162,9 @@ func (g *RuleBasedInstancesFilter) matchSourceMetadata(ruleMeta map[string]*apim
 			if !exist {
 				return false, "", nil
 			}
+			if rawMetaValue == matchAll {
+				continue
+			}
 			switch ruleMetaValue.Type {
 			case apimodel.MatchString_REGEX:
 				var matchExp *regexp.Regexp
