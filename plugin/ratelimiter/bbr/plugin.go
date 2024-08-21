@@ -30,6 +30,7 @@ import (
 // BBRPlugin 基于 CPU BBR 策略的限流控制器
 type BBRPlugin struct {
 	*plugin.PluginBase
+	cfg *Config
 }
 
 // Type 插件类型，这里是算 limiter 的一种
@@ -44,10 +45,18 @@ func (g *BBRPlugin) Name() string {
 
 // Init 初始化插件
 func (g *BBRPlugin) Init(ctx *plugin.InitContext) error {
-	g.PluginBase = plugin.NewPluginBase(ctx)
 	if err := cpu.Init(); err != nil {
 		return err
 	}
+
+	g.PluginBase = plugin.NewPluginBase(ctx)
+	cfgValue := ctx.Config.GetProvider().GetRateLimit().GetPluginConfig(g.Name())
+	if cfgValue != nil {
+		g.cfg = cfgValue.(*Config)
+		core.SetDecay(g.cfg.Decay)
+		core.SetInterval(g.cfg.CPUSampleInterval)
+	}
+
 	go core.CollectCPUStat()
 	return nil
 }

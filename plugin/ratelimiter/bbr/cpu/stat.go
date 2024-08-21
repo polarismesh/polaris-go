@@ -19,12 +19,13 @@ package cpu
 
 import (
 	"fmt"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"sync/atomic"
 	"time"
 )
 
 const (
-	interval time.Duration = time.Millisecond * 500
+	interval time.Duration = time.Millisecond * 100
 )
 
 var (
@@ -42,7 +43,7 @@ func Init() error {
 	var err error
 	stats, err = newCgroupCPU()
 	if err != nil {
-		// fmt.Printf("cgroup cpu init failed(%v),switch to psutil cpu\n", err)
+		log.GetBaseLogger().Warnf("cgroup cpu init failed(%s), switch to psutil cpu", err.Error())
 		stats, err = newPsutilCPU(interval)
 		if err != nil {
 			return fmt.Errorf("cgroup cpu init failed. err: %w", err)
@@ -51,8 +52,7 @@ func Init() error {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for {
-			<-ticker.C
+		for range ticker.C {
 			u, err := stats.Usage()
 			if err == nil && u != 0 {
 				atomic.StoreUint64(&usage, u)
@@ -81,4 +81,14 @@ func ReadStat(stat *Stat) {
 // GetInfo get cpu info.
 func GetInfo() Info {
 	return stats.Info()
+}
+
+// GetCPUUsage 获取瞬时 CPU 使用率（百分数）
+func GetCPUUsage() float64 {
+	return float64(atomic.LoadUint64(&usage)) / 10
+}
+
+// GetCPUUsageInt 获取瞬时 CPU 使用率（百分数，整数）
+func GetCPUUsageInt() int {
+	return int(atomic.LoadUint64(&usage) / 10)
 }

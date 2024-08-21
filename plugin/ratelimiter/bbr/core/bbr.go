@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	gCPU  int64
-	decay = 0.95
+	gCPU   int64                                    // 当前 CPU 使用率
+	decay  = 0.95                                   // 加权平均系数
+	ticker = time.NewTicker(time.Millisecond * 500) // 定时任务定时器
 )
 
 type (
@@ -39,10 +40,26 @@ type (
 	Option func(*options)
 )
 
-// CollectCPUStat 定期采集并更新 CPU 使用率等指标
+// GetEMACPUUsage 获取 CPU 使用率（百分数，加权平均值）
+func GetEMACPUUsage() float64 {
+	return float64(atomic.LoadInt64(&gCPU)) / 10
+}
+
+// SetDecay 设置加权平均系数
+func SetDecay(decayInt int) {
+	log.GetBaseLogger().Infof("bbr limiter decay is set to: %v", decayInt)
+	decay = float64(decayInt) / 100
+}
+
+// SetInterval 设置定时任务间隔
+func SetInterval(interval time.Duration) {
+	log.GetBaseLogger().Infof("bbr ticker interval is set to: %v", interval)
+	ticker.Reset(interval)
+}
+
+// CollectCPUStat 定期更新 CPU 平均使用率
 // cpu = cpuᵗ⁻¹ * decay + cpuᵗ * (1 - decay)
 func CollectCPUStat() {
-	ticker := time.NewTicker(time.Millisecond * 500) // same to cpu sample rate
 	defer func() {
 		ticker.Stop()
 		if r := recover(); r != nil {
