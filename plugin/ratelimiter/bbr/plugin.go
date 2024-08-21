@@ -79,5 +79,5 @@ func (g *BBRPlugin) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.Qu
 
 // init 注册插件
 func init() {
-	plugin.RegisterPlugin(&BBRPlugin{})
+	plugin.RegisterConfigurablePlugin(&BBRPlugin{}, &Config{})
 }
