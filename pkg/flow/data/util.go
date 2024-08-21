@@ -88,29 +88,17 @@ func GetRegistry(cfg config.Configuration, supplier plugin.Supplier) (localregis
 
 // GetCircuitBreakers 获取熔断插件链
 func GetCircuitBreakers(
-	cfg config.Configuration, supplier plugin.Supplier) ([]circuitbreaker.InstanceCircuitBreaker, error) {
+	cfg config.Configuration, supplier plugin.Supplier) ([]circuitbreaker.CircuitBreaker, error) {
 	cbChain := cfg.GetConsumer().GetCircuitBreaker().GetChain()
-	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
-	var hasHealthCheckBreaker bool
-	cbreakers := make([]circuitbreaker.InstanceCircuitBreaker, 0, len(cbChain))
+	cbreakers := make([]circuitbreaker.CircuitBreaker, 0, len(cbChain))
 	if len(cbChain) > 0 {
 		for _, cbName := range cbChain {
-			if cbName == config.DefaultCircuitBreakerErrCheck {
-				hasHealthCheckBreaker = true
-			}
 			targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, cbName)
 			if err != nil {
 				return nil, err
 			}
-			cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
+			cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.CircuitBreaker))
 		}
-	}
-	if when == config.HealthCheckAlways && !hasHealthCheckBreaker {
-		targetPlugin, err := supplier.GetPlugin(common.TypeCircuitBreaker, config.DefaultCircuitBreakerErrCheck)
-		if err != nil {
-			return nil, err
-		}
-		cbreakers = append(cbreakers, targetPlugin.(circuitbreaker.InstanceCircuitBreaker))
 	}
 	return cbreakers, nil
 }

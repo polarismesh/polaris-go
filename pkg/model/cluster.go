@@ -733,12 +733,15 @@ type ServiceClusters interface {
 	GetExtendedCacheValue(pluginIndex int) interface{}
 	// SetExtendedCacheValue 设置扩展的缓存值，需要预初始化好，否则会有并发修改的问题
 	SetExtendedCacheValue(pluginIndex int, value interface{})
+	// GetInstancesWithMetaValuesNotEqual 获取该标签不等于指定标签值的实例集合
+	GetInstancesWithMetaValuesNotEqual(location Location, metaKey string, metavalue string) map[string]string
 }
 
 // LocationBasedMetaKey 基于某个地域信息的元数据查询key
 type LocationBasedMetaKey struct {
 	location Location
 	metaKey  string
+	keyType  int // 0: equal, 1: not equal
 }
 
 // metaDataInService 标签缓存信息
@@ -1012,6 +1015,42 @@ func (c *clusterCache) GetExtendedCacheValue(pluginIndex int) interface{} {
 // SetExtendedCacheValue 设置扩展的缓存值，需要预初始化好，否则会有并发修改的问题
 func (c *clusterCache) SetExtendedCacheValue(pluginIndex int, value interface{}) {
 	c.extendedCacheValues.Store(pluginIndex, value)
+}
+
+// GetInstancesWithMetaValuesNotEqual 获取该标签不等于指定标签值的实例集合
+func (c *clusterCache) GetInstancesWithMetaValuesNotEqual(location Location, metaKey string, metaValue string) map[string]string {
+	var value interface{}
+	var exists bool
+	locationKey := LocationBasedMetaKey{location: location, metaKey: metaKey, keyType: 1}
+	value, exists = c.svcLevelMetadata.metaDataSet.Load(locationKey)
+	if exists {
+		return value.(map[string]string)
+	}
+	// 按需构建指定地域的实例元数据集合
+	instances := c.svcInstances.GetInstances()
+	metaValueSet := make(map[string]string, 0)
+	for _, instance := range instances {
+		if !matchLocation(instance, location) {
+			continue
+		}
+		if instance.IsIsolated() || instance.GetWeight() == 0 || !instance.IsHealthy() {
+			continue
+		}
+		metadata := instance.GetMetadata()
+		if len(metadata) == 0 {
+			continue
+		}
+		val, ok := metadata[metaKey]
+		if !ok {
+			continue
+		}
+		if val == metaValue {
+			continue
+		}
+		metaValueSet[val] = buildComposedValue(metaKey, val)
+	}
+	value, _ = c.svcLevelMetadata.metaDataSet.LoadOrStore(locationKey, metaValueSet)
+	return value.(map[string]string)
 }
 
 // matchMetadata 标签匹配

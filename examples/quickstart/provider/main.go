@@ -54,6 +54,7 @@ type PolarisProvider struct {
 	host       string
 	port       int
 	isShutdown bool
+	webSvr     *http.Server
 }
 
 // Run starts the provider
@@ -83,7 +84,8 @@ func (svr *PolarisProvider) runWebServer() {
 
 	go func() {
 		log.Printf("[INFO] start http server, listen port is %v", svr.port)
-		if err := http.Serve(ln, nil); err != nil {
+		svr.webSvr = &http.Server{Handler: nil}
+		if err := svr.webSvr.Serve(ln); err != nil {
 			svr.isShutdown = false
 			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 		}
@@ -99,8 +101,6 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(1)
-	// 实例id不是必填，如果不填，服务端会默认生成一个唯一Id，否则当提供实例id时，需要保证实例id是唯一的
-	registerRequest.InstanceId = providedInstanceId(namespace, service, svr.host, svr.port)
 	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
@@ -116,8 +116,6 @@ func (svr *PolarisProvider) deregisterService() {
 	deregisterRequest.Host = svr.host
 	deregisterRequest.Port = svr.port
 	deregisterRequest.ServiceToken = token
-	// 实例id不是必填，如果注册时指定了实例id，则反注册时需要提供同样的id
-	deregisterRequest.InstanceID = providedInstanceId(namespace, service, svr.host, svr.port)
 	if err := svr.provider.Deregister(deregisterRequest); err != nil {
 		log.Fatalf("fail to deregister instance, err is %v", err)
 	}
@@ -135,6 +133,7 @@ func (svr *PolarisProvider) runMainLoop() {
 		log.Printf("catch signal(%+v), stop servers", s)
 		svr.isShutdown = true
 		svr.deregisterService()
+		_ = svr.webSvr.Close()
 		return
 	}
 }

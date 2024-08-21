@@ -60,9 +60,9 @@ Run the built **provider** executable
 for ((i=1; i<=3; i++))
 do
     # Set the locale information
-    export POLARIS_INSTANCE_REGION=china
-    export POLARIS_INSTANCE_ZONE=ap-guangzhou
-    export POLARIS_INSTANCE_CAMPUS=ap-guangzhou-${i}
+    export REGION=china
+    export ZONE=ap-guangzhou
+    export CAMPUS=ap-guangzhou-${i}
     
     # linux/mac run command
     ./provider > provider-20000.log 2>&1 &
@@ -73,9 +73,9 @@ Run the built **consumer** executable
 
 ````
 # Set the locale information
-export POLARIS_INSTANCE_REGION=china
-export POLARIS_INSTANCE_ZONE=ap-guangzhou
-export POLARIS_INSTANCE_CAMPUS=ap-guangzhou-1
+export REGION=china
+export ZONE=ap-guangzhou
+export CAMPUS=ap-guangzhou-1
 
 # linux/mac run command
 ./consumer --selfNamespace={selfName} --selfService=EchoConsumer

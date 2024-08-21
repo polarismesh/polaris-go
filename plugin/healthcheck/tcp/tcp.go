@@ -18,8 +18,13 @@
 package tcp
 
 import (
+	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"time"
+
+	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -27,7 +32,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
-	"github.com/polarismesh/polaris-go/plugin/healthcheck/utils"
 )
 
 // Detector TCP协议的实例健康探测器
@@ -66,28 +70,73 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 }
 
 // DetectInstance 探测服务实例健康
-func (g *Detector) DetectInstance(ins model.Instance) (result healthcheck.DetectResult, err error) {
+func (g *Detector) DetectInstance(ins model.Instance, rule *fault_tolerance.FaultDetectRule) (result healthcheck.DetectResult, err error) {
 	start := time.Now()
-	address := utils.GetAddressByInstance(ins)
-	success := g.doTCPDetect(address)
+	address := fmt.Sprintf("%s:%d", ins.GetHost(), ins.GetPort())
+	if rule != nil && rule.GetPort() > 0 {
+		address = fmt.Sprintf("%s:%d", ins.GetHost(), rule.GetPort())
+	}
+	success := g.doTCPDetect(address, rule)
 	result = &healthcheck.DetectResultImp{
 		Success:        success,
 		DetectTime:     start,
 		DetectInstance: ins,
+		Code: func() string {
+			if success {
+				return "0"
+			}
+			return "-1"
+		}(),
 	}
 	return result, nil
 }
 
 // doTCPDetect 执行一次探测逻辑
-func (g *Detector) doTCPDetect(address string) bool {
+func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetectRule) bool {
+	timeout := g.timeout
+	if rule != nil {
+		timeout = time.Duration(rule.GetTimeout()) * time.Millisecond
+	}
 	// 建立连接
-	conn, err := net.DialTimeout("tcp", address, g.timeout)
+	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
 		log.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
 		return false
 	}
-	_ = conn.Close()
-	return true
+	defer func() {
+		_ = conn.Close()
+	}()
+	if rule == nil || rule.GetTcpConfig() == nil {
+		return true
+	}
+	// 发送数据
+	tcpCfg := rule.GetTcpConfig()
+	if tcpCfg.Send == "" {
+		return true
+	}
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return false
+	}
+	if _, err = conn.Write([]byte(tcpCfg.Send)); err != nil {
+		return false
+	}
+	recvData, err := ioutil.ReadAll(conn)
+	if err != nil && err != io.EOF {
+		return false
+	}
+	actualData := string(recvData)
+	found := false
+	for i := range tcpCfg.Receive {
+		if tcpCfg.Receive[i] == actualData {
+			found = true
+		}
+	}
+	return found
+}
+
+// Protocol .
+func (g *Detector) Protocol() fault_tolerance.FaultDetectRule_Protocol {
+	return fault_tolerance.FaultDetectRule_TCP
 }
 
 // IsEnable enable

@@ -19,10 +19,13 @@ package model
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 )
 
@@ -51,6 +54,22 @@ type SDKToken struct {
 	Version  string
 	PodName  string
 	HostName string
+}
+
+func (sdkToken *SDKToken) InitUID() {
+	if sdkToken.PodName != "" {
+		sdkToken.UID = sdkToken.PodName
+		return
+	}
+	if sdkToken.HostName != "" {
+		sdkToken.UID = sdkToken.HostName + "-" + strconv.Itoa(int(sdkToken.PID))
+		return
+	}
+	if sdkToken.IP != "" {
+		sdkToken.UID = sdkToken.IP + "-" + strconv.Itoa(int(sdkToken.PID))
+		return
+	}
+	sdkToken.UID = strings.ToUpper(uuid.New().String())
 }
 
 // LocationInfo 地域信息

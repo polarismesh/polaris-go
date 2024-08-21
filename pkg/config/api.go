@@ -44,6 +44,8 @@ type GlobalConfig interface {
 	GetStatReporter() StatReporterConfig
 	// GetLocation global.location前缀开头的所有配置项
 	GetLocation() LocationConfig
+	// GetClient global.client前缀开头的所有配置项
+	GetClient() ClientConfig
 }
 
 // ConsumerConfig consumer config object.
@@ -77,6 +79,8 @@ type ConfigFileConfig interface {
 	BaseConfig
 	// IsEnable 是否启用配置中心
 	IsEnable() bool
+	// SetEnable 设置是否启用配置中心能力
+	SetEnable(bool)
 	// GetConfigConnectorConfig 配置文件连接器
 	GetConfigConnectorConfig() ConfigConnectorConfig
 	// GetConfigFilterConfig 配置文件加密器
@@ -213,8 +217,16 @@ type LocationConfig interface {
 	BaseConfig
 	// GetProvider 获取地理位置的提供者插件名称
 	GetProviders() []*LocationProviderConfigImpl
-
+	// GetProvider 根据类型名称获取对应插件的配置内容信息
 	GetProvider(typ string) *LocationProviderConfigImpl
+}
+
+type ClientConfig interface {
+	BaseConfig
+	// GetId 获取客户端ID
+	GetId() string
+	// GetLabels 获取客户端标签
+	GetLabels() map[string]string
 }
 
 // ServerConnectorConfig 与名字服务服务端的连接配置.
@@ -260,6 +272,10 @@ type ServerConnectorConfig interface {
 	GetConnectionIdleTimeout() time.Duration
 	// SetConnectionIdleTimeout 设置连接会被释放的空闲的时长
 	SetConnectionIdleTimeout(time.Duration)
+	// GetToken .
+	GetToken() string
+	// SetToken .
+	SetToken(string)
 }
 
 // LocalCacheConfig 本地缓存相关配置项.
@@ -401,32 +417,46 @@ type CircuitBreakerConfig interface {
 	// SetChain 设置熔断器插件链
 	SetChain([]string)
 	// GetCheckPeriod 熔断器定时检测时间
+	// Deprecated: 不在使用
 	GetCheckPeriod() time.Duration
 	// SetCheckPeriod 设置熔断器定时检测时间
+	// Deprecated: 不在使用
 	SetCheckPeriod(time.Duration)
 	// GetSleepWindow 获取熔断周期
+	// Deprecated: 不在使用
 	GetSleepWindow() time.Duration
 	// SetSleepWindow 设置熔断周期
+	// Deprecated: 不在使用
 	SetSleepWindow(interval time.Duration)
 	// GetRequestCountAfterHalfOpen 获取半开状态后最多分配多少个探测请求
+	// Deprecated: 不在使用
 	GetRequestCountAfterHalfOpen() int
 	// SetRequestCountAfterHalfOpen 设置半开状态后最多分配多少个探测请求
+	// Deprecated: 不在使用
 	SetRequestCountAfterHalfOpen(count int)
 	// GetSuccessCountAfterHalfOpen 获取半开状态后多少个成功请求则恢复
+	// Deprecated: 不在使用
 	GetSuccessCountAfterHalfOpen() int
 	// SetSuccessCountAfterHalfOpen 设置半开状态后多少个成功请求则恢复
+	// Deprecated: 不在使用
 	SetSuccessCountAfterHalfOpen(count int)
 	// GetRecoverWindow 获取半开后的恢复周期，按周期来进行半开放量的统计
+	// Deprecated: 不在使用
 	GetRecoverWindow() time.Duration
 	// SetRecoverWindow 设置半开后的恢复周期，按周期来进行半开放量的统计
+	// Deprecated: 不在使用
 	SetRecoverWindow(value time.Duration)
 	// GetRecoverNumBuckets 半开后请求数统计滑桶数量
+	// Deprecated: 不在使用
 	GetRecoverNumBuckets() int
 	// SetRecoverNumBuckets 设置半开后请求数统计滑桶数量
+	// Deprecated: 不在使用
 	SetRecoverNumBuckets(value int)
 	// GetErrorCountConfig 连续错误数熔断配置
+	// Deprecated: 不在使用
 	GetErrorCountConfig() ErrorCountConfig
 	// GetErrorRateConfig 错误率熔断配置
+	// Deprecated: 不在使用
 	GetErrorRateConfig() ErrorRateConfig
 }
 

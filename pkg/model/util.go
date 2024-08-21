@@ -260,18 +260,6 @@ func GetErrorCodeFromError(e error) ErrCode {
 	return sdkErr.ErrorCode()
 }
 
-// IsInstanceAvailable 服务实例是否可用
-func IsInstanceAvailable(instance Instance) bool {
-	if !instance.IsHealthy() {
-		return false
-	}
-	cbStatus := instance.GetCircuitBreakerStatus()
-	if nil != cbStatus && !cbStatus.IsAvailable() {
-		return false
-	}
-	return true
-}
-
 // SortMap 对map进行排序, keys的长度必须等于map的长度
 // 返回已经排序的key，以及map中总字符串长度
 func SortMap(values map[string]string, keys []string) ([]string, int) {

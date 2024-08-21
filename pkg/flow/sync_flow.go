@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -331,21 +330,18 @@ func (e *Engine) doSyncGetInstances(commonRequest *data.CommonInstancesRequest) 
 		commonRequest.DstService, targetCls, instances, totalWeight, commonRequest.DstInstances), nil
 }
 
-// SyncRegisterV2 async-regis
-func (e *Engine) SyncRegisterV2(request *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
-	request.SetDefaultTTL()
-
-	resp, err := e.doSyncRegister(request, registerstate.CreateRegisterV2Header())
-	if err != nil {
-		return nil, err
-	}
-
-	e.registerStates.PutRegister(request, e.doSyncRegister, e.SyncHeartbeat)
-	return resp, nil
-}
-
 // SyncRegister 同步进行服务注册
 func (e *Engine) SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {
+	if instance.AutoHeartbeat {
+		instance.SetDefaultTTL()
+		resp, err := e.doSyncRegister(instance, registerstate.CreateRegisterV2Header())
+		if err != nil {
+			return nil, err
+		}
+
+		e.registerStates.PutRegister(instance, e.doSyncRegister, e.SyncHeartbeat)
+		return resp, nil
+	}
 	return e.doSyncRegister(instance, nil)
 }
 
@@ -468,37 +464,7 @@ func (e *Engine) realSyncUpdateServiceCallResult(result *model.ServiceCallResult
 	if err := e.reportSvcStat(result); err != nil {
 		return err
 	}
-	if nil == e.rtCircuitBreakChan || len(e.circuitBreakerChain) == 0 {
-		return nil
-	}
-	var rtTask *cbcheck.RealTimeLimitTask
-	for _, cbreaker := range e.circuitBreakerChain {
-		cbName := cbreaker.Name()
-		rtLimit, err := cbreaker.Stat(result)
-		if err != nil {
-			return model.NewSDKError(model.ErrCodeCircuitBreakerError, err,
-				"fail to do real time circuitBreak in %s", cbName)
-		}
-		if rtLimit && nil == rtTask {
-			rtTask = &cbcheck.RealTimeLimitTask{
-				SvcKey: model.ServiceKey{
-					Namespace: result.GetNamespace(),
-					Service:   result.GetService()},
-				InstID: result.GetID(),
-				Host:   result.GetHost(),
-				Port:   result.GetPort(),
-				CbName: cbName}
-		}
-	}
-	if nil == rtTask {
-		return nil
-	}
-	rtCircuitBreakTask := &model.PriorityTask{
-		Name:     fmt.Sprintf("real-time-cb-%s", result.GetID()),
-		CallBack: cbcheck.NewCircuitBreakRealTimeCallBack(e.circuitBreakTask, rtTask),
-	}
-	log.GetDetectLogger().Debugf("realTime circuit break task %s for %s generated", rtCircuitBreakTask.Name, rtTask.SvcKey)
-	e.rtCircuitBreakChan <- rtCircuitBreakTask
+	// TODO 用新的熔断实现进行适配
 	return nil
 }
 
@@ -543,13 +509,13 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 	apiStartTime := e.globalCtx.Now()
 	for retryTimes < maxRetryTimes {
 		startTime := e.globalCtx.Now()
-		svcRule := e.registry.GetServiceRouteRule(&commonRequest.DstService.ServiceKey, false)
+		svcRule := e.registry.GetServiceRule(&commonRequest.DstService, false)
 		if svcRule.IsInitialized() {
 			commonRequest.CallResult.SetSuccess(e.globalCtx.Since(startTime))
 			return commonRequest.BuildServiceRuleResponse(svcRule), nil
 		}
 		var notifier *common.Notifier
-		if notifier, err = e.registry.LoadServiceRouteRule(&commonRequest.DstService.ServiceKey); err != nil {
+		if notifier, err = e.registry.LoadServiceRule(&commonRequest.DstService); err != nil {
 			(&commonRequest.CallResult).SetFail(
 				model.GetErrorCodeFromError(err), e.globalCtx.Since(apiStartTime))
 			return nil, err
@@ -628,23 +594,28 @@ func (e *Engine) realInitCalleeService(req *model.InitCalleeServiceRequest,
 }
 
 // SyncGetConfigFile 同步获取配置文件
-func (e *Engine) SyncGetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
-	return e.configFileFlow.GetConfigFile(namespace, fileGroup, fileName)
+func (e *Engine) SyncGetConfigFile(req *model.GetConfigFileRequest) (model.ConfigFile, error) {
+	return e.configFlow.GetConfigFile(req)
+}
+
+// SyncGetConfigGroup 同步获取配置文件
+func (e *Engine) SyncGetConfigGroup(namespace, fileGroup string) (model.ConfigFileGroup, error) {
+	return e.configFlow.GetConfigGroup(namespace, fileGroup)
 }
 
 // SyncCreateConfigFile 同步创建配置文件
 func (e *Engine) SyncCreateConfigFile(namespace, fileGroup, fileName, content string) error {
-	return e.configFileFlow.CreateConfigFile(namespace, fileGroup, fileName, content)
+	return e.configFlow.CreateConfigFile(namespace, fileGroup, fileName, content)
 }
 
 // SyncUpdateConfigFile 同步更新配置文件
 func (e *Engine) SyncUpdateConfigFile(namespace, fileGroup, fileName, content string) error {
-	return e.configFileFlow.UpdateConfigFile(namespace, fileGroup, fileName, content)
+	return e.configFlow.UpdateConfigFile(namespace, fileGroup, fileName, content)
 }
 
 // SyncPublishConfigFile 同步发布配置文件
 func (e *Engine) SyncPublishConfigFile(namespace, fileGroup, fileName string) error {
-	return e.configFileFlow.PublishConfigFile(namespace, fileGroup, fileName)
+	return e.configFlow.PublishConfigFile(namespace, fileGroup, fileName)
 }
 
 // WatchAllInstances 监听所有的实例

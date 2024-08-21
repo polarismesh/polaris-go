@@ -8,5 +8,6 @@ global:
       - prometheus
     plugin:
       prometheus:
-        type: pull
-        metricPort: 0
+        type: push
+        address: 127.0.0.1:9091
+        interval: 10s

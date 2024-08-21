@@ -57,6 +57,7 @@ type Connector struct {
 	valueCtx              model.ValueContext
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
+	token           string
 }
 
 // Type 插件类型.
@@ -77,6 +78,7 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		c.cfg = cfgValue.(*networkConfig)
 	}
+	c.token = ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetToken()
 	connManager, err := network.NewConfigConnectionManager(ctx.Config, ctx.ValueCtx)
 	if err != nil {
 		return model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create config connectionManager")
@@ -121,7 +123,8 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextRegisterInstanceReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -153,7 +156,8 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextWatchConfigFilesReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -190,7 +194,8 @@ func (c *Connector) CreateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextCreateConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -222,7 +227,8 @@ func (c *Connector) UpdateConfigFile(configFile *configconnector.ConfigFile) (*c
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextUpdateConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -254,7 +260,8 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	defer conn.Release(opKey)
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextPublishConfigFileReqID()
-	ctx, cancel := connector.CreateHeaderContextWithReqId(0, reqID)
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
 	if cancel != nil {
 		defer cancel()
 	}
@@ -266,6 +273,62 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	}
 	pbResp, err := configClient.PublishConfigFile(ctx, pbConfigFileRelease)
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
+}
+
+func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configconnector.ConfigGroupResponse, error) {
+	var err error
+	if err = c.waitDiscoverReady(); err != nil {
+		return nil, err
+	}
+	opKey := connector.OpKeyGetConfigGroup
+	startTime := clock.GetClock().Now()
+	// 获取server连接
+	conn, err := c.connManager.GetConnection(opKey, config.ConfigCluster)
+	if err != nil {
+		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
+			fmt.Sprintf("failed to get connection, opKey: %s", opKey))
+	}
+
+	reqID := connector.NextPublishConfigFileReqID()
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
+	if cancel != nil {
+		defer cancel()
+	}
+
+	// 释放server连接
+	defer conn.Release(opKey)
+	stub := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
+	request := req.ToSpecQuery()
+	response, err := stub.GetConfigFileMetadataList(ctx, request)
+	endTime := clock.GetClock().Now()
+	if err != nil {
+		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrorCodeRpcError), err, startTime,
+			fmt.Sprintf("fail to %s, request %s, "+
+				"reason is fail to send request, reqID %s, server %s", opKey, request, reqID, conn.ConnID))
+	}
+	// 打印应答报文
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(response)
+		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+	}
+	serverCodeType := pb.ConvertServerErrorToRpcError(response.GetCode().GetValue())
+	code := apimodel.Code(response.GetCode().GetValue())
+	// 预期code，正常响应
+	if code == apimodel.Code_ExecuteSuccess || code == apimodel.Code_NotFoundResource || code == apimodel.Code_DataNoChange {
+		c.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
+		groupResp := &configconnector.ConfigGroupResponse{}
+		if err := groupResp.ParseFromSpec(response); err != nil {
+			return nil, model.NewSDKError(model.ErrCodeServerException, nil, err.Error())
+		}
+		return groupResp, nil
+	}
+	// 当server发生了内部错误时，上报调用服务失败
+	errMsg := fmt.Sprintf(
+		"fail to %s, request %s, server code %d, reason %s, server %s", opKey,
+		request, response.GetCode().GetValue(), response.GetInfo().GetValue(), conn.ConnID)
+	c.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
+	return nil, model.NewSDKError(model.ErrCodeServerException, nil, errMsg)
 }
 
 // IsEnable .插件开关.
@@ -330,12 +393,20 @@ func (c *Connector) handleResponse(request string, reqID string, opKey string, r
 }
 
 func transferToClientConfigFileInfo(configFile *configconnector.ConfigFile) *config_manage.ClientConfigFileInfo {
+	tags := make([]*config_manage.ConfigFileTag, 0, len(configFile.GetLabels()))
+	for key, val := range configFile.GetLabels() {
+		tags = append(tags, &config_manage.ConfigFileTag{
+			Key:   wrapperspb.String(key),
+			Value: wrapperspb.String(val),
+		})
+	}
 	return &config_manage.ClientConfigFileInfo{
 		Namespace: wrapperspb.String(configFile.Namespace),
 		Group:     wrapperspb.String(configFile.GetFileGroup()),
 		FileName:  wrapperspb.String(configFile.GetFileName()),
 		Version:   wrapperspb.UInt64(configFile.GetVersion()),
 		PublicKey: wrapperspb.String(configFile.GetPublicKey()),
+		Tags:      tags,
 	}
 }
 

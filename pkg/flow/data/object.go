@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -215,6 +217,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	c.DstService.Service = request.Service
 	c.DstService.Namespace = request.Namespace
 	c.RouteInfo.DestService = request
+	c.RouteInfo.IncludeCircuitBreakInstances = request.IncludeCircuitBreakInstances
 	c.RouteInfo.EnableFailOverDefaultMeta = request.EnableFailOverDefaultMeta
 	c.RouteInfo.FailOverDefaultMeta = request.FailOverDefaultMeta
 	c.RouteInfo.Canary = request.Canary
@@ -550,7 +553,7 @@ type CommonRateLimitRequest struct {
 	DstService    model.ServiceKey
 	Token         uint32
 	Method        string
-	Arguments     map[int]map[string]string
+	Arguments     map[apitraffic.MatchArgument_Type]map[string]string
 	RateLimitRule model.ServiceRule
 	Trigger       model.NotifyTrigger
 	ControlParam  model.ControlParam
@@ -566,16 +569,35 @@ func (cl *CommonRateLimitRequest) clearValues() {
 	cl.Arguments = nil
 }
 
-func parseArguments(arguments []model.Argument) map[int]map[string]string {
-	argumentMap := make(map[int]map[string]string, 0)
+func toSpecArgument(i int) apitraffic.MatchArgument_Type {
+	switch i {
+	case model.ArgumentTypeCallerIP:
+		return apitraffic.MatchArgument_CALLER_IP
+	case model.ArgumentTypeCallerService:
+		return apitraffic.MatchArgument_CALLER_SERVICE
+	case model.ArgumentTypeCustom:
+		return apitraffic.MatchArgument_CUSTOM
+	case model.ArgumentTypeHeader:
+		return apitraffic.MatchArgument_HEADER
+	case model.ArgumentTypeMethod:
+		return apitraffic.MatchArgument_METHOD
+	case model.ArgumentTypeQuery:
+		return apitraffic.MatchArgument_QUERY
+	default:
+		return apitraffic.MatchArgument_CUSTOM
+	}
+}
+
+func parseArguments(arguments []model.Argument) map[apitraffic.MatchArgument_Type]map[string]string {
+	argumentMap := make(map[apitraffic.MatchArgument_Type]map[string]string, 0)
 	if len(arguments) == 0 {
 		return argumentMap
 	}
 	for _, argument := range arguments {
-		stringMatchArgumentMap := argumentMap[argument.ArgumentType()]
+		stringMatchArgumentMap := argumentMap[toSpecArgument(argument.ArgumentType())]
 		if nil == stringMatchArgumentMap {
 			stringMatchArgumentMap = make(map[string]string)
-			argumentMap[argument.ArgumentType()] = stringMatchArgumentMap
+			argumentMap[toSpecArgument(argument.ArgumentType())] = stringMatchArgumentMap
 		}
 		stringMatchArgumentMap[argument.Key()] = argument.Value()
 	}

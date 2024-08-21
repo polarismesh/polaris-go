@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"github.com/modern-go/reflect2"
 	"gopkg.in/yaml.v2"
@@ -261,20 +260,21 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
-	getSelfIP(cfg)
-	token := model.SDKToken{
+	initSelfIP(cfg)
+	token := &model.SDKToken{
 		IP:       cfg.GetGlobal().GetAPI().GetBindIP(),
 		PID:      int32(os.Getpid()),
-		UID:      strings.ToUpper(uuid.New().String()),
 		Client:   version.ClientType,
 		Version:  version.Version,
 		PodName:  getPodName(),
 		HostName: getHostName(),
 	}
+	token.InitUID()
+	initSelfLabels(cfg, token)
 	log.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, CONTAINER: "+"%s, HOSTNAME:%s-------",
 		version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
 
-	globalCtx.SetValue(model.ContextKeyToken, token)
+	globalCtx.SetValue(model.ContextKeyToken, *token)
 	plugManager := plugin.NewPluginManager()
 	globalCtx.SetValue(model.ContextKeyPlugins, plugManager)
 	connManager, err := network.NewConnectionManager(cfg, globalCtx)
@@ -321,8 +321,8 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	return ctx, nil
 }
 
-// getSelfIP 获取SDK自身的IP
-func getSelfIP(cfg config.Configuration) {
+// initSelfIP 获取SDK自身的IP
+func initSelfIP(cfg config.Configuration) {
 	bindIP := cfg.GetGlobal().GetAPI().GetBindIP()
 	bindIntf := cfg.GetGlobal().GetAPI().GetBindIntf()
 	if len(bindIP) != 0 || len(bindIntf) != 0 {
@@ -334,7 +334,8 @@ func getSelfIP(cfg config.Configuration) {
 		return
 	}
 
-	conn, _ := net.Dial("tcp", address[0])
+	timeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
+	conn, _ := net.DialTimeout("tcp", address[0], timeout)
 	if conn != nil {
 		localAddr := conn.LocalAddr().String()
 		colonIdx := strings.LastIndex(localAddr, ":")
@@ -344,6 +345,19 @@ func getSelfIP(cfg config.Configuration) {
 		cfg.GetGlobal().GetAPI().SetBindIP(localAddr)
 		_ = conn.Close()
 	}
+}
+
+func initSelfLabels(cfg config.Configuration, sdkToken *model.SDKToken) {
+	clientCfg := cfg.GetGlobal().GetClient().(*config.ClientConfigImpl)
+	if clientCfg.GetId() == "" {
+		clientCfg.SetId(sdkToken.UID)
+	}
+	clientCfg.AddLabels(map[string]string{
+		"CLIENT_IP":       cfg.GetGlobal().GetAPI().GetBindIP(),
+		"CLIENT_ID":       clientCfg.GetId(),
+		"CLIENT_VERSION":  sdkToken.Version,
+		"CLIENT_LANGUAGE": sdkToken.Client,
+	})
 }
 
 // onContextInitialized 在全局上下文初始化完成后，触发事件回调，可针对不同插件做一些阻塞等待某个事件完成的操作

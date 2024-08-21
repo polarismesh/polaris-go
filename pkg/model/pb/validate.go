@@ -29,17 +29,21 @@ import (
 
 var (
 	eventTypeToProtoRequestType = map[model.EventType]apiservice.DiscoverRequest_DiscoverRequestType{
-		model.EventInstances:    apiservice.DiscoverRequest_INSTANCE,
-		model.EventRouting:      apiservice.DiscoverRequest_ROUTING,
-		model.EventRateLimiting: apiservice.DiscoverRequest_RATE_LIMIT,
-		model.EventServices:     apiservice.DiscoverRequest_SERVICES,
+		model.EventInstances:      apiservice.DiscoverRequest_INSTANCE,
+		model.EventRouting:        apiservice.DiscoverRequest_ROUTING,
+		model.EventRateLimiting:   apiservice.DiscoverRequest_RATE_LIMIT,
+		model.EventServices:       apiservice.DiscoverRequest_SERVICES,
+		model.EventCircuitBreaker: apiservice.DiscoverRequest_CIRCUIT_BREAKER,
+		model.EventFaultDetect:    apiservice.DiscoverRequest_FAULT_DETECTOR,
 	}
 
 	protoRespTypeToEventType = map[apiservice.DiscoverResponse_DiscoverResponseType]model.EventType{
-		apiservice.DiscoverResponse_INSTANCE:   model.EventInstances,
-		apiservice.DiscoverResponse_ROUTING:    model.EventRouting,
-		apiservice.DiscoverResponse_RATE_LIMIT: model.EventRateLimiting,
-		apiservice.DiscoverResponse_SERVICES:   model.EventServices,
+		apiservice.DiscoverResponse_INSTANCE:        model.EventInstances,
+		apiservice.DiscoverResponse_ROUTING:         model.EventRouting,
+		apiservice.DiscoverResponse_RATE_LIMIT:      model.EventRateLimiting,
+		apiservice.DiscoverResponse_SERVICES:        model.EventServices,
+		apiservice.DiscoverResponse_CIRCUIT_BREAKER: model.EventCircuitBreaker,
+		apiservice.DiscoverResponse_FAULT_DETECTOR:  model.EventFaultDetect,
 	}
 )
 

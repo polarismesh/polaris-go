@@ -44,6 +44,8 @@ import (
 const (
 	// 需要发往服务端的请求跟踪标识
 	headerRequestID = "request-id"
+	//
+	headerAuthToken = "X-Polaris-Token"
 	// 失败时的最大超时时间
 	maxConnTimeout = 100 * time.Millisecond
 	// 任务重试间隔
@@ -68,6 +70,8 @@ type DiscoverConnector struct {
 	ServiceConnector      *plugin.PluginBase
 	connectionIdleTimeout time.Duration
 	messageTimeout        time.Duration
+	// authToken
+	authToken string
 	// 普通任务队列
 	taskChannel chan *clientTask
 	// 高优先级重试任务队列，只会在系统服务未ready时候会往队列塞值
@@ -100,6 +104,7 @@ type clientTask struct {
 // Init 初始化插件
 func (g *DiscoverConnector) Init(ctx *plugin.InitContext, createClient DiscoverClientCreator) {
 	ctxConfig := ctx.Config
+	g.authToken = ctxConfig.GetGlobal().GetServerConnector().GetToken()
 	g.RunContext = common.NewRunContext()
 	g.scalableRand = rand.NewScalableRand()
 	g.discoverKey.Namespace = ctxConfig.GetGlobal().GetSystem().GetDiscoverCluster().GetNamespace()
@@ -141,7 +146,7 @@ func (g *DiscoverConnector) doLog() {
 	for {
 		select {
 		case <-g.Done():
-			log.GetBaseLogger().Infof("doLog routine of grpc connector has benn terminated")
+			log.GetNetworkLogger().Infof("doLog routine of grpc connector has benn terminated")
 			return
 		case <-logLoop.C:
 			g.updateTaskSet.Range(func(k, v interface{}) bool {
@@ -170,10 +175,10 @@ func (g *DiscoverConnector) doRetry() {
 	for {
 		select {
 		case <-g.Done():
-			log.GetBaseLogger().Infof("doRetry routine of grpc connector has benn terminated")
+			log.GetNetworkLogger().Infof("doRetry routine of grpc connector has benn terminated")
 			return
 		case svcEventKey := <-g.retryPriorityTaskChannel:
-			log.GetBaseLogger().Infof("retry: start add priority task %s", svcEventKey)
+			log.GetNetworkLogger().Infof("retry: start add priority task %s", svcEventKey)
 			if taskValue, ok := g.updateTaskSet.Load(svcEventKey); ok {
 				priorityTask := taskValue.(*serviceUpdateTask)
 				g.scheduleRetry(priorityTask)
@@ -193,14 +198,14 @@ func (g *DiscoverConnector) scheduleRetry(task *serviceUpdateTask) {
 	task.retryLock.Lock()
 	defer task.retryLock.Unlock()
 	if atomic.CompareAndSwapUint32(&task.longRun, retryTask, firstTask) {
-		log.GetBaseLogger().Infof("retry: start schedule task %s", task.ServiceEventKey)
+		log.GetNetworkLogger().Infof("retry: start schedule task %s", task.ServiceEventKey)
 		select {
 		case <-g.Done():
-			log.GetBaseLogger().Infof("%s, context done, exit retry", g.ServiceConnector.GetSDKContextID())
+			log.GetNetworkLogger().Infof("%s, context done, exit retry", g.ServiceConnector.GetSDKContextID())
 			return
 		case <-task.retryDeadline:
 			_ = g.addFirstTask(task)
-			log.GetBaseLogger().Infof("retry: success schedule task %s", task.ServiceEventKey)
+			log.GetNetworkLogger().Infof("retry: success schedule task %s", task.ServiceEventKey)
 		}
 	}
 }
@@ -219,7 +224,7 @@ func (g *DiscoverConnector) doSend() {
 				// 如果刚好连接切换，还没有执行到clearIdleClient，旧连接可能还是活跃的，关闭连接避免泄露
 				streamingClient.CloseStream(true)
 			}
-			log.GetBaseLogger().Infof("doSend routine of grpc connector has benn terminated")
+			log.GetNetworkLogger().Infof("doSend routine of grpc connector has benn terminated")
 			return
 		case clientTask := <-g.taskChannel:
 			streamingClient = g.onClientTask(streamingClient, clientTask)
@@ -227,6 +232,9 @@ func (g *DiscoverConnector) doSend() {
 			if nil != streamingClient {
 				allTaskTimeout := g.clearTimeoutClient(streamingClient)
 				hasSwitchedClient := g.clearSwitchedClient(streamingClient)
+				if hasSwitchedClient || allTaskTimeout {
+					log.GetNetworkLogger().Infof("trigger clear idle client, hasSwitchedClient(%+v) allTaskTimeout(%+v)", hasSwitchedClient, allTaskTimeout)
+				}
 				g.clearIdleClient(streamingClient, hasSwitchedClient || allTaskTimeout)
 			}
 			g.updateTaskSet.Range(func(k, v interface{}) bool {
@@ -235,11 +243,11 @@ func (g *DiscoverConnector) doSend() {
 				if atomic.LoadUint32(&task.longRun) != longRunning || !task.needUpdate() {
 					return true
 				}
-				log.GetBaseLogger().Debugf(
+				log.GetNetworkLogger().Debugf(
 					"start to update task %s, update interval %v", task.ServiceEventKey, task.updateInterval)
 				streamingClient = g.processUpdateTask(streamingClient, task)
 				if len(g.taskChannel) > 0 {
-					log.GetBaseLogger().Infof("firstTask received, now breakthrough updateTasks")
+					log.GetNetworkLogger().Infof("firstTask received, now breakthrough updateTasks")
 					return false
 				}
 				return true
@@ -253,7 +261,7 @@ func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err e
 	updateTask.retryLock.Lock()
 	defer updateTask.retryLock.Unlock()
 	if atomic.CompareAndSwapUint32(&updateTask.longRun, firstTask, retryTask) {
-		log.GetBaseLogger().Warnf("retry: task %s for error %v", updateTask.ServiceEventKey, err)
+		log.GetNetworkLogger().Warnf("retry: task %s for error %v", updateTask.ServiceEventKey, err)
 		if notReady {
 			// 如果是等待首次连接的，则缩短重试间隔
 			updateTask.retryDeadline = time.After(clock.TimeStep())
@@ -265,7 +273,7 @@ func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err e
 			g.retryPriorityTaskChannel <- updateTask.ServiceEventKey
 		}
 	} else {
-		log.GetBaseLogger().Warnf(
+		log.GetNetworkLogger().Warnf(
 			"skip retry: not first task %s for error %v", updateTask.ServiceEventKey, err)
 		updateTask.lastUpdateTime.Store(time.Now())
 	}
@@ -276,7 +284,7 @@ const maxLogMsgSize = 4 * 1024 * 1024
 
 // 打印应答消息
 func logDiscoverResponse(resp *apiservice.DiscoverResponse, connection *network.Connection) {
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		svcKey := model.ServiceEventKey{
 			ServiceKey: model.ServiceKey{
 				Namespace: resp.GetService().GetNamespace().GetValue(),
@@ -287,10 +295,10 @@ func logDiscoverResponse(resp *apiservice.DiscoverResponse, connection *network.
 		jsonMarshaler := &jsonpb.Marshaler{}
 		respJSON, _ := jsonMarshaler.MarshalToString(resp)
 		if len(respJSON) <= maxLogMsgSize {
-			log.GetBaseLogger().Debugf("received response from %s(%s), service %s: \n%v",
+			log.GetNetworkLogger().Debugf("received response from %s(%s), service %s: \n%v",
 				connection.ConnID, connection.Address, svcKey, respJSON)
 		} else {
-			log.GetBaseLogger().Debugf("received response from %s(%s), service %s: message size exceed %v",
+			log.GetNetworkLogger().Debugf("received response from %s(%s), service %s: message size exceed %v",
 				connection.ConnID, connection.Address, svcKey, maxLogMsgSize)
 		}
 	}
@@ -306,7 +314,7 @@ func discoverResponseToEvent(resp *apiservice.DiscoverResponse,
 	if model.IsSuccessResultCode(retCode) {
 		svcEvent.Value = resp
 	} else {
-		log.GetBaseLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
+		log.GetNetworkLogger().Errorf("server error received, code %v, info: %s", retCode, errInfo)
 		svcEvent.Error = model.NewServerSDKError(retCode,
 			errInfo, nil, "server error from %s: %s", connection.ConnID.Address, errInfo)
 	}
@@ -316,7 +324,7 @@ func discoverResponseToEvent(resp *apiservice.DiscoverResponse,
 // 将任务加入调度列表
 func (g *DiscoverConnector) addUpdateTaskSet(updateTask *serviceUpdateTask) {
 	if atomic.CompareAndSwapUint32(&updateTask.longRun, firstTask, longRunning) {
-		log.GetBaseLogger().Infof("serviceEvent %s update has been scheduled, interval %v",
+		log.GetNetworkLogger().Infof("serviceEvent %s update has been scheduled, interval %v",
 			updateTask.ServiceEventKey, updateTask.updateInterval)
 		g.updateTaskSet.Store(updateTask.ServiceEventKey, updateTask)
 	}
@@ -341,8 +349,8 @@ func (g *DiscoverConnector) onAddListener(
 
 // 处理删除服务实例更新任务
 func (g *DiscoverConnector) onDelListener(taskKey *model.ServiceEventKey) {
-	// log.GetBaseLogger().Infof("serviceEvent %s update has been cancelled", *taskKey)
-	log.GetBaseLogger().Infof("%s, onDelListener: task %s removed from updateTaskSet",
+	// log.GetNetworkLogger().Infof("serviceEvent %s update has been cancelled", *taskKey)
+	log.GetNetworkLogger().Infof("%s, onDelListener: task %s removed from updateTaskSet",
 		g.ServiceConnector.GetSDKContextID(), *taskKey)
 	g.updateTaskSet.Delete(*taskKey)
 }
@@ -473,7 +481,7 @@ func (s *StreamingClient) checkErrorReport(grpcErr error, resp *apiservice.Disco
 
 // 使用streamClient进行收包，并更新服务信息
 func (s *StreamingClient) receiveAndNotify() {
-	log.GetBaseLogger().Infof("%s, receiveAndNotify of streamingClient %s start to receive message",
+	log.GetNetworkLogger().Infof("%s, receiveAndNotify of streamingClient %s start to receive message",
 		s.connector.ServiceConnector.GetSDKContextID(), s.reqID)
 	for {
 		resp, grpcErr := s.discoverClient.Recv()
@@ -501,7 +509,7 @@ func (s *StreamingClient) receiveAndNotify() {
 				}
 			}
 			// 出现了错误，退出收包协程
-			log.GetBaseLogger().Infof("%s, receiveAndNotify of streamClient %s terminated",
+			log.GetNetworkLogger().Infof("%s, receiveAndNotify of streamClient %s terminated",
 				s.connector.ServiceConnector.GetSDKContextID(), s.reqID)
 			return
 		}
@@ -530,7 +538,7 @@ func (s *StreamingClient) receiveAndNotify() {
 			// 服务如果没有被删除，则添加后续轮询
 			s.connector.addUpdateTaskSet(updateTask)
 		} else {
-			log.GetBaseLogger().Errorf("%s, can not get task %s from streamingClient %s pendingTask",
+			log.GetNetworkLogger().Errorf("%s, can not get task %s from streamingClient %s pendingTask",
 				s.connector.ServiceConnector.GetSDKContextID(), svcKey, s.reqID)
 		}
 	}
@@ -560,7 +568,7 @@ func (g *DiscoverConnector) checkStreamingClientAvailable(
 	}
 	origTask, ok := streamingClient.pendingTasks[task.ServiceEventKey]
 	if ok {
-		log.GetBaseLogger().Errorf("%s, checkStreamingClientAvailable:"+
+		log.GetNetworkLogger().Errorf("%s, checkStreamingClientAvailable:"+
 			" add exist task %s to client %s, whose msgSendTime is %s, lastUpdateTime is %s",
 			g.ServiceConnector.GetSDKContextID(), origTask, streamingClient.reqID,
 			atomicTimeToString(origTask.msgSendTime), atomicTimeToString(origTask.lastUpdateTime))
@@ -584,8 +592,12 @@ func (g *DiscoverConnector) newStream(task *serviceUpdateTask) (streamingClient 
 		goto finally
 	}
 	streamingClient.reqID = NextDiscoverReqID()
-	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(streamingClient.reqID,
-		streamingClient.connection, 0)
+	streamingClient.discoverClient, streamingClient.cancel, err = g.createClient(&DiscoverClientCreatorArgs{
+		ReqId:      streamingClient.reqID,
+		Connection: streamingClient.connection,
+		Timeout:    0,
+		AuthToken:  g.authToken,
+	})
 	if err != nil {
 		log.GetNetworkLogger().Errorf("%s, newStream: fail to get streaming client from %s, reqID %s, err %v",
 			g.ServiceConnector.GetSDKContextID(), streamingClient.connection, streamingClient.reqID, err)
@@ -659,7 +671,7 @@ func (s *StreamingClient) allTaskTimeout(msgTimeout time.Duration) bool {
 	}
 	lastRecvTime := s.getLastRecvTime()
 	if allTaskTimeout && time.Since(*lastRecvTime) > msgTimeout {
-		log.GetBaseLogger().Infof("%s, allTaskTimeout: timeout on connection %s, connection lastRecv time is %v",
+		log.GetNetworkLogger().Infof("%s, allTaskTimeout: timeout on connection %s, connection lastRecv time is %v",
 			s.connector.ServiceConnector.GetSDKContextID(), s.connection.ConnID, *lastRecvTime)
 		return true
 	}
@@ -683,7 +695,7 @@ func (g *DiscoverConnector) clearTimeoutClient(client *StreamingClient) bool {
 		return false
 	}
 	// 进行closeStream操作
-	log.GetBaseLogger().Warnf(
+	log.GetNetworkLogger().Warnf(
 		"connection %s(%s) reqID %s has pending tasks after timeout %v, start to terminate",
 		client.connection.ConnID, client.reqID, client.connection.Address, g.messageTimeout)
 	atomic.StoreUint32(&client.hasError, 1)
@@ -731,11 +743,11 @@ func (g *DiscoverConnector) asyncUpdateTask(
 		// 构造新的streamingClient
 		streamingClient, err = g.newStream(task)
 		if err != nil {
-			log.GetBaseLogger().Errorf("fail to create stream for service %v, error is %+v", task.ServiceEventKey, err)
+			log.GetNetworkLogger().Errorf("fail to create stream for service %v, error is %+v", task.ServiceEventKey, err)
 			return nil
 		}
 	}
-	log.GetBaseLogger().Debugf("send request(id=%s) to %s for service %v",
+	log.GetNetworkLogger().Debugf("send request(id=%s) to %s for service %v",
 		streamingClient.reqID, streamingClient.connection.Address, task.ServiceEventKey)
 	task.msgSendTime.Store(curTime)
 	taskType := atomic.LoadUint32(&task.longRun)
@@ -760,7 +772,7 @@ func (g *DiscoverConnector) processUpdateTask(
 		// 未到更新时间
 		return streamingClient
 	}
-	log.GetBaseLogger().Debugf("start to process task %s", task.ServiceEventKey)
+	log.GetNetworkLogger().Debugf("start to process task %s", task.ServiceEventKey)
 	if task.targetCluster == config.BuiltinCluster {
 		err := g.syncUpdateTask(task)
 		if err != nil {
@@ -858,9 +870,9 @@ func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
-		log.GetBaseLogger().Debugf(
+		log.GetNetworkLogger().Debugf(
 			"discover request to send is %s", reqJSON)
 	}
 	return request
@@ -883,7 +895,7 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	diffSecond := g.scalableRand.Intn(3)
 	mu.Unlock()
 	updateTask.updateInterval = svcEventHandler.RefreshInterval + (time.Duration(diffSecond) * time.Second)
-	log.GetBaseLogger().Debugf(
+	log.GetNetworkLogger().Debugf(
 		"register update task for service %s, update interval %v", updateTask.ServiceEventKey, updateTask.updateInterval)
 	return g.addFirstTask(updateTask)
 }
@@ -891,7 +903,7 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 // 往队列插入任务
 func (g *DiscoverConnector) addFirstTask(updateTask *serviceUpdateTask) error {
 	task := &clientTask{updateTask: updateTask, op: opAddListener}
-	log.GetBaseLogger().Infof("%s, addFirstTask: start to add first task for %s",
+	log.GetNetworkLogger().Infof("%s, addFirstTask: start to add first task for %s",
 		g.ServiceConnector.GetSDKContextID(), updateTask)
 	select {
 	case <-g.Done():
@@ -899,7 +911,7 @@ func (g *DiscoverConnector) addFirstTask(updateTask *serviceUpdateTask) error {
 			"RegisterServiceHandler: serverConnector has been destroyed")
 	case g.taskChannel <- task:
 		// 这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
-		log.GetBaseLogger().Infof("%s, addFirstTask: finish add first task for %s",
+		log.GetNetworkLogger().Infof("%s, addFirstTask: finish add first task for %s",
 			g.ServiceConnector.GetSDKContextID(), updateTask)
 	}
 	return nil
@@ -915,7 +927,7 @@ func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey)
 	task := &clientTask{
 		updateTask: updateTask,
 		op:         opDelListener}
-	log.GetBaseLogger().Infof("%s, DeRegisterServiceHandler: start to add deregister task %s",
+	log.GetNetworkLogger().Infof("%s, DeRegisterServiceHandler: start to add deregister task %s",
 		g.ServiceConnector.GetSDKContextID(), updateTask)
 	select {
 	case <-g.Done():
@@ -923,7 +935,7 @@ func (g *DiscoverConnector) DeRegisterServiceHandler(key *model.ServiceEventKey)
 			"DeRegisterServiceHandler: serverConnector has been destroyed")
 	case g.taskChannel <- task:
 		// 这里先用同步来塞，到时测试下性能，不行的话就改成异步塞
-		log.GetBaseLogger().Infof("%s, DeRegisterServiceHandler: finish add deregister task %s",
+		log.GetNetworkLogger().Infof("%s, DeRegisterServiceHandler: finish add deregister task %s",
 			g.ServiceConnector.GetSDKContextID(), updateTask)
 	}
 	return nil
@@ -950,21 +962,26 @@ func (g *DiscoverConnector) syncUpdateTask(task *serviceUpdateTask) error {
 	}
 	defer connection.Release(OpKeyDiscover)
 	reqID := NextDiscoverReqID()
-	discoverClient, cancel, err := g.createClient(reqID, connection, g.messageTimeout)
+	discoverClient, cancel, err := g.createClient(&DiscoverClientCreatorArgs{
+		ReqId:      reqID,
+		Connection: connection,
+		Timeout:    g.messageTimeout,
+		AuthToken:  g.authToken,
+	})
 	if cancel != nil {
 		defer cancel()
 	}
 	if err != nil {
 		return err
 	}
-	log.GetBaseLogger().Debugf("sync stream %s created, connection %s, timeout %v",
+	log.GetNetworkLogger().Debugf("sync stream %s created, connection %s, timeout %v",
 		reqID, connection.ConnID, g.connectionIdleTimeout)
 	var request = task.toDiscoverRequest()
 	task.msgSendTime.Store(curTime)
 	atomic.AddUint64(&task.totalRequests, 1)
 	err = discoverClient.Send(request)
 	if err != nil {
-		log.GetBaseLogger().Errorf(
+		log.GetNetworkLogger().Errorf(
 			"fail to send request for service %v, error is %+v", task.ServiceEventKey, err)
 		return err
 	}

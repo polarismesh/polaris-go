@@ -35,6 +35,10 @@ const (
 	EventRateLimiting EventType = 0x2003
 	// EventServices 批量服务
 	EventServices EventType = 0x2005
+	// EventCircuitBreaker 熔断规则
+	EventCircuitBreaker EventType = 0x2006
+	// EventFaultDetect 探测规则
+	EventFaultDetect EventType = 0x2007
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
@@ -62,17 +66,21 @@ func (e EventType) String() string {
 var (
 	// 路由规则到日志回显
 	eventTypeToPresent = map[EventType]string{
-		EventInstances:    "instance",
-		EventRouting:      "routing",
-		EventRateLimiting: "rate_limiting",
-		EventServices:     "services",
+		EventInstances:      "instance",
+		EventRouting:        "routing",
+		EventRateLimiting:   "rate_limiting",
+		EventServices:       "services",
+		EventCircuitBreaker: "circuit_breaker",
+		EventFaultDetect:    "fault_detect",
 	}
 
 	presentToEventType = map[string]EventType{
-		"instance":      EventInstances,
-		"routing":       EventRouting,
-		"rate_limiting": EventRateLimiting,
-		"services":      EventServices,
+		"instance":        EventInstances,
+		"routing":         EventRouting,
+		"rate_limiting":   EventRateLimiting,
+		"services":        EventServices,
+		"circuit_breaker": EventCircuitBreaker,
+		"fault_detect":    EventFaultDetect,
 	}
 )
 
@@ -83,6 +91,8 @@ func ToEventType(value string) EventType {
 	}
 	return EventUnknown
 }
+
+var EmptyServiceKey = &ServiceKey{}
 
 // ServiceKey 服务的唯一标识KEY
 type ServiceKey struct {

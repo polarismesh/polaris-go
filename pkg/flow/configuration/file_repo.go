@@ -47,9 +47,9 @@ var (
 
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
 type ConfigFileRepo struct {
-	connector     configconnector.ConfigConnector
-	chain         configfilter.Chain
-	configuration config.Configuration
+	connector configconnector.ConfigConnector
+	chain     configfilter.Chain
+	conf      config.Configuration
 
 	configFileMetadata model.ConfigFileMetadata
 	// 长轮询通知的版本号
@@ -71,12 +71,12 @@ type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetada
 func newConfigFileRepo(metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
-	configuration config.Configuration,
+	conf config.Configuration,
 	persistHandler *CachePersistHandler) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
 		chain:              chain,
-		configuration:      configuration,
+		conf:               conf,
 		configFileMetadata: metadata,
 		notifiedVersion:    initVersion,
 		retryPolicy: retryPolicy{
@@ -85,7 +85,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		},
 		remoteConfigFileRef:  &atomic.Value{},
 		persistHandler:       persistHandler,
-		fallbackToLocalCache: configuration.GetConfigFile().GetLocalCache().IsFallbackToLocalCache(),
+		fallbackToLocalCache: conf.GetConfigFile().GetLocalCache().IsFallbackToLocalCache(),
 	}
 	repo.remoteConfigFileRef.Store(&configconnector.ConfigFile{
 		Namespace: metadata.GetNamespace(),
@@ -143,6 +143,13 @@ func (r *ConfigFileRepo) pull() error {
 		FileGroup: r.configFileMetadata.GetFileGroup(),
 		FileName:  r.configFileMetadata.GetFileName(),
 		Version:   r.notifiedVersion,
+		Tags:      make([]*configconnector.ConfigFileTag, 0, len(r.conf.GetGlobal().GetClient().GetLabels())),
+	}
+	for k, v := range r.conf.GetGlobal().GetClient().GetLabels() {
+		pullConfigFileReq.Tags = append(pullConfigFileReq.Tags, &configconnector.ConfigFileTag{
+			Key:   k,
+			Value: v,
+		})
 	}
 
 	log.GetBaseLogger().Infof("[Config] start pull config file. config file = %+v, version = %d",

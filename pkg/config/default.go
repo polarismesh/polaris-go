@@ -55,6 +55,8 @@ const (
 	DefaultRequestQueueSize int = 1000
 	// DefaultServerSwitchInterval 默认server的切换时间时间.
 	DefaultServerSwitchInterval = 10 * time.Minute
+	// DefaultCachePersistEnable 默认缓存持久化存储开启.
+	DefaultCachePersistEnable bool = true
 	// DefaultCachePersistDir 默认缓存持久化存储目录.
 	DefaultCachePersistDir string = "./polaris/backup"
 	// DefaultPersistMaxWriteRetry 持久化缓存写文件的默认重试次数.
@@ -188,6 +190,8 @@ const (
 	DefaultLoadBalancerL5CST string = "l5cst"
 	// DefaultLoadBalancerHash 负载均衡器,普通hash.
 	DefaultLoadBalancerHash string = "hash"
+	// DefaultCircuitBreaker 默认错误率熔断器.
+	DefaultCircuitBreaker string = "composite"
 	// DefaultCircuitBreakerErrRate 默认错误率熔断器.
 	DefaultCircuitBreakerErrRate string = "errorRate"
 	// DefaultCircuitBreakerErrCount 默认持续错误熔断器.
@@ -459,6 +463,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.StatReporter.Init()
 	g.Location = &LocationConfigImpl{}
 	g.Location.Init()
+	g.Client = &ClientConfigImpl{}
+	g.Client.Init()
 }
 
 // Init 初始化ConsumerConfigImpl.
@@ -613,4 +619,52 @@ func (s *ServerClusterConfigImpl) Verify() error {
 			fmt.Errorf("refreshInterval can not be empty and must greater than %v", DefaultMinTimingInterval))
 	}
 	return errs
+}
+
+type ClientConfigImpl struct {
+	ID     string            `yaml:"id" json:"id"`
+	Labels map[string]string `yaml:"labels" json:"labels"`
+}
+
+// Init 初始化
+func (c *ClientConfigImpl) Init() {
+}
+
+func (c *ClientConfigImpl) SetId(id string) {
+	c.ID = id
+}
+
+func (c *ClientConfigImpl) GetId() string {
+	return c.ID
+}
+
+func (c *ClientConfigImpl) SetLabels(m map[string]string) {
+	c.Labels = m
+}
+
+func (c *ClientConfigImpl) AddLabels(m map[string]string) {
+	if len(c.Labels) == 0 {
+		c.Labels = map[string]string{}
+	}
+	for k, v := range m {
+		c.Labels[k] = v
+	}
+}
+
+func (c *ClientConfigImpl) GetLabels() map[string]string {
+	copyM := map[string]string{}
+	for k, v := range c.Labels {
+		copyM[k] = v
+	}
+	return copyM
+}
+
+func (c *ClientConfigImpl) SetDefault() {
+	if len(c.Labels) == 0 {
+		c.Labels = map[string]string{}
+	}
+}
+
+func (c *ClientConfigImpl) Verify() error {
+	return nil
 }

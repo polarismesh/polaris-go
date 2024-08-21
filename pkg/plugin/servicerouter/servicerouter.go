@@ -27,6 +27,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
 
+type FailOverType int32
+
+const (
+	_ FailOverType = iota
+	FailOverAll
+	FailOverNone
+)
+
 // RouteInfo 路由信息
 type RouteInfo struct {
 	// 源服务信息
@@ -46,6 +54,8 @@ type RouteInfo struct {
 	// 对于全死全活插件，以及就近路由插件等，已经做了最小实例数检查，则可以设置该属性为true
 	// 需要插件内部进行设置
 	ignoreFilterOnlyOnEndChain bool
+	// includeCircuitBreakInstances
+	IncludeCircuitBreakInstances bool
 	// 可动态调整路由插件是否启用，不存在或者为true代表启用
 	// key为路由插件的id
 	chainEnables map[int32]bool
@@ -57,6 +67,8 @@ type RouteInfo struct {
 	Canary string
 	// 进行匹配的规则类型，如规则路由有入规则和出规则之分
 	MatchRuleType RuleType
+	// 规则路由失败降级类型
+	FailOverType *FailOverType
 }
 
 // Init 初始化map

@@ -63,12 +63,11 @@ func (s *SlidingWindow) currentWindow(curTimeMs int64, reset bool) (*Window, *Wi
 		return oldWindow, nil
 	} else if !reset {
 		return nil, nil
-	} else {
-		s.mutex.Lock()
-		expiredWindow := oldWindow.reset(oldWindowStart, windowStart)
-		s.mutex.Unlock()
-		return oldWindow, expiredWindow
 	}
+	s.mutex.Lock()
+	expiredWindow := oldWindow.reset(oldWindowStart, windowStart)
+	s.mutex.Unlock()
+	return oldWindow, expiredWindow
 }
 
 // AddAndGetCurrentPassed 原子增加，并返回当前bucket

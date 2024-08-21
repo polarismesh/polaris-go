@@ -69,6 +69,7 @@ const (
 	OpKeyCreateConfigFile      = "CreateConfigFile"
 	OpKeyUpdateConfigFile      = "UpdateConfigFile"
 	OpKeyPublishConfigFile     = "PublishConfigFile"
+	OpKeyGetConfigGroup        = "GetConfigGroup"
 )
 
 // NextDiscoverReqID 生成GetInstances调用的请求Id
@@ -173,8 +174,12 @@ func GetUpdateTaskRequestTime(updateTask *serviceUpdateTask) time.Duration {
 //	return metadata.NewOutgoingContext(ctx, md)
 // }
 
-// CreateHeaderContext 创建传输grpc头的valueContext
-func CreateHeaderContext(timeout time.Duration, headers map[string]string) (context.Context, context.CancelFunc) {
+func CreateHeadersContext(timeout time.Duration, options ...func(map[string]string)) (context.Context, context.CancelFunc) {
+	headers := map[string]string{}
+	for _, option := range options {
+		option(headers)
+	}
+
 	md := metadata.New(headers)
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -187,25 +192,14 @@ func CreateHeaderContext(timeout time.Duration, headers map[string]string) (cont
 	return metadata.NewOutgoingContext(ctx, md), cancel
 }
 
-// CreateHeaderContextWithReqId 创建传输grpc头的valueContext
-func CreateHeaderContextWithReqId(timeout time.Duration, reqID string) (context.Context, context.CancelFunc) {
-	md := metadata.New(map[string]string{headerRequestID: reqID})
-	var ctx context.Context
-	var cancel context.CancelFunc
-	if timeout > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), timeout)
-	} else {
-		ctx = context.Background()
-		cancel = nil
+func AppendAuthHeader(token string) func(map[string]string) {
+	return func(header map[string]string) {
+		header[headerAuthToken] = token
 	}
-	return metadata.NewOutgoingContext(ctx, md), cancel
 }
 
-func AppendHeaderWithReqId(header map[string]string, reqID string) map[string]string {
-	m := make(map[string]string, len(header)+1)
-	for k, v := range header {
-		m[k] = v
+func AppendHeaderWithReqId(reqID string) func(map[string]string) {
+	return func(header map[string]string) {
+		header[headerRequestID] = reqID
 	}
-	m[headerRequestID] = reqID
-	return m
 }

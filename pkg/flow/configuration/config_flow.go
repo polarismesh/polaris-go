@@ -43,9 +43,9 @@ type ConfigFileFlow struct {
 	configFilePool  map[string]*ConfigFileRepo
 	notifiedVersion map[string]uint64
 
-	connector     configconnector.ConfigConnector
-	chain         configfilter.Chain
-	configuration config.Configuration
+	connector configconnector.ConfigConnector
+	chain     configfilter.Chain
+	conf      config.Configuration
 
 	persistHandler *CachePersistHandler
 
@@ -54,12 +54,12 @@ type ConfigFileFlow struct {
 
 // NewConfigFileFlow 创建配置中心服务
 func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
-	configuration config.Configuration) (*ConfigFileFlow, error) {
+	conf config.Configuration) (*ConfigFileFlow, error) {
 	persistHandler, err := NewCachePersistHandler(
-		configuration.GetConfigFile().GetLocalCache().GetPersistDir(),
-		configuration.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
-		configuration.GetConfigFile().GetLocalCache().GetPersistMaxReadRetry(),
-		configuration.GetConfigFile().GetLocalCache().GetPersistRetryInterval(),
+		conf.GetConfigFile().GetLocalCache().GetPersistDir(),
+		conf.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
+		conf.GetConfigFile().GetLocalCache().GetPersistMaxReadRetry(),
+		conf.GetConfigFile().GetLocalCache().GetPersistRetryInterval(),
 	)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfi
 	configFileService := &ConfigFileFlow{
 		connector:       connector,
 		chain:           chain,
-		configuration:   configuration,
+		conf:            conf,
 		repos:           make([]*ConfigFileRepo, 0, 8),
 		configFileCache: map[string]model.ConfigFile{},
 		configFilePool:  map[string]*ConfigFileRepo{},
@@ -87,11 +87,11 @@ func (c *ConfigFileFlow) Destroy() {
 }
 
 // GetConfigFile 获取配置文件
-func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
+func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.ConfigFile, error) {
 	configFileMetadata := &model.DefaultConfigFileMetadata{
-		Namespace: namespace,
-		FileGroup: fileGroup,
-		FileName:  fileName,
+		Namespace: req.Namespace,
+		FileGroup: req.FileGroup,
+		FileName:  req.FileName,
 	}
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
@@ -112,15 +112,17 @@ func (c *ConfigFileFlow) GetConfigFile(namespace, fileGroup, fileName string) (m
 		return configFile, nil
 	}
 
-	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.configuration, c.persistHandler)
+	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.conf, c.persistHandler)
 	if err != nil {
 		return nil, err
 	}
-	c.addConfigFileToLongPollingPool(fileRepo)
-	c.repos = append(c.repos, fileRepo)
-
 	configFile = newDefaultConfigFile(configFileMetadata, fileRepo)
-	c.configFileCache[cacheKey] = configFile
+
+	if req.Subscribe {
+		c.addConfigFileToLongPollingPool(fileRepo)
+		c.repos = append(c.repos, fileRepo)
+		c.configFileCache[cacheKey] = configFile
+	}
 	return configFile, nil
 }
 

@@ -36,6 +36,12 @@ type DiscoverClient interface {
 	CloseSend() error
 }
 
+type DiscoverClientCreatorArgs struct {
+	ReqId      string
+	AuthToken  string
+	Connection *network.Connection
+	Timeout    time.Duration
+}
+
 // DiscoverClientCreator 创建client的函数
-type DiscoverClientCreator func(
-	reqId string, connection *network.Connection, timeout time.Duration) (DiscoverClient, context.CancelFunc, error)
+type DiscoverClientCreator func(args *DiscoverClientCreatorArgs) (DiscoverClient, context.CancelFunc, error)

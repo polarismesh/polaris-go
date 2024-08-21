@@ -52,6 +52,7 @@ type Connector struct {
 	discoverConnector     *connector.DiscoverConnector
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
+	token           string
 }
 
 // Type 插件类型
@@ -72,6 +73,7 @@ func (g *Connector) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		g.cfg = cfgValue.(*networkConfig)
 	}
+	g.token = ctx.Config.GetGlobal().GetServerConnector().GetToken()
 	g.connManager = ctx.ConnManager
 	g.connectionIdleTimeout = ctx.Config.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	g.valueCtx = ctx.ValueCtx
@@ -98,11 +100,13 @@ func (g *Connector) GetConnectionManager() network.ConnectionManager {
 }
 
 // 创建服务发现客户端
-func (g *Connector) createDiscoverClient(reqID string,
-	connection *network.Connection, timeout time.Duration) (connector.DiscoverClient, context.CancelFunc, error) {
+func (g *Connector) createDiscoverClient(args *connector.DiscoverClientCreatorArgs) (connector.DiscoverClient, context.CancelFunc, error) {
 	// 创建namingClient对象
-	client := apiservice.NewPolarisGRPCClient(network.ToGRPCConn(connection.Conn))
-	outgoingCtx, cancel := connector.CreateHeaderContextWithReqId(timeout, reqID)
+	client := apiservice.NewPolarisGRPCClient(network.ToGRPCConn(args.Connection.Conn))
+	outgoingCtx, cancel := connector.CreateHeadersContext(args.Timeout,
+		connector.AppendAuthHeader(args.AuthToken),
+		connector.AppendHeaderWithReqId(args.ReqId))
+
 	discoverClient, err := client.Discover(outgoingCtx)
 	return discoverClient, cancel, err
 }

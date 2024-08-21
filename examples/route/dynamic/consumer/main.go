@@ -19,6 +19,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -62,28 +63,6 @@ type PolarisConsumer struct {
 
 // Run .
 func (svr *PolarisConsumer) Run() {
-	if selfService != "" && selfNamespace != "" {
-		tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
-		if nil != err {
-			panic(fmt.Errorf("error occur while fetching localhost: %v", err))
-		}
-		req := &polaris.InstanceRegisterRequest{}
-		req.Namespace = selfNamespace
-		req.Service = selfService
-		log.Printf("start to invoke register operation")
-		registerRequest := &polaris.InstanceRegisterRequest{}
-		registerRequest.Service = service
-		registerRequest.Namespace = namespace
-		registerRequest.Host = tmpHost
-		registerRequest.Port = int(port)
-		registerRequest.ServiceToken = token
-		resp, err := svr.provider.RegisterInstance(registerRequest)
-		if nil != err {
-			log.Fatalf("fail to register instance, err is %v", err)
-		}
-		log.Printf("register response: instanceId %s", resp.InstanceID)
-	}
-
 	svr.runWebServer()
 }
 
@@ -105,7 +84,8 @@ func (svr *PolarisConsumer) runWebServer() {
 		routerRequest.DstInstances = instancesResp
 		routerRequest.SourceService.Service = selfService
 		routerRequest.SourceService.Namespace = selfNamespace
-		routerRequest.AddArguments(convertQuery(r.URL.RawQuery)...)
+		routerRequest.AddArguments(convertRouteArguments(r)...)
+		log.Printf("route request %s", mustJson(routerRequest))
 		routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
 		if nil != err {
 			log.Printf("[error] fail to processRouters, err is %v", err)
@@ -191,16 +171,26 @@ func main() {
 
 }
 
-func convertQuery(rawQuery string) []model.Argument {
+func convertRouteArguments(r *http.Request) []model.Argument {
 	arguments := make([]model.Argument, 0, 4)
-	if len(rawQuery) == 0 {
-		return arguments
+
+	headers := r.Header
+	if len(headers) != 0 {
+		for k, vs := range headers {
+			if len(vs) == 0 {
+				continue
+			}
+			arguments = append(arguments, model.BuildHeaderArgument(strings.ToLower(k), vs[0]))
+		}
 	}
-	tokens := strings.Split(rawQuery, "&")
-	if len(tokens) > 0 {
-		for _, token := range tokens {
-			values := strings.Split(token, "=")
-			arguments = append(arguments, model.BuildQueryArgument(values[0], values[1]))
+
+	query := r.URL.Query()
+	if len(query) != 0 {
+		for k, vs := range query {
+			if len(vs) == 0 {
+				continue
+			}
+			arguments = append(arguments, model.BuildQueryArgument(strings.ToLower(k), vs[0]))
 		}
 	}
 	return arguments
@@ -217,4 +207,9 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+func mustJson(v interface{}) string {
+	d, _ := json.Marshal(v)
+	return string(d)
 }

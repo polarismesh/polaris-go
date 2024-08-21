@@ -73,3 +73,9 @@ func init() {
 	globalClock.currentTime.Store(&now)
 	go globalClock.updateTime()
 }
+
+func CurrentMillis() int64 {
+	tn := time.Now()
+	curTimeMill := tn.Unix()*1e3 + int64(tn.Nanosecond())/1e6
+	return curTimeMill
+}

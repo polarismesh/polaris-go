@@ -6,9 +6,10 @@ global:
   location:
     providers:
       - type: local
-        region: ${REGION}
-        zone: ${ZONE}
-        campus: ${CAMPUS}
+        options:
+          region: ${REGION}
+          zone: ${ZONE}
+          campus: ${CAMPUS}
 consumer:
   serviceRouter:
     # 服务路由链

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"sync/atomic"
 
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
@@ -44,10 +45,13 @@ type SvcPluginValues struct {
 
 // ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
-	service         *apiservice.Service
-	notExists       bool
-	instances       []model.Instance
-	instancesMap    map[string]model.Instance
+	service   *apiservice.Service
+	notExists bool
+	instances []model.Instance
+	// instancesMap instanceId -> model.Instance
+	instancesMap map[string]model.Instance
+	// endpointMapping host:port -> instanceId
+	endpointMapping map[string]string
 	initialized     bool
 	svcIDSet        model.HashSet
 	totalWeight     int
@@ -91,6 +95,7 @@ func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalVa
 		service:         resp.Service,
 		instances:       make([]model.Instance, 0, len(resp.Instances)),
 		instancesMap:    make(map[string]model.Instance, len(resp.Instances)),
+		endpointMapping: make(map[string]string, len(resp.Instances)),
 		initialized:     true,
 		svcIDSet:        model.HashSet{},
 		svcPluginValues: pluginValues,
@@ -125,6 +130,8 @@ func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalVa
 			instancesInProto.instances = append(instancesInProto.instances, instanceInProto)
 			instancesInProto.svcIDSet.Add(instId)
 			instancesInProto.instancesMap[instId] = instanceInProto
+			endpoint := instanceInProto.GetHost() + ":" + strconv.FormatUint(uint64(instanceInProto.GetPort()), 10)
+			instancesInProto.endpointMapping[endpoint] = instId
 			clusterCache.AddInstance(instanceInProto)
 		}
 	}
@@ -238,6 +245,19 @@ func (s *ServiceInstancesInProto) GetServiceLoadbalancer() loadbalancer.LoadBala
 
 // GetInstanceLocalValue 按实例获取本地可变状态值.
 func (s *ServiceInstancesInProto) GetInstanceLocalValue(instId string) local.InstanceLocalValue {
+	if inst, ok := s.instancesMap[instId]; ok {
+		return inst.(*InstanceInProto).GetInstanceLocalValue()
+	}
+	return nil
+}
+
+// GetInstanceLocalValueByEndpoint .
+func (s *ServiceInstancesInProto) GetInstanceLocalValueByEndpoint(host string, port uint32) local.InstanceLocalValue {
+	endpoint := host + ":" + strconv.Itoa(int(port))
+	instId, ok := s.endpointMapping[endpoint]
+	if !ok {
+		return nil
+	}
 	if inst, ok := s.instancesMap[instId]; ok {
 		return inst.(*InstanceInProto).GetInstanceLocalValue()
 	}

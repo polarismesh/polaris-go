@@ -206,7 +206,7 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []byte) (*Connection, error) {
 	curConnValue := s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
-		// log.GetBaseLogger().Debugf("[CheckConnection]traceCheck IsAvailableConnection")
+		// log.GetNetworkLogger().Debugf("[CheckConnection]traceCheck IsAvailableConnection")
 		return curConnValue, nil
 	}
 	s.connectMutex.Lock()
@@ -406,60 +406,26 @@ func (c *connectionManager) ConnectByAddr(clusterType config.ClusterType, addr s
 
 // ReportSuccess 上报服务成功
 func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout time.Duration) {
-	log.GetBaseLogger().Debugf("service %s: reported success", connID.Service)
-	var err error
-	if !reflect2.IsNil(connID.instance) {
-		engineValue, ok := c.valueCtx.GetValue(model.ContextKeyEngine)
-		if ok {
-			engine := engineValue.(model.Engine)
-			result := &model.ServiceCallResult{
-				CalledInstance: connID.instance,
-				RetStatus:      model.RetSuccess}
-			result.SetDelay(timeout)
-			result.SetRetCode(retCode)
-			err = engine.SyncUpdateServiceCallResult(result)
-		}
-	}
-	if err != nil {
-		log.GetBaseLogger().Errorf(
-			"error to update success call result for connection %s, %s", connID.String(), err)
-	}
+	log.GetNetworkLogger().Debugf("service %s: reported success", connID.Service)
 }
 
 // ReportFail 上报服务失败
 func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout time.Duration) {
-	log.GetBaseLogger().Warnf("connection %s: reported fail", connID)
-	var err error
-	if !reflect2.IsNil(connID.instance) && connID.Service.ClusterType != config.BuiltinCluster {
-		engineValue, ok := c.valueCtx.GetValue(model.ContextKeyEngine)
-		if ok {
-			engine := engineValue.(model.Engine)
-			result := &model.ServiceCallResult{
-				CalledInstance: connID.instance,
-				RetStatus:      model.RetFail}
-			result.SetDelay(timeout)
-			result.SetRetCode(retCode)
-			err = engine.SyncUpdateServiceCallResult(result)
-		}
-	}
-	if err != nil {
-		log.GetBaseLogger().Errorf(
-			"error to update fail call result for connection %s, %s", connID.String(), err)
-	}
+	log.GetNetworkLogger().Warnf("connection %s: reported fail", connID)
 }
 
 // ReportConnectionDown 报告连接故障
 func (c *connectionManager) ReportConnectionDown(connID ConnID) {
-	log.GetBaseLogger().Tracef("connection %s: reported down", connID)
+	log.GetNetworkLogger().Tracef("connection %s: reported down", connID)
 	var svc = connID.Service
 	var serverList *ServerAddressList
 	var ok bool
 	serverList, ok = c.serverServices[svc.ClusterType]
 	if !ok {
-		log.GetBaseLogger().Warnf("connection %s down received from unknown service %s", connID, svc)
+		log.GetNetworkLogger().Warnf("connection %s down received from unknown service %s", connID, svc)
 		return
 	}
-	log.GetBaseLogger().Infof("connection %s down received from service %s", connID, svc.String())
+	log.GetNetworkLogger().Infof("connection %s down received from service %s", connID, svc.String())
 	curConn := serverList.loadCurrentConnection()
 	if nil != curConn && connID.ID != curConn.ConnID.ID {
 		// 已经切换新连接，忽略
@@ -492,16 +458,13 @@ func (c *connectionManager) doSwitchRoutine() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			log.GetBaseLogger().Infof("doSwitchRoutine of connection manager has been terminated")
+			log.GetNetworkLogger().Infof("doSwitchRoutine of connection manager has been terminated")
 			return
-		case <-buildInCloseTicker.C:
-			serverList := c.serverServices[config.BuiltinCluster]
-			serverList.closeCurrentConnection(false)
+		// case <-buildInCloseTicker.C:
+		// 	serverList := c.serverServices[config.BuiltinCluster]
+		// 	serverList.closeCurrentConnection(false)
 		case <-switchTicker.C:
 			for clusterType, serverList := range c.serverServices {
-				if clusterType == config.BuiltinCluster {
-					continue
-				}
 				if ctrl, ok := DefaultServerServiceToConnectionControl[clusterType]; ok && ctrl == ConnectionLong {
 					// 只有长连接模式才切换server
 					curConn := serverList.loadCurrentConnection()
@@ -529,7 +492,7 @@ func (c *connectionManager) UpdateServers(svcEventKey model.ServiceEventKey) {
 			return
 		}
 		value := atomic.AddUint32(&c.ready, 1)
-		log.GetBaseLogger().Infof("discover server updated to ready %v, event is %s", value, svcEventKey)
+		log.GetNetworkLogger().Infof("discover server updated to ready %v, event is %s", value, svcEventKey)
 	}
 }
 

@@ -54,7 +54,17 @@ func newConfigFileAPIBySDKContext(context SDKContext) ConfigFileAPI {
 
 // GetConfigFile 获取配置文件
 func (c *configFileAPI) GetConfigFile(namespace, fileGroup, fileName string) (model.ConfigFile, error) {
-	return c.context.GetEngine().SyncGetConfigFile(namespace, fileGroup, fileName)
+	return c.context.GetEngine().SyncGetConfigFile(&model.GetConfigFileRequest{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+		Subscribe: true,
+	})
+}
+
+// FetchConfigFile 获取配置文件
+func (c *configFileAPI) FetchConfigFile(req *GetConfigFileRequest) (model.ConfigFile, error) {
+	return c.context.GetEngine().SyncGetConfigFile(req.GetConfigFileRequest)
 }
 
 // CreateConfigFile 创建配置文件
@@ -74,5 +84,45 @@ func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string)
 
 // SDKContext 获取SDK上下文
 func (c *configFileAPI) SDKContext() SDKContext {
+	return c.context
+}
+
+type configGroupAPI struct {
+	context SDKContext
+}
+
+func newConfigGroupAPI() (ConfigGroupAPI, error) {
+	return newConfigGroupAPIByConfig(config.NewDefaultConfigurationWithDomain())
+}
+
+func newConfigGroupAPIByConfig(cfg config.Configuration) (ConfigGroupAPI, error) {
+	context, err := InitContextByConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &configGroupAPI{context}, nil
+}
+
+func newConfigGroupAPIByFile(path string) (ConfigGroupAPI, error) {
+	context, err := InitContextByFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &configGroupAPI{context}, nil
+}
+
+func newConfigGroupAPIBySDKContext(context SDKContext) ConfigGroupAPI {
+	return &configGroupAPI{
+		context: context,
+	}
+}
+
+// GetConfigGroup 获取配置分组
+func (c *configGroupAPI) GetConfigGroup(namespace, group string) (model.ConfigFileGroup, error) {
+	return c.context.GetEngine().SyncGetConfigGroup(namespace, group)
+}
+
+// SDKContext 获取SDK上下文
+func (c *configGroupAPI) SDKContext() SDKContext {
 	return c.context
 }

@@ -19,13 +19,13 @@ package flow
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/flow/cbcheck"
 	"github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
@@ -35,7 +35,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -75,19 +74,15 @@ type Engine struct {
 	plugins plugin.Supplier
 	// 任务调度协程
 	taskRoutines []schedule.TaskRoutine
-	// 实时熔断任务队列
-	rtCircuitBreakChan chan<- *model.PriorityTask
-	// 实时熔断公共任务信息
-	circuitBreakTask *cbcheck.CircuitBreakCallBack
-	// 熔断插件链
-	circuitBreakerChain []circuitbreaker.InstanceCircuitBreaker
+	// 熔断引擎
+	circuitBreakerFlow *CircuitBreakerFlow
 	// 修改消息订阅插件链
 	subscribe *subscribeChannel
 	// 配置中心门面类
-	configFileFlow *configuration.ConfigFileFlow
+	configFlow *configuration.ConfigFlow
 	// 注册状态管理器
 	registerStates *registerstate.RegisterStateManager
-
+	// watchEngine .
 	watchEngine *WatchEngine
 	// 配置过滤链
 	configFilterChain configfilter.Chain
@@ -146,25 +141,16 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); err != nil {
 		return err
 	}
-	// 启动健康探测
-	when := cfg.GetConsumer().GetHealthCheck().GetWhen()
-	disableHealthCheck := when == config.HealthCheckNever
-	if !disableHealthCheck {
-		if err = flowEngine.addHealthCheckTask(); err != nil {
-			return err
-		}
-	}
 	// 加载熔断器插件
-	enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable()
-	if enable {
-		flowEngine.circuitBreakerChain, err = data.GetCircuitBreakers(cfg, plugins)
+	if enable := cfg.GetConsumer().GetCircuitBreaker().IsEnable(); enable {
+		breakers, err := data.GetCircuitBreakers(cfg, flowEngine.plugins)
 		if err != nil {
 			return err
 		}
-		flowEngine.rtCircuitBreakChan, flowEngine.circuitBreakTask, err = flowEngine.addPeriodicCircuitBreakTask()
-		if err != nil {
-			return err
+		if len(breakers) == 0 {
+			return fmt.Errorf("consumer.circuitBreaker.chain not set")
 		}
+		flowEngine.circuitBreakerFlow = newCircuitBreakerFlow(flowEngine, breakers[0])
 	}
 	flowEngine.watchEngine = NewWatchEngine(flowEngine.registry)
 	flowEngine.subscribe = &subscribeChannel{
@@ -180,11 +166,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		configFileFlow, err := configuration.NewConfigFileFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
+		configFlow, err := configuration.NewConfigFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
 		if err != nil {
 			return err
 		}
-		flowEngine.configFileFlow = configFileFlow
+		flowEngine.configFlow = configFlow
 	}
 
 	// 初始注册状态管理器
@@ -258,6 +244,10 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 // GetContext 获取上下文
 func (e *Engine) GetContext() model.ValueContext {
 	return e.globalCtx
+}
+
+func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
+	return e.circuitBreakerFlow
 }
 
 // ServiceEventCallback serviceUpdate消息订阅回调
@@ -341,8 +331,8 @@ func (e *Engine) Destroy() error {
 	if e.flowQuotaAssistant != nil {
 		e.flowQuotaAssistant.Destroy()
 	}
-	if e.configFileFlow != nil {
-		e.configFileFlow.Destroy()
+	if e.configFlow != nil {
+		e.configFlow.Destroy()
 	}
 	e.registerStates.Destroy()
 	return nil
@@ -365,7 +355,9 @@ func (e *Engine) SyncReportStat(typ model.MetricType, stat model.InstanceGauge) 
 
 // reportAPIStat 上报api数据
 func (e *Engine) reportAPIStat(result *model.APICallResult) error {
-	return e.SyncReportStat(model.SDKAPIStat, result)
+	// TODO: SDK 本身和北极星 server 的服务调用监控数据不能和用户的监控数据混合在一起，这里可以打印在本地日志中
+	// return e.SyncReportStat(model.SDKAPIStat, result)
+	return nil
 }
 
 // reportSvcStat 上报服务数据
@@ -375,8 +367,8 @@ func (e *Engine) reportSvcStat(result *model.ServiceCallResult) error {
 
 // loadLocation 上报服务数据
 func (e *Engine) loadLocation() {
-	providerName := e.configuration.GetGlobal().GetLocation().GetProviders()
-	if len(providerName) == 0 {
+	providers := e.configuration.GetGlobal().GetLocation().GetProviders()
+	if len(providers) == 0 {
 		return
 	}
 	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
@@ -390,6 +382,7 @@ func (e *Engine) loadLocation() {
 		return
 	}
 
+	log.GetBaseLogger().Infof("location provider get location result: %v", loc)
 	e.globalCtx.SetCurrentLocation(&model.Location{
 		Region: loc.Region,
 		Zone:   loc.Zone,
