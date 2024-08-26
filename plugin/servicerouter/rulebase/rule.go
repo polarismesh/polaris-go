@@ -19,7 +19,6 @@ package rulebase
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -44,6 +42,7 @@ type RuleBasedInstancesFilter struct {
 	recoverAll            bool
 	prioritySubsetPool    *sync.Pool
 	systemCfg             config.SystemConfig
+	routerConf            *RuleRouterConfig
 }
 
 // Type 插件类型
@@ -66,6 +65,10 @@ func (g *RuleBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	g.valueCtx = ctx.ValueCtx
 	g.prioritySubsetPool = &sync.Pool{}
 	g.systemCfg = ctx.Config.GetGlobal().GetSystem()
+	routerConf := ctx.Config.GetConsumer().GetServiceRouter().GetPluginConfig(g.Name())
+	if routerConf != nil {
+		g.routerConf = routerConf.(*RuleRouterConfig)
+	}
 	return nil
 }
 
@@ -144,27 +147,20 @@ finally:
 	case dstRuleSuccess:
 		targetCluster = dstFilteredInstances
 	default:
-		checkRule := routeInfo.DestService.GetNamespace() + ":" + routeInfo.DestService.GetService()
-		if ruleStatus == sourceRuleFail {
-			checkRule = routeInfo.SourceService.GetNamespace() + ":" + routeInfo.SourceService.GetService()
+		failoverType := routeInfo.FailOverType
+		if failoverType == nil {
+			failoverType = &g.routerConf.failoverType
 		}
-		// 如果规则匹配失败, 返回错误
-		notMatchedSrcText := getSourcesText(summary.notMatchedSources)
-		matchedSrcText := getSourcesText(summary.matchedSource)
-		invalidRegexSourceText := getSourcesText(summary.invalidRegexSources)
-		notMatchedDstText := getNotMatchedDestinationText(summary.notMatchedDestinations)
-		invalidRegexDstText := getNotMatchedDestinationText(summary.invalidRegexDestinations)
-		weightZeroDstText := getNotMatchedDestinationText(summary.weightZeroDestinations)
-		regexCompileErrText := getErrorRegexText(summary.errorRegexes)
-		errorText := fmt.Sprintf("route rule not match, rule status: %s, sourceService %s, used variables %v,"+
-			" dstService %s, notMatchedSource is %s, invalidRegexSource is %s, matchedSource is %s,"+
-			" notMatchedDestination is %s, invalidRegexDestination is %s, zeroWeightDestination is %s,"+
-			" regexCompileErrors is %s, please check your route rule of service %s",
-			ruleStatus.String(), model.ToStringService(routeInfo.SourceService, true), routeInfo.EnvironmentVariables,
-			model.ToStringService(routeInfo.DestService, false), notMatchedSrcText, invalidRegexSourceText,
-			matchedSrcText, notMatchedDstText, invalidRegexDstText, weightZeroDstText, regexCompileErrText, checkRule)
-		log.GetBaseLogger().Errorf(errorText)
-		return nil, model.NewSDKError(model.ErrCodeRouteRuleNotMatch, nil, errorText)
+		if *failoverType == servicerouter.FailOverNone {
+			emptyCluster := model.NewServiceClusters(model.NewDefaultServiceInstancesWithRegistryValue(model.ServiceInfo{
+				Service:   withinCluster.GetClusters().GetServiceInstances().GetService(),
+				Namespace: withinCluster.GetClusters().GetServiceInstances().GetNamespace(),
+				Metadata:  withinCluster.GetClusters().GetServiceInstances().GetMetadata(),
+			}, withinCluster.GetClusters().GetServiceInstances(), []model.Instance{}))
+			targetCluster = model.NewCluster(emptyCluster, withinCluster)
+		} else {
+			targetCluster = model.NewCluster(clusters, withinCluster)
+		}
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
@@ -236,4 +232,26 @@ func checkRouteRule(routeRule model.ServiceRule) error {
 // init 注册插件
 func init() {
 	plugin.RegisterPlugin(&RuleBasedInstancesFilter{})
+}
+
+func init() {
+	plugin.RegisterConfigurablePlugin(&RuleBasedInstancesFilter{}, &RuleRouterConfig{})
+}
+
+type RuleRouterConfig struct {
+	failoverType servicerouter.FailOverType
+	FailoverType string `yaml:"failoverType"`
+}
+
+// Verify 校验配置是否OK
+func (rc *RuleRouterConfig) Verify() error {
+	return nil
+}
+
+// SetDefault 对关键值设置默认值
+func (rc *RuleRouterConfig) SetDefault() {
+	rc.failoverType = servicerouter.FailOverAll
+	if rc.FailoverType == "none" {
+		rc.failoverType = servicerouter.FailOverNone
+	}
 }
