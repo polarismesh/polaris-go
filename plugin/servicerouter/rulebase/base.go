@@ -332,9 +332,9 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			return nil, false, "", nil
 		}
 
-		// 全匹配类型直接返回全量实例
+		// 全匹配类型直接放行
 		if ruleMetaValueStr == matchAll && ruleMetaValue.ValueType == apimodel.MatchString_TEXT {
-			return cls, true, "", nil
+			continue
 		}
 		// 如果是“不等于”类型，需要单独处理
 		var metaValues map[string]string
