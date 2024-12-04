@@ -256,7 +256,7 @@ func (w *WatchEngine) longPullAllServices(
 		Value:     latestServices.GetValue(),
 		Revision:  latestServices.GetRevision(),
 		HashValue: latestServices.GetHashValue(),
-	}, nil), nil
+	}, w.CancelWatch), nil
 }
 
 func (w *WatchEngine) WatchAllInstances(
