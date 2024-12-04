@@ -96,7 +96,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		if err != nil {
 			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
 
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 			delay := time.Since(start)
