@@ -151,7 +151,7 @@ func (df *DefaultFunctionalDecorator) Decorator(ctx context.Context, args interf
 				Duration: delay,
 				Result:   ret,
 			}
-			invoke.OnError(rspCtx)
+			invoke.OnSuccess(rspCtx)
 		}
 	}()
 
