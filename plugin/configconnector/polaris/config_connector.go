@@ -401,12 +401,13 @@ func transferToClientConfigFileInfo(configFile *configconnector.ConfigFile) *con
 		})
 	}
 	return &config_manage.ClientConfigFileInfo{
-		Namespace: wrapperspb.String(configFile.Namespace),
-		Group:     wrapperspb.String(configFile.GetFileGroup()),
-		FileName:  wrapperspb.String(configFile.GetFileName()),
-		Version:   wrapperspb.UInt64(configFile.GetVersion()),
-		PublicKey: wrapperspb.String(configFile.GetPublicKey()),
-		Tags:      tags,
+		Namespace:  wrapperspb.String(configFile.Namespace),
+		Group:      wrapperspb.String(configFile.GetFileGroup()),
+		FileName:   wrapperspb.String(configFile.GetFileName()),
+		Version:    wrapperspb.UInt64(configFile.GetVersion()),
+		PublicKey:  wrapperspb.String(configFile.GetPublicKey()),
+		Tags:       tags,
+		ClientType: config_manage.ConfigClientType(configFile.GetFileMode()),
 	}
 }
 
@@ -419,14 +420,17 @@ func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfig
 		})
 	}
 	return &configconnector.ConfigFile{
-		Namespace:     configFileInfo.GetNamespace().GetValue(),
-		FileGroup:     configFileInfo.GetGroup().GetValue(),
-		FileName:      configFileInfo.GetFileName().GetValue(),
-		SourceContent: configFileInfo.GetContent().GetValue(),
-		Version:       configFileInfo.GetVersion().GetValue(),
-		Md5:           configFileInfo.GetMd5().GetValue(),
-		Encrypted:     configFileInfo.GetEncrypted().GetValue(),
-		Tags:          tags,
+		Namespace:        configFileInfo.GetNamespace().GetValue(),
+		FileGroup:        configFileInfo.GetGroup().GetValue(),
+		FileName:         configFileInfo.GetFileName().GetValue(),
+		SourceContent:    configFileInfo.GetContent().GetValue(),
+		Version:          configFileInfo.GetVersion().GetValue(),
+		Md5:              configFileInfo.GetMd5().GetValue(),
+		Encrypted:        configFileInfo.GetEncrypted().GetValue(),
+		Tags:             tags,
+		SaveFilePath:     configFileInfo.GetPersistent().GetPath(),
+		SaveFileEncoding: configFileInfo.GetPersistent().GetEncoding(),
+		SaveFilePostCmd:  configFileInfo.GetPersistent().GetPostCmd(),
 	}
 }
 

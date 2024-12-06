@@ -19,7 +19,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/polarismesh/specification v1.4.1
+	github.com/polarismesh/specification v1.5.5-alpha.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0

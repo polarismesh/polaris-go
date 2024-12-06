@@ -49,6 +49,12 @@ type ConfigFileChangeEvent struct {
 	NewValue string
 	// ChangeType 变更类型
 	ChangeType ChangeType
+	// 文件存储路径
+	SaveFilePath string
+	// 文件编码
+	SaveFileEncoding string
+	// 后置脚本
+	SaveFilePostCmd string
 }
 
 type SimpleConfigFile struct {
@@ -74,6 +80,8 @@ type ConfigFileMetadata interface {
 	GetFileGroup() string
 	// GetFileName 获取配置文件值
 	GetFileName() string
+	// GetFileMode 获取配置文件mode
+	GetFileMode() GetConfigFileRequestMode
 }
 
 // ConfigFile 文本类型配置文件对象
@@ -89,6 +97,12 @@ type ConfigFile interface {
 	AddChangeListenerWithChannel() <-chan ConfigFileChangeEvent
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
+	// GetFilePath 获取文件下发路径
+	GetFilePath() string
+	// GetFileEncoding 获取文件编码
+	GetFileEncoding() string
+	// GetFilePostCmd 获取文件后置脚本
+	GetFilePostCmd() string
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类
@@ -96,6 +110,7 @@ type DefaultConfigFileMetadata struct {
 	Namespace string
 	FileGroup string
 	FileName  string
+	Mode      GetConfigFileRequestMode
 }
 
 // GetNamespace 获取 Namespace
@@ -113,6 +128,11 @@ func (m *DefaultConfigFileMetadata) GetFileName() string {
 	return m.FileName
 }
 
+// GetFileMode 获取配置文件值
+func (m *DefaultConfigFileMetadata) GetFileMode() GetConfigFileRequestMode {
+	return m.Mode
+}
+
 type ConfigFileGroup interface {
 	// GetFiles
 	GetFiles() ([]*SimpleConfigFile, string, bool)
@@ -120,9 +140,24 @@ type ConfigFileGroup interface {
 	AddChangeListener(cb OnConfigGroupChange)
 }
 
+type GetConfigFileRequestMode int
+
+const (
+	SDKMode   GetConfigFileRequestMode = 0
+	AgentMode GetConfigFileRequestMode = 1
+)
+
 type GetConfigFileRequest struct {
 	Namespace string
 	FileGroup string
 	FileName  string
 	Subscribe bool
+	Mode      GetConfigFileRequestMode
+}
+
+type GetConfigGroupRequest struct {
+	Namespace string
+	FileGroup string
+	Subscribe bool
+	Mode      GetConfigFileRequestMode
 }

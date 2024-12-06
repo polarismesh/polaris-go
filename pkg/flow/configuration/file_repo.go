@@ -65,7 +65,7 @@ type ConfigFileRepo struct {
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
-type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string) error
+type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, saveFilePath string, saveFileEncoding string, saveFilePostCmd string) error
 
 // newConfigFileRepo 创建远程配置文件
 func newConfigFileRepo(metadata model.ConfigFileMetadata,
@@ -92,6 +92,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		FileGroup: metadata.GetFileGroup(),
 		FileName:  metadata.GetFileName(),
 		Version:   initVersion,
+		Mode:      metadata.GetFileMode(),
 	})
 	// 1. 同步从服务端拉取配置
 	if err := repo.pull(); err != nil {
@@ -110,6 +111,24 @@ func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
 		return nil
 	}
 	return val.(*configconnector.ConfigFile)
+}
+
+// GetFilePath 获取配置文件路径
+func (r *ConfigFileRepo) GetFilePath() string {
+	remoteFile := r.loadRemoteFile()
+	return remoteFile.GetFilePath()
+}
+
+// GetFileEncoding 获取文件编码
+func (r *ConfigFileRepo) GetFileEncoding() string {
+	remoteFile := r.loadRemoteFile()
+	return remoteFile.GetFileEncoding()
+}
+
+// GetFilePostCmd 获取文件后置脚本
+func (r *ConfigFileRepo) GetFilePostCmd() string {
+	remoteFile := r.loadRemoteFile()
+	return remoteFile.GetFilePostCmd()
 }
 
 // GetContent 获取配置文件内容
@@ -143,6 +162,7 @@ func (r *ConfigFileRepo) pull() error {
 		FileGroup: r.configFileMetadata.GetFileGroup(),
 		FileName:  r.configFileMetadata.GetFileName(),
 		Version:   r.notifiedVersion,
+		Mode:      r.configFileMetadata.GetFileMode(),
 		Tags:      make([]*configconnector.ConfigFileTag, 0, len(r.conf.GetGlobal().GetClient().GetLabels())),
 	}
 	for k, v := range r.conf.GetGlobal().GetClient().GetLabels() {
@@ -322,7 +342,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 	}
 
 	for _, listener := range r.listeners {
-		if err := listener(r.configFileMetadata, f.GetContent()); err != nil {
+		if err := listener(r.configFileMetadata, f.GetContent(), f.GetFilePath(), f.SaveFileEncoding, f.GetFilePostCmd()); err != nil {
 			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed.",
 				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}

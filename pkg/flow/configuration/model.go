@@ -28,8 +28,11 @@ import (
 type defaultConfigFile struct {
 	model.DefaultConfigFileMetadata
 
-	fileRepo *ConfigFileRepo
-	content  string
+	fileRepo         *ConfigFileRepo
+	content          string
+	saveFilePath     string
+	saveFileEncoding string
+	saveFilePostCmd  string
 
 	lock                sync.RWMutex
 	changeListeners     []func(event model.ConfigFileChangeEvent)
@@ -38,8 +41,11 @@ type defaultConfigFile struct {
 
 func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *ConfigFileRepo) *defaultConfigFile {
 	configFile := &defaultConfigFile{
-		fileRepo: repo,
-		content:  repo.GetContent(),
+		fileRepo:         repo,
+		content:          repo.GetContent(),
+		saveFilePath:     repo.GetFilePath(),
+		saveFileEncoding: repo.GetFileEncoding(),
+		saveFilePostCmd:  repo.GetFilePostCmd(),
 	}
 	configFile.Namespace = metadata.GetNamespace()
 	configFile.FileGroup = metadata.GetFileGroup()
@@ -66,12 +72,27 @@ func (c *defaultConfigFile) GetContent() string {
 	return c.content
 }
 
+// GetFilePath 获取配置文件内容
+func (c *defaultConfigFile) GetFilePath() string {
+	return c.saveFilePath
+}
+
+// GetFileEncoding 获取文件编码
+func (c *defaultConfigFile) GetFileEncoding() string {
+	return c.saveFileEncoding
+}
+
+// GetFilePostCmd 获取文件后置脚本
+func (c *defaultConfigFile) GetFilePostCmd() string {
+	return c.saveFilePostCmd
+}
+
 // HasContent 是否有配置内容
 func (c *defaultConfigFile) HasContent() bool {
 	return c.content != "" && c.content != NotExistedFileContent
 }
 
-func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string) error {
+func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string, saveFilePath string, saveFileEncoding string, saveFilePostCmd string) error {
 	oldContent := c.content
 
 	log.GetBaseLogger().Infof("[Config] update content. file = %+v, old content = %s, new content = %s",
@@ -96,6 +117,9 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 		OldValue:           c.content,
 		NewValue:           newContent,
 		ChangeType:         changeType,
+		SaveFilePath:       saveFilePath,
+		SaveFileEncoding:   saveFileEncoding,
+		SaveFilePostCmd:    saveFilePostCmd,
 	}
 	c.content = newContent
 

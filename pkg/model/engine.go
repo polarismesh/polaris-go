@@ -112,6 +112,8 @@ type Engine interface {
 	SyncGetConfigFile(req *GetConfigFileRequest) (ConfigFile, error)
 	// SyncGetConfigGroup 同步获取配置文件
 	SyncGetConfigGroup(namespace, fileGroup string) (ConfigFileGroup, error)
+	// SyncGetConfigGroupWithReq 同步获取配置文件
+	SyncGetConfigGroupWithReq(req *GetConfigGroupRequest) (ConfigFileGroup, error)
 	// SyncCreateConfigFile 同步创建配置文件
 	SyncCreateConfigFile(namespace, fileGroup, fileName, content string) error
 	// SyncUpdateConfigFile 同步更新配置文件

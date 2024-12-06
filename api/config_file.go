@@ -23,6 +23,10 @@ type GetConfigFileRequest struct {
 	*model.GetConfigFileRequest
 }
 
+type GetConfigGroupRequest struct {
+	*model.GetConfigGroupRequest
+}
+
 // ConfigFileAPI 配置文件的 API
 type ConfigFileAPI interface {
 	SDKOwner
@@ -43,6 +47,8 @@ type ConfigGroupAPI interface {
 	SDKOwner
 	// GetConfigGroup 获取配置分组
 	GetConfigGroup(namespace, group string) (model.ConfigFileGroup, error)
+	// FetchConfigGroup 获取配置文件
+	FetchConfigGroup(*GetConfigGroupRequest) (model.ConfigFileGroup, error)
 }
 
 var (

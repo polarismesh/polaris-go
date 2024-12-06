@@ -92,6 +92,7 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		Namespace: req.Namespace,
 		FileGroup: req.FileGroup,
 		FileName:  req.FileName,
+		Mode:      req.Mode,
 	}
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)

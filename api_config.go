@@ -147,6 +147,11 @@ func (c *configGroupAPI) GetConfigGroup(namesapce, group string) (model.ConfigFi
 	return c.rawAPI.GetConfigGroup(namesapce, group)
 }
 
+// FetchConfigGroup 获取配置分组
+func (c *configGroupAPI) FetchConfigGroup(req *GetConfigGroupRequest) (model.ConfigFileGroup, error) {
+	return c.rawAPI.FetchConfigGroup((*api.GetConfigGroupRequest)(req))
+}
+
 // SDKContext 获取SDK上下文
 func (c *configGroupAPI) SDKContext() api.SDKContext {
 	return c.rawAPI.SDKContext()
