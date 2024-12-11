@@ -62,7 +62,7 @@ global:
     #类型:string
     #格式:^\d+(ms|s|m|h)$
     #范围:[1ms:...]
-    #默认值:200ms
+    #默认值:500ms
     connectTimeout: 500ms
     #描述:远程请求超时时间
     #类型:string
@@ -194,7 +194,7 @@ consumer:
     #类型:string
     #格式:^\d+(ms|s|m|h)$
     #范围:[1ms:...]
-    #默认值:1s
+    #默认值:60s
     persistAvailableInterval: 60s
     #描述:启动后，首次名字服务是否可以使用缓存文件
     #类型:bool
@@ -223,9 +223,15 @@ consumer:
         #默认值:zone
         matchLevel: zone
       ruleBasedRouter: {}
-    #至少应该返回多少比率的实例，如果不填，默认0%，即全死全活
+    #描述:至少应该返回多少比率的实例，如果不填，默认0%，即全死全活
+    #类型:float64
+    #范围:[0:...1.0]
+    #默认值:0
     percentOfMinInstances: 0
-    #是否开启全死全活，默认开启
+    #描述:是否开启全死全活，默认开启
+    #类型:bool
+    #范围:[true: false]
+    #默认值:true
     enableRecoverAll: true
   #描述:负载均衡相关配置
   loadbalancer:
