@@ -1,0 +1,13 @@
+global:
+  serverConnector:
+    addresses:
+      - 127.0.0.1:8091
+  #描述:主调端配置
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricPort: 0
