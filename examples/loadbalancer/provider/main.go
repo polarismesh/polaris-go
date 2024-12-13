@@ -21,7 +21,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"log"
 	"net"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 	"syscall"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/config"
 )
 
 var (

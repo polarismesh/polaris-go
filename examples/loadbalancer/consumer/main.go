@@ -21,11 +21,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/polarismesh/polaris-go"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/config"
 )
 
 var (
