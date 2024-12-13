@@ -45,6 +45,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/location"
 	_ "github.com/polarismesh/polaris-go/plugin/logger/zaplog"
 	_ "github.com/polarismesh/polaris-go/plugin/metrics/prometheus"
+	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/bbr"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/reject"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/unirate"
 	_ "github.com/polarismesh/polaris-go/plugin/serverconnector/grpc"

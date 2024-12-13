@@ -21,9 +21,10 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/polarismesh/specification v1.4.1
 	github.com/prometheus/client_golang v1.12.2
+	github.com/shirou/gopsutil/v3 v3.23.8
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.21.0
 	google.golang.org/genproto v0.0.0-20221014213838-99cd37c6964a // indirect
 	google.golang.org/grpc v1.51.0

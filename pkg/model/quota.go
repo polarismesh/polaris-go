@@ -156,6 +156,8 @@ const (
 	QuotaResultLimited QuotaResultCode = -1
 )
 
+type ReleaseFunc func()
+
 // QuotaResponse 配额查询应答.
 type QuotaResponse struct {
 	// 配额分配的返回码
@@ -164,6 +166,8 @@ type QuotaResponse struct {
 	Info string
 	// 需要等待的时间段
 	WaitMs int64
+	// 释放资源函数
+	ReleaseFuncs []ReleaseFunc
 }
 
 // QuotaFutureImpl 异步获取配额的future.
@@ -180,7 +184,10 @@ func QuotaFutureWithResponse(resp *QuotaResponse) *QuotaFutureImpl {
 		deadlineCtx, cancel = context.WithTimeout(context.Background(), time.Duration(resp.WaitMs)*time.Millisecond)
 	}
 	return &QuotaFutureImpl{
-		resp: resp, deadlineCtx: deadlineCtx, cancel: cancel}
+		resp:        resp,
+		deadlineCtx: deadlineCtx,
+		cancel:      cancel,
+	}
 }
 
 // Done 分配是否结束.
@@ -204,8 +211,13 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	return q.resp
 }
 
-// Release 释放资源，仅用于并发数限流的场景.
+// Release 释放资源，仅用于并发数限流/CPU限流场景
 func (q *QuotaFutureImpl) Release() {
+	if q.resp != nil {
+		for i := range q.resp.ReleaseFuncs {
+			q.resp.ReleaseFuncs[i]()
+		}
+	}
 }
 
 const (
