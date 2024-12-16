@@ -38,7 +38,7 @@ const (
 	// DefaultDiscoverServiceRetryInterval 默认首次发现discovery服务重试间隔.
 	DefaultDiscoverServiceRetryInterval = 5 * time.Second
 	// DefaultServiceExpireTime 默认的服务超时淘汰时间.
-	DefaultServiceExpireTime = 24 * time.Hour
+	DefaultServiceExpireTime = 1 * time.Hour
 	// DefaultServiceRefreshIntervalDuration 默认的服务刷新间隔.
 	DefaultServiceRefreshIntervalDuration = 2 * time.Second
 	// DefaultServerConnectTimeout 默认SDK往Server连接超时时间间隔.

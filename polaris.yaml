@@ -160,9 +160,9 @@ consumer:
     #描述:服务过期淘汰时间
     #类型:string
     #格式:^\d+(ms|s|m|h)$
-    #范围:[1m:...]
-    #默认值:24h
-    serviceExpireTime: 24h
+    #范围:[5s:1h]
+    #默认值:1h
+    serviceExpireTime: 1h
     #描述:服务定期刷新周期
     #类型:string
     #格式:^\d+(ms|s|m|h)$
