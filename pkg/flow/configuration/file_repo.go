@@ -65,7 +65,7 @@ type ConfigFileRepo struct {
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
-type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, saveFilePath string, saveFileEncoding string, saveFilePostCmd string) error
+type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error
 
 // newConfigFileRepo 创建远程配置文件
 func newConfigFileRepo(metadata model.ConfigFileMetadata,
@@ -113,22 +113,10 @@ func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
 	return val.(*configconnector.ConfigFile)
 }
 
-// GetFilePath 获取配置文件路径
-func (r *ConfigFileRepo) GetFilePath() string {
+// GetPersistent 获取配置文件持久化配置
+func (r *ConfigFileRepo) GetPersistent() model.Persistent {
 	remoteFile := r.loadRemoteFile()
-	return remoteFile.GetFilePath()
-}
-
-// GetFileEncoding 获取文件编码
-func (r *ConfigFileRepo) GetFileEncoding() string {
-	remoteFile := r.loadRemoteFile()
-	return remoteFile.GetFileEncoding()
-}
-
-// GetFilePostCmd 获取文件后置脚本
-func (r *ConfigFileRepo) GetFilePostCmd() string {
-	remoteFile := r.loadRemoteFile()
-	return remoteFile.GetFilePostCmd()
+	return remoteFile.GetPersistent()
 }
 
 // GetContent 获取配置文件内容
@@ -342,7 +330,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 	}
 
 	for _, listener := range r.listeners {
-		if err := listener(r.configFileMetadata, f.GetContent(), f.GetFilePath(), f.SaveFileEncoding, f.GetFilePostCmd()); err != nil {
+		if err := listener(r.configFileMetadata, f.GetContent(), f.Persistent); err != nil {
 			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed.",
 				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}

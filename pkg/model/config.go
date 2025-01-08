@@ -49,12 +49,30 @@ type ConfigFileChangeEvent struct {
 	NewValue string
 	// ChangeType 变更类型
 	ChangeType ChangeType
-	// 文件存储路径
-	SaveFilePath string
-	// 文件编码
-	SaveFileEncoding string
+	// 配置文件持久化数据
+	Persistent Persistent
+}
+
+// Persistent 配置文件持久化数据
+type Persistent struct {
+	// 文件保存编码
+	Encoding string
+	// 文件保存路径
+	Path string
 	// 后置脚本
-	SaveFilePostCmd string
+	PostCmd string
+}
+
+func (persistent Persistent) GetEncoding() string {
+	return persistent.Encoding
+}
+
+func (persistent Persistent) GetPath() string {
+	return persistent.Path
+}
+
+func (persistent Persistent) GetPostCmd() string {
+	return persistent.PostCmd
 }
 
 type SimpleConfigFile struct {
@@ -97,12 +115,8 @@ type ConfigFile interface {
 	AddChangeListenerWithChannel() <-chan ConfigFileChangeEvent
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
-	// GetFilePath 获取文件下发路径
-	GetFilePath() string
-	// GetFileEncoding 获取文件编码
-	GetFileEncoding() string
-	// GetFilePostCmd 获取文件后置脚本
-	GetFilePostCmd() string
+	// GetPersistent 获取文件持久化数据
+	GetPersistent() Persistent
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类

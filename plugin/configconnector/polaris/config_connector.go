@@ -420,17 +420,19 @@ func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfig
 		})
 	}
 	return &configconnector.ConfigFile{
-		Namespace:        configFileInfo.GetNamespace().GetValue(),
-		FileGroup:        configFileInfo.GetGroup().GetValue(),
-		FileName:         configFileInfo.GetFileName().GetValue(),
-		SourceContent:    configFileInfo.GetContent().GetValue(),
-		Version:          configFileInfo.GetVersion().GetValue(),
-		Md5:              configFileInfo.GetMd5().GetValue(),
-		Encrypted:        configFileInfo.GetEncrypted().GetValue(),
-		Tags:             tags,
-		SaveFilePath:     configFileInfo.GetPersistent().GetPath(),
-		SaveFileEncoding: configFileInfo.GetPersistent().GetEncoding(),
-		SaveFilePostCmd:  configFileInfo.GetPersistent().GetPostCmd(),
+		Namespace:     configFileInfo.GetNamespace().GetValue(),
+		FileGroup:     configFileInfo.GetGroup().GetValue(),
+		FileName:      configFileInfo.GetFileName().GetValue(),
+		SourceContent: configFileInfo.GetContent().GetValue(),
+		Version:       configFileInfo.GetVersion().GetValue(),
+		Md5:           configFileInfo.GetMd5().GetValue(),
+		Encrypted:     configFileInfo.GetEncrypted().GetValue(),
+		Tags:          tags,
+		Persistent: model.Persistent{
+			Encoding: configFileInfo.GetPersistent().GetEncoding(),
+			Path:     configFileInfo.GetPersistent().GetPath(),
+			PostCmd:  configFileInfo.GetPersistent().GetPostCmd(),
+		},
 	}
 }
 
