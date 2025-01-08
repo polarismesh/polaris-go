@@ -28,8 +28,9 @@ import (
 type defaultConfigFile struct {
 	model.DefaultConfigFileMetadata
 
-	fileRepo *ConfigFileRepo
-	content  string
+	fileRepo   *ConfigFileRepo
+	content    string
+	persistent model.Persistent
 
 	lock                sync.RWMutex
 	changeListeners     []func(event model.ConfigFileChangeEvent)
@@ -38,8 +39,9 @@ type defaultConfigFile struct {
 
 func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *ConfigFileRepo) *defaultConfigFile {
 	configFile := &defaultConfigFile{
-		fileRepo: repo,
-		content:  repo.GetContent(),
+		fileRepo:   repo,
+		content:    repo.GetContent(),
+		persistent: repo.GetPersistent(),
 	}
 	configFile.Namespace = metadata.GetNamespace()
 	configFile.FileGroup = metadata.GetFileGroup()
@@ -66,12 +68,17 @@ func (c *defaultConfigFile) GetContent() string {
 	return c.content
 }
 
+// GetPersistent 获取配置文件内容
+func (c *defaultConfigFile) GetPersistent() model.Persistent {
+	return c.persistent
+}
+
 // HasContent 是否有配置内容
 func (c *defaultConfigFile) HasContent() bool {
 	return c.content != "" && c.content != NotExistedFileContent
 }
 
-func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string) error {
+func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error {
 	oldContent := c.content
 
 	log.GetBaseLogger().Infof("[Config] update content. file = %+v, old content = %s, new content = %s",
@@ -96,6 +103,7 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 		OldValue:           c.content,
 		NewValue:           newContent,
 		ChangeType:         changeType,
+		Persistent:         persistent,
 	}
 	c.content = newContent
 

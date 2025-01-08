@@ -53,6 +53,10 @@ type ConfigFile struct {
 	content string
 	// 该配置文件是否为不存在的场景下的占位信息
 	NotExist bool
+	//mode=0，默认模式，获取SDK使用的配置文件, mode=1，SDK模式，同mode=1,mode=2，Agent模式，获取Agent使用的配置文件
+	Mode model.GetConfigFileRequestMode
+	// 文件持久化配置
+	Persistent model.Persistent
 }
 
 func (c *ConfigFile) String() string {
@@ -140,6 +144,16 @@ func (c *ConfigFile) GetDataKey() string {
 	return ""
 }
 
+// GetPersistent 获取文件持久化数据
+func (c *ConfigFile) GetPersistent() model.Persistent {
+	return c.Persistent
+}
+
+// GetFileMode 获取文件Mode
+func (c *ConfigFile) GetFileMode() model.GetConfigFileRequestMode {
+	return c.Mode
+}
+
 // GetEncryptAlgo 获取配置文件数据加密算法
 func (c *ConfigFile) GetEncryptAlgo() string {
 	for _, tag := range c.Tags {
@@ -154,6 +168,7 @@ type ConfigGroup struct {
 	Namespace    string
 	Group        string
 	Revision     string
+	Mode         model.GetConfigFileRequestMode
 	ReleaseFiles []*model.SimpleConfigFile
 }
 
@@ -164,5 +179,6 @@ func (c *ConfigGroup) ToSpecQuery() *config_manage.ConfigFileGroupRequest {
 			Name:      wrapperspb.String(c.Group),
 			Namespace: wrapperspb.String(c.Namespace),
 		},
+		ClientType: config_manage.ConfigClientType(c.Mode),
 	}
 }

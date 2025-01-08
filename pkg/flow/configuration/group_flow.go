@@ -73,13 +73,43 @@ func (flow *ConfigGroupFlow) GetConfigGroup(namespace, fileGroup string) (model.
 		return configGroup, nil
 	}
 
-	groupRepo, err := newConfigGroupRepo(namespace, fileGroup, flow.connector, flow.configuration)
+	groupRepo, err := newConfigGroupRepo(namespace, fileGroup, model.SDKMode, flow.connector, flow.configuration)
 	if err != nil {
 		return nil, err
 	}
 	flow.repos[cacheKey] = groupRepo
 
 	configGroup = newDefaultConfigGroup(namespace, fileGroup, groupRepo)
+	flow.groupCache[cacheKey] = configGroup
+	return configGroup, nil
+}
+
+func (flow *ConfigGroupFlow) GetConfigGroupWithReq(req *model.GetConfigGroupRequest) (model.ConfigFileGroup, error) {
+	cacheKey := req.Namespace + "@" + req.FileGroup
+
+	flow.fclock.RLock()
+	configGroup, ok := flow.groupCache[cacheKey]
+	flow.fclock.RUnlock()
+	if ok {
+		return configGroup, nil
+	}
+
+	flow.fclock.Lock()
+	defer flow.fclock.Unlock()
+
+	// double check
+	configGroup, ok = flow.groupCache[cacheKey]
+	if ok {
+		return configGroup, nil
+	}
+
+	groupRepo, err := newConfigGroupRepo(req.Namespace, req.FileGroup, req.Mode, flow.connector, flow.configuration)
+	if err != nil {
+		return nil, err
+	}
+	flow.repos[cacheKey] = groupRepo
+
+	configGroup = newDefaultConfigGroup(req.Namespace, req.FileGroup, groupRepo)
 	flow.groupCache[cacheKey] = configGroup
 	return configGroup, nil
 }

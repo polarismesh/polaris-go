@@ -49,6 +49,30 @@ type ConfigFileChangeEvent struct {
 	NewValue string
 	// ChangeType 变更类型
 	ChangeType ChangeType
+	// 配置文件持久化数据
+	Persistent Persistent
+}
+
+// Persistent 配置文件持久化数据
+type Persistent struct {
+	// 文件保存编码
+	Encoding string
+	// 文件保存路径
+	Path string
+	// 后置脚本
+	PostCmd string
+}
+
+func (persistent Persistent) GetEncoding() string {
+	return persistent.Encoding
+}
+
+func (persistent Persistent) GetPath() string {
+	return persistent.Path
+}
+
+func (persistent Persistent) GetPostCmd() string {
+	return persistent.PostCmd
 }
 
 type SimpleConfigFile struct {
@@ -74,6 +98,8 @@ type ConfigFileMetadata interface {
 	GetFileGroup() string
 	// GetFileName 获取配置文件值
 	GetFileName() string
+	// GetFileMode 获取配置文件mode
+	GetFileMode() GetConfigFileRequestMode
 }
 
 // ConfigFile 文本类型配置文件对象
@@ -89,6 +115,8 @@ type ConfigFile interface {
 	AddChangeListenerWithChannel() <-chan ConfigFileChangeEvent
 	// AddChangeListener 增加配置文件变更监听器
 	AddChangeListener(cb OnConfigFileChange)
+	// GetPersistent 获取文件持久化数据
+	GetPersistent() Persistent
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类
@@ -96,6 +124,7 @@ type DefaultConfigFileMetadata struct {
 	Namespace string
 	FileGroup string
 	FileName  string
+	Mode      GetConfigFileRequestMode
 }
 
 // GetNamespace 获取 Namespace
@@ -113,6 +142,11 @@ func (m *DefaultConfigFileMetadata) GetFileName() string {
 	return m.FileName
 }
 
+// GetFileMode 获取配置文件值
+func (m *DefaultConfigFileMetadata) GetFileMode() GetConfigFileRequestMode {
+	return m.Mode
+}
+
 type ConfigFileGroup interface {
 	// GetFiles
 	GetFiles() ([]*SimpleConfigFile, string, bool)
@@ -120,9 +154,24 @@ type ConfigFileGroup interface {
 	AddChangeListener(cb OnConfigGroupChange)
 }
 
+type GetConfigFileRequestMode int
+
+const (
+	SDKMode   GetConfigFileRequestMode = 0
+	AgentMode GetConfigFileRequestMode = 1
+)
+
 type GetConfigFileRequest struct {
 	Namespace string
 	FileGroup string
 	FileName  string
 	Subscribe bool
+	Mode      GetConfigFileRequestMode
+}
+
+type GetConfigGroupRequest struct {
+	Namespace string
+	FileGroup string
+	Subscribe bool
+	Mode      GetConfigFileRequestMode
 }

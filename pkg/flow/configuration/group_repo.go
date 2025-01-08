@@ -28,6 +28,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
 
@@ -35,6 +36,7 @@ import (
 type ConfigGroupRepo struct {
 	namespace       string
 	groupName       string
+	mode            model.GetConfigFileRequestMode
 	connector       configconnector.ConfigConnector
 	configuration   config.Configuration
 	notifiedVersion string
@@ -46,11 +48,12 @@ type ConfigGroupRepo struct {
 	listeners []func(*configconnector.ConfigGroupResponse)
 }
 
-func newConfigGroupRepo(namespace, group string, connector configconnector.ConfigConnector,
+func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequestMode, connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigGroupRepo, error) {
 	repo := &ConfigGroupRepo{
 		namespace:       namespace,
 		groupName:       group,
+		mode:            mode,
 		connector:       connector,
 		configuration:   configuration,
 		notifiedVersion: "",
@@ -72,6 +75,7 @@ func (repo *ConfigGroupRepo) pull() error {
 		Namespace: repo.namespace,
 		Group:     repo.groupName,
 		Revision:  repo.notifiedVersion,
+		Mode:      repo.mode,
 	}
 
 	log.GetBaseLogger().Infof("[Config][Group] start pull. namespace=%+v, group=%s, version=%+v",

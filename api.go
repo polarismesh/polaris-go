@@ -132,6 +132,7 @@ func NewQuotaRequest() QuotaRequest {
 }
 
 type GetConfigFileRequest api.GetConfigFileRequest
+type GetConfigGroupRequest api.GetConfigGroupRequest
 
 // ConfigFile config
 type ConfigFile model.ConfigFile
@@ -157,6 +158,9 @@ type ConfigGroupAPI interface {
 	api.SDKOwner
 	// GetConfigGroup .
 	GetConfigGroup(namesapce, group string) (model.ConfigFileGroup, error)
+
+	// FetchConfigGroup 获取配置分组
+	FetchConfigGroup(*GetConfigGroupRequest) (model.ConfigFileGroup, error)
 }
 
 type CircuitBreakerAPI interface {

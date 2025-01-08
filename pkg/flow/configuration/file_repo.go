@@ -65,7 +65,7 @@ type ConfigFileRepo struct {
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
-type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string) error
+type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error
 
 // newConfigFileRepo 创建远程配置文件
 func newConfigFileRepo(metadata model.ConfigFileMetadata,
@@ -92,6 +92,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		FileGroup: metadata.GetFileGroup(),
 		FileName:  metadata.GetFileName(),
 		Version:   initVersion,
+		Mode:      metadata.GetFileMode(),
 	})
 	// 1. 同步从服务端拉取配置
 	if err := repo.pull(); err != nil {
@@ -110,6 +111,12 @@ func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
 		return nil
 	}
 	return val.(*configconnector.ConfigFile)
+}
+
+// GetPersistent 获取配置文件持久化配置
+func (r *ConfigFileRepo) GetPersistent() model.Persistent {
+	remoteFile := r.loadRemoteFile()
+	return remoteFile.GetPersistent()
 }
 
 // GetContent 获取配置文件内容
@@ -143,6 +150,7 @@ func (r *ConfigFileRepo) pull() error {
 		FileGroup: r.configFileMetadata.GetFileGroup(),
 		FileName:  r.configFileMetadata.GetFileName(),
 		Version:   r.notifiedVersion,
+		Mode:      r.configFileMetadata.GetFileMode(),
 		Tags:      make([]*configconnector.ConfigFileTag, 0, len(r.conf.GetGlobal().GetClient().GetLabels())),
 	}
 	for k, v := range r.conf.GetGlobal().GetClient().GetLabels() {
@@ -322,7 +330,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 	}
 
 	for _, listener := range r.listeners {
-		if err := listener(r.configFileMetadata, f.GetContent()); err != nil {
+		if err := listener(r.configFileMetadata, f.GetContent(), f.Persistent); err != nil {
 			log.GetBaseLogger().Errorf("[Config] invoke config file repo change listener failed.",
 				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}

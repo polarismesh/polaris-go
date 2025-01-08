@@ -603,6 +603,11 @@ func (e *Engine) SyncGetConfigGroup(namespace, fileGroup string) (model.ConfigFi
 	return e.configFlow.GetConfigGroup(namespace, fileGroup)
 }
 
+// SyncGetConfigGroupWithReq 同步获取配置文件
+func (e *Engine) SyncGetConfigGroupWithReq(req *model.GetConfigGroupRequest) (model.ConfigFileGroup, error) {
+	return e.configFlow.GetConfigGroupWithReq(req)
+}
+
 // SyncCreateConfigFile 同步创建配置文件
 func (e *Engine) SyncCreateConfigFile(namespace, fileGroup, fileName, content string) error {
 	return e.configFlow.CreateConfigFile(namespace, fileGroup, fileName, content)

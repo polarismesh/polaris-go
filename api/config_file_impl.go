@@ -122,6 +122,11 @@ func (c *configGroupAPI) GetConfigGroup(namespace, group string) (model.ConfigFi
 	return c.context.GetEngine().SyncGetConfigGroup(namespace, group)
 }
 
+// GetConfigGroup 获取配置分组
+func (c *configGroupAPI) FetchConfigGroup(req *GetConfigGroupRequest) (model.ConfigFileGroup, error) {
+	return c.context.GetEngine().SyncGetConfigGroupWithReq(req.GetConfigGroupRequest)
+}
+
 // SDKContext 获取SDK上下文
 func (c *configGroupAPI) SDKContext() SDKContext {
 	return c.context
