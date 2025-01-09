@@ -65,17 +65,9 @@ func (g *LoadBalancer) Destroy() error {
 // ChooseInstance 获取单个服务实例
 func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
-	cluster := criteria.Cluster
-	svcClusters := inputInstances.GetServiceClusters()
-	clusterValue := cluster.GetClusterValue()
-	var instance model.Instance
-	svcInstances := svcClusters.GetServiceInstances()
-	targetInstances := lbcommon.SelectAvailableInstanceSet(clusterValue, cluster.HasLimitedInstances,
-		cluster.IncludeHalfOpen)
-	if targetInstances.TotalWeight() == 0 {
-		return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil,
-			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance",
-			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
+	targetInstances, err := lbcommon.SelectAvailableInstanceSetFromCriteria(criteria, inputInstances)
+	if err != nil {
+		return nil, err
 	}
 	hashValue, err := lbcommon.CalcHashValue(criteria, g.hashFunc)
 	if err != nil {
@@ -86,7 +78,7 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	// 按照权重区间来寻找
 	targetIndex := search.BinarySearch(weightedSlice, uint64(targetValue))
 	instanceIndex := targetInstances.GetInstances()[targetIndex]
-	instance = svcInstances.GetInstances()[instanceIndex.Index]
+	instance := inputInstances.GetInstances()[instanceIndex.Index]
 	return instance, nil
 }
 
