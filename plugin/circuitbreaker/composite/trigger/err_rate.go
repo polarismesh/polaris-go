@@ -124,6 +124,12 @@ func (c *ErrRateCounter) Report(success bool) {
 	}
 }
 
+func (c *ErrRateCounter) Resume() {
+	if c.isSuspend() {
+		c.resume()
+	}
+}
+
 func getBucketInterval(interval time.Duration) time.Duration {
 	bucketSize := math.Ceil(float64(interval) / float64(bucketCount))
 	return time.Duration(bucketSize)
