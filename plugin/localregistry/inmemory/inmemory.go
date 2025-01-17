@@ -161,6 +161,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers = make(map[model.EventType]CacheHandlers, 0)
 	g.eventToCacheHandlers[model.EventInstances] = g.newServiceCacheHandler()
 	g.eventToCacheHandlers[model.EventRouting] = g.newRuleCacheHandler()
+	g.eventToCacheHandlers[model.EventNearbyRouteRule] = g.newNearByRouteRuleCacheHandler()
 	g.eventToCacheHandlers[model.EventRateLimiting] = g.newRateLimitCacheHandler()
 	g.eventToCacheHandlers[model.EventCircuitBreaker] = g.newCircuitBreakerCacheHandler()
 	g.eventToCacheHandlers[model.EventFaultDetect] = g.newFaultDetectCacheHandler()
@@ -654,6 +655,14 @@ func (g *LocalCache) GetServiceRouteRule(key *model.ServiceKey, includeCache boo
 	return svcRule
 }
 
+// GetServiceNearByRouteRule 非阻塞获取就近路由信息
+func (g *LocalCache) GetServiceNearByRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule {
+	svcEventKey := poolGetSvcEventKey(key, model.EventNearbyRouteRule)
+	svcRule := g.GetServiceRule(svcEventKey, includeCache)
+	poolPutSvcEventKey(svcEventKey)
+	return svcRule
+}
+
 // GetServicesByMeta 非阻塞获取服务列表
 func (g *LocalCache) GetServicesByMeta(key *model.ServiceKey, includeCache bool) model.Services {
 	svcEventKey := poolGetSvcEventKey(key, model.EventServices)
@@ -718,6 +727,15 @@ func (g *LocalCache) GetServiceRule(svcEventKey *model.ServiceEventKey, includeC
 
 // 创建服务路由规则缓存操作回调集合
 func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建就近路由规则缓存操作回调集合
+func (g *LocalCache) newNearByRouteRuleCacheHandler() CacheHandlers {
 	return CacheHandlers{
 		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,
@@ -1008,6 +1026,17 @@ func (g *LocalCache) LoadServices(key *model.ServiceKey) (*common.Notifier, erro
 			Service:   key.Service,
 		},
 		Type: model.EventServices,
+	})
+}
+
+// LoadServiceNearByRouteRule 非阻塞发起配置加载
+func (g *LocalCache) LoadServiceNearByRouteRule(key *model.ServiceKey) (*common.Notifier, error) {
+	return g.LoadServiceRule(&model.ServiceEventKey{
+		ServiceKey: model.ServiceKey{
+			Namespace: key.Namespace,
+			Service:   key.Service,
+		},
+		Type: model.EventNearbyRouteRule,
 	})
 }
 

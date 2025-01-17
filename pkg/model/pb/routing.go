@@ -23,6 +23,7 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
+	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -43,6 +44,18 @@ func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (pr
 	if nil != routingValue {
 		revision = routingValue.GetRevision().GetValue()
 	}
+
+	if resp.Routing == nil && len(resp.NearbyRouteRules) >= 1 {
+		rule := resp.NearbyRouteRules[0]
+		routing := &apitraffic.Routing{
+			Namespace: wrapperspb.String(rule.GetNamespace()),
+			Service:   resp.Service.Name,
+			Rules:     resp.NearbyRouteRules,
+		}
+
+		return routing, rule.GetRevision()
+	}
+
 	return routingValue, revision
 }
 
