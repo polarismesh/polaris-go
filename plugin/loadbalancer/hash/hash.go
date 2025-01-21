@@ -78,7 +78,9 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	// 按照权重区间来寻找
 	targetIndex := search.BinarySearch(weightedSlice, uint64(targetValue))
 	instanceIndex := targetInstances.GetInstances()[targetIndex]
-	instance := inputInstances.GetInstances()[instanceIndex.Index]
+
+	instance := inputInstances.GetServiceClusters().GetServiceInstances().GetInstances()[instanceIndex.Index]
+
 	return instance, nil
 }
 
