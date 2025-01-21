@@ -52,6 +52,8 @@ type Options struct {
 type TriggerCounter interface {
 	// Report .
 	Report(success bool)
+	// Resume .
+	Resume()
 }
 
 func newBaseCounter(rule string, opt *Options) *baseCounter {

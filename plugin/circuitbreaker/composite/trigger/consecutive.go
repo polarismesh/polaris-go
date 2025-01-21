@@ -55,3 +55,9 @@ func (c *ConsecutiveCounter) Report(success bool) {
 		atomic.StoreInt32(&c.consecutiveErrors, 0)
 	}
 }
+
+func (c *ConsecutiveCounter) Resume() {
+	if c.isSuspend() {
+		c.resume()
+	}
+}

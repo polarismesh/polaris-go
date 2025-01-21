@@ -192,6 +192,10 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
 	rc.reportCircuitStatus(newStatus)
+
+	for _, counter := range rc.counters {
+		counter.Resume()
+	}
 }
 
 func (rc *ResourceCounters) HalfOpenToOpen() {
