@@ -79,17 +79,11 @@ func (m *MaglevLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (mod
 // ChooseInstance 获取单个服务实例
 func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
-	cluster := criteria.Cluster
-	svcClusters := inputInstances.GetServiceClusters()
-	clusterValue := cluster.GetClusterValue()
-	svcInstances := svcClusters.GetServiceInstances()
-	targetInstances := lbcommon.SelectAvailableInstanceSet(clusterValue, cluster.HasLimitedInstances,
-		cluster.IncludeHalfOpen)
-	if targetInstances.TotalWeight() == 0 {
-		return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil,
-			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance",
-			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
+	targetInstances, err := lbcommon.SelectAvailableInstanceSetFromCriteria(criteria, inputInstances)
+	if err != nil {
+		return nil, err
 	}
+	svcInstances := inputInstances.GetServiceClusters().GetServiceInstances()
 	selector, err := m.getOrBuildHashRing(targetInstances)
 	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to build maglev table")

@@ -19,6 +19,7 @@ package common
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 )
 
 // SelectAvailableInstanceSet select available instance set
@@ -34,4 +35,20 @@ func SelectAvailableInstanceSet(clsValue *model.ClusterValue, hasLimitedInstance
 	// return targetInstances
 	targetInstances := clsValue.GetInstancesSet(hasLimitedInstances, includeHalfOpen)
 	return targetInstances
+}
+
+// SelectAvailableInstanceSetFromCriteria select available instance from criteria
+func SelectAvailableInstanceSetFromCriteria(criteria *loadbalancer.Criteria,
+	inputInstances model.ServiceInstances) (*model.InstanceSet, error) {
+	cluster := criteria.Cluster
+	svcClusters := inputInstances.GetServiceClusters()
+	clusterValue := cluster.GetClusterValue()
+	targetInstances := SelectAvailableInstanceSet(clusterValue, cluster.HasLimitedInstances,
+		cluster.IncludeHalfOpen)
+	if targetInstances.TotalWeight() == 0 {
+		return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil,
+			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance",
+			svcClusters.GetServiceKey(), *cluster, targetInstances.Count())
+	}
+	return targetInstances, nil
 }
