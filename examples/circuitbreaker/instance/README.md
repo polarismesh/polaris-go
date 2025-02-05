@@ -36,7 +36,7 @@ go build -o consumer.exe
 
 Create a corresponding service through the Arctic Star Console, if you are installed by a local one-click installation package, open the console directly on the browser through 127.0.0.1:8080
 
-### Set fuck rule
+### Set CircuitBreaker Rule
 
 ![create_circuitbreaker](./image/create_circuitbreaker.png)
 
@@ -97,7 +97,7 @@ Hello, I'm CircuitBreakerEchoServer Provider, My host : 27.0.0.1:9999
 
 ...
 
--- Trigger the fuck CURL request, the fused example will not be accessed
+-- Trigger the circuitBreaker CURL request, the fused example will not be accessed
 curl -H 'user-id: polaris' http://127.0.0.1:18080/echo
 
 Hello, I'm CircuitBreakerEchoServer Provider, My host : 127.0.0.1:9999
