@@ -14,3 +14,6 @@ angevil_test/
 
 style_tool/
 goimports-reviser
+
+/examples/**/provider
+/examples/**/consumer
