@@ -130,8 +130,6 @@ type StreamCounterSet struct {
 	lastConnectFailTimeMilli int64
 	// 创建时间
 	createTimeMilli int64
-	// 是否已经过期
-	expired int32
 	// 时间差
 	timeDiff int64
 }
@@ -154,13 +152,6 @@ func (s *StreamCounterSet) CompareTo(value interface{}) int {
 		return 0
 	}
 	return 1
-}
-
-// EnsureDeleted 删除前进行检查，返回true才删除，该检查是同步操作
-func (s *StreamCounterSet) EnsureDeleted(value interface{}) bool {
-	counterSet := value.(*StreamCounterSet)
-	result := atomic.LoadInt32(&counterSet.expired) > 0
-	return result
 }
 
 // HasInitialized 是否已经初始化
@@ -589,8 +580,6 @@ type asyncRateLimitConnector struct {
 	destroyed bool
 	// 全局上下文信息
 	valueCtx model.ValueContext
-	// 单次加载
-	once *sync.Once
 	// 获取自身IP的互斥锁
 	clientHostMutex *sync.Mutex
 	// 自身IP信息
@@ -599,10 +588,10 @@ type asyncRateLimitConnector struct {
 	connTimeout time.Duration
 	// 消息超时时间
 	msgTimeout time.Duration
-	// 淘汰清理任务列表
-	taskValues model.TaskValues
 	// 定时淘汰间隔
 	purgeInterval time.Duration
+	// 关闭定时清理任务的信号
+	stopChan chan struct{}
 	// 连接释放的空闲时长
 	connIdleTimeout time.Duration
 	// 重连间隔时间
@@ -619,7 +608,7 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 	purgeInterval := cfg.GetProvider().GetRateLimit().GetPurgeInterval()
 	connIdleTimeout := cfg.GetGlobal().GetServerConnector().GetConnectionIdleTimeout()
 	reconnectInterval := cfg.GetGlobal().GetServerConnector().GetReconnectInterval()
-	return &asyncRateLimitConnector{
+	c := &asyncRateLimitConnector{
 		mutex:             &sync.RWMutex{},
 		streams:           make(map[HostIdentifier]*StreamCounterSet),
 		valueCtx:          valueCtx,
@@ -628,10 +617,12 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 		purgeInterval:     purgeInterval,
 		connIdleTimeout:   connIdleTimeout,
 		reconnectInterval: reconnectInterval,
-		once:              &sync.Once{},
 		clientHostMutex:   &sync.Mutex{},
 		protocol:          protocol,
+		stopChan:          make(chan struct{}),
 	}
+	go c.startClearTask()
+	return c
 }
 
 // dropStreamCounterSet 淘汰流管理器
@@ -656,36 +647,6 @@ func (a *asyncRateLimitConnector) getStreamCounterSet(hostIdentifier HostIdentif
 	return a.streams[hostIdentifier], nil
 }
 
-// Process 定时处理过期任务
-func (a *asyncRateLimitConnector) Process(
-	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
-	counterSet := taskValue.(*StreamCounterSet)
-	nowMilli := model.CurrentMillisecond()
-	lastProcessMilli := lastProcessTime.UnixNano() / 1e6
-	if nowMilli-lastProcessMilli < model.ToMilliSeconds(a.purgeInterval) {
-		return model.SKIP
-	}
-
-	if !counterSet.Expired(nowMilli, true) {
-		return model.CONTINUE
-	}
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-	if counterSet.Expired(nowMilli, false) {
-		atomic.StoreInt32(&counterSet.expired, 1)
-		delete(a.streams, *counterSet.HostIdentifier)
-		counterSet.closeConnection()
-		log.GetBaseLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
-		return model.TERMINATE
-	}
-	return model.CONTINUE
-}
-
-// OnTaskEvent 任务事件回调
-func (a *asyncRateLimitConnector) OnTaskEvent(event model.TaskEvent) {
-
-}
-
 // StreamCount 获取stream的数量，用于测试
 func (a *asyncRateLimitConnector) StreamCount() int {
 	a.mutex.RLock()
@@ -703,15 +664,6 @@ func (a *asyncRateLimitConnector) GetMessageSender(
 	req.HashValue = hashValue
 	req.Metadata = map[string]string{"protocol": a.protocol}
 	engine := a.valueCtx.GetEngine()
-	a.once.Do(func() {
-		_, taskValues := engine.ScheduleTask(&model.PeriodicTask{
-			Name:       "rateLimit-connector-clean",
-			CallBack:   a,
-			Period:     a.purgeInterval,
-			DelayStart: false,
-		})
-		a.taskValues = taskValues
-	})
 	instanceResp, err := engine.SyncGetOneInstance(req)
 	if err != nil {
 		return nil, err
@@ -735,7 +687,6 @@ func (a *asyncRateLimitConnector) GetMessageSender(
 	}
 	counterSet = NewStreamCounterSet(a, hostIdentifier)
 	a.streams[*hostIdentifier] = counterSet
-	a.taskValues.AddValue(*hostIdentifier, counterSet)
 	return counterSet, nil
 }
 
@@ -759,6 +710,9 @@ func (a *asyncRateLimitConnector) getIPString(remoteHost string, remotePort uint
 // Destroy 清理
 func (a *asyncRateLimitConnector) Destroy() {
 	a.mutex.Lock()
+	if !a.destroyed {
+		close(a.stopChan)
+	}
 	a.destroyed = true
 	streams := a.streams
 	a.streams = nil
@@ -768,5 +722,43 @@ func (a *asyncRateLimitConnector) Destroy() {
 	}
 	for _, stream := range streams {
 		stream.closeConnection()
+	}
+}
+
+// startClearTask 启动定时清理闲置超时的 StreamCounterSet
+func (a *asyncRateLimitConnector) startClearTask() {
+	ticker := time.NewTicker(a.purgeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			a.clearCounterSet()
+		case <-a.stopChan:
+			log.GetBaseLogger().Infof("[RateLimit] stop clear task")
+			return
+		}
+	}
+}
+
+// clearCounterSet 清理闲置超时的 StreamCounterSet
+func (a *asyncRateLimitConnector) clearCounterSet() {
+	if a.destroyed {
+		return
+	}
+	a.mutex.Lock()
+	counterSets := make([]*StreamCounterSet, 0, len(a.streams))
+	for _, counterSet := range a.streams {
+		counterSets = append(counterSets, counterSet)
+	}
+	a.mutex.Unlock()
+	nowMilli := model.CurrentMillisecond()
+	for _, counterSet := range counterSets {
+		if counterSet.Expired(nowMilli, true) {
+			a.mutex.Lock()
+			delete(a.streams, *counterSet.HostIdentifier)
+			a.mutex.Unlock()
+			counterSet.closeConnection()
+			log.GetBaseLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
+		}
 	}
 }
