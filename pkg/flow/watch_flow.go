@@ -235,7 +235,9 @@ func (w *WatchEngine) longPullAllServices(
 	w.rwMutex.Unlock()
 	defer func() {
 		w.rwMutex.Lock()
-		delete(w.watchContexts, nextId)
+		if watchers, ok := w.servicesWatch[request.Namespace]; ok {
+			delete(watchers, nextId)
+		}
 		w.rwMutex.Unlock()
 	}()
 	if !serivcesResp.IsInitialized() {
@@ -328,7 +330,11 @@ func (w *WatchEngine) longPullAllInstances(
 	w.rwMutex.Unlock()
 	defer func() {
 		w.rwMutex.Lock()
-		delete(w.watchContexts, nextId)
+		if nsMap, ok := w.instancesWatch[request.Namespace]; ok {
+			if svcMap, ok := nsMap[request.Service]; ok {
+				delete(svcMap, nextId)
+			}
+		}
 		w.rwMutex.Unlock()
 	}()
 	if !svcInstances.IsInitialized() {
@@ -345,7 +351,7 @@ func (w *WatchEngine) longPullAllInstances(
 		latestSvcInstances = w.registry.GetInstances(&request.ServiceKey, false, false)
 	}
 	instancesResponse := data.BuildInstancesResponse(request.ServiceKey, nil, latestSvcInstances)
-	return model.NewWatchAllInstancesResponse(nextId, instancesResponse, nil), nil
+	return model.NewWatchAllInstancesResponse(nextId, instancesResponse, w.CancelWatch), nil
 }
 
 type NotifyUpdateContext struct {
