@@ -116,6 +116,9 @@ func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
 // GetPersistent 获取配置文件持久化配置
 func (r *ConfigFileRepo) GetPersistent() model.Persistent {
 	remoteFile := r.loadRemoteFile()
+	if remoteFile == nil {
+		return model.Persistent{}
+	}
 	return remoteFile.GetPersistent()
 }
 
