@@ -163,13 +163,13 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 }
 
 func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse, regexFunc func(string) *regexp.Regexp) *fault_tolerance.CircuitBreakerRule {
-	if object == nil {
+	if object == nil || object.Value == nil {
 		return nil
 	}
-	if object.Value == nil {
+	circuitBreaker, ok := object.Value.(*fault_tolerance.CircuitBreaker)
+	if !ok || circuitBreaker == nil {
 		return nil
 	}
-	circuitBreaker := object.Value.(*fault_tolerance.CircuitBreaker)
 	rules := circuitBreaker.Rules
 	if len(rules) == 0 {
 		return nil
