@@ -42,6 +42,8 @@ type GlobalConfig interface {
 	GetServerConnector() ServerConnectorConfig
 	// GetStatReporter global.statReporter前缀开头的所有配置项
 	GetStatReporter() StatReporterConfig
+	// GetEventReporter global.eventReporter前缀开头的所有配置项
+	GetEventReporter() EventReporterConfig
 	// GetLocation global.location前缀开头的所有配置项
 	GetLocation() LocationConfig
 	// GetClient global.client前缀开头的所有配置项
@@ -203,6 +205,19 @@ type StatReporterConfig interface {
 	BaseConfig
 	PluginConfig
 	// IsEnable 是否启用上报
+	IsEnable() bool
+	// SetEnable 设置是否启用上报
+	SetEnable(bool)
+	// GetChain 统计上报器插件链
+	GetChain() []string
+	// SetChain 设置统计上报器插件链
+	SetChain([]string)
+}
+
+type EventReporterConfig interface {
+	BaseConfig
+	PluginConfig
+	// IsEnable 是否启用
 	IsEnable() bool
 	// SetEnable 设置是否启用上报
 	SetEnable(bool)

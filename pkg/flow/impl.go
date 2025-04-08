@@ -38,6 +38,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/event"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/location"
@@ -62,6 +63,8 @@ type Engine struct {
 	routerChain *servicerouter.RouterChain
 	// 上报插件链
 	reporterChain []statreporter.StatReporter
+	// 事件插件链
+	eventChain []event.EventReporter
 	// 负载均衡器
 	loadbalancer loadbalancer.LoadBalancer
 	// 限流处理协助辅助类
@@ -129,6 +132,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 		}
 	}
 
+	flowEngine.eventChain, err = data.GetEventReporterChain(cfg, plugins)
+	if err != nil {
+		return err
+	}
+
 	// 加载服务路由链插件
 	err = flowEngine.LoadFlowRouteChain()
 	if err != nil {
@@ -166,7 +174,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		configFlow, err := configuration.NewConfigFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration)
+		configFlow, err := configuration.NewConfigFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration, flowEngine.eventChain)
 		if err != nil {
 			return err
 		}

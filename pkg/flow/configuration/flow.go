@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/event"
 )
 
 type ConfigFlow struct {
@@ -30,8 +31,8 @@ type ConfigFlow struct {
 
 // NewConfigFlow 创建配置中心服务
 func NewConfigFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
-	configuration config.Configuration) (*ConfigFlow, error) {
-	fileFlow, err := NewConfigFileFlow(connector, chain, configuration)
+	configuration config.Configuration, eventChain []event.EventReporter) (*ConfigFlow, error) {
+	fileFlow, err := NewConfigFileFlow(connector, chain, configuration, eventChain)
 	if err != nil {
 		return nil, err
 	}

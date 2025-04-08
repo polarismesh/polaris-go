@@ -252,6 +252,8 @@ const (
 	DefaultStatReportEnabled = true
 	// DefaultMetricsChain .
 	DefaultMetricsChain = "prometheus"
+	// DefaultEventReporterEnabled 事件上报默认不开启
+	DefaultEventReporterEnabled = false
 )
 
 const (
@@ -438,6 +440,9 @@ func (g *GlobalConfigImpl) Verify() error {
 	if err = g.Location.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = g.EventReporter.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -447,6 +452,7 @@ func (g *GlobalConfigImpl) SetDefault() {
 	g.ServerConnector.SetDefault()
 	g.System.SetDefault()
 	g.StatReporter.SetDefault()
+	g.EventReporter.SetDefault()
 	g.Location.SetDefault()
 }
 
@@ -459,6 +465,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.ServerConnector.Init()
 	g.StatReporter = &StatReporterConfigImpl{}
 	g.StatReporter.Init()
+	g.EventReporter = &EventReporterConfigImpl{}
+	g.EventReporter.Init()
 	g.Location = &LocationConfigImpl{}
 	g.Location.Init()
 	g.Client = &ClientConfigImpl{}

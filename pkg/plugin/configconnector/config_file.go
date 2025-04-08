@@ -49,6 +49,7 @@ type ConfigFile struct {
 	Encrypted     bool
 	PublicKey     string
 	Tags          []*ConfigFileTag
+	VersionName   string
 	// 实际暴露给应用的配置内容数据
 	content string
 	// 该配置文件是否为不存在的场景下的占位信息
@@ -117,6 +118,10 @@ func (c *ConfigFile) GetContent() string {
 // GetVersion 获取配置文件版本号
 func (c *ConfigFile) GetVersion() uint64 {
 	return c.Version
+}
+
+func (c *ConfigFile) GetVersionName() string {
+	return c.VersionName
 }
 
 // GetMd5 获取配置文件MD5值

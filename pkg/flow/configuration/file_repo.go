@@ -31,6 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/event"
 )
 
 const (
@@ -62,6 +63,8 @@ type ConfigFileRepo struct {
 	persistHandler *CachePersistHandler
 
 	fallbackToLocalCache bool
+
+	eventReporterChain []event.EventReporter
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
@@ -72,7 +75,8 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
 	conf config.Configuration,
-	persistHandler *CachePersistHandler) (*ConfigFileRepo, error) {
+	persistHandler *CachePersistHandler,
+	eventChain []event.EventReporter) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
 		chain:              chain,
@@ -86,6 +90,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		remoteConfigFileRef:  &atomic.Value{},
 		persistHandler:       persistHandler,
 		fallbackToLocalCache: conf.GetConfigFile().GetLocalCache().IsFallbackToLocalCache(),
+		eventReporterChain:   eventChain,
 	}
 	repo.remoteConfigFileRef.Store(&configconnector.ConfigFile{
 		Namespace: metadata.GetNamespace(),
@@ -285,6 +290,27 @@ func (r *ConfigFileRepo) removeCacheConfigFile(file *configconnector.ConfigFile)
 	r.persistHandler.DeleteCacheFromFile(fileName)
 }
 
+func (r *ConfigFileRepo) handleEventReporterChain(f *configconnector.ConfigFile) {
+	e := &model.BaseEventImpl{
+		BaseType: model.ConfigBaseEvent,
+		ConfigEvent: &model.ConfigEventImpl{
+			EventName:         model.ConfigUpdated,
+			EventTime:         time.Now().Format("2006-01-02 15:04:05"),
+			Namespace:         r.configFileMetadata.GetNamespace(),
+			ConfigGroup:       r.configFileMetadata.GetFileGroup(),
+			ConfigFileName:    r.configFileMetadata.GetFileName(),
+			ConfigFileVersion: f.GetVersionName(),
+			ClientType:        model.ConfigFileRequestMode2Str[r.configFileMetadata.GetFileMode()],
+		},
+	}
+	for _, chain := range r.eventReporterChain {
+		if err := chain.ReportEvent(e); err != nil {
+			log.GetBaseLogger().Errorf("[Config] report event(%+v) err: %+v", e, err)
+			continue
+		}
+	}
+}
+
 func deepCloneConfigFile(sourceConfigFile *configconnector.ConfigFile) *configconnector.ConfigFile {
 	tags := make([]*configconnector.ConfigFileTag, 0, len(sourceConfigFile.Tags))
 	for _, tag := range sourceConfigFile.Tags {
@@ -338,4 +364,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 				zap.Any("file", r.configFileMetadata), zap.Error(err))
 		}
 	}
+
+	// 处理文件配置变更事件上报
+	r.handleEventReporterChain(f)
 }
