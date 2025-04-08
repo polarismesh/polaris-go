@@ -38,7 +38,11 @@ func (e *EventReporterConfigImpl) GetPluginConfig(name string) BaseConfig {
 }
 
 func (e *EventReporterConfigImpl) Verify() error {
-	return e.Plugin.Verify()
+	if e.IsEnable() {
+		return e.Plugin.Verify()
+	}
+
+	return nil
 }
 
 func (e *EventReporterConfigImpl) SetDefault() {
