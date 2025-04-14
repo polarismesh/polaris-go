@@ -56,7 +56,7 @@ const (
 	TypeConfigConnector Type = 0x1014
 	// TypeConfigFilter extend point of config file filter
 	TypeConfigFilter Type = 0x1015
-
+	// TypeEventReporter event reporter plugin
 	TypeEventReporter Type = 0x1016
 )
 
