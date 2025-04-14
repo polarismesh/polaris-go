@@ -25,6 +25,7 @@ const (
 type PushgatewayReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
+	valueCtx model.ValueContext
 
 	cfg      *Config
 	clientIP string
@@ -72,6 +73,7 @@ func (p *PushgatewayReporter) Destroy() error {
 func (p *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	p.PluginBase = plugin.NewPluginBase(ctx)
 	p.RunContext = common.NewRunContext()
+	p.valueCtx = ctx.ValueCtx
 	p.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	p.clientID = ctx.Config.GetGlobal().GetClient().GetId()
 
@@ -79,12 +81,6 @@ func (p *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	if cfgValue != nil {
 		p.cfg = cfgValue.(*Config)
 	}
-
-	p.events = make([]model.BaseEvent, 0, p.cfg.EventQueueSize+1)
-	p.reqChan = make(chan model.BaseEvent, p.cfg.EventQueueSize+1)
-
-	p.httpClient = &http.Client{Timeout: time.Second * 3}
-	p.targetUrl = fmt.Sprintf("http://%s/%s", p.cfg.Address, p.cfg.ReportPath)
 
 	return nil
 }
@@ -104,6 +100,15 @@ func (p *PushgatewayReporter) ReportEvent(e model.BaseEvent) error {
 
 func (p *PushgatewayReporter) prepare() {
 	p.once.Do(func() {
+		// 只有触发了Chain.ReportEvent，才需要初始化chan，启动接受协程（一次任务）
+		p.events = make([]model.BaseEvent, 0, p.cfg.EventQueueSize+1)
+		p.reqChan = make(chan model.BaseEvent, p.cfg.EventQueueSize+1)
+
+		p.httpClient = &http.Client{Timeout: time.Second * 3}
+		if p.cfg.Address != "" {
+			p.targetUrl = fmt.Sprintf("http://%s/%s", p.cfg.Address, p.cfg.ReportPath)
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		p.cancel = cancel
 		go func(ctx context.Context) {
@@ -128,6 +133,25 @@ func (p *PushgatewayReporter) prepare() {
 
 		}(ctx)
 	})
+}
+
+func (p *PushgatewayReporter) getTargetUrl() (string, error) {
+	// 有target，代表传入了IpTarget
+	if p.targetUrl != "" {
+		return p.targetUrl, nil
+	}
+
+	// 从服务端获取IP
+	resp, err := p.valueCtx.GetEngine().SyncGetOneInstance(&model.GetOneInstanceRequest{
+		FlowID:    uint64(time.Now().Unix()),
+		Service:   p.cfg.ServiceName,
+		Namespace: p.cfg.NamespaceName,
+	})
+	if err != nil {
+		return "", fmt.Errorf("fail to get instance from service")
+	}
+
+	return fmt.Sprintf("http://%s:%d/%s", resp.GetInstances()[0].GetHost(), resp.GetInstances()[0].GetPort(), p.cfg.ReportPath), nil
 }
 
 // Flush 刷新数据到远端
@@ -158,8 +182,12 @@ func (p *PushgatewayReporter) Flush(sync bool) {
 		}
 
 		dataBuffer := bytes2.NewBuffer(data)
-
-		req, err := http.NewRequest(http.MethodPost, p.targetUrl, dataBuffer)
+		targetUrl, err := p.getTargetUrl()
+		if err != nil {
+			log.GetBaseLogger().Errorf("[EventReporter][Pushgateway] get target url err: %+v", err)
+			return
+		}
+		req, err := http.NewRequest(http.MethodPost, targetUrl, dataBuffer)
 		if err != nil {
 			log.GetBaseLogger().Errorf("[EventReporter][Pushgateway] new request err: %+v", err)
 			return
