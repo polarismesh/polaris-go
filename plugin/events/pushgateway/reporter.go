@@ -216,7 +216,7 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 		if resp != nil {
 			respCode = resp.StatusCode
 			if resp.Body != nil {
-				io.Copy(&respBuffer, resp.Body)
+				_, _ = io.Copy(&respBuffer, resp.Body)
 				defer resp.Body.Close()
 			}
 		}

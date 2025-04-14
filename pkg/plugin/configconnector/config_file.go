@@ -54,7 +54,7 @@ type ConfigFile struct {
 	content string
 	// 该配置文件是否为不存在的场景下的占位信息
 	NotExist bool
-	//mode=0，默认模式，获取SDK使用的配置文件, mode=1，SDK模式，同mode=1,mode=2，Agent模式，获取Agent使用的配置文件
+	// mode=0，默认模式，获取SDK使用的配置文件, mode=1，SDK模式，同mode=1,mode=2，Agent模式，获取Agent使用的配置文件
 	Mode model.GetConfigFileRequestMode
 	// 文件持久化配置
 	Persistent model.Persistent
