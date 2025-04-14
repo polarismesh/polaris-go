@@ -172,7 +172,7 @@ func (p *PushgatewayReporter) getTargetUrl() (string, error) {
 }
 
 // Flush 刷新数据到远端
-func (p *PushgatewayReporter) Flush(sync bool) {
+func (p *PushgatewayReporter) Flush(isSync bool) {
 	if len(p.events) == 0 {
 		return
 	}
@@ -226,7 +226,7 @@ func (p *PushgatewayReporter) Flush(sync bool) {
 		}
 	}
 
-	if sync {
+	if isSync {
 		flushHandler(batchEvents)
 	} else {
 		go flushHandler(batchEvents)
