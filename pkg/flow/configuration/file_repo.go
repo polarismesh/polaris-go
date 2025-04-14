@@ -31,7 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/event"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 )
 
 const (
@@ -64,7 +64,7 @@ type ConfigFileRepo struct {
 
 	fallbackToLocalCache bool
 
-	eventReporterChain []event.EventReporter
+	eventReporterChain []events.EventReporter
 }
 
 // ConfigFileRepoChangeListener 远程配置文件发布监听器
@@ -76,7 +76,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 	chain configfilter.Chain,
 	conf config.Configuration,
 	persistHandler *CachePersistHandler,
-	eventChain []event.EventReporter) (*ConfigFileRepo, error) {
+	eventChain []events.EventReporter) (*ConfigFileRepo, error) {
 	repo := &ConfigFileRepo{
 		connector:          connector,
 		chain:              chain,

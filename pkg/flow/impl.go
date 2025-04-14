@@ -38,7 +38,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/event"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/location"
@@ -64,7 +64,7 @@ type Engine struct {
 	// 上报插件链
 	reporterChain []statreporter.StatReporter
 	// 事件插件链
-	eventChain []event.EventReporter
+	eventChain []events.EventReporter
 	// 负载均衡器
 	loadbalancer loadbalancer.LoadBalancer
 	// 限流处理协助辅助类

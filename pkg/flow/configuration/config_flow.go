@@ -31,7 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
-	"github.com/polarismesh/polaris-go/pkg/plugin/event"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 )
 
 // ConfigFileFlow 配置中心核心服务门面类
@@ -52,12 +52,12 @@ type ConfigFileFlow struct {
 
 	startLongPollingTaskOnce sync.Once
 
-	eventReporterChain []event.EventReporter
+	eventReporterChain []events.EventReporter
 }
 
 // NewConfigFileFlow 创建配置中心服务
 func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
-	conf config.Configuration, eventReporterChain []event.EventReporter) (*ConfigFileFlow, error) {
+	conf config.Configuration, eventReporterChain []events.EventReporter) (*ConfigFileFlow, error) {
 	persistHandler, err := NewCachePersistHandler(
 		conf.GetConfigFile().GetLocalCache().GetPersistDir(),
 		conf.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
