@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -152,6 +153,26 @@ func GetStatReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([
 				return nil, err
 			}
 			reporterChain = append(reporterChain, targetPlugin.(statreporter.StatReporter))
+		}
+	}
+	return reporterChain, nil
+}
+
+// GetEventReporterChain 获取事件上报插件
+func GetEventReporterChain(cfg config.Configuration, supplier plugin.Supplier) ([]events.EventReporter, error) {
+	if !cfg.GetGlobal().GetEventReporter().IsEnable() {
+		return make([]events.EventReporter, 0), nil
+	}
+
+	reporterNames := cfg.GetGlobal().GetEventReporter().GetChain()
+	reporterChain := make([]events.EventReporter, 0, len(reporterNames))
+	if len(reporterNames) > 0 {
+		for _, reporter := range reporterNames {
+			targetPlugin, err := supplier.GetPlugin(common.TypeEventReporter, reporter)
+			if err != nil {
+				return nil, err
+			}
+			reporterChain = append(reporterChain, targetPlugin.(events.EventReporter))
 		}
 	}
 	return reporterChain, nil

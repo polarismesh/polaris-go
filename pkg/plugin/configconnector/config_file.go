@@ -49,11 +49,12 @@ type ConfigFile struct {
 	Encrypted     bool
 	PublicKey     string
 	Tags          []*ConfigFileTag
+	VersionName   string
 	// 实际暴露给应用的配置内容数据
 	content string
 	// 该配置文件是否为不存在的场景下的占位信息
 	NotExist bool
-	//mode=0，默认模式，获取SDK使用的配置文件, mode=1，SDK模式，同mode=1,mode=2，Agent模式，获取Agent使用的配置文件
+	// mode=0，默认模式，获取SDK使用的配置文件, mode=1，SDK模式，同mode=1,mode=2，Agent模式，获取Agent使用的配置文件
 	Mode model.GetConfigFileRequestMode
 	// 文件持久化配置
 	Persistent model.Persistent
@@ -117,6 +118,10 @@ func (c *ConfigFile) GetContent() string {
 // GetVersion 获取配置文件版本号
 func (c *ConfigFile) GetVersion() uint64 {
 	return c.Version
+}
+
+func (c *ConfigFile) GetVersionName() string {
+	return c.VersionName
 }
 
 // GetMd5 获取配置文件MD5值

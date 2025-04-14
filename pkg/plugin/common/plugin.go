@@ -56,6 +56,8 @@ const (
 	TypeConfigConnector Type = 0x1014
 	// TypeConfigFilter extend point of config file filter
 	TypeConfigFilter Type = 0x1015
+	// TypeEventReporter event reporter plugin
+	TypeEventReporter Type = 0x1016
 )
 
 var typeToPresent = map[Type]string{
@@ -72,6 +74,7 @@ var typeToPresent = map[Type]string{
 	TypeLocationProvider: "locationProvider",
 	TypeConfigConnector:  "configConnector",
 	TypeConfigFilter:     "configFilter",
+	TypeEventReporter:    "eventReporter",
 }
 
 // ToString方法
@@ -219,6 +222,7 @@ var LoadedPluginTypes = []Type{
 	TypeCircuitBreaker,
 	TypeWeightAdjuster,
 	TypeStatReporter,
+	TypeEventReporter,
 	TypeLocalRegistry,
 	TypeRateLimiter,
 	TypeLocationProvider,

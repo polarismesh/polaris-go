@@ -63,6 +63,7 @@ type GlobalConfigImpl struct {
 	API             *APIConfigImpl             `yaml:"api" json:"api"`
 	ServerConnector *ServerConnectorConfigImpl `yaml:"serverConnector" json:"serverConnector"`
 	StatReporter    *StatReporterConfigImpl    `yaml:"statReporter" json:"statReporter"`
+	EventReporter   *EventReporterConfigImpl   `yaml:"eventReporter" json:"eventReporter"`
 	Location        *LocationConfigImpl        `yaml:"location" json:"location"`
 	Client          *ClientConfigImpl          `yaml:"client" json:"client"`
 }
@@ -85,6 +86,11 @@ func (g *GlobalConfigImpl) GetServerConnector() ServerConnectorConfig {
 // GetStatReporter cl5.global.statReporter前缀开头的所有配置项.
 func (g *GlobalConfigImpl) GetStatReporter() StatReporterConfig {
 	return g.StatReporter
+}
+
+// GetEventReporter global.eventReporter前缀开头的所有配置项
+func (g *GlobalConfigImpl) GetEventReporter() EventReporterConfig {
+	return g.EventReporter
 }
 
 // GetLocation cl5.global.location前缀开头的所有配置项.

@@ -161,6 +161,12 @@ const (
 	AgentMode GetConfigFileRequestMode = 1
 )
 
+// mode to str的映射
+var ConfigFileRequestMode2Str = map[GetConfigFileRequestMode]string{
+	SDKMode:   "sdk",
+	AgentMode: "agent",
+}
+
 type GetConfigFileRequest struct {
 	Namespace string
 	FileGroup string

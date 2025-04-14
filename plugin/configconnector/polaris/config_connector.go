@@ -425,6 +425,7 @@ func transferFromClientConfigFileInfo(configFileInfo *config_manage.ClientConfig
 		FileName:      configFileInfo.GetFileName().GetValue(),
 		SourceContent: configFileInfo.GetContent().GetValue(),
 		Version:       configFileInfo.GetVersion().GetValue(),
+		VersionName:   configFileInfo.GetName().GetValue(),
 		Md5:           configFileInfo.GetMd5().GetValue(),
 		Encrypted:     configFileInfo.GetEncrypted().GetValue(),
 		Tags:          tags,

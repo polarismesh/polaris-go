@@ -31,6 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 )
 
 // ConfigFileFlow 配置中心核心服务门面类
@@ -50,11 +51,13 @@ type ConfigFileFlow struct {
 	persistHandler *CachePersistHandler
 
 	startLongPollingTaskOnce sync.Once
+
+	eventReporterChain []events.EventReporter
 }
 
 // NewConfigFileFlow 创建配置中心服务
 func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfilter.Chain,
-	conf config.Configuration) (*ConfigFileFlow, error) {
+	conf config.Configuration, eventReporterChain []events.EventReporter) (*ConfigFileFlow, error) {
 	persistHandler, err := NewCachePersistHandler(
 		conf.GetConfigFile().GetLocalCache().GetPersistDir(),
 		conf.GetConfigFile().GetLocalCache().GetPersistMaxWriteRetry(),
@@ -66,14 +69,15 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfi
 	}
 
 	configFileService := &ConfigFileFlow{
-		connector:       connector,
-		chain:           chain,
-		conf:            conf,
-		repos:           make([]*ConfigFileRepo, 0, 8),
-		configFileCache: map[string]model.ConfigFile{},
-		configFilePool:  map[string]*ConfigFileRepo{},
-		notifiedVersion: map[string]uint64{},
-		persistHandler:  persistHandler,
+		connector:          connector,
+		chain:              chain,
+		conf:               conf,
+		repos:              make([]*ConfigFileRepo, 0, 8),
+		configFileCache:    map[string]model.ConfigFile{},
+		configFilePool:     map[string]*ConfigFileRepo{},
+		notifiedVersion:    map[string]uint64{},
+		persistHandler:     persistHandler,
+		eventReporterChain: eventReporterChain,
 	}
 
 	return configFileService, nil
@@ -113,7 +117,7 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		return configFile, nil
 	}
 
-	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.conf, c.persistHandler)
+	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.conf, c.persistHandler, c.eventReporterChain)
 	if err != nil {
 		return nil, err
 	}
