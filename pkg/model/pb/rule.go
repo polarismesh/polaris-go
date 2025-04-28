@@ -39,10 +39,11 @@ type ServiceRuleAssistant interface {
 }
 
 var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
-	model.EventRouting:        &RoutingAssistant{},
-	model.EventRateLimiting:   &RateLimitingAssistant{},
-	model.EventCircuitBreaker: &CircuitBreakAssistant{},
-	model.EventFaultDetect:    &FaultDetectAssistant{},
+	model.EventRouting:         &RoutingAssistant{},
+	model.EventRateLimiting:    &RateLimitingAssistant{},
+	model.EventCircuitBreaker:  &CircuitBreakAssistant{},
+	model.EventFaultDetect:     &FaultDetectAssistant{},
+	model.EventNearbyRouteRule: &RoutingAssistant{},
 }
 
 // ServiceRuleInProto 路由规则配置对象.

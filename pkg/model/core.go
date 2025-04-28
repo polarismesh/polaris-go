@@ -39,6 +39,8 @@ const (
 	EventCircuitBreaker EventType = 0x2006
 	// EventFaultDetect 探测规则
 	EventFaultDetect EventType = 0x2007
+	//EventNearbyRouteRule 就近路由事件
+	EventNearbyRouteRule EventType = 0x2008
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
@@ -66,21 +68,23 @@ func (e EventType) String() string {
 var (
 	// 路由规则到日志回显
 	eventTypeToPresent = map[EventType]string{
-		EventInstances:      "instance",
-		EventRouting:        "routing",
-		EventRateLimiting:   "rate_limiting",
-		EventServices:       "services",
-		EventCircuitBreaker: "circuit_breaker",
-		EventFaultDetect:    "fault_detect",
+		EventInstances:       "instance",
+		EventRouting:         "routing",
+		EventRateLimiting:    "rate_limiting",
+		EventServices:        "services",
+		EventCircuitBreaker:  "circuit_breaker",
+		EventFaultDetect:     "fault_detect",
+		EventNearbyRouteRule: "nearby_route_rule",
 	}
 
 	presentToEventType = map[string]EventType{
-		"instance":        EventInstances,
-		"routing":         EventRouting,
-		"rate_limiting":   EventRateLimiting,
-		"services":        EventServices,
-		"circuit_breaker": EventCircuitBreaker,
-		"fault_detect":    EventFaultDetect,
+		"instance":          EventInstances,
+		"routing":           EventRouting,
+		"rate_limiting":     EventRateLimiting,
+		"services":          EventServices,
+		"circuit_breaker":   EventCircuitBreaker,
+		"fault_detect":      EventFaultDetect,
+		"nearby_route_rule": EventNearbyRouteRule,
 	}
 )
 

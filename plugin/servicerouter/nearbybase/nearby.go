@@ -20,6 +20,8 @@ package nearbybase
 import (
 	"context"
 	"fmt"
+	"github.com/modern-go/reflect2"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"strings"
 	"time"
 
@@ -94,7 +96,29 @@ const (
 // Enable 当前是否需要启动该服务路由插件
 func (g *NearbyBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	location := g.valueCtx.GetCurrentLocation().GetLocation()
-	return nil != location && clusters.IsNearbyEnabled()
+	return nil != location && (clusters.IsNearbyEnabled() || g.enableNearByRouteRules(routeInfo))
+}
+
+func ruleEmpty(svcRule model.ServiceRule) bool {
+	return reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) || svcRule.GetValidateError() != nil
+}
+
+func (g *NearbyBasedInstancesFilter) enableNearByRouteRules(routeInfo *servicerouter.RouteInfo) bool {
+	if ruleEmpty(routeInfo.DestRouteRule) {
+		return false
+	}
+
+	rt, ok := routeInfo.DestRouteRule.GetValue().(*apitraffic.Routing)
+	if !ok {
+		return false
+	}
+	for _, rule := range rt.Rules {
+		if rule.Enable {
+			return true
+		}
+	}
+
+	return false
 }
 
 // 一个匹配级别的cluster的健康和全部实例数量
