@@ -18,6 +18,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 
@@ -25,7 +26,21 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
+var (
+	namespace string
+	fileGroup string
+	fileName  string
+)
+
+func initArgs() {
+	flag.StringVar(&namespace, "namespace", "default", "namespace")
+	flag.StringVar(&fileGroup, "fileGroup", "encrypt", "fileGroup")
+	flag.StringVar(&fileName, "fileName", "example.yaml", "fileName")
+}
+
 func main() {
+	initArgs()
+	flag.Parse()
 	configAPI, err := polaris.NewConfigAPI()
 
 	if err != nil {
@@ -34,10 +49,6 @@ func main() {
 	}
 
 	// 获取远程加密配置文件
-	namespace := "default"
-	fileGroup := "encrypt"
-	fileName := "example.yaml"
-
 	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
 	if err != nil {
 		log.Println("fail to get config.", err)

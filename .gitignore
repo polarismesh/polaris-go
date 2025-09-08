@@ -17,3 +17,8 @@ goimports-reviser
 
 /examples/**/provider
 /examples/**/consumer
+!/examples/**/provider/
+!/examples/**/consumer/
+/examples/**/polaris
+
+/examples/**/bin

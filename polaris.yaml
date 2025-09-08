@@ -136,18 +136,21 @@ global:
         # #默认值:10m
         # pushInterval: 10s
   # 地址提供插件，用于获取当前SDK所在的地域信息
-  # location:
-  #   providers:
-  #     - type: local
-  #       region: ${REGION}
-  #       zone: ${ZONE}
-  #       campus: ${CAMPUS}
-  #     - type: remoteHttp
-  #       region: http://127.0.0.1/region
-  #       zone: http://127.0.0.1/zone
-  #       campus: http://127.0.0.1/campus
-  #     - type: remoteService
-  #       address: grpc://127.0.0.1
+  location:
+    providers:
+     - type: local
+       options:
+         region: ${REGION}
+         zone: ${ZONE}
+         campus: ${CAMPUS}
+     - type: remoteHttp
+       options:
+         region: http://127.0.0.1/region
+         zone: http://127.0.0.1/zone
+         campus: http://127.0.0.1/campus
+     - type: remoteService
+       options:
+         target: grpc://127.0.0.1
 #描述:主调端配置
 consumer:
   #描述:本地缓存相关配置

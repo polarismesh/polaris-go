@@ -1,7 +1,7 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - ${POLARIS_SERVER}:8091
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location:
     providers:
@@ -10,6 +10,16 @@ global:
           region: ${REGION}
           zone: ${ZONE}
           campus: ${CAMPUS}
+  #描述:主调端配置
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: push
+        address: ${POLARIS_SERVER}:9091
+        interval: 10s
 consumer:
   serviceRouter:
     # 服务路由链
@@ -24,4 +34,3 @@ consumer:
         #描述:就近路由的最小匹配级别
         #范围:region(大区)、zone(区域)、campus(园区)
         matchLevel: campus
-

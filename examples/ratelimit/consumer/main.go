@@ -72,7 +72,7 @@ func (svr *PolarisConsumer) Run() {
 
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
+		log.Printf("receive echo request from client:%s", r.RemoteAddr)
 		// DiscoverEchoServer
 		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
@@ -124,6 +124,84 @@ func (svr *PolarisConsumer) runWebServer() {
 				EmptyInstanceGauge: model.EmptyInstanceGauge{},
 				CalledInstance:     instance,
 				Method:             "/echo",
+				RetStatus:          model.RetSuccess,
+			},
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			ret.RetStatus = model.RetFlowControl
+		}
+		ret.SetDelay(delay)
+		ret.SetRetCode(int32(resp.StatusCode))
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
+		}
+
+		defer resp.Body.Close()
+
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write(data)
+	})
+
+	http.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
+		log.Printf("receive health request from client:%s", r.RemoteAddr)
+		// DiscoverEchoServer
+		getOneRequest := &polaris.GetOneInstanceRequest{}
+		getOneRequest.Namespace = namespace
+		getOneRequest.Service = service
+		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+		if err != nil {
+			log.Printf("[error] fail to getOneInstance, err is %v", err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)))
+			return
+		}
+		instance := oneInstResp.GetInstance()
+		if nil != instance {
+			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+		}
+
+		start := time.Now()
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
+		req.Header = r.Header
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+			delay := time.Since(start)
+
+			ret := &polaris.ServiceCallResult{
+				ServiceCallResult: model.ServiceCallResult{
+					EmptyInstanceGauge: model.EmptyInstanceGauge{},
+					CalledInstance:     instance,
+					Method:             "/health",
+					RetStatus:          model.RetFail,
+				},
+			}
+			ret.SetRetCode(int32(http.StatusInternalServerError))
+			ret.SetDelay(delay)
+			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+				log.Printf("do report service call result : %+v", err)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+		delay := time.Since(start)
+
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             "/health",
 				RetStatus:          model.RetSuccess,
 			},
 		}

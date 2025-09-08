@@ -1,6 +1,6 @@
 module github.com/polarismesh/polaris-go-configuration
 
-go 1.17
+go 1.24
 
 require github.com/polarismesh/polaris-go v1.5.5
 

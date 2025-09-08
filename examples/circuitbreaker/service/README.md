@@ -1,6 +1,6 @@
 # Polaris Go
 
-English | [中文](./README-zh.md)
+English | [中文](README-zh.md)
 
 ## Use troubleshooting
 
@@ -38,7 +38,7 @@ Create a corresponding service through the Arctic Star Console, if you are insta
 
 ### Set CircuitBreaker Rule
 
-![create_circuitbreaker](./image/create_circuitbreaker.png)
+![create_circuitbreaker](../image/create_circuitbreaker.png)
 
 ### Change setting
 

@@ -1,8 +1,8 @@
 module github.com/polarismesh/polaris-go-circuitbreaker-consumer
 
-go 1.17
+go 1.24
 
-require github.com/polarismesh/polaris-go v1.5.5
+require github.com/polarismesh/polaris-go v1.6.1
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
