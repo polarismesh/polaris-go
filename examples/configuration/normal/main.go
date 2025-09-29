@@ -18,7 +18,7 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"log"
 
 	"github.com/polarismesh/polaris-go"
@@ -26,41 +26,66 @@ import (
 )
 
 func main() {
-	configAPI, err := polaris.NewConfigAPI()
+	log.Println("开始启动配置文件监听示例...")
 
+	configAPI, err := polaris.NewConfigAPI()
 	if err != nil {
-		fmt.Println("fail to start example.", err)
+		log.Printf("创建配置API失败: %v", err)
 		return
 	}
+	log.Println("配置API创建成功")
 
 	// 获取远程的配置文件
 	namespace := "default"
 	fileGroup := "polaris-config-example"
 	fileName := "example.yaml"
 
+	log.Printf("准备获取配置文件 - namespace: %s, fileGroup: %s, fileName: %s", namespace, fileGroup, fileName)
+
 	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
 	if err != nil {
-		log.Println("fail to get config.", err)
+		log.Printf("获取配置文件失败: %v", err)
 		return
 	}
+	log.Println("配置文件获取成功")
 
 	// 打印配置文件内容
-	log.Println(configFile.GetContent())
+	content := configFile.GetContent()
+	log.Printf("配置文件内容:\n%s", content)
+	log.Printf("配置文件内容长度: %d 字符", len(content))
 
 	// 方式一：添加监听器
+	log.Println("添加配置变更监听器（回调函数方式）...")
 	configFile.AddChangeListener(changeListener)
 
 	// 方式二：添加监听器
+	log.Println("添加配置变更监听器（通道方式）...")
 	changeChan := configFile.AddChangeListenerWithChannel()
 
+	log.Println("开始监听配置变更事件...")
 	for {
 		select {
 		case event := <-changeChan:
-			log.Printf("received change event by channel. %+v", event)
+			log.Printf("通过通道接收到配置变更事件: %+v", event)
 		}
 	}
 }
 
 func changeListener(event model.ConfigFileChangeEvent) {
-	log.Printf("received change event. %+v", event)
+	log.Printf("通过回调函数接收到配置变更事件:")
+	log.Printf("  - 变更类型: %v", event.ChangeType)
+	log.Printf("  - 命名空间: %s", event.ConfigFileMetadata.GetNamespace())
+	log.Printf("  - 文件组: %s", event.ConfigFileMetadata.GetFileGroup())
+	log.Printf("  - 文件名: %s", event.ConfigFileMetadata.GetFileName())
+	log.Printf("  - 新内容: %s", event.NewValue)
+	log.Printf("  - 旧内容: %s", event.OldValue)
+	log.Printf("完整事件信息: %+v", jsonMarshal(event))
+}
+
+func jsonMarshal(v interface{}) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }

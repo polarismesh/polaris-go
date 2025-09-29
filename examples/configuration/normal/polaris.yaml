@@ -9,3 +9,4 @@ config:
   configConnector:
     addresses:
       - ${POLARIS_SERVER}:8093
+    token: ${POLARIS_TOKEN}
