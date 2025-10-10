@@ -1,0 +1,10 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+provider:
+  rateLimit:
+    enable: true
+  limiterNamespace: Polaris
+  limiterService: polaris.limiter

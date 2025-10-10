@@ -22,7 +22,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -51,7 +53,6 @@ func initArgs() {
 // PolarisConsumer .
 type PolarisConsumer struct {
 	consumer  polaris.ConsumerAPI
-	router    polaris.RouterAPI
 	namespace string
 	service   string
 	host      string
@@ -67,6 +68,18 @@ func (svr *PolarisConsumer) Run() {
 
 	svr.host = tmpHost
 	svr.runWebServer()
+}
+
+func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResult, retStatus model.RetStatus,
+	retCode int32) {
+	svcCallResult.SetRetStatus(retStatus)
+	svcCallResult.SetRetCode(retCode)
+	err := svr.consumer.UpdateServiceCallResult(svcCallResult)
+	if err != nil {
+		log.Fatalf("fail to UpdateServiceCallResult, err is %v, res:%s", err, jsonEncode(svcCallResult))
+	} else {
+		log.Printf("UpdateServiceCallResult success, res:%s", jsonEncode(svcCallResult))
+	}
 }
 
 func (svr *PolarisConsumer) runWebServer() {
@@ -93,24 +106,38 @@ func (svr *PolarisConsumer) runWebServer() {
 		loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
 		locStr, _ := json.Marshal(loc)
 
+		svr.consumer.SDKContext().GetConfig()
 		msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ", string(locStr), svr.host, svr.port)
 		_, _ = buf.WriteString(msg)
 
+		//服务调用结果，用于在后面进行调用结果上报
+		svcCallResult := &polaris.ServiceCallResult{}
+		//将服务上报对象设置为获取到的实例
+		svcCallResult.SetCalledInstance(instance)
+
 		func() {
+			requestStartTime := time.Now()
 			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+			//设置调用耗时
+			svcCallResult.SetDelay(time.Since(requestStartTime))
 			if err != nil {
 				log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 				rw.WriteHeader(http.StatusOK)
 				_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+				svr.reportResult(svcCallResult, api.RetFail, -1)
 				return
 			}
-			data, err := ioutil.ReadAll(resp.Body)
+			data, err := io.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 				rw.WriteHeader(http.StatusOK)
 				_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+				svr.reportResult(svcCallResult, api.RetFail, -1)
 				return
 			}
+			log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
+			svr.reportResult(svcCallResult, api.RetSuccess, 0)
+
 			_, _ = buf.Write(data)
 			_ = buf.WriteByte('\n')
 			defer resp.Body.Close()
@@ -149,9 +176,15 @@ func main() {
 	}
 	defer sdkCtx.Destroy()
 
+	svcRouter := sdkCtx.GetConfig().GetConsumer().GetServiceRouter()
+	log.Printf("service router config: %+v", jsonEncode(svcRouter))
+	loc := sdkCtx.GetConfig().GetGlobal().GetLocation()
+	log.Printf("location config: %+v", jsonEncode(loc))
+	statReporter := sdkCtx.GetConfig().GetGlobal().GetStatReporter()
+	log.Printf("stat reporter config: %+v", jsonEncode(statReporter))
+
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
-		router:    polaris.NewRouterAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
 	}
@@ -186,4 +219,12 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+func jsonEncode(data interface{}) string {
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return string(buf)
 }

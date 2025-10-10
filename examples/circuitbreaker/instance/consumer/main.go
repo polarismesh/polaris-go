@@ -20,156 +20,292 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
+	"math/rand"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
-	namespace string
-	service   string
-	port      int64
+	selfNamespace   string
+	selfService     string
+	selfRegister    bool
+	calleeNamespace string
+	calleeService   string
+	port            int
+	token           string
+	configPath      string
 )
 
 func initArgs() {
-	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "CircuitBreakerEchoServer", "service")
-	flag.Int64Var(&port, "port", 18080, "port")
+	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
+	flag.StringVar(&selfService, "selfService", "CircuitBreakerInstanceCaller", "selfService")
+	flag.BoolVar(&selfRegister, "selfRegister", true, "selfRegister")
+	flag.StringVar(&calleeNamespace, "calleeNamespace", "default", "calleeNamespace")
+	flag.StringVar(&calleeService, "calleeService", "CircuitBreakerCallee", "calleeService")
+	flag.IntVar(&port, "port", 18080, "port")
+	flag.StringVar(&token, "token", "", "token")
+	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
 }
 
-// PolarisConsumer is a consumer of the circuit breaker service.
-type PolarisConsumer struct {
-	consumer     polaris.ConsumerAPI
-	circuitbreak polaris.CircuitBreakerAPI
-	namespace    string
-	service      string
+// PolarisClient is a consumer of the circuit breaker calleeService.
+type PolarisClient struct {
+	provider       polaris.ProviderAPI
+	host           string
+	isShutdown     bool
+	consumer       polaris.ConsumerAPI
+	circuitBreaker polaris.CircuitBreakerAPI
+	webSvr         *http.Server
 }
 
-// Run is the consumer's main function.
-func (svr *PolarisConsumer) Run() {
-	svr.runWebServer()
-}
-
-func (svr *PolarisConsumer) discoverInstance() (string, model.Resource, error) {
-	req := &polaris.GetInstancesRequest{}
-	req.Namespace = namespace
-	req.Service = service
-
-	instancesResp, err := svr.consumer.GetInstances(req)
-	if err != nil {
-		log.Printf("[error] fail to getInstances, err is %v", err)
-		return "", nil, err
-	}
-	for _, ins := range instancesResp.GetInstances() {
-		cbStatus := "close"
-		if ins.GetCircuitBreakerStatus() != nil {
-			cbStatus = ins.GetCircuitBreakerStatus().GetStatus().String()
-		}
-		log.Printf("%s:%d. cb status: %s", ins.GetHost(), ins.GetPort(), cbStatus)
-	}
-
+func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
+	svr.printAllInstances()
 	getOneRequest := &polaris.GetOneInstanceRequest{}
-	getOneRequest.Namespace = namespace
-	getOneRequest.Service = service
-	// 允许返回熔断半开的实例
-	getOneRequest.IncludeCircuitBreakInstances = true
+	getOneRequest.Namespace = calleeNamespace
+	getOneRequest.Service = calleeService
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance, err is %v", err)
-		return "", nil, err
+		return nil, err
 	}
 	instance := oneInstResp.GetInstance()
-	if nil != instance {
-		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+	if instance == nil {
+		log.Printf("[error] fail to getOneInstance, instance is nil")
+		return nil, fmt.Errorf("Consumer.GetOneInstance empty")
 	}
-
-	insRes, _ := model.NewInstanceResource(&model.ServiceKey{
-		Namespace: namespace,
-		Service:   service,
-	}, nil, "http", instance.GetHost(), instance.GetPort())
-
-	return fmt.Sprintf("%s:%d", instance.GetHost(), instance.GetPort()), insRes, nil
+	log.Printf("getOneInstance is %s:%d, ishealthy:%v", instance.GetHost(),
+		instance.GetPort(), instance.IsHealthy())
+	return instance, nil
 }
 
-func (svr *PolarisConsumer) runWebServer() {
+func (svr *PolarisClient) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
-		endpoint, insRes, err := svr.discoverInstance()
+		instance, err := svr.discoverInstance()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] discover instance fail : %s", err)))
 			return
 		}
 		start := time.Now()
-		resp, err := http.Get(fmt.Sprintf("http://%+v/echo", endpoint))
-		if resp != nil {
-			defer resp.Body.Close()
-		}
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+
 		if err != nil {
-			svr.circuitbreak.Report(&model.ResourceStat{
-				Delay:     time.Since(start),
-				RetStatus: model.RetFail,
-				RetCode:   strconv.Itoa(http.StatusInternalServerError),
-				Resource:  insRes,
-			})
+			log.Printf("[error] send request to %s:%d fail : %s",
+				instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] discover instance fail : %s", err)))
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
+				instance.GetHost(), instance.GetPort(), err)))
+
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+			// 上报熔断结果，用于熔断计算
+			svr.reportCircuitBreak(instance, model.RetFail, strconv.Itoa(http.StatusInternalServerError), start)
 			return
 		}
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+
+		defer resp.Body.Close()
+
+		// 上报熔断结果，用于熔断计算
 		if resp.StatusCode != http.StatusOK {
-			svr.circuitbreak.Report(&model.ResourceStat{
-				Delay:     time.Since(start),
-				RetStatus: model.RetFail,
-				RetCode:   strconv.Itoa(resp.StatusCode),
-				Resource:  insRes,
-			})
+			svr.reportCircuitBreak(instance, model.RetFail,
+				strconv.Itoa(resp.StatusCode), start)
 		} else {
-			svr.circuitbreak.Report(&model.ResourceStat{
-				Delay:     time.Since(start),
-				RetStatus: model.RetSuccess,
-				RetCode:   strconv.Itoa(http.StatusOK),
-				Resource:  insRes,
-			})
+			svr.reportCircuitBreak(instance, model.RetSuccess,
+				strconv.Itoa(http.StatusOK), start)
 		}
-		ret, _ := ioutil.ReadAll(resp.Body)
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s",
+				instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+		log.Printf("echo success, resp: %+v", string(data))
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(ret))
+		_, _ = rw.Write(data)
 	})
 
-	log.Printf("start run web server, port : %d", port)
-	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
-		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		log.Fatalf("[ERROR]fail to listen tcp, err is %v", err)
 	}
+
+	go func() {
+		log.Printf("[INFO] start http server, listen port is %v", ln.Addr().(*net.TCPAddr).Port)
+		if err := svr.webSvr.Serve(ln); err != nil {
+			svr.isShutdown = false
+			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+		}
+	}()
+}
+
+func (svr *PolarisClient) printAllInstances() {
+	req := &polaris.GetInstancesRequest{
+		GetInstancesRequest: model.GetInstancesRequest{
+			Service:   calleeService,
+			Namespace: calleeNamespace,
+		},
+	}
+	instancesResp, err := svr.consumer.GetInstances(req)
+	if err != nil {
+		log.Printf("[error] fail to getInstances for request [%+v], err is %v\n", req, err)
+		return
+	}
+	log.Printf("printAllInstances get [%d] instances", len(instancesResp.GetInstances()))
+
+	for _, ins := range instancesResp.GetInstances() {
+		cbStatus := "close"
+		if ins.GetCircuitBreakerStatus() != nil {
+			cbStatus = ins.GetCircuitBreakerStatus().GetStatus().String()
+		}
+		log.Printf("%s:%d. cb status: %s\n", ins.GetHost(), ins.GetPort(), cbStatus)
+	}
+}
+
+func (svr *PolarisClient) reportCircuitBreak(instance model.Instance, status model.RetStatus,
+	retCode string, start time.Time) {
+	insRes, _ := model.NewInstanceResource(&model.ServiceKey{
+		Namespace: calleeNamespace,
+		Service:   calleeService,
+	}, &model.ServiceKey{
+		Namespace: selfNamespace,
+		Service:   selfService,
+	}, "http", instance.GetHost(), instance.GetPort())
+
+	log.Printf("report circuitBreaker [%v] for instance %s/%s:%d "+
+		"caller [%s.%s] "+
+		"delay [%v] "+
+		"circuitBreaker status [%v]\n",
+		status,
+		instance.GetService(),
+		instance.GetHost(), instance.GetPort(),
+		selfNamespace, selfService, time.Since(start),
+		instance.GetCircuitBreakerStatus())
+
+	if err := svr.circuitBreaker.Report(&model.ResourceStat{
+		Delay:     time.Since(start),
+		RetStatus: status,
+		RetCode:   retCode,
+		Resource:  insRes,
+	}); err != nil {
+		log.Printf("report circuitbreak for service %v failed: %v",
+			insRes, err)
+	}
+}
+
+func (svr *PolarisClient) runMainLoop() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, []os.Signal{
+		syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGSEGV,
+	}...)
+
+	for s := range ch {
+		log.Printf("catch signal(%+v), stop servers", s)
+		if selfRegister {
+			svr.isShutdown = true
+			svr.deregisterService()
+		}
+		_ = svr.webSvr.Close()
+		return
+	}
+}
+
+func (svr *PolarisClient) registerService() {
+	log.Printf("start to invoke register operation")
+	tmpHost, err := getLocalHost(svr.provider.SDKContext().GetConfig().GetGlobal().GetServerConnector().GetAddresses()[0])
+	if err != nil {
+		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
+	}
+	svr.host = tmpHost
+	registerRequest := &polaris.InstanceRegisterRequest{}
+	registerRequest.Service = selfService
+	registerRequest.Namespace = selfNamespace
+	registerRequest.Host = svr.host
+	registerRequest.Port = port
+	registerRequest.ServiceToken = token
+	resp, err := svr.provider.RegisterInstance(registerRequest)
+	if err != nil {
+		log.Fatalf("fail to register instance, err is %v", err)
+	}
+	log.Printf("register response: instanceId %s", resp.InstanceID)
+}
+
+func (svr *PolarisClient) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
+	deregisterRequest.Service = selfService
+	deregisterRequest.Namespace = selfNamespace
+	deregisterRequest.Host = svr.host
+	deregisterRequest.Port = port
+	deregisterRequest.ServiceToken = token
+	if err := svr.provider.Deregister(deregisterRequest); err != nil {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister successfully.")
 }
 
 func main() {
 	initArgs()
 	flag.Parse()
-	if len(namespace) == 0 || len(service) == 0 {
-		log.Print("namespace and service are required")
+	if len(calleeNamespace) == 0 || len(calleeService) == 0 {
+		log.Print("calleeNamespace and calleeService are required")
 		return
 	}
-	sdkCtx, err := polaris.NewSDKContext()
+	cfg, err := config.LoadConfigurationByFile(configPath)
 	if err != nil {
-		log.Fatalf("fail to create consumerAPI, err is %v", err)
+		log.Fatalf("load configuration by file %s failed: %v", configPath, err)
 	}
+	sdkCtx, err := polaris.NewSDKContextByConfig(cfg)
+	if err != nil {
+		log.Fatalf("fail to create sdkContext, err is %v", err)
+	}
+	provider := polaris.NewProviderAPIByContext(sdkCtx)
+	defer provider.Destroy()
+
 	consumer := polaris.NewConsumerAPIByContext(sdkCtx)
 	circuitBreaker := polaris.NewCircuitBreakerAPIByContext(sdkCtx)
 	defer func() {
 		sdkCtx.Destroy()
 	}()
 
-	svr := &PolarisConsumer{
-		consumer:     consumer,
-		circuitbreak: circuitBreaker,
-		namespace:    namespace,
-		service:      service,
+	svr := &PolarisClient{
+		provider:       provider,
+		consumer:       consumer,
+		circuitBreaker: circuitBreaker,
+		webSvr:         &http.Server{},
 	}
 
-	svr.Run()
+	if selfRegister {
+		svr.registerService()
+	}
+	svr.runWebServer()
+	svr.runMainLoop()
+}
+
+func getLocalHost(serverAddr string) (string, error) {
+	conn, err := net.Dial("tcp", serverAddr)
+	if err != nil {
+		return "", err
+	}
+	localAddr := conn.LocalAddr().String()
+	colonIdx := strings.LastIndex(localAddr, ":")
+	if colonIdx > 0 {
+		return localAddr[:colonIdx], nil
+	}
+	return localAddr, nil
 }

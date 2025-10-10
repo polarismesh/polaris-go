@@ -1,12 +1,5 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
-  statReporter:
-    enable: true
-    chain:
-      - prometheus
-    plugin:
-      prometheus:
-        type: pull
-        metricPort: 0
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}

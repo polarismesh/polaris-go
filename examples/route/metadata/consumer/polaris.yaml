@@ -1,0 +1,17 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: push
+        address: ${POLARIS_SERVER}:9091
+        interval: 10s
+consumer:
+  serviceRouter:
+    chain:
+      - dstMetaRouter # 启用元数据路由, 该配置使用元数据路由替代了默认开启的规则路由，一般不建议同时使用元数据路由和规则路由

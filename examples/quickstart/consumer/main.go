@@ -20,7 +20,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -72,7 +72,7 @@ func (svr *PolarisConsumer) Run() {
 
 func (svr *PolarisConsumer) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
+		log.Printf("receive echo request from client:%s", r.RemoteAddr)
 		// DiscoverEchoServer
 		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
@@ -136,7 +136,7 @@ func (svr *PolarisConsumer) runWebServer() {
 
 		defer resp.Body.Close()
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)

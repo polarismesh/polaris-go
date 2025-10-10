@@ -1,7 +1,7 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - ${POLARIS_SERVER}:8091
   statReporter:
     enable: true
     chain:
@@ -9,5 +9,5 @@ global:
     plugin:
       prometheus:
         type: push
-        address: 127.0.0.1:9091
+        address: ${POLARIS_SERVER}:9091
         interval: 10s

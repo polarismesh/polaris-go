@@ -1,99 +1,113 @@
 # Polaris Go
 
-[English](./README.md) | 中文
+[English](README.md) | 中文
 
-## 使用实例故障熔断
+## 使用故障熔断
+北极星支持熔断异常的服务、实例或者接口，降低请求失败率。
 
-北极星支持及时熔断异常的服务、接口、实例或者实例分组，降低请求失败率。
 ## 如何使用
-
-### 构建可执行文件
-
-构建 provider
-
+进入 上一级的callee目录，启动 provider-a 和 provider-b
+### 执行provider程序
+- provider
 ```
-# linux/mac
-cd ./provider
-go build -o provider
-
-# windows
-cd ./consumer
-go build -o provider.exe
+cd provider
+export POLARIS_SERVER=127.0.0.1
+make run
 ```
-
-构建 consumer
-
-```
-# linux/mac
-cd ./consumer
-go build -o consumer
-
-# windows
-cd ./consumer
-go build -o consumer.exe
-```
-### 进入控制台
-
-预先通过北极星控制台创建对应的服务，如果是通过本地一键安装包的方式安装，直接在浏览器通过127.0.0.1:8080打开控制台
 
 ### 设置熔断规则
+- 服务级
+  ![create_service_circuitbreaker](./image/create_circuitbreaker.png)
 
-![create_circuitbreaker](./image/create_circuitbreaker.png)
-
-### 修改配置
-
-指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
-
+### 执行consumer程序
+- consumer
 ```
-global:
-  serverConnector:
-    addresses:
-    - 127.0.0.1:8091
+cd consumer
+export POLARIS_SERVER=127.0.0.1
+make run
 ```
 
-### 执行程序
+## 验证
+### 服务级熔断
+- provider-a正常，provider-b异常
+- 设置熔断规则失败率大于等于50%
+- 会熔断整个服务
 
-### 执行程序
+```shell
+❯ for i in {1..10};do curl http://127.0.0.1:18080/echo -w '\n';echo $(date);sleep 0.1s;done                                                                                                                       ~
 
-运行构建出的**provider**可执行文件
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分01秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分02秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分02秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分02秒 CST
+[11:00:02] [cost 1.396s] for i in {1..10};do curl http://127.0.0.1:18080/echo -w '                                                                                                                                  
+';echo $(date);sleep 0.1s;done
 
+
+❯ for i in {1..10};do curl http://127.0.0.1:18080/echo -w '\n';echo $(date);sleep 0.1s;done                                                                                                                       ~
+
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分38秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 200, Hello, My host : 10.64.44.79:59242
+2025年 9月 5日 星期五 11时00分39秒 CST
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时00分40秒 CST
+[11:00:40] [cost 1.342s] for i in {1..10};do curl http://127.0.0.1:18080/echo -w '                                                                                                                                  
+';echo $(date);sleep 0.1s;done
+
+-- 整个服务被熔断
+❯ for i in {1..10};do curl http://127.0.0.1:18080/echo -w '\n';echo $(date);sleep 0.1s;done                                                                                                                       ~
+
+status code: 500, Fatal, My host : 10.64.44.79:59235
+2025年 9月 5日 星期五 11时02分47秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分47秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[error] fail : call aborted
+2025年 9月 5日 星期五 11时02分48秒 CST
+[11:02:49] [cost 1.362s] for i in {1..10};do curl http://127.0.0.1:18080/echo -w '                                                                                                                                  
+';echo $(date);sleep 0.1s;done
 ```
-# linux/mac运行命令
-./provider
-
-# windows运行命令
-./provider.exe
-```
-
-运行构建出的**consumer**可执行文件
-
-```
-# linux/mac运行命令
-./provider
-
-# windows运行命令
-./provider.exe
-```
-
-### 验证
-
-快速的发起多次**curl**请求命令
-
-```
--- 第一次发起请求
-curl -H 'user-id: polaris' http://127.0.0.1:18080/echo
-
-Hello, My host : 127.0.0.1:8888
-Hello, My host : 127.0.0.1:9999
-...
-Hello, My host : 127.0.0.1:9999
-
--- 关闭某些provider，在发起请求
-
-"Hello, My host : %s:%d", svr.host, svr.port
-dial tcp 127.0.0.1:37907: connect: connection refused
-
-<多次调用触发熔断>
-
-it's fallback
-...

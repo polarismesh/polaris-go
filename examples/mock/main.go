@@ -66,7 +66,7 @@ func (svr *PolarisProvider) watchInstances(ctx context.Context) {
 		},
 	})
 	if err != nil {
-		panic(err)0
+		panic(err)
 	}
 
 	for {

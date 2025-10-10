@@ -18,6 +18,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -72,7 +73,9 @@ func (svr *PolarisProvider) Run() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm DiscoverEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		msg := fmt.Sprintf("Hello, I'm DiscoverEchoServer Provider, My host : %s:%d", svr.host, svr.port)
+		log.Printf("get echo request from client address: %s, response:%s", r.RemoteAddr, msg)
+		_, _ = rw.Write([]byte(msg))
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
@@ -101,6 +104,7 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(1)
+	log.Printf("registerRequest: %+v", jsonStr(registerRequest))
 	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
 		log.Fatalf("fail to register instance, err is %v", err)
@@ -180,4 +184,9 @@ func getLocalHost(serverAddr string) (string, error) {
 
 func providedInstanceId(namespace, service, host string, port int) string {
 	return fmt.Sprintf("%s#%s#%s#%d", namespace, service, host, port)
+}
+
+func jsonStr(v interface{}) string {
+	str, _ := json.Marshal(v)
+	return string(str)
 }

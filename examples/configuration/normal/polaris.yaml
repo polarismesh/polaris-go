@@ -1,11 +1,12 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - ${POLARIS_SERVER}:8091
   client:
     labels:
       env: pre
 config:
   configConnector:
     addresses:
-      - 127.0.0.1:8093
+      - ${POLARIS_SERVER}:8093
+    token: ${POLARIS_TOKEN}

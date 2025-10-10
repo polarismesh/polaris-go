@@ -134,6 +134,7 @@ func (svr *PolarisProvider) runWebServer() {
 		loc := svr.provider.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
 		locStr, _ := json.Marshal(loc)
 		msg := fmt.Sprintf("Hello, I'm RouteNearbyEchoServer Provider, MyLocInfo's : %s, host : %s:%d", string(locStr), svr.host, svr.port)
+		log.Printf("get echo request from client address: %s, response:%s", r.RemoteAddr, msg)
 		_, _ = rw.Write([]byte(msg))
 	})
 
