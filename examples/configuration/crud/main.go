@@ -68,120 +68,6 @@ var actionMap = map[string]string{
 	ActionFetch:   "Fetching config file",
 }
 
-func defaultHandler(c *gin.Context) {
-	c.String(http.StatusOK, "you can use /create, /update, /publish, /get, /fetch to operate config file")
-}
-
-func createHandler(c *gin.Context) {
-	var req struct {
-		Namespace string `json:"namespace"`
-		FileGroup string `json:"config-group"`
-		FileName  string `json:"config-name"`
-		Content   string `json:"content"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if err := configAPI.CreateConfigFile(req.Namespace, req.FileGroup, req.FileName, req.Content); err != nil {
-		log.Println("failed to create config file.", err)
-		c.String(http.StatusInternalServerError, "create failed")
-		return
-	}
-	log.Println("[Create] Success")
-	c.String(http.StatusOK, "create success")
-}
-
-func updateHandler(c *gin.Context) {
-	var req struct {
-		Namespace string `json:"namespace"`
-		FileGroup string `json:"config-group"`
-		FileName  string `json:"config-name"`
-		Content   string `json:"content"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if err := configAPI.UpdateConfigFile(req.Namespace, req.FileGroup, req.FileName, req.Content); err != nil {
-		log.Println("failed to update config file.", err)
-		c.String(http.StatusInternalServerError, "update failed")
-		return
-	}
-	log.Println("[Update] Success")
-	c.String(http.StatusOK, "update success")
-}
-
-func publishHandler(c *gin.Context) {
-	var req struct {
-		Namespace string `json:"namespace"`
-		FileGroup string `json:"config-group"`
-		FileName  string `json:"config-name"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if err := configAPI.PublishConfigFile(req.Namespace, req.FileGroup, req.FileName); err != nil {
-		log.Println("failed to publish config file.", err)
-		c.String(http.StatusInternalServerError, "publish failed")
-		return
-	}
-	log.Println("[Publish] Success")
-	c.String(http.StatusOK, "publish success")
-}
-
-func getHandler(c *gin.Context) {
-	var req struct {
-		Namespace string `json:"namespace"`
-		FileGroup string `json:"config-group"`
-		FileName  string `json:"config-name"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusBadRequest, "invalid request body")
-		return
-	}
-	configFile, err := configAPI.GetConfigFile(req.Namespace, req.FileGroup, req.FileName)
-	if err != nil {
-		log.Println("failed to get config file.", err)
-		c.String(http.StatusInternalServerError, "get failed")
-		return
-	}
-	log.Printf("got config file is %#v\n", jsonString(configFile))
-	log.Printf("got config file content:\n %s\n", configFile.GetContent())
-	c.String(http.StatusOK, "got config file content:\n %s\n", configFile.GetContent())
-}
-
-func fetchHandler(c *gin.Context) {
-	var req struct {
-		Namespace string `json:"namespace"`
-		FileGroup string `json:"config-group"`
-		FileName  string `json:"config-name"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.String(http.StatusBadRequest, "invalid request body")
-		return
-	}
-	fetchReq := &polaris.GetConfigFileRequest{
-		GetConfigFileRequest: &model.GetConfigFileRequest{
-			Namespace: req.Namespace,
-			FileGroup: req.FileGroup,
-			FileName:  req.FileName,
-		},
-	}
-	configFileFromFetch, err := configAPI.FetchConfigFile(fetchReq)
-	if err != nil {
-		log.Println("failed to get config file.", err)
-		c.String(http.StatusInternalServerError, "fetch failed")
-		return
-	}
-	log.Printf("fetched config file is %#v\n", jsonString(configFileFromFetch))
-	log.Printf("fetched config file content:\n %s\n", configFileFromFetch.GetContent())
-	c.String(http.StatusOK, "got config file content:\n %s\n", configFileFromFetch.GetContent())
-}
-
 var configAPI polaris.ConfigAPI
 
 func main() {
@@ -206,7 +92,6 @@ func main() {
 		log.Println("failed to start example.", err)
 		return
 	}
-	crud()
 
 	r := gin.New()
 	r.Use(gin.Logger())
@@ -226,43 +111,170 @@ func main() {
 	}
 }
 
-func crud() {
-	err := configAPI.UpdateConfigFile(namespace, fileGroup, fileName, newContent)
-	if err != nil {
+// getParamValue 获取参数值，优先从请求体获取，如果为空则使用默认值
+func getParamValue(reqValue, defaultValue string) string {
+	if reqValue != "" {
+		return reqValue
+	}
+	return defaultValue
+}
+
+func defaultHandler(c *gin.Context) {
+	helpText := `Polaris Config CRUD API
+
+Available endpoints:
+- GET /create  - Create config file
+- GET /update  - Update config file  
+- GET /publish - Publish config file
+- GET /get     - Get config file
+- GET /fetch   - Fetch config file
+
+Parameters can be passed in two ways:
+1. JSON request body (recommended for POST requests)
+2. Command line arguments (used as fallback)
+
+JSON format example:
+{
+  "namespace": "default",
+  "config-group": "polaris-config-example", 
+  "config-name": "example.yaml",
+  "content": "hello world"
+}
+
+If parameters are not provided in request body, values from command line arguments will be used.
+`
+	c.String(http.StatusOK, helpText)
+}
+
+func createHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+		Content   string `json:"content"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
+	finalContent := getParamValue(req.Content, content)
+
+	if err := configAPI.CreateConfigFile(finalNamespace, finalFileGroup, finalFileName, finalContent); err != nil {
+		log.Println("failed to create config file.", err)
+		c.String(http.StatusInternalServerError, "create failed: %v", err)
+		return
+	}
+	log.Printf("[Create] Success - namespace: %s, fileGroup: %s, fileName: %s", finalNamespace, finalFileGroup, finalFileName)
+	c.String(http.StatusOK, "create success")
+}
+
+func updateHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+		Content   string `json:"content"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
+	// 对于update操作，如果请求体中没有content，使用newContent参数
+	finalContent := getParamValue(req.Content, newContent)
+
+	if err := configAPI.UpdateConfigFile(finalNamespace, finalFileGroup, finalFileName, finalContent); err != nil {
 		log.Println("failed to update config file.", err)
+		c.String(http.StatusInternalServerError, "update failed: %v", err)
 		return
 	}
-	log.Println("[Update] Success")
+	log.Printf("[Update] Success - namespace: %s, fileGroup: %s, fileName: %s", finalNamespace, finalFileGroup, finalFileName)
+	c.String(http.StatusOK, "update success")
+}
 
-	err = configAPI.PublishConfigFile(namespace, fileGroup, fileName)
-	if err != nil {
+func publishHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
+
+	if err := configAPI.PublishConfigFile(finalNamespace, finalFileGroup, finalFileName); err != nil {
 		log.Println("failed to publish config file.", err)
+		c.String(http.StatusInternalServerError, "publish failed: %v", err)
 		return
 	}
-	log.Println("[Publish] Success")
+	log.Printf("[Publish] Success - namespace: %s, fileGroup: %s, fileName: %s", finalNamespace, finalFileGroup, finalFileName)
+	c.String(http.StatusOK, "publish success")
+}
 
-	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
+func getHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
+
+	configFile, err := configAPI.GetConfigFile(finalNamespace, finalFileGroup, finalFileName)
 	if err != nil {
 		log.Println("failed to get config file.", err)
+		c.String(http.StatusInternalServerError, "get failed: %v", err)
 		return
 	}
 	log.Printf("got config file is %#v\n", jsonString(configFile))
-	log.Printf("got config file content is %s\n", configFile.GetContent())
+	log.Printf("got config file content:\n %s\n", configFile.GetContent())
+	c.String(http.StatusOK, "got config file content:\n %s\n", configFile.GetContent())
+}
+
+func fetchHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
 
 	fetchReq := &polaris.GetConfigFileRequest{
 		GetConfigFileRequest: &model.GetConfigFileRequest{
-			Namespace: namespace,
-			FileGroup: fileGroup,
-			FileName:  fileName,
+			Namespace: finalNamespace,
+			FileGroup: finalFileGroup,
+			FileName:  finalFileName,
 		},
 	}
 	configFileFromFetch, err := configAPI.FetchConfigFile(fetchReq)
 	if err != nil {
 		log.Println("failed to get config file.", err)
+		c.String(http.StatusInternalServerError, "fetch failed: %v", err)
 		return
 	}
 	log.Printf("fetched config file is %#v\n", jsonString(configFileFromFetch))
-	log.Printf("fetched config file content is %s\n", configFileFromFetch.GetContent())
+	log.Printf("fetched config file content:\n %s\n", configFileFromFetch.GetContent())
+	c.String(http.StatusOK, "got config file content:\n %s\n", configFileFromFetch.GetContent())
 }
 
 func jsonString(v interface{}) string {
