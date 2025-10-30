@@ -1,10 +1,10 @@
 module github.com/polarismesh/polaris-go-watchinstance
 
-go 1.17
+go 1.24
 
 replace github.com/polarismesh/polaris-go => ../../
 
-require github.com/polarismesh/polaris-go v1.4.2
+require github.com/polarismesh/polaris-go v1.6.1
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -19,7 +19,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/polarismesh/specification v1.5.5-alpha.1 // indirect
+	github.com/polarismesh/specification v1.6.0 // indirect
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect

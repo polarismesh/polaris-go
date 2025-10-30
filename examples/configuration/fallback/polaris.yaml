@@ -1,7 +1,7 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
+      - ${POLARIS_SERVER}:8091
 config:
   # 本地缓存配置
   localCache:
@@ -19,7 +19,8 @@ config:
     fallbackToLocalCache: true
   configConnector:
     addresses:
-      - 127.0.0.1:18093
+      - ${POLARIS_SERVER}:8093
+    token: ${POLARIS_TOKEN}
   configFilter:
     enable: true
     chain:
