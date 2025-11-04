@@ -36,6 +36,11 @@ func (e *Engine) AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFut
 	} else {
 		(&commonRequest.CallResult).SetDelay(time.Duration(consumeTime) * time.Millisecond)
 	}
-	e.syncRateLimitReportAndFinalize(commonRequest, future.GetImmediately())
+	if future != nil {
+		e.syncRateLimitReportAndFinalize(commonRequest, future.GetImmediately())
+	} else {
+		// 处理future为nil的情况
+		e.syncRateLimitReportAndFinalize(commonRequest, nil)
+	}
 	return future, err
 }
