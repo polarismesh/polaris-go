@@ -20,6 +20,8 @@ package polaris
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -275,6 +277,39 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
 }
 
+// UpsertAndPublishConfigFile insert and publish config file.
+func (c *Connector) UpsertAndPublishConfigFile(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
+	var err error
+	if err = c.waitDiscoverReady(); err != nil {
+		return nil, err
+	}
+	opKey := connector.OpkeyUpsertAndPublishConfigFile
+	startTime := clock.GetClock().Now()
+	// 获取server连接
+	conn, err := c.connManager.GetConnection(opKey, config.ConfigCluster)
+	if err != nil {
+		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
+			fmt.Sprintf("failed to get connection, opKey: %s", opKey))
+	}
+	// 释放server连接
+	defer conn.Release(opKey)
+	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
+	reqID := connector.NextPublishConfigFileReqID()
+	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
+		connector.AppendHeaderWithReqId(reqID))
+	if cancel != nil {
+		defer cancel()
+	}
+	// 打印请求报文
+	pbConfigFileRelease := transferToConfigFilePublishInfo(configFile)
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbConfigFileRelease)
+		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+	}
+	pbResp, err := configClient.UpsertAndPublishConfigFile(ctx, pbConfigFileRelease)
+	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
+}
+
 func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configconnector.ConfigGroupResponse, error) {
 	var err error
 	if err = c.waitDiscoverReady(); err != nil {
@@ -452,6 +487,32 @@ func transferToConfigFileRelease(configFile *configconnector.ConfigFile) *config
 		Group:     wrapperspb.String(configFile.GetFileGroup()),
 		FileName:  wrapperspb.String(configFile.GetFileName()),
 	}
+}
+
+func transferToConfigFilePublishInfo(configFile *configconnector.ConfigFile) *config_manage.ConfigFilePublishInfo {
+	tags := make([]*config_manage.ConfigFileTag, 0, len(configFile.GetLabels()))
+	for key, val := range configFile.GetLabels() {
+		tags = append(tags, &config_manage.ConfigFileTag{
+			Key:   wrapperspb.String(key),
+			Value: wrapperspb.String(val),
+		})
+	}
+	return &config_manage.ConfigFilePublishInfo{
+		ReleaseName: wrapperspb.String(configFile.GetVersionName()),
+		Namespace:   wrapperspb.String(configFile.GetNamespace()),
+		Group:       wrapperspb.String(configFile.GetFileGroup()),
+		FileName:    wrapperspb.String(configFile.GetFileName()),
+		Content:     wrapperspb.String(configFile.GetContent()),
+		Md5:         wrapperspb.String(CalMd5(configFile.GetContent())), // TODO
+		Tags:        tags,
+	}
+}
+
+// CalMd5 计算md5值
+func CalMd5(content string) string {
+	h := md5.New()
+	h.Write([]byte(content))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // init 注册插件信息.

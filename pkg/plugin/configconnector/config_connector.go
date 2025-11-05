@@ -38,6 +38,8 @@ type ConfigConnector interface {
 	PublishConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
 	// GetConfigGroup query config_group release file list
 	GetConfigGroup(req *ConfigGroup) (*ConfigGroupResponse, error)
+	// UpsertAndPublishConfigFile insert and publish config file
+	UpsertAndPublishConfigFile(configFile *ConfigFile) (*ConfigFileResponse, error)
 }
 
 // init

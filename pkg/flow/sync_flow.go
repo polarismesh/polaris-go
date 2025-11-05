@@ -623,6 +623,11 @@ func (e *Engine) SyncPublishConfigFile(namespace, fileGroup, fileName string) er
 	return e.configFlow.PublishConfigFile(namespace, fileGroup, fileName)
 }
 
+// SyncUpsertAndPublishConfigFile UpsertAndPublishConfigFile 同步创建并发布配置文件
+func (e *Engine) SyncUpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error {
+	return e.configFlow.UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content)
+}
+
 // WatchAllInstances 监听所有的实例
 func (e *Engine) WatchAllInstances(request *model.WatchAllInstancesRequest) (*model.WatchAllInstancesResponse, error) {
 	return e.watchEngine.WatchAllInstances(request)
