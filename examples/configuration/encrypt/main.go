@@ -49,7 +49,14 @@ func main() {
 	}
 
 	// 获取远程加密配置文件
-	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
+	configFile, err := configAPI.FetchConfigFile(&polaris.GetConfigFileRequest{
+		GetConfigFileRequest: &model.GetConfigFileRequest{
+			Namespace: namespace,
+			FileGroup: fileGroup,
+			FileName:  fileName,
+			Subscribe: true,
+		},
+	})
 	if err != nil {
 		log.Println("fail to get config.", err)
 		return

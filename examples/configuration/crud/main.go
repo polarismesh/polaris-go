@@ -103,6 +103,7 @@ func main() {
 	r.GET("/publish", publishHandler)
 	r.GET("/get", getHandler)
 	r.GET("/fetch", fetchHandler)
+	r.GET("/upsertAndPublish", upsertAndPublishHandler)
 	log.Printf("listening at %s\n", port)
 	err = r.Run(port)
 	if err != nil {
@@ -275,6 +276,31 @@ func fetchHandler(c *gin.Context) {
 	log.Printf("fetched config file is %#v\n", jsonString(configFileFromFetch))
 	log.Printf("fetched config file content:\n %s\n", configFileFromFetch.GetContent())
 	c.String(http.StatusOK, "got config file content:\n %s\n", configFileFromFetch.GetContent())
+}
+
+// 创建并发布配置文件
+func upsertAndPublishHandler(c *gin.Context) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		FileGroup string `json:"config-group"`
+		FileName  string `json:"config-name"`
+		Content   string `json:"content"`
+	}
+	// 尝试绑定JSON，如果失败则使用默认参数
+	c.ShouldBindJSON(&req)
+	// 如果请求体中没有传入需要的参数，则从启动参数中取值
+	finalNamespace := getParamValue(req.Namespace, namespace)
+	finalFileGroup := getParamValue(req.FileGroup, fileGroup)
+	finalFileName := getParamValue(req.FileName, fileName)
+	finalContent := getParamValue(req.Content, content)
+
+	if err := configAPI.UpsertAndPublishConfigFile(finalNamespace, finalFileGroup, finalFileName, finalContent); err != nil {
+		log.Printf("failed to upsert and publish config file. err:%+v", err)
+		c.String(http.StatusInternalServerError, "upsert and publish failed: %v", err)
+		return
+	}
+	log.Println("upsert and publish config file success.")
+	c.String(http.StatusOK, "upsert and publish success")
 }
 
 func jsonString(v interface{}) string {

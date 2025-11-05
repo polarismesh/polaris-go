@@ -38,7 +38,14 @@ func main() {
 	fileGroup := "polaris-config-example"
 	fileName := "example.yaml"
 
-	configFile, err := configAPI.GetConfigFile(namespace, fileGroup, fileName)
+	configFile, err := configAPI.FetchConfigFile(&polaris.GetConfigFileRequest{
+		GetConfigFileRequest: &model.GetConfigFileRequest{
+			Namespace: namespace,
+			FileGroup: fileGroup,
+			FileName:  fileName,
+			Subscribe: true,
+		},
+	})
 	if err != nil {
 		log.Println("fail to get config.", err)
 		return
