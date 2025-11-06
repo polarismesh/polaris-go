@@ -93,6 +93,11 @@ func (c *configAPI) PublishConfigFile(namespace, fileGroup, fileName string) err
 	return c.rawAPI.PublishConfigFile(namespace, fileGroup, fileName)
 }
 
+// UpsertAndPublishConfigFile 创建配置文件并发布
+func (c *configAPI) UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.rawAPI.UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content)
+}
+
 // SDKContext 获取SDK上下文
 func (c *configAPI) SDKContext() api.SDKContext {
 	return c.rawAPI.SDKContext()

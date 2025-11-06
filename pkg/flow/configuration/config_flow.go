@@ -223,11 +223,51 @@ func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string
 	}
 
 	responseCode := resp.GetCode()
+	responseMessage := resp.GetMessage()
 
 	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
-		log.GetBaseLogger().Infof("[Config] failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+		log.GetBaseLogger().Infof("[Config] failed to publish config file. namespace = %s, fileGroup = %s, "+
+			"fileName = %s, response code = %d, msg:%v", namespace, fileGroup, fileName, responseCode, responseMessage)
+		errMsg := fmt.Sprintf("failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, "+
+			"response code = %d, msg:%v", namespace, fileGroup, fileName, responseCode, responseMessage)
+		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
+	}
+
+	return nil
+}
+
+// UpsertAndPublishConfigFile 创建配置文件并发布
+func (c *ConfigFileFlow) UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error {
+	// 校验参数
+	configFile := &configconnector.ConfigFile{
+		Namespace: namespace,
+		FileGroup: fileGroup,
+		FileName:  fileName,
+	}
+	configFile.SetContent(content)
+
+	if err := model.CheckConfigFileMetadata(configFile); err != nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
+	}
+
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
+
+	resp, err := c.connector.UpsertAndPublishConfigFile(configFile)
+	if err != nil {
+		log.GetBaseLogger().Infof("[Config] failed to UpsertAndPublishConfigFile. namespace = %s, "+
+			"fileGroup = %s, fileName = %s, err:%+v", namespace, fileGroup, fileName, err)
+		return err
+	}
+
+	responseCode := resp.GetCode()
+
+	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
+		log.GetBaseLogger().Infof("[Config] failed to upsert and publish config file. namespace = %s, "+
+			"fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
-		errMsg := fmt.Sprintf("failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+		errMsg := fmt.Sprintf("failed to upsert and publish config file. namespace = %s, fileGroup = %s, "+
+			"fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
 		return model.NewSDKError(model.ErrCodeInternalError, nil, errMsg)
 	}

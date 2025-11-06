@@ -151,6 +151,8 @@ type ConfigAPI interface {
 	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
 	// PublishConfigFile publish configuration file
 	PublishConfigFile(namespace, fileGroup, fileName string) error
+	// UpsertAndPublishConfigFile insert and publish configuration file
+	UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error
 }
 
 // ConfigGroupAPI .

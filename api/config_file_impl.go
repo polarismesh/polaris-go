@@ -82,6 +82,11 @@ func (c *configFileAPI) PublishConfigFile(namespace, fileGroup, fileName string)
 	return c.context.GetEngine().SyncPublishConfigFile(namespace, fileGroup, fileName)
 }
 
+// UpsertAndPublishConfigFile 创建配置文件并发布
+func (c *configFileAPI) UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error {
+	return c.context.GetEngine().SyncUpsertAndPublishConfigFile(namespace, fileGroup, fileName, content)
+}
+
 // SDKContext 获取SDK上下文
 func (c *configFileAPI) SDKContext() SDKContext {
 	return c.context

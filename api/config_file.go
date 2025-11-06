@@ -41,6 +41,8 @@ type ConfigFileAPI interface {
 	UpdateConfigFile(namespace, fileGroup, fileName, content string) error
 	// PublishConfigFile 发布配置文件
 	PublishConfigFile(namespace, fileGroup, fileName string) error
+	// UpsertAndPublishConfigFile 创建配置文件并发布
+	UpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error
 }
 
 type ConfigGroupAPI interface {

@@ -120,6 +120,8 @@ type Engine interface {
 	SyncUpdateConfigFile(namespace, fileGroup, fileName, content string) error
 	// SyncPublishConfigFile 同步发布配置文件
 	SyncPublishConfigFile(namespace, fileGroup, fileName string) error
+	// SyncUpsertAndPublishConfigFile 同步创建并发布配置文件
+	SyncUpsertAndPublishConfigFile(namespace, fileGroup, fileName, content string) error
 	// ProcessRouters 执行路由链过滤，返回经过路由后的实例列表
 	ProcessRouters(req *ProcessRoutersRequest) (*InstancesResponse, error)
 	// ProcessLoadBalance 执行负载均衡策略，返回负载均衡后的实例

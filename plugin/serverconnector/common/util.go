@@ -55,21 +55,22 @@ const (
 )
 
 const (
-	OpKeyRegisterInstance      = "RegisterInstance"
-	OpKeyDeregisterInstance    = "DeregisterInstance"
-	OpKeyInstanceHeartbeat     = "InstanceHeartbeat"
-	OpKeyDiscover              = "Discover"
-	OpKeyReportClient          = "ReportClient"
-	OpKeyRateLimitInit         = "RateLimitInit"
-	OpKeyRateLimitAcquire      = "RateLimitAcquire"
-	OpKeyRateLimitMetricInit   = "RateLimitMetricInit"
-	OpKeyRateLimitMetricReport = "RateLimitMetricReport"
-	OpKeyGetConfigFile         = "GetConfigFile"
-	OpKeyWatchConfigFiles      = "WatchConfigFiles"
-	OpKeyCreateConfigFile      = "CreateConfigFile"
-	OpKeyUpdateConfigFile      = "UpdateConfigFile"
-	OpKeyPublishConfigFile     = "PublishConfigFile"
-	OpKeyGetConfigGroup        = "GetConfigGroup"
+	OpKeyRegisterInstance           = "RegisterInstance"
+	OpKeyDeregisterInstance         = "DeregisterInstance"
+	OpKeyInstanceHeartbeat          = "InstanceHeartbeat"
+	OpKeyDiscover                   = "Discover"
+	OpKeyReportClient               = "ReportClient"
+	OpKeyRateLimitInit              = "RateLimitInit"
+	OpKeyRateLimitAcquire           = "RateLimitAcquire"
+	OpKeyRateLimitMetricInit        = "RateLimitMetricInit"
+	OpKeyRateLimitMetricReport      = "RateLimitMetricReport"
+	OpKeyGetConfigFile              = "GetConfigFile"
+	OpKeyWatchConfigFiles           = "WatchConfigFiles"
+	OpKeyCreateConfigFile           = "CreateConfigFile"
+	OpKeyUpdateConfigFile           = "UpdateConfigFile"
+	OpKeyPublishConfigFile          = "PublishConfigFile"
+	OpKeyGetConfigGroup             = "GetConfigGroup"
+	OpkeyUpsertAndPublishConfigFile = "UpsertAndPublishConfigFile"
 )
 
 // NextDiscoverReqID 生成GetInstances调用的请求Id
