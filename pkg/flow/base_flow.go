@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -163,10 +162,23 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			request.SetDstRoute(routeRule)
 			trigger.EnableDstRoute = false
 		}
+		nearbyRouteRule := registry.GetServiceNearByRouteRule(dstService, false)
+		if nearbyRouteRule.IsInitialized() {
+			request.SetDstRoute(nearbyRouteRule)
+			trigger.EnableDstRoute = false
+		}
 		if load && (routeRule.IsCacheLoaded() || !routeRule.IsInitialized()) {
 			dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRoute}
 			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
 			notifier, err := registry.LoadServiceRouteRule(dstService)
+			if err != nil {
+				return nil, err.(model.SDKError)
+			}
+			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
+
+			dstRouterKey = &ContextKey{ServiceKey: dstService, Operation: keyDstNearByRouteRule}
+			log.GetBaseLogger().Infof("value not initialized, scheduled context %s", dstRouterKey)
+			notifier, err = registry.LoadServiceNearByRouteRule(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
