@@ -167,7 +167,7 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
 	resource := stat.Resource
-	if resource.GetLevel() == fault_tolerance.Level_UNKNOWN {
+	if resource == nil || resource.GetLevel() == fault_tolerance.Level_UNKNOWN {
 		return nil
 	}
 	retStatus := stat.RetStatus
