@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -212,6 +213,7 @@ func (s *PrometheusReporter) prepare() {
 
 // Info 插件信息.
 func (s *PrometheusReporter) Info() model.StatInfo {
+	s.prepare() // 确保 action 已初始化，避免并发读写竞态
 	if s.action == nil {
 		return model.StatInfo{}
 	}
@@ -264,7 +266,7 @@ type PullAction struct {
 	cfg      *Config
 	clientIP string
 	bindIP   string
-	bindPort int32
+	bindPort atomic.Int32 // 使用 atomic 保证并发安全
 	ln       net.Listener
 }
 
@@ -279,7 +281,7 @@ func (pa *PullAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 	if len(pa.cfg.IP) != 0 {
 		pa.bindIP = pa.cfg.IP
 	}
-	pa.bindPort = int32(pa.cfg.port)
+	pa.bindPort.Store(int32(pa.cfg.port))
 }
 
 func (pa *PullAction) Close() {
@@ -317,24 +319,24 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 }
 
 func (pa *PullAction) Run(ctx context.Context) {
-	if pa.bindPort < 0 {
+	if pa.bindPort.Load() < 0 {
 		return
 	}
 	go pa.doAggregation(ctx)
 	go func() {
-		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort))
+		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err != nil {
 			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail: %v", err)
-			pa.bindPort = -1
+			pa.bindPort.Store(-1)
 			return
 		}
 		pa.ln = ln
-		pa.bindPort = int32(ln.Addr().(*net.TCPAddr).Port)
+		pa.bindPort.Store(int32(ln.Addr().(*net.TCPAddr).Port))
 		handler := metricsHttpHandler{
 			handler: promhttp.HandlerFor(pa.reporter.registry, promhttp.HandlerOpts{}),
 		}
 
-		log.GetBaseLogger().Infof("[metrics][push] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort))
+		log.GetBaseLogger().Infof("[metrics][push] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err := http.Serve(ln, &handler); err != nil {
 			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail : %s", err)
 			return
@@ -344,12 +346,13 @@ func (pa *PullAction) Run(ctx context.Context) {
 
 // Info 插件信息.
 func (pa *PullAction) Info() model.StatInfo {
-	if pa.bindPort <= 0 {
+	port := pa.bindPort.Load()
+	if port <= 0 {
 		return model.StatInfo{}
 	}
 	return model.StatInfo{
 		Target:   PluginName,
-		Port:     uint32(pa.bindPort),
+		Port:     uint32(port),
 		Path:     "/metrics",
 		Protocol: "http",
 	}
