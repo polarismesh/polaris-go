@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -158,31 +159,45 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 	}
 	if trigger.EnableDstRoute {
 		routeRule := registry.GetServiceRouteRule(dstService, false)
+		nearbyRouteRule := registry.GetServiceNearByRouteRule(dstService, false)
+
+		// 同时设置自定义路由规则和就近路由规则到不同的字段
+		// 这样两种路由规则可以独立判断是否生效
 		if routeRule.IsInitialized() {
 			request.SetDstRoute(routeRule)
-			trigger.EnableDstRoute = false
 		}
-		nearbyRouteRule := registry.GetServiceNearByRouteRule(dstService, false)
 		if nearbyRouteRule.IsInitialized() {
-			request.SetDstRoute(nearbyRouteRule)
+			request.SetDstNearbyRoute(nearbyRouteRule)
+		}
+
+		// 如果至少有一个规则已初始化，则标记为已启用
+		if routeRule.IsInitialized() || nearbyRouteRule.IsInitialized() {
 			trigger.EnableDstRoute = false
 		}
-		if load && (routeRule.IsCacheLoaded() || !routeRule.IsInitialized()) {
-			dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRoute}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
-			notifier, err := registry.LoadServiceRouteRule(dstService)
-			if err != nil {
-				return nil, err.(model.SDKError)
-			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
 
-			dstRouterKey = &ContextKey{ServiceKey: dstService, Operation: keyDstNearByRouteRule}
-			log.GetBaseLogger().Infof("value not initialized, scheduled context %s", dstRouterKey)
-			notifier, err = registry.LoadServiceNearByRouteRule(dstService)
-			if err != nil {
-				return nil, err.(model.SDKError)
+		// 同时检查 routeRule 和 nearbyRouteRule 的状态来决定是否需要加载
+		// 只有当两者都未初始化或需要从缓存加载时才触发加载
+		needLoadRouteRule := routeRule.IsCacheLoaded() || !routeRule.IsInitialized()
+		needLoadNearbyRouteRule := nearbyRouteRule.IsCacheLoaded() || !nearbyRouteRule.IsInitialized()
+		if load && (needLoadRouteRule || needLoadNearbyRouteRule) {
+			if needLoadRouteRule {
+				dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRoute}
+				log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
+				notifier, err := registry.LoadServiceRouteRule(dstService)
+				if err != nil {
+					return nil, err.(model.SDKError)
+				}
+				notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
+			if needLoadNearbyRouteRule {
+				dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstNearByRouteRule}
+				log.GetBaseLogger().Infof("value not initialized, scheduled context %s", dstRouterKey)
+				notifier, err := registry.LoadServiceNearByRouteRule(dstService)
+				if err != nil {
+					return nil, err.(model.SDKError)
+				}
+				notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
+			}
 		}
 	}
 	if trigger.EnableDstRateLimit {

@@ -27,6 +27,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -86,7 +87,10 @@ func (g *RuleBasedInstancesFilter) Destroy() error {
 func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	dstRoutes := g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
 	sourceRoutes := g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
-	return len(dstRoutes) > 0 || len(sourceRoutes) > 0
+	enabled := len(dstRoutes) > 0 || len(sourceRoutes) > 0
+	log.GetBaseLogger().Debugf("RuleBasedRouter.Enable: dest=%s, dstRoutes=%d, sourceRoutes=%d, enabled=%v",
+		routeInfo.DestService, len(dstRoutes), len(sourceRoutes), enabled)
+	return enabled
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
@@ -98,6 +102,7 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 	var dstRoutes, sourceRoutes []*apitraffic.Route
 	var filteredInstances *model.Cluster
 	var summary ruleMatchSummary
+
 	// 检查输入参数
 	if isValid, errInfo := g.validateParams(routeInfo); !isValid {
 		return nil, errInfo
@@ -108,6 +113,7 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 	// 优先匹配inbound规则, 成功则不需要继续匹配outbound规则 获取目标的入路由规则
 	var err error
 	dstRoutes = g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
+
 	if len(dstRoutes) > 0 {
 		routeInfo.MatchRuleType = servicerouter.DestRule
 		filteredInstances, err = g.getRuleFilteredInstances(
@@ -117,8 +123,11 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		}
 		dstFilteredInstances = filteredInstances
 		if nil == dstFilteredInstances {
+			log.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched but no instances, status=fail")
 			ruleStatus = dstRuleFail
 		} else {
+			log.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched, instances=%d",
+				dstFilteredInstances.GetClusterValue().Count())
 			ruleStatus = dstRuleSuccess
 		}
 		goto finally
@@ -126,6 +135,7 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 
 	// 处理主调服务路由规则, 获取目标的出路由规则
 	sourceRoutes = g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
+
 	if len(sourceRoutes) > 0 {
 		routeInfo.MatchRuleType = servicerouter.SrcRule
 		filteredInstances, err = g.getRuleFilteredInstances(
@@ -135,8 +145,11 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		}
 		sourceFilteredInstances = filteredInstances
 		if nil == sourceFilteredInstances {
+			log.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched but no instances, status=fail")
 			ruleStatus = sourceRuleFail
 		} else {
+			log.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched, instances=%d",
+				sourceFilteredInstances.GetClusterValue().Count())
 			ruleStatus = sourceRuleSuccess
 		}
 	}
@@ -156,6 +169,8 @@ finally:
 		if failoverType == nil {
 			failoverType = &g.routerConf.failoverType
 		}
+		log.GetBaseLogger().Debugf("RuleBasedRouter: route failed, failover=%v", *failoverType)
+
 		if *failoverType == servicerouter.FailOverNone {
 			emptyCluster := model.NewServiceClusters(model.NewDefaultServiceInstancesWithRegistryValue(model.ServiceInfo{
 				Service:   withinCluster.GetClusters().GetServiceInstances().GetService(),
@@ -167,6 +182,7 @@ finally:
 			targetCluster = model.NewCluster(clusters, withinCluster)
 		}
 	}
+
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
 	return result, nil

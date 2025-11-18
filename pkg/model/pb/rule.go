@@ -43,7 +43,7 @@ var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
 	model.EventRateLimiting:    &RateLimitingAssistant{},
 	model.EventCircuitBreaker:  &CircuitBreakAssistant{},
 	model.EventFaultDetect:     &FaultDetectAssistant{},
-	model.EventNearbyRouteRule: &RoutingAssistant{},
+	model.EventNearbyRouteRule: &NearbyRoutingAssistant{},
 }
 
 // ServiceRuleInProto 路由规则配置对象.

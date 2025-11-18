@@ -100,6 +100,10 @@ func (n *nearbyConfig) SetDefault() {
 	if n.MatchLevel == "" {
 		n.MatchLevel = config.DefaultMatchLevel
 	}
+	// 明确设置MaxMatchLevel的默认值为all，表示可以降级到所有级别
+	if n.MaxMatchLevel == "" {
+		n.MaxMatchLevel = config.AllLevel
+	}
 	if n.UnhealthyPercentToDegrade == 0 {
 		n.UnhealthyPercentToDegrade = 100
 	}

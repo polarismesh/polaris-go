@@ -20,10 +20,11 @@ package nearbybase
 import (
 	"context"
 	"fmt"
-	"github.com/modern-go/reflect2"
-	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"strings"
 	"time"
+
+	"github.com/modern-go/reflect2"
+	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -96,7 +97,15 @@ const (
 // Enable 当前是否需要启动该服务路由插件
 func (g *NearbyBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	location := g.valueCtx.GetCurrentLocation().GetLocation()
-	return nil != location && (clusters.IsNearbyEnabled() || g.enableNearByRouteRules(routeInfo))
+	hasLocation := nil != location
+	isNearbyEnabled := clusters.IsNearbyEnabled()
+	hasNearbyRouteRules := g.enableNearByRouteRules(routeInfo)
+	enabled := hasLocation && (isNearbyEnabled || hasNearbyRouteRules)
+
+	log.GetBaseLogger().Debugf("NearbyRouter.Enable: service=%s, enabled=%v (location=%v, nearbyEnabled=%v, rules=%v)",
+		clusters.GetServiceKey(), enabled, hasLocation, isNearbyEnabled, hasNearbyRouteRules)
+
+	return enabled
 }
 
 func ruleEmpty(svcRule model.ServiceRule) bool {
@@ -104,21 +113,30 @@ func ruleEmpty(svcRule model.ServiceRule) bool {
 }
 
 func (g *NearbyBasedInstancesFilter) enableNearByRouteRules(routeInfo *servicerouter.RouteInfo) bool {
-	if ruleEmpty(routeInfo.DestRouteRule) {
+	// 检查就近路由规则字段，而不是普通路由规则字段
+	if ruleEmpty(routeInfo.DestNearbyRouteRule) {
 		return false
 	}
 
-	rt, ok := routeInfo.DestRouteRule.GetValue().(*apitraffic.Routing)
+	rt, ok := routeInfo.DestNearbyRouteRule.GetValue().(*apitraffic.Routing)
 	if !ok {
 		return false
 	}
+
+	enabledRuleCount := 0
 	for _, rule := range rt.Rules {
 		if rule.Enable {
-			return true
+			enabledRuleCount++
 		}
 	}
 
-	return false
+	hasEnabledRules := enabledRuleCount > 0
+	if hasEnabledRules {
+		log.GetBaseLogger().Debugf("NearbyRouter: found %d enabled nearby rules (total %d)",
+			enabledRuleCount, len(rt.Rules))
+	}
+
+	return hasEnabledRules
 }
 
 // 一个匹配级别的cluster的健康和全部实例数量
@@ -230,7 +248,7 @@ func (g *NearbyBasedInstancesFilter) GetLevel(clusters model.ServiceClusters) (i
 			if nearbySp.GetMaxMatchLevel() != "" {
 				maxMatchLevelTmp := nearbyLevels[nearbySp.GetMaxMatchLevel()]
 				if maxMatchLevelTmp <= matchLevel {
-					g.maxMatchLevel = maxMatchLevelTmp
+					maxMatchLevel = maxMatchLevelTmp
 				} else {
 					log.GetBaseLogger().Warnf("%s %s nearbyConfig maxMatchLevel > matchLevel", namespace, service)
 				}
@@ -257,6 +275,7 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 		// 假如是全量服务，则尝试直接获取缓存
 		nearCluster, finalLevel = clusters.GetNearbyCluster(*location)
 		if nil != nearCluster {
+			log.GetBaseLogger().Debugf("NearbyRouter: using cached cluster, level=%d", finalLevel)
 			outCluster = nearCluster
 			setNearbyCluster = false
 			goto finally
@@ -277,8 +296,10 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 
 	outCluster = model.NewCluster(clusters, withinCluster)
 	g.checkAllLevelInstCounts(outCluster, location, &allLevelsCount)
+
 	// 如果priorityLevelAll级别的实例数量为0，说明没有实例，直接报错
 	if allLevelsCount[priorityLevelAll].allCount == 0 {
+		log.GetBaseLogger().Warnf("NearbyRouter: no instances found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
@@ -299,13 +320,18 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 	if finalLevel < priorityLevelAll {
 		finalLevel = notZeroLevel
 	}
+	// 额外的安全检查：如果finalLevel仍然小于priorityLevelAll（即为-1），说明所有级别都没有实例
 	if finalLevel < priorityLevelAll {
+		log.GetBaseLogger().Warnf("NearbyRouter: no valid level found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
 	}
 
 	// 如果进行降级，修改outcluster的地域信息以对齐最终匹配级别，否则直接使用已经匹配到的实例
+	if matchLevel != finalLevel {
+		log.GetBaseLogger().Debugf("NearbyRouter: degrade from level %d to %d", matchLevel, finalLevel)
+	}
 	g.modifyOutClusterLevel(outCluster, finalLevel)
 
 finally:
@@ -320,6 +346,8 @@ finally:
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = outCluster
 	result.Status = checkNearbyStatus(matchLevel, finalLevel)
+	log.GetBaseLogger().Debugf("NearbyRouter: matched level=%d, instances=%d, status=%v",
+		finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	return result, nil
 }
 

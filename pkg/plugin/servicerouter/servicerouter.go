@@ -45,6 +45,8 @@ type RouteInfo struct {
 	DestService model.ServiceMetadata
 	// 目标路由规则
 	DestRouteRule model.ServiceRule
+	// 目标就近路由规则
+	DestNearbyRouteRule model.ServiceRule
 	// 在路由匹配过程中使用到的环境变量
 	EnvironmentVariables map[string]string
 	// 全死全活路由插件，用于做路由兜底
@@ -87,6 +89,7 @@ func (r *RouteInfo) ClearValue() {
 	r.DestService = nil
 	r.SourceService = nil
 	r.DestRouteRule = nil
+	r.DestNearbyRouteRule = nil
 	r.SourceService = nil
 	r.FilterOnlyRouter = nil
 	r.MatchRuleType = UnknownRule
