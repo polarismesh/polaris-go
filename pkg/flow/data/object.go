@@ -138,6 +138,11 @@ func (br *BaseRequest) SetDstRoute(rule model.ServiceRule) {
 	// do nothing
 }
 
+// SetDstNearbyRoute 设置就近路由规则
+func (br *BaseRequest) SetDstNearbyRoute(rule model.ServiceRule) {
+	// do nothing
+}
+
 // SetDstRateLimit 设置ratelimit
 func (br *BaseRequest) SetDstRateLimit(rule model.ServiceRule) {
 	// do nothing
@@ -380,6 +385,11 @@ func (c *CommonInstancesRequest) SetDstInstances(instances model.ServiceInstance
 // SetDstRoute 设置目标服务路由规则
 func (c *CommonInstancesRequest) SetDstRoute(rule model.ServiceRule) {
 	c.RouteInfo.DestRouteRule = rule
+}
+
+// SetDstNearbyRoute 设置目标服务就近路由规则
+func (c *CommonInstancesRequest) SetDstNearbyRoute(rule model.ServiceRule) {
+	c.RouteInfo.DestNearbyRouteRule = rule
 }
 
 // SetDstRateLimit 设置目标服务限流规则
@@ -656,6 +666,11 @@ func (cl *CommonRateLimitRequest) SetDstInstances(instances model.ServiceInstanc
 
 // SetDstRoute 设置目标服务路由规则
 func (cl *CommonRateLimitRequest) SetDstRoute(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetDstNearbyRoute 设置目标服务就近路由规则
+func (cl *CommonRateLimitRequest) SetDstNearbyRoute(rule model.ServiceRule) {
 	// do nothing
 }
 

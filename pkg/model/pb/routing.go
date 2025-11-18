@@ -23,8 +23,8 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
-	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -40,22 +40,24 @@ type RoutingAssistant struct {
 // ParseRuleValue 解析出具体的规则值
 func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
 	var revision string
+	serviceKey := ""
+	if resp.Service != nil {
+		serviceKey = resp.Service.GetNamespace().GetValue() + "/" + resp.Service.GetName().GetValue()
+	}
+
 	routingValue := resp.Routing
 	if nil != routingValue {
 		revision = routingValue.GetRevision().GetValue()
+		inboundCount := len(routingValue.GetInbounds())
+		outboundCount := len(routingValue.GetOutbounds())
+
+		log.GetBaseLogger().Debugf("RoutingAssistant.ParseRuleValue: service=%s, routing rule found, revision=%s, inbounds=%d, outbounds=%d",
+			serviceKey, revision, inboundCount, outboundCount)
+
+		return routingValue, revision
 	}
 
-	if resp.Routing == nil && len(resp.NearbyRouteRules) >= 1 {
-		rule := resp.NearbyRouteRules[0]
-		routing := &apitraffic.Routing{
-			Namespace: wrapperspb.String(rule.GetNamespace()),
-			Service:   resp.Service.Name,
-			Rules:     resp.NearbyRouteRules,
-		}
-
-		return routing, rule.GetRevision()
-	}
-
+	log.GetBaseLogger().Debugf("RoutingAssistant.ParseRuleValue: service=%s, no routing rule found", serviceKey)
 	return routingValue, revision
 }
 

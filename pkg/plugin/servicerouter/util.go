@@ -20,6 +20,7 @@ package servicerouter
 import (
 	"sync"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -59,10 +60,20 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
+	log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%d",
+		routeInfo.SourceService, routeInfo.DestService, len(routers), cluster.GetClusterValue().GetInstancesSet(false, false).Count())
+
 	for _, router := range routers {
-		if !routeInfo.IsRouterEnable(router.ID()) || !router.Enable(routeInfo, svcClusters) {
+		routerName := router.Name()
+		isRouterEnabled := routeInfo.IsRouterEnable(router.ID())
+		isEnabled := router.Enable(routeInfo, svcClusters)
+
+		if !isRouterEnabled || !isEnabled {
+			log.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
+				routerName, isRouterEnabled, isEnabled)
 			continue
 		}
+
 		if nil != result {
 			// 回收，下一步即将被新值替换
 			GetRouteResultPool().Put(result)
@@ -73,13 +84,18 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil {
+			log.GetBaseLogger().Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
 			// 转发规则
+			log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s",
+				routerName, result.RedirectDestService)
 			return result, nil
 		}
 		cluster = result.OutputCluster
+		log.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%d, status=%s",
+			routerName, cluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status.String())
 	}
 	if !routeInfo.ignoreFilterOnlyOnEndChain {
 		// 需要执行一遍全死全活
@@ -92,9 +108,12 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil {
+			log.GetBaseLogger().Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
+		log.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%d",
+			cluster.GetClusterValue().GetInstancesSet(false, false).Count())
 	}
 	return result, nil
 }
