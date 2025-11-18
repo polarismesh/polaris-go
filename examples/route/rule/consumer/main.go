@@ -22,14 +22,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
-	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -41,6 +41,7 @@ var (
 	selfService   string
 	port          int64
 	token         string
+	times         int
 )
 
 func initArgs() {
@@ -50,6 +51,7 @@ func initArgs() {
 	flag.StringVar(&selfService, "selfService", "", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
 	flag.StringVar(&token, "token", "", "token")
+	flag.IntVar(&times, "times", 1, "times")
 }
 
 // PolarisConsumer .
@@ -85,7 +87,6 @@ func (svr *PolarisConsumer) runWebServer() {
 		routerRequest.SourceService.Service = selfService
 		routerRequest.SourceService.Namespace = selfNamespace
 		routerRequest.AddArguments(convertRouteArguments(r)...)
-		log.Printf("route request %s", mustJson(routerRequest))
 		routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
 		if nil != err {
 			log.Printf("[error] fail to processRouters, err is %v", err)
@@ -94,9 +95,12 @@ func (svr *PolarisConsumer) runWebServer() {
 			return
 		}
 		log.Printf("router instances count %d", len(routerInstancesResp.Instances))
+		for i, inst := range routerInstancesResp.Instances {
+			log.Printf("  [%d] instance: %s:%d, metadata: %v", i, inst.GetHost(), inst.GetPort(), inst.GetMetadata())
+		}
 
 		buf := &bytes.Buffer{}
-		for i := 0; i < 10; i++ {
+		for i := 0; i < times; i++ {
 			lbRequest := &polaris.ProcessLoadBalanceRequest{}
 			lbRequest.DstInstances = routerInstancesResp
 			lbRequest.LbPolicy = config.DefaultLoadBalancerWR
@@ -113,23 +117,40 @@ func (svr *PolarisConsumer) runWebServer() {
 			}
 
 			func() {
+				// 创建服务调用结果对象
+				svcCallResult := &polaris.ServiceCallResult{}
+				svcCallResult.SetCalledInstance(instance)
+
+				// 记录请求开始时间
+				requestStartTime := time.Now()
 				resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+				svcCallResult.SetDelay(time.Since(requestStartTime))
+
 				if err != nil {
 					log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+					// 上报调用失败结果
+					svr.reportResult(svcCallResult, model.RetFail, -1)
 					rw.WriteHeader(http.StatusOK)
 					_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
 					return
 				}
-				data, err := ioutil.ReadAll(resp.Body)
+				defer resp.Body.Close()
+
+				data, err := io.ReadAll(resp.Body)
 				if err != nil {
 					log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+					// 上报调用失败结果
+					svr.reportResult(svcCallResult, model.RetFail, -1)
 					rw.WriteHeader(http.StatusOK)
 					_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
 					return
 				}
+
+				// 上报调用成功结果
+				svr.reportResult(svcCallResult, model.RetSuccess, int32(resp.StatusCode))
+
 				_, _ = buf.Write(data)
 				_ = buf.WriteByte('\n')
-				defer resp.Body.Close()
 				time.Sleep(30 * time.Millisecond)
 			}()
 
@@ -158,10 +179,18 @@ func main() {
 		log.Fatalf("fail to create sdk context, err is %v", err)
 	}
 	defer sdkCtx.Destroy()
-
-	// 获取服务路由链配置
-	chain := sdkCtx.GetConfig().GetConsumer().GetServiceRouter().GetChain()
-	log.Printf("service router chain: %s", chain)
+	// 设置日志级别为DEBUG
+	if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+		log.Printf("fail to set log level to DEBUG, err is %v", err)
+	} else {
+		log.Printf("successfully set log level to DEBUG")
+	}
+	svcRouter := sdkCtx.GetConfig().GetConsumer().GetServiceRouter()
+	log.Printf("service router config: %+v", mustJson(svcRouter))
+	loc := sdkCtx.GetConfig().GetGlobal().GetLocation()
+	log.Printf("location config: %+v", mustJson(loc))
+	statReporter := sdkCtx.GetConfig().GetGlobal().GetStatReporter()
+	log.Printf("stat reporter config: %+v", mustJson(statReporter))
 
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
@@ -175,6 +204,18 @@ func main() {
 
 }
 
+func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResult, retStatus model.RetStatus,
+	retCode int32) {
+	svcCallResult.SetRetStatus(retStatus)
+	svcCallResult.SetRetCode(retCode)
+	err := svr.consumer.UpdateServiceCallResult(svcCallResult)
+	if err != nil {
+		log.Printf("[error] fail to UpdateServiceCallResult, err is %v, res:%s", err, mustJson(svcCallResult))
+	} else {
+		log.Printf("UpdateServiceCallResult success, res:%s", mustJson(svcCallResult))
+	}
+}
+
 func convertRouteArguments(r *http.Request) []model.Argument {
 	arguments := make([]model.Argument, 0, 4)
 
@@ -184,7 +225,8 @@ func convertRouteArguments(r *http.Request) []model.Argument {
 			if len(vs) == 0 {
 				continue
 			}
-			arguments = append(arguments, model.BuildHeaderArgument(strings.ToLower(k), vs[0]))
+			arg := model.BuildHeaderArgument(strings.ToLower(k), vs[0])
+			arguments = append(arguments, arg)
 		}
 	}
 
@@ -194,23 +236,12 @@ func convertRouteArguments(r *http.Request) []model.Argument {
 			if len(vs) == 0 {
 				continue
 			}
-			arguments = append(arguments, model.BuildQueryArgument(strings.ToLower(k), vs[0]))
+			arg := model.BuildQueryArgument(strings.ToLower(k), vs[0])
+			arguments = append(arguments, arg)
 		}
 	}
+	log.Printf("total arguments count: %d, %v", len(arguments), arguments)
 	return arguments
-}
-
-func getLocalHost(serverAddr string) (string, error) {
-	conn, err := net.Dial("tcp", serverAddr)
-	if nil != err {
-		return "", err
-	}
-	localAddr := conn.LocalAddr().String()
-	colonIdx := strings.LastIndex(localAddr, ":")
-	if colonIdx > 0 {
-		return localAddr[:colonIdx], nil
-	}
-	return localAddr, nil
 }
 
 func mustJson(v interface{}) string {

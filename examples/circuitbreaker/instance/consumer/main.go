@@ -93,9 +93,11 @@ func (svr *PolarisClient) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
 		instance, err := svr.discoverInstance()
-		if err != nil {
+		if err != nil || instance == nil {
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] discover instance fail : %s", err)))
+			instanceIsNil := instance == nil
+			msg := fmt.Sprintf("fail to getOneInstance, err is %v, instance is nil:%v", err, instanceIsNil)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] discover instance fail : %s", msg)))
 			return
 		}
 		start := time.Now()
@@ -178,14 +180,17 @@ func (svr *PolarisClient) printAllInstances() {
 
 func (svr *PolarisClient) reportCircuitBreak(instance model.Instance, status model.RetStatus,
 	retCode string, start time.Time) {
-	insRes, _ := model.NewInstanceResource(&model.ServiceKey{
+	insRes, err := model.NewInstanceResource(&model.ServiceKey{
 		Namespace: calleeNamespace,
 		Service:   calleeService,
 	}, &model.ServiceKey{
 		Namespace: selfNamespace,
 		Service:   selfService,
 	}, "http", instance.GetHost(), instance.GetPort())
-
+	if err != nil {
+		log.Printf("[error] fail to createInstanceResource, err is %v", err)
+		return
+	}
 	log.Printf("report circuitBreaker [%v] for instance %s/%s:%d "+
 		"caller [%s.%s] "+
 		"delay [%v] "+

@@ -6,14 +6,17 @@ ifeq "$(GOPATH)" ""
 endif
 
 .PHONY: build
-build:
-	go build -o provider main.go
-	
+build: clean
+	go build -o bin *.go
+	mkdir provider-a provider-b
+	cp bin polaris.yaml ./provider-a/
+	cp bin polaris.yaml ./provider-b/
+
 .PHONY: run
 run: build
-	./provider
-	
+	./bin
+
 .PHONY: clean
 clean:
-	rm -f provider *.log
-	rm -rf polaris
+	rm -f bin
+	rm -rf polaris provider-a provider-b

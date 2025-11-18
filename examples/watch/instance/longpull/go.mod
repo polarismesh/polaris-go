@@ -1,10 +1,10 @@
-module polarismesh/polaris-go/examples/mock
+module polarismesh/polaris-go/examples/watch/instance/longpull
 
 go 1.24
 
-replace github.com/polarismesh/polaris-go => ../../
-
 require github.com/polarismesh/polaris-go v1.6.1
+
+replace github.com/polarismesh/polaris-go => ../../../../
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect

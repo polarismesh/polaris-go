@@ -18,6 +18,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -122,7 +123,11 @@ func (svr *PolarisProvider) deregisterService() {
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		msg := fmt.Sprintf("Hello, I'm RouteEchoServer Provider, My metadata's : %#v, host : %s:%d", metadata, svr.host, svr.port)
+		loc := svr.provider.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
+		locStr, _ := json.Marshal(loc)
+		msg := fmt.Sprintf("Hello, I'm RouteEchoServer Provider, My metadata's : %#v, MyLocInfo's : %s, host : %s:%d",
+			metadata, string(locStr), svr.host, svr.port)
+		log.Printf("get echo request from client address: %s, response:%s", r.RemoteAddr, msg)
 		_, _ = rw.Write([]byte(msg))
 	})
 

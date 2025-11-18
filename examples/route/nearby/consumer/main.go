@@ -26,7 +26,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
@@ -34,29 +37,42 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
+const (
+	// defaultRequestTimeout HTTP请求超时时间
+	defaultRequestTimeout = 5 * time.Second
+	// sleepAfterRequest 请求后的等待时间
+	sleepAfterRequest = 30 * time.Millisecond
+)
+
 var (
 	namespace     string
 	service       string
 	selfNamespace string
 	selfService   string
+	selfRegister  bool
 	port          int64
+	token         string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "RouteNearbyEchoServer", "service")
+	flag.BoolVar(&selfRegister, "selfRegister", false, "selfRegister")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
-	flag.StringVar(&selfService, "selfService", "", "selfService")
+	flag.StringVar(&selfService, "selfService", "RouteNearbyEchoClient", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
+	flag.StringVar(&token, "token", "", "token")
 }
 
 // PolarisConsumer .
 type PolarisConsumer struct {
-	consumer  polaris.ConsumerAPI
-	namespace string
-	service   string
-	host      string
-	port      int
+	consumer   polaris.ConsumerAPI
+	provider   polaris.ProviderAPI
+	namespace  string
+	service    string
+	host       string
+	port       int
+	isShutdown bool
 }
 
 // Run .
@@ -67,7 +83,57 @@ func (svr *PolarisConsumer) Run() {
 	}
 
 	svr.host = tmpHost
+	if selfRegister {
+		svr.registerService()
+	}
 	svr.runWebServer()
+	svr.runMainLoop()
+}
+
+func (svr *PolarisConsumer) registerService() {
+	log.Printf("start to invoke register operation")
+	registerRequest := &polaris.InstanceRegisterRequest{}
+	registerRequest.Service = selfService
+	registerRequest.Namespace = selfNamespace
+	registerRequest.Host = svr.host
+	registerRequest.Port = svr.port
+	registerRequest.ServiceToken = token
+	resp, err := svr.provider.RegisterInstance(registerRequest)
+	if err != nil {
+		log.Fatalf("fail to register instance, err is %v", err)
+	}
+	log.Printf("register response: instanceId %s", resp.InstanceID)
+}
+
+func (svr *PolarisConsumer) deregisterService() {
+	log.Printf("start to invoke deregister operation")
+	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
+	deregisterRequest.Service = selfService
+	deregisterRequest.Namespace = selfNamespace
+	deregisterRequest.Host = svr.host
+	deregisterRequest.Port = svr.port
+	deregisterRequest.ServiceToken = token
+	if err := svr.provider.Deregister(deregisterRequest); err != nil {
+		log.Fatalf("fail to deregister instance, err is %v", err)
+	}
+	log.Printf("deregister successfully.")
+}
+
+func (svr *PolarisConsumer) runMainLoop() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, []os.Signal{
+		syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGSEGV,
+	}...)
+
+	for s := range ch {
+		log.Printf("catch signal(%+v), stop servers", s)
+		if selfRegister {
+			svr.isShutdown = true
+			svr.deregisterService()
+		}
+		return
+	}
 }
 
 func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResult, retStatus model.RetStatus,
@@ -76,78 +142,35 @@ func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResul
 	svcCallResult.SetRetCode(retCode)
 	err := svr.consumer.UpdateServiceCallResult(svcCallResult)
 	if err != nil {
-		log.Fatalf("fail to UpdateServiceCallResult, err is %v, res:%s", err, jsonEncode(svcCallResult))
+		log.Printf("[error] fail to UpdateServiceCallResult, err is %v, res:%s", err, jsonEncode(svcCallResult))
 	} else {
 		log.Printf("UpdateServiceCallResult success, res:%s", jsonEncode(svcCallResult))
 	}
 }
 
+// callInstance 调用指定的服务实例
+func (svr *PolarisConsumer) callInstance(instance model.Instance) ([]byte, error) {
+	client := &http.Client{
+		Timeout: defaultRequestTimeout,
+	}
+
+	url := fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort())
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("send request to %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read resp from %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
+	}
+
+	return data, nil
+}
+
 func (svr *PolarisConsumer) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
-		getOneRequest := &polaris.GetOneInstanceRequest{}
-		getOneRequest.Namespace = namespace
-		getOneRequest.Service = service
-		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
-		if nil != err {
-			log.Printf("[error] fail to getAllInstances, err is %v", err)
-			rw.WriteHeader(http.StatusOK)
-			_, _ = rw.Write([]byte(fmt.Sprintf("fail to getAllInstances, err is %v", err)))
-			return
-		}
-
-		instance := oneInstResp.GetInstance()
-		if nil != instance {
-			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-		}
-
-		var buf bytes.Buffer
-
-		loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
-		locStr, _ := json.Marshal(loc)
-
-		svr.consumer.SDKContext().GetConfig()
-		msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ", string(locStr), svr.host, svr.port)
-		_, _ = buf.WriteString(msg)
-
-		//服务调用结果，用于在后面进行调用结果上报
-		svcCallResult := &polaris.ServiceCallResult{}
-		//将服务上报对象设置为获取到的实例
-		svcCallResult.SetCalledInstance(instance)
-
-		func() {
-			requestStartTime := time.Now()
-			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
-			//设置调用耗时
-			svcCallResult.SetDelay(time.Since(requestStartTime))
-			if err != nil {
-				log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-				rw.WriteHeader(http.StatusOK)
-				_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-				svr.reportResult(svcCallResult, api.RetFail, -1)
-				return
-			}
-			data, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-				rw.WriteHeader(http.StatusOK)
-				_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-				svr.reportResult(svcCallResult, api.RetFail, -1)
-				return
-			}
-			log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
-			svr.reportResult(svcCallResult, api.RetSuccess, 0)
-
-			_, _ = buf.Write(data)
-			_ = buf.WriteByte('\n')
-			defer resp.Body.Close()
-			time.Sleep(30 * time.Millisecond)
-		}()
-
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write(buf.Bytes())
-
-	})
+	http.HandleFunc("/echo", svr.handleEcho)
 
 	log.Printf("start run web server, port : %d", port)
 
@@ -158,9 +181,79 @@ func (svr *PolarisConsumer) runWebServer() {
 
 	svr.port = ln.Addr().(*net.TCPAddr).Port
 
-	if err := http.Serve(ln, nil); err != nil {
-		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+	go func() {
+		log.Printf("[INFO] start http server, listen port is %v", svr.port)
+		if err := http.Serve(ln, nil); err != nil {
+			if !svr.isShutdown {
+				log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+			}
+		}
+	}()
+}
+
+// handleEcho 处理echo请求
+func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
+	log.Printf("start to invoke getOneInstance operation")
+
+	// 获取服务实例
+	getOneRequest := &polaris.GetOneInstanceRequest{}
+	getOneRequest.Namespace = namespace
+	getOneRequest.Service = service
+	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+	if err != nil {
+		log.Printf("[error] fail to getOneInstance, err is %v", err)
+		http.Error(rw, fmt.Sprintf("fail to getOneInstance, err is %v", err), http.StatusInternalServerError)
+		return
 	}
+
+	instance := oneInstResp.GetInstance()
+	if instance == nil {
+		log.Printf("[error] no available instance")
+		http.Error(rw, "no available instance", http.StatusServiceUnavailable)
+		return
+	}
+
+	log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+
+	// 构建响应头部信息
+	var buf bytes.Buffer
+	loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
+	locStr, err := json.Marshal(loc)
+	if err != nil {
+		log.Printf("[warn] fail to marshal location, err is %v", err)
+		locStr = []byte("unknown")
+	}
+
+	msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ", string(locStr), svr.host, svr.port)
+	buf.WriteString(msg)
+
+	// 服务调用结果，用于在后面进行调用结果上报
+	svcCallResult := &polaris.ServiceCallResult{}
+	svcCallResult.SetCalledInstance(instance)
+
+	// 调用远程服务
+	requestStartTime := time.Now()
+	data, err := svr.callInstance(instance)
+	svcCallResult.SetDelay(time.Since(requestStartTime))
+
+	if err != nil {
+		log.Printf("[error] %v", err)
+		svr.reportResult(svcCallResult, api.RetFail, -1)
+		http.Error(rw, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
+	svr.reportResult(svcCallResult, api.RetSuccess, 0)
+
+	buf.Write(data)
+	buf.WriteByte('\n')
+
+	// 模拟处理延迟
+	time.Sleep(sleepAfterRequest)
+
+	rw.WriteHeader(http.StatusOK)
+	rw.Write(buf.Bytes())
 }
 
 func main() {
@@ -185,6 +278,7 @@ func main() {
 
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
+		provider:  polaris.NewProviderAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
 	}
@@ -199,10 +293,15 @@ func convertQuery(rawQuery string) map[string]string {
 		return meta
 	}
 	tokens := strings.Split(rawQuery, "&")
-	if len(tokens) > 0 {
-		for _, token := range tokens {
-			values := strings.Split(token, "=")
+	for _, token := range tokens {
+		if token == "" {
+			continue
+		}
+		values := strings.Split(token, "=")
+		if len(values) >= 2 {
 			meta[values[0]] = values[1]
+		} else if len(values) == 1 {
+			meta[values[0]] = ""
 		}
 	}
 	return meta

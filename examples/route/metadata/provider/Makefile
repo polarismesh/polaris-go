@@ -8,8 +8,9 @@ endif
 .PHONY: build
 build: clean
 	go build -o bin *.go
-	cp bin ./provider-a/
-	cp bin ./provider-b/
+	mkdir provider-a provider-b
+	cp bin polaris.yaml ./provider-a/
+	cp bin polaris.yaml ./provider-b/
 
 .PHONY: run
 run: build
@@ -17,5 +18,5 @@ run: build
 
 .PHONY: clean
 clean:
-	rm -f bin provider-a/bin provider-b/bin
-	rm -rf polaris provider-a/polaris provider-b/polaris
+	rm -f bin
+	rm -rf polaris provider-a provider-b
