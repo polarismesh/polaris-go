@@ -3,3 +3,11 @@ global:
     addresses:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
+  # 地址提供插件，用于获取当前SDK所在的地域信息
+  location:
+    providers:
+      - type: local
+        options:
+          region: ${REGION}
+          zone: ${ZONE}
+          campus: ${CAMPUS}

@@ -6,6 +6,7 @@
 
 北极星支持根据请求标签、实例标签和标签匹配规则，对线上流量进行动态调度，可以应用于按地域就近、单元化隔离和金丝雀发布等多种场景。
 
+
 ## 如何使用
 
 ### 构建可执行文件
@@ -13,26 +14,32 @@
 构建 provider
 
 ```
-# linux/mac构建命令
 cd ./provider
-go build -o provider
-
-# windows构建命令
-cd ./consumer
-go build -o provider.exe
+make build
 ```
 
 构建 consumer
 
 ```
-# linux/mac构建命令
 cd ./consumer
-go build -o consumer
-
-# windows构建命令
-cd ./consumer
-go build -o consumer.exe
+make build
 ```
+
+### 修改配置
+
+- 方式一:指定北极星服务端地址，需编辑polaris.yaml文件，填入服务端地址
+```
+global:
+  serverConnector:
+    addresses:
+    - 127.0.0.1:8091
+```
+
+- 方式二: 设置环境变量POLARIS_SERVER,值为服务端地址
+```shell
+export POLARIS_SERVER=127.0.0.1
+```
+
 
 ### 创建服务
 

@@ -206,11 +206,11 @@ consumer:
     startUseFileCache: true
   #描述:服务路由相关配置
   serviceRouter:
-    # 服务路由链
+    # 服务路由链, 不填则默认开启自定义路由和就近路由插件
     chain:
       # 基于主调和被调服务规则的路由策略(默认的路由策略)
       - ruleBasedRouter
-      # 就近路由策略
+      # 就近路由策略(默认的路由策略)
       - nearbyBasedRouter
     afterChain:
       # 兜底路由，默认存在
@@ -225,7 +225,12 @@ consumer:
         #范围:region(大区)、zone(区域)、campus(园区)
         #默认值:zone
         matchLevel: zone
-      ruleBasedRouter: {}
+      ruleBasedRouter:
+        #描述:规则匹配失败时的返回的实例列表
+        #类型:string
+        #范围:all代表返回所有实例, none表示返回空列表
+        #默认值:all
+        failoverType: all
     #描述:至少应该返回多少比率的实例，如果不填，默认0%，即全死全活
     #类型:float64
     #范围:[0:...1.0]

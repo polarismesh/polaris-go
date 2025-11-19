@@ -18,6 +18,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -71,6 +72,110 @@ func (svr *PolarisConsumer) Run() {
 }
 
 func (svr *PolarisConsumer) runWebServer() {
+	// 新增 API：支持通过请求体传入 namespace 和 service
+	http.HandleFunc("/echo-with-body", func(rw http.ResponseWriter, r *http.Request) {
+		log.Printf("receive echo-with-body request from client:%s", r.RemoteAddr)
+
+		// 定义请求体结构
+		type EchoRequest struct {
+			Namespace string `json:"namespace"`
+			Service   string `json:"service"`
+		}
+
+		// 解析请求体
+		var req EchoRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("[error] fail to decode request body, err is %v", err)
+			rw.WriteHeader(http.StatusBadRequest)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to decode request body, err is %v", err)))
+			return
+		}
+		defer r.Body.Close()
+
+		// 验证参数
+		if req.Namespace == "" || req.Service == "" {
+			log.Printf("[error] namespace and service are required")
+			rw.WriteHeader(http.StatusBadRequest)
+			_, _ = rw.Write([]byte("[error] namespace and service are required"))
+			return
+		}
+
+		log.Printf("request params: namespace=%s, service=%s", req.Namespace, req.Service)
+
+		// 获取服务实例
+		getOneRequest := &polaris.GetOneInstanceRequest{}
+		getOneRequest.Namespace = req.Namespace
+		getOneRequest.Service = req.Service
+		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+		if err != nil {
+			log.Printf("[error] fail to getOneInstance, err is %v", err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)))
+			return
+		}
+		instance := oneInstResp.GetInstance()
+		if nil != instance {
+			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+		}
+
+		start := time.Now()
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		if err != nil {
+			log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+			delay := time.Since(start)
+
+			ret := &polaris.ServiceCallResult{
+				ServiceCallResult: model.ServiceCallResult{
+					EmptyInstanceGauge: model.EmptyInstanceGauge{},
+					CalledInstance:     instance,
+					Method:             "/echo",
+					RetStatus:          model.RetFail,
+				},
+			}
+			ret.SetDelay(delay)
+			ret.SetRetCode(int32(http.StatusInternalServerError))
+			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+				log.Printf("do report service call result : %+v", err)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+		delay := time.Since(start)
+
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             "/echo",
+				RetStatus:          model.RetSuccess,
+			},
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			ret.RetStatus = model.RetFlowControl
+		}
+		ret.SetDelay(delay)
+		ret.SetRetCode(int32(resp.StatusCode))
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
+		}
+
+		defer resp.Body.Close()
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write(data)
+	})
+
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("receive echo request from client:%s", r.RemoteAddr)
 		// DiscoverEchoServer

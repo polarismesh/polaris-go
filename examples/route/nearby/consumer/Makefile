@@ -7,14 +7,14 @@ endif
 
 .PHONY: build
 build: clean
-	go build -o consumer main.go
+	go build -o bin *.go
 
 .PHONY: run
 run: build
-	./consumer
+	./bin
 
 .PHONY: clean
 clean:
-	rm -f consumer
+	rm -f bin
 	rm -rf polaris
 

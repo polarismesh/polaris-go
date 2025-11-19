@@ -7,7 +7,7 @@ endif
 
 .PHONY: build
 build: clean
-	go build -o bin main.go
+	go build -o bin *.go
 
 .PHONY: run
 run: build
