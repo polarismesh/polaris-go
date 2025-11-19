@@ -29,6 +29,6 @@ consumer:
     #描述：服务路由插件的配置
     plugin:
       nearbyBasedRouter:
-        #描述:就近路由的最小匹配级别
+        #描述:就近路由的最小匹配级别,不填则默认zone
         #范围:region(大区)、zone(区域)、campus(园区)
         matchLevel: campus

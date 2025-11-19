@@ -11,27 +11,28 @@ global:
         type: push
         address: ${POLARIS_SERVER}:9091
         interval: 60s
-  # 地址提供插件，用于获取当前SDK所在的地域信息
-  location:
-    providers:
-      - type: local
-        options:
-          region: ${REGION}
-          zone: ${ZONE}
-          campus: ${CAMPUS}
+#  # 地址提供插件，用于获取当前SDK所在的地域信息
+#  location:
+#    providers:
+#      - type: local
+#        options:
+#          region: ${REGION}
+#          zone: ${ZONE}
+#          campus: ${CAMPUS}
 consumer:
   serviceRouter:
     # 服务路由链
     chain:
       # 自定义路由策略
       - ruleBasedRouter
-      # 就近路由策略
-      - nearbyBasedRouter
+#      # 就近路由策略
+#      - nearbyBasedRouter
     #描述：服务路由插件的配置
     plugin:
       ruleBasedRouter:
-        failoverType: all # 规则匹配失败时返回所有实例
-      nearbyBasedRouter:
-        #描述:就近路由的最小匹配级别
-        #范围:region(大区)、zone(区域)、campus(园区)
-        matchLevel: campus
+        # 代表规则匹配失败时的动作, all代表返回所有实例, none表示返回空列表, 默认为all
+        failoverType: all
+#      nearbyBasedRouter:
+#        #描述:就近路由的最小匹配级别,不填则默认zone
+#        #范围:region(大区)、zone(区域)、campus(园区)
+#        matchLevel: campus
