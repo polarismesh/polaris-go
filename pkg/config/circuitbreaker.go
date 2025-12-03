@@ -52,7 +52,7 @@ type CircuitBreakerConfigImpl struct {
 	DefaultErrorCount *int `yaml:"defaultErrorCount" json:"defaultErrorCount"`
 	// DefaultErrorPercent 错误率熔断器默认错误率
 	DefaultErrorPercent *int `yaml:"defaultErrorPercent" json:"defaultErrorPercent"`
-	// DefaultInterval 错误率熔断器默认统计周期（单位：毫秒）
+	// DefaultInterval 错误率熔断器默认统计周期
 	DefaultInterval *time.Duration `yaml:"defaultInterval" json:"defaultInterval"`
 	// DefaultMinimumRequest 错误率熔断器默认最小请求数
 	DefaultMinimumRequest *int `yaml:"defaultMinimumRequest" json:"defaultMinimumRequest"`
@@ -179,7 +179,7 @@ func (c *CircuitBreakerConfigImpl) SetDefaultErrorPercent(percent int) {
 	c.DefaultErrorPercent = &percent
 }
 
-// GetDefaultInterval 获取错误率熔断器默认统计周期（单位：毫秒）
+// GetDefaultInterval 获取错误率熔断器默认统计周期
 func (c *CircuitBreakerConfigImpl) GetDefaultInterval() time.Duration {
 	if c.DefaultInterval == nil {
 		return 0
@@ -187,7 +187,7 @@ func (c *CircuitBreakerConfigImpl) GetDefaultInterval() time.Duration {
 	return *c.DefaultInterval
 }
 
-// SetDefaultInterval 设置错误率熔断器默认统计周期（单位：毫秒）
+// SetDefaultInterval 设置错误率熔断器默认统计周期
 func (c *CircuitBreakerConfigImpl) SetDefaultInterval(interval time.Duration) {
 	c.DefaultInterval = &interval
 }

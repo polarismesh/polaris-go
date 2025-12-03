@@ -38,7 +38,7 @@ type defaultInstanceCircuitBreakerConfig struct {
 	defaultErrorCount int
 	// 错误率熔断器默认错误率
 	defaultErrorPercent int
-	// 错误率熔断器默认统计周期（单位：毫秒）
+	// 错误率熔断器默认统计周期
 	defaultInterval int
 	// 错误率熔断器默认最小请求数
 	defaultMinimumRequest int
