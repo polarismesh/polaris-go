@@ -270,11 +270,9 @@ func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 func (c *CompositeCircuitBreaker) doSchedule(expectKey model.ServiceEventKey) {
 	c.log.Debugf("[CircuitBreaker] doSchedule started, namespace: %s, service: %s, eventType: %v",
 		expectKey.Namespace, expectKey.Service, expectKey.Type)
-	scheduledCount := 0
 	c.containers.Range(func(key, value interface{}) bool {
 		ruleC := value.(*RuleContainer)
 		resource := ruleC.res
-
 		actualKey := resource.GetService()
 		if actualKey.Namespace == expectKey.Namespace && actualKey.Service == expectKey.Service {
 			c.log.Debugf("[CircuitBreaker] doSchedule matched resource: %s, eventType: %v",
@@ -289,7 +287,6 @@ func (c *CompositeCircuitBreaker) doSchedule(expectKey model.ServiceEventKey) {
 					resource.String())
 				ruleC.scheduleHealthCheck()
 			}
-			scheduledCount++
 		}
 		return true
 	})
