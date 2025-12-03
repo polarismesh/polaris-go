@@ -63,6 +63,8 @@ type CompositeCircuitBreaker struct {
 	checkPeriod time.Duration
 	// healthCheckInstanceExpireInterval
 	healthCheckInstanceExpireInterval time.Duration
+	// defaultInstanceCircuitBreakerConfig
+	defaultInstanceCircuitBreakerConfig defaultInstanceCircuitBreakerConfig
 	// localCache
 	localCache localregistry.LocalRegistry
 	// log .
@@ -108,6 +110,16 @@ func (c *CompositeCircuitBreaker) Start() error {
 		c.checkPeriod = defaultCheckPeriod
 	}
 	c.healthCheckInstanceExpireInterval = c.checkPeriod * defaultCheckPeriodMultiple
+	c.defaultInstanceCircuitBreakerConfig = defaultInstanceCircuitBreakerConfig{
+		defaultRuleEnable:   c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().IsDefaultRuleEnable(),
+		defaultErrorCount:   c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetDefaultErrorCount(),
+		defaultErrorPercent: c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetDefaultErrorPercent(),
+		defaultInterval: int(c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetDefaultInterval().
+			Seconds()),
+		defaultMinimumRequest:     c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetDefaultMinimumRequest(),
+		sleepWindow:               int(c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetSleepWindow().Seconds()),
+		successCountAfterHalfOpen: c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetSuccessCountAfterHalfOpen(),
+	}
 	c.engineFlow = c.pluginCtx.ValueCtx.GetEngine()
 	c.start = 1
 
@@ -233,6 +245,7 @@ func (c *CompositeCircuitBreaker) Name() string {
 
 func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 	if c.isDestroyed() || c.start == 0 {
+		c.log.Debugf("[CircuitBreaker] OnEvent ignored, destroyed: %v, started: %v", c.isDestroyed(), c.start)
 		return nil
 	}
 
@@ -241,26 +254,37 @@ func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 		ok          bool
 	)
 	if eventObject, ok = event.EventObject.(*common.ServiceEventObject); !ok {
+		c.log.Debugf("[CircuitBreaker] OnEvent ignored, event object is not ServiceEventObject")
 		return nil
 	}
 	if eventObject.SvcEventKey.Type != model.EventCircuitBreaker && eventObject.SvcEventKey.Type != model.EventFaultDetect {
+		c.log.Debugf("[CircuitBreaker] OnEvent ignored, event type: %v", eventObject.SvcEventKey.Type)
 		return nil
 	}
+	c.log.Infof("[CircuitBreaker] OnEvent processing, namespace: %s, service: %s, eventType: %v",
+		eventObject.SvcEventKey.Namespace, eventObject.SvcEventKey.Service, eventObject.SvcEventKey.Type)
 	c.doSchedule(eventObject.SvcEventKey)
 	return nil
 }
 
 func (c *CompositeCircuitBreaker) doSchedule(expectKey model.ServiceEventKey) {
+	c.log.Debugf("[CircuitBreaker] doSchedule started, namespace: %s, service: %s, eventType: %v",
+		expectKey.Namespace, expectKey.Service, expectKey.Type)
 	c.containers.Range(func(key, value interface{}) bool {
 		ruleC := value.(*RuleContainer)
 		resource := ruleC.res
-
 		actualKey := resource.GetService()
 		if actualKey.Namespace == expectKey.Namespace && actualKey.Service == expectKey.Service {
+			c.log.Debugf("[CircuitBreaker] doSchedule matched resource: %s, eventType: %v",
+				resource.String(), expectKey.Type)
 			switch expectKey.Type {
 			case model.EventCircuitBreaker:
+				c.log.Debugf("[CircuitBreaker] doSchedule triggering scheduleCircuitBreaker for resource: %s",
+					resource.String())
 				ruleC.scheduleCircuitBreaker()
 			case model.EventFaultDetect:
+				c.log.Debugf("[CircuitBreaker] doSchedule triggering scheduleHealthCheck for resource: %s",
+					resource.String())
 				ruleC.scheduleHealthCheck()
 			}
 		}

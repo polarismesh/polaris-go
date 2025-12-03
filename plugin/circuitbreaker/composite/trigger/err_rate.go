@@ -68,19 +68,22 @@ func NewErrRateCounter(name string, opt *Options) *ErrRateCounter {
 }
 
 func (c *ErrRateCounter) init() {
-	c.log.Infof("[CircuitBreaker][Counter] errRateCounter(%s) initialized, resource(%s)", c.ruleName, c.res.String())
+	c.log.Infof("[CircuitBreaker][ErrRateCounter] initialized, ruleName:%s, resource(%s)", c.ruleName, c.res.String())
 	c.metricWindow = time.Duration(c.triggerCondition.Interval) * time.Second
 	c.errorPercent = int(c.triggerCondition.ErrorPercent)
 	c.minimumRequest = int32(c.triggerCondition.MinimumRequest)
-	c.sliceWindow = metric.NewSliceWindow(c.res.String(), bucketCount, getBucketInterval(c.metricWindow), maxDimension, clock.GetClock().Now().UnixNano())
+	c.sliceWindow = metric.NewSliceWindow(c.res.String(), bucketCount, getBucketInterval(c.metricWindow), maxDimension,
+		clock.GetClock().Now().UnixNano())
 }
 
 func (c *ErrRateCounter) Report(success bool) {
 	if c.isSuspend() {
-		c.log.Debugf("[CircuitBreaker][Counter] errRateCounter(%s) suspended, skip report", c.ruleName)
+		c.log.Debugf("[CircuitBreaker][ErrRateCounter] suspended, skip report, ruleName:%s, resource(%s)",
+			c.ruleName, c.res.String())
 		return
 	}
-	c.log.Debugf("[CircuitBreaker][Counter] errRateCounter(%s): add requestCount 1, success(%+v)", c.ruleName, success)
+	c.log.Debugf("[CircuitBreaker][ErrRateCounter] report request, ruleName:%s, success(%v), resource(%s)",
+		c.ruleName, success, c.res.String())
 
 	retStatus := model.RetSuccess
 	if !success {
@@ -98,7 +101,8 @@ func (c *ErrRateCounter) Report(success bool) {
 		return 0
 	})
 	if !success && atomic.CompareAndSwapInt32(&c.scheduled, 0, 1) {
-		c.log.Infof("[CircuitBreaker][Counter] errRateCounter: trigger error rate callback on failure, name(%s)", c.ruleName)
+		c.log.Infof("[CircuitBreaker][ErrRateCounter] scheduled error rate check, ruleName:%s, metricWindow(%v), "+
+			"resource(%s)", c.ruleName, c.metricWindow, c.res.String())
 		c.delayExecutor(c.metricWindow, func() {
 			currentTime := time.Now()
 			timeRange := &metric.TimeRange{
@@ -107,18 +111,20 @@ func (c *ErrRateCounter) Report(success bool) {
 			}
 			reqCount := c.sliceWindow.CalcMetrics(keyRequestCount, timeRange)
 			reqFailCount := c.sliceWindow.CalcMetrics(keyFailCount, timeRange)
-			c.log.Infof("[CircuitBreaker][Counter] errRateCounter: requestCount(%d) failCount(%d), minimumRequest(%d), name(%s)",
-				reqCount, reqFailCount, c.minimumRequest, c.ruleName)
-			if reqCount < int64(c.minimumRequest) {
+			failRatio := (float64(reqFailCount) / float64(reqCount)) * 100
+			if reqCount < int64(c.minimumRequest) || failRatio < float64(c.errorPercent) {
 				atomic.StoreInt32(&c.scheduled, 0)
+				c.log.Debugf("[CircuitBreaker][ErrRateCounter] threshold not reached, skip trigger, ruleName:%s, "+
+					"reqCount(%d), minimumRequest(%d), failRatio(%.2f%%), errorPercent(%d%%), failCount(%d), "+
+					"resource(%s)", c.ruleName, reqCount, c.minimumRequest, failRatio, c.errorPercent, reqFailCount,
+					c.res.String())
 				return
 			}
-			failCount := c.sliceWindow.CalcMetrics(keyFailCount, timeRange)
-			failRatio := (float64(failCount) / float64(reqCount)) * 100
-			if failRatio >= float64(c.errorPercent) {
-				c.suspend()
-				c.handler.CloseToOpen(c.ruleName)
-			}
+			c.suspend()
+			c.log.Infof("[CircuitBreaker][ErrRateCounter] triggered CloseToOpen, ruleName:%s, reqCount(%d), "+
+				"failCount(%d), failRatio(%.2f%%), minimumRequest(%d), errorPercent(%d%%), resource(%s)",
+				c.ruleName, reqCount, reqFailCount, failRatio, c.minimumRequest, c.errorPercent, c.res.String())
+			c.handler.CloseToOpen(c.ruleName)
 			atomic.StoreInt32(&c.scheduled, 0)
 		})
 	}
@@ -127,6 +133,8 @@ func (c *ErrRateCounter) Report(success bool) {
 func (c *ErrRateCounter) Resume() {
 	if c.isSuspend() {
 		c.resume()
+		c.log.Infof("[CircuitBreaker][ErrRateCounter] resumed counter, ruleName:%s, resource(%s)",
+			c.ruleName, c.res.String())
 	}
 }
 

@@ -60,8 +60,10 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
+	sourceStr := model.ToStringService(routeInfo.SourceService, true)
+	destStr := model.ToStringService(routeInfo.DestService, true)
 	log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%d",
-		routeInfo.SourceService, routeInfo.DestService, len(routers), cluster.GetClusterValue().GetInstancesSet(false, false).Count())
+		sourceStr, destStr, len(routers), cluster.GetClusterValue().GetInstancesSet(false, false).Count())
 
 	for _, router := range routers {
 		routerName := router.Name()
@@ -89,8 +91,9 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		}
 		if nil != result.RedirectDestService {
 			// 转发规则
+			redirectStr := model.ToStringService(result.RedirectDestService, true)
 			log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s",
-				routerName, result.RedirectDestService)
+				routerName, redirectStr)
 			return result, nil
 		}
 		cluster = result.OutputCluster

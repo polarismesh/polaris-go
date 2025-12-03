@@ -108,7 +108,17 @@ const (
 	// DefaultRequestCountAfterHalfOpen 半开状态后分配的探测请求数.
 	DefaultRequestCountAfterHalfOpen = 10
 	// DefaultSuccessCountAfterHalfOpen 半开状态后恢复的成功请求数.
-	DefaultSuccessCountAfterHalfOpen = 8
+	DefaultSuccessCountAfterHalfOpen = 3
+	// DefaultRuleEnable 默认是否启用默认熔断规则.
+	DefaultRuleEnable bool = true
+	// DefaultErrorCount 连续错误数熔断器默认连续错误数.
+	DefaultErrorCount = 10
+	// DefaultErrorPercent 错误率熔断器默认错误率.
+	DefaultErrorPercent = 50
+	// DefaultInterval 错误率熔断器默认统计周期, 60s.
+	DefaultInterval = 60 * time.Second
+	// DefaultMinimumRequest 错误率熔断器默认最小请求数.
+	DefaultMinimumRequest = 10
 	// DefaultRateLimitWindowCount 限流上报时间窗数量，上报间隔=时间间隔/时间窗数量.
 	DefaultRateLimitWindowCount = 10
 	// MinRateLimitReportInterval 最小限流上报周期.

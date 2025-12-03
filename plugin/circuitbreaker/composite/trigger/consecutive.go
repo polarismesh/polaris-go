@@ -36,7 +36,8 @@ func NewConsecutiveCounter(name string, opt *Options) *ConsecutiveCounter {
 }
 
 func (c *ConsecutiveCounter) init() {
-	c.log.Infof("[CircuitBreaker][Counter] consecutiveCounter(%s) initialized, resource(%s)", c.ruleName, c.res.String())
+	c.log.Infof("[CircuitBreaker][ConsecutiveCounter] initialized, ruleName: %s, resource(%s)", c.ruleName,
+		c.res.String())
 	c.maxCount = int64(c.triggerCondition.GetErrorCount())
 }
 
@@ -46,9 +47,13 @@ func (c *ConsecutiveCounter) Report(success bool) {
 	}
 	if !success {
 		currentSum := atomic.AddInt32(&c.consecutiveErrors, 1)
+		c.log.Debugf("[CircuitBreaker][ConsecutiveCounter] add, ruleName: %s, currentSum(%d), maxCount(%d), "+
+			"resource(%s)", c.ruleName, currentSum, c.maxCount, c.res.String())
 		if currentSum == int32(c.maxCount) {
 			c.suspend()
 			atomic.StoreInt32(&c.consecutiveErrors, 0)
+			c.log.Infof("[CircuitBreaker][ConsecutiveCounter] triggered CloseToOpen, ruleName: %s, currentSum(%d), "+
+				"maxCount(%d), resource(%s)", c.ruleName, currentSum, c.maxCount, c.res.String())
 			c.handler.CloseToOpen(c.ruleName)
 		}
 	} else {
@@ -59,5 +64,7 @@ func (c *ConsecutiveCounter) Report(success bool) {
 func (c *ConsecutiveCounter) Resume() {
 	if c.isSuspend() {
 		c.resume()
+		c.log.Infof("[CircuitBreaker][ConsecutiveCounter] resumed, ruleName: %s, resource(%s)", c.ruleName,
+			c.res.String())
 	}
 }

@@ -545,10 +545,10 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 		}
 	}
 	log.GetBaseLogger().Warnf("retry GetRoutes from cache loaded from cache files because of timeout, "+
-		" Namespace: %s, Service: %s",
-		commonRequest.DstService.Namespace, commonRequest.DstService.Service)
+		" Namespace: %s, Service: %s, type: %s",
+		commonRequest.DstService.Namespace, commonRequest.DstService.Service, commonRequest.DstService.String())
 	// 上面的尝试超时之后，向尝试获取从缓存文件加载的信息
-	svcRule := e.registry.GetServiceRouteRule(&commonRequest.DstService.ServiceKey, true)
+	svcRule := e.registry.GetServiceRule(&commonRequest.DstService, true)
 	if svcRule.IsInitialized() {
 		commonRequest.CallResult.SetSuccess(e.globalCtx.Since(apiStartTime))
 		return commonRequest.BuildServiceRuleResponse(svcRule), nil

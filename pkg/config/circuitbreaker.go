@@ -46,6 +46,16 @@ type CircuitBreakerConfigImpl struct {
 	RecoverWindow *time.Duration `yaml:"recoverWindow" json:"recoverWindow"`
 	// RecoverNumBuckets 半开后的统计的滑窗数
 	RecoverNumBuckets int `yaml:"recoverNumBuckets" json:"recoverNumBuckets"`
+	// DefaultRuleEnable 是否启用默认熔断规则
+	DefaultRuleEnable *bool `yaml:"defaultRuleEnable" json:"defaultRuleEnable"`
+	// DefaultErrorCount 连续错误数熔断器默认连续错误数
+	DefaultErrorCount *int `yaml:"defaultErrorCount" json:"defaultErrorCount"`
+	// DefaultErrorPercent 错误率熔断器默认错误率
+	DefaultErrorPercent *int `yaml:"defaultErrorPercent" json:"defaultErrorPercent"`
+	// DefaultInterval 错误率熔断器默认统计周期
+	DefaultInterval *time.Duration `yaml:"defaultInterval" json:"defaultInterval"`
+	// DefaultMinimumRequest 错误率熔断器默认最小请求数
+	DefaultMinimumRequest *int `yaml:"defaultMinimumRequest" json:"defaultMinimumRequest"`
 	// Plugin 插件配置反序列化后的对象
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
 }
@@ -130,6 +140,71 @@ func (c *CircuitBreakerConfigImpl) SetRecoverNumBuckets(value int) {
 	c.RecoverNumBuckets = value
 }
 
+// IsDefaultRuleEnable 是否启用默认熔断规则
+func (c *CircuitBreakerConfigImpl) IsDefaultRuleEnable() bool {
+	if c.DefaultRuleEnable == nil {
+		return false
+	}
+	return *c.DefaultRuleEnable
+}
+
+// SetDefaultRuleEnable 设置是否启用默认熔断规则
+func (c *CircuitBreakerConfigImpl) SetDefaultRuleEnable(enable bool) {
+	c.DefaultRuleEnable = &enable
+}
+
+// GetDefaultErrorCount 获取连续错误数熔断器默认连续错误数
+func (c *CircuitBreakerConfigImpl) GetDefaultErrorCount() int {
+	if c.DefaultErrorCount == nil {
+		return 0
+	}
+	return *c.DefaultErrorCount
+}
+
+// SetDefaultErrorCount 设置连续错误数熔断器默认连续错误数
+func (c *CircuitBreakerConfigImpl) SetDefaultErrorCount(count int) {
+	c.DefaultErrorCount = &count
+}
+
+// GetDefaultErrorPercent 获取错误率熔断器默认错误率
+func (c *CircuitBreakerConfigImpl) GetDefaultErrorPercent() int {
+	if c.DefaultErrorPercent == nil {
+		return 0
+	}
+	return *c.DefaultErrorPercent
+}
+
+// SetDefaultErrorPercent 设置错误率熔断器默认错误率
+func (c *CircuitBreakerConfigImpl) SetDefaultErrorPercent(percent int) {
+	c.DefaultErrorPercent = &percent
+}
+
+// GetDefaultInterval 获取错误率熔断器默认统计周期
+func (c *CircuitBreakerConfigImpl) GetDefaultInterval() time.Duration {
+	if c.DefaultInterval == nil {
+		return 0
+	}
+	return *c.DefaultInterval
+}
+
+// SetDefaultInterval 设置错误率熔断器默认统计周期
+func (c *CircuitBreakerConfigImpl) SetDefaultInterval(interval time.Duration) {
+	c.DefaultInterval = &interval
+}
+
+// GetDefaultMinimumRequest 获取错误率熔断器默认最小请求数
+func (c *CircuitBreakerConfigImpl) GetDefaultMinimumRequest() int {
+	if c.DefaultMinimumRequest == nil {
+		return 0
+	}
+	return *c.DefaultMinimumRequest
+}
+
+// SetDefaultMinimumRequest 设置错误率熔断器默认最小请求数
+func (c *CircuitBreakerConfigImpl) SetDefaultMinimumRequest(count int) {
+	c.DefaultMinimumRequest = &count
+}
+
 // GetErrorCountConfig 获取连续错误数熔断配置
 func (c *CircuitBreakerConfigImpl) GetErrorCountConfig() ErrorCountConfig {
 	return c.Plugin[DefaultCircuitBreakerErrCount].(ErrorCountConfig)
@@ -173,6 +248,23 @@ func (c *CircuitBreakerConfigImpl) Verify() error {
 			fmt.Errorf(
 				"consumer.circuitbreaker.recoverNumBuckets must be greater than %d", MinRecoverNumBuckets))
 	}
+	// 校验默认熔断规则参数
+	if nil != c.DefaultErrorCount && *c.DefaultErrorCount <= 0 {
+		errs = multierror.Append(errs,
+			fmt.Errorf("consumer.circuitbreaker.defaultErrorCount must be greater than 0"))
+	}
+	if nil != c.DefaultErrorPercent && (*c.DefaultErrorPercent < 0 || *c.DefaultErrorPercent > 100) {
+		errs = multierror.Append(errs,
+			fmt.Errorf("consumer.circuitbreaker.defaultErrorPercent must be in range [0, 100]"))
+	}
+	if nil != c.DefaultInterval && *c.DefaultInterval <= 0 {
+		errs = multierror.Append(errs,
+			fmt.Errorf("consumer.circuitbreaker.defaultInterval must be greater than 0"))
+	}
+	if nil != c.DefaultMinimumRequest && *c.DefaultMinimumRequest <= 0 {
+		errs = multierror.Append(errs,
+			fmt.Errorf("consumer.circuitbreaker.defaultMinimumRequest must be greater than 0"))
+	}
 	if err := c.Plugin.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
@@ -205,6 +297,26 @@ func (c *CircuitBreakerConfigImpl) SetDefault() {
 	}
 	if c.RecoverNumBuckets == 0 {
 		c.RecoverNumBuckets = DefaultRecoverNumBuckets
+	}
+	if nil == c.DefaultRuleEnable {
+		enable := DefaultRuleEnable
+		c.DefaultRuleEnable = &enable
+	}
+	if nil == c.DefaultErrorCount {
+		count := DefaultErrorCount
+		c.DefaultErrorCount = &count
+	}
+	if nil == c.DefaultErrorPercent {
+		percent := DefaultErrorPercent
+		c.DefaultErrorPercent = &percent
+	}
+	if nil == c.DefaultInterval {
+		interval := DefaultInterval
+		c.DefaultInterval = &interval
+	}
+	if nil == c.DefaultMinimumRequest {
+		count := DefaultMinimumRequest
+		c.DefaultMinimumRequest = &count
 	}
 	c.Plugin.SetDefault(common.TypeCircuitBreaker)
 }

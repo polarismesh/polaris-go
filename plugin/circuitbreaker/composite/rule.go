@@ -76,6 +76,7 @@ func (c *RuleContainer) scheduleHealthCheck() {
 }
 
 func (c *RuleContainer) realRefreshCircuitBreaker() {
+	c.log.Debugf("[CircuitBreaker] refreshing circuit breaker rule for resource: %s", c.res.String())
 	engineFlow := c.engineFlow
 	resp, err := engineFlow.SyncGetServiceRule(model.EventCircuitBreaker, &model.GetServiceRuleRequest{
 		Namespace: c.res.GetService().Namespace,
@@ -86,19 +87,25 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 		return
 	}
 	resourceCounters := c.breaker.getLevelResourceCounters(c.res.GetLevel())
-	cbRule := selectCircuitBreakerRule(c.res, resp, c.regexFunction)
+	cbRule := c.getCircuitBreakerRule(resp)
 	if cbRule == nil {
 		if _, exist := resourceCounters.remove(c.res); exist {
+			c.log.Infof("[CircuitBreaker] removed counters for resource: %s, scheduling health check", c.res.String())
 			c.scheduleHealthCheck()
 		}
 		return
 	}
+	c.log.Debugf("[CircuitBreaker] matched rule: %s (id: %s, revision: %s) for resource: %s",
+		cbRule.Name, cbRule.Id, cbRule.Revision, c.res.String())
 	counters, exist := resourceCounters.get(c.res)
 	if exist {
 		activeRule := counters.CurrentActiveRule()
 		if activeRule.Id == cbRule.Id && activeRule.Revision == cbRule.Revision {
+			c.log.Debugf("[CircuitBreaker] rule unchanged for resource: %s, skipping update", c.res.String())
 			return
 		}
+		c.log.Infof("[CircuitBreaker] rule changed for resource: %s, old rule: %s (revision: %s), new rule: %s "+
+			"(revision: %s)", c.res.String(), activeRule.Name, activeRule.Revision, cbRule.Name, cbRule.Revision)
 	}
 	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
 	if err != nil {
@@ -106,6 +113,8 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 		return
 	}
 	resourceCounters.put(c.res, counters)
+	c.log.Infof("[CircuitBreaker] created new counters, applied rule: %s (id: %s, revision: %s) for resource: %s",
+		cbRule.Name, cbRule.Id, cbRule.Revision, c.res.String())
 	c.scheduleHealthCheck()
 }
 
@@ -117,7 +126,8 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	if exist {
 		currentActiveRule = counters.CurrentActiveRule()
 	}
-	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFallbackConfig().Enable {
+	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFallbackConfig() != nil &&
+		currentActiveRule.GetFallbackConfig().Enable {
 		engineFlow := c.engineFlow
 		resp, err := engineFlow.SyncGetServiceRule(model.EventFaultDetect, &model.GetServiceRuleRequest{
 			Namespace: c.res.GetService().Namespace,
@@ -162,7 +172,8 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	}
 }
 
-func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse, regexFunc func(string) *regexp.Regexp) *fault_tolerance.CircuitBreakerRule {
+func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse,
+	regexFunc func(string) *regexp.Regexp) *fault_tolerance.CircuitBreakerRule {
 	if object == nil || object.Value == nil {
 		return nil
 	}
@@ -178,23 +189,33 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 	for i := range sortedRules {
 		cbRule := sortedRules[i]
 		if !cbRule.Enable {
+			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
 			continue
 		}
 		if cbRule.Level != res.GetLevel() {
+			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
+				"level: %v, resource: %s)", cbRule.Name, cbRule.Level, res.GetLevel(), res.String())
 			continue
 		}
 		ruleMatcher := cbRule.RuleMatcher
 		destination := ruleMatcher.Destination
 		if !match.MatchService(res.GetService(), destination.Namespace, destination.Service) {
+			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
+				"resource: %s)",
+				cbRule.Name, destination.Namespace, destination.Service, res.GetService().String())
 			continue
 		}
 		source := ruleMatcher.Source
 		if !match.MatchService(res.GetCallerService(), source.Namespace, source.Service) {
+			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
+				"resource caller: %s)", cbRule.Name, source.Namespace, source.Service, res.GetCallerService().String())
 			continue
 		}
 		if ok := matchMethod(res, destination.GetMethod(), regexFunc); !ok {
+			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: method mismatch", cbRule.Name)
 			continue
 		}
+		log.GetBaseLogger().Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
 		return cbRule
 	}
 	return nil

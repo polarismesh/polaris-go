@@ -424,7 +424,7 @@ func (c *BaseCircuitBreakerStatus) IsAvailable() bool {
 
 type HalfOpenStatus struct {
 	BaseCircuitBreakerStatus
-	maxRequest   int
+	maxRequest   int // 半开后请求总数, 存储半开到关闭所必须的最少成功请求数
 	scheduled    int32
 	calledResult []bool
 	triggered    bool
@@ -447,9 +447,11 @@ func (c *HalfOpenStatus) Report(success bool) bool {
 	defer c.lock.Unlock()
 
 	c.calledResult = append(c.calledResult, success)
+	// 请求失败了 OR 已经探测够了
 	needTrigger := !success || (len(c.calledResult) >= c.maxRequest)
 	if needTrigger && !c.triggered {
 		c.triggered = true
+		// 需要执行状态转换
 		return true
 	}
 	return false
@@ -464,14 +466,17 @@ func (c *HalfOpenStatus) CalNextStatus() Status {
 	defer c.lock.Unlock()
 
 	if !c.triggered {
+		// 不需要执行状态转换, 保持半开状态
 		return HalfOpen
 	}
 
 	for _, ret := range c.calledResult {
 		if !ret {
+			// 任意一次失败, 熔断器打开
 			return Open
 		}
 	}
+	// 连续成功数达到最大请求数，熔断器关闭
 	return Close
 }
 
