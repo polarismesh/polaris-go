@@ -438,10 +438,8 @@ type CircuitBreakerConfig interface {
 	// Deprecated: 不在使用
 	SetCheckPeriod(time.Duration)
 	// GetSleepWindow 获取熔断周期
-	// Deprecated: 不在使用
 	GetSleepWindow() time.Duration
 	// SetSleepWindow 设置熔断周期
-	// Deprecated: 不在使用
 	SetSleepWindow(interval time.Duration)
 	// GetRequestCountAfterHalfOpen 获取半开状态后最多分配多少个探测请求
 	// Deprecated: 不在使用
@@ -450,10 +448,8 @@ type CircuitBreakerConfig interface {
 	// Deprecated: 不在使用
 	SetRequestCountAfterHalfOpen(count int)
 	// GetSuccessCountAfterHalfOpen 获取半开状态后多少个成功请求则恢复
-	// Deprecated: 不在使用
 	GetSuccessCountAfterHalfOpen() int
 	// SetSuccessCountAfterHalfOpen 设置半开状态后多少个成功请求则恢复
-	// Deprecated: 不在使用
 	SetSuccessCountAfterHalfOpen(count int)
 	// GetRecoverWindow 获取半开后的恢复周期，按周期来进行半开放量的统计
 	// Deprecated: 不在使用
@@ -473,6 +469,16 @@ type CircuitBreakerConfig interface {
 	// GetErrorRateConfig 错误率熔断配置
 	// Deprecated: 不在使用
 	GetErrorRateConfig() ErrorRateConfig
+	IsDefaultRuleEnable() bool
+	SetDefaultRuleEnable(enable bool)
+	GetDefaultErrorCount() int
+	SetDefaultErrorCount(count int)
+	GetDefaultErrorPercent() int
+	SetDefaultErrorPercent(rate int)
+	GetDefaultInterval() time.Duration
+	SetDefaultInterval(interval time.Duration)
+	GetDefaultMinimumRequest() int
+	SetDefaultMinimumRequest(count int)
 }
 
 // Configuration 全量配置对象.

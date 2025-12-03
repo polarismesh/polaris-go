@@ -226,7 +226,7 @@ func (rc *ResourceCounters) Report(stat *model.ResourceStat) {
 			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToOpen)
 		}
 	} else {
-		log.GetBaseLogger().Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
+		rc.log.Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
 		for _, counter := range rc.counters {
 			counter.Report(isSuccess)
 		}

@@ -37,12 +37,14 @@ import (
 var (
 	namespace string
 	service   string
+	hashkey   string
 	port      int64
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "DiscoverEchoServer", "service")
+	flag.StringVar(&hashkey, "hashkey", "", "")
 	flag.Int64Var(&port, "port", 18080, "port")
 }
 
@@ -106,6 +108,7 @@ func (svr *PolarisConsumer) runWebServer() {
 		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = req.Namespace
 		getOneRequest.Service = req.Service
+		getOneRequest.HashKey = []byte(hashkey)
 		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 		if err != nil {
 			log.Printf("[error] fail to getOneInstance, err is %v", err)

@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -46,6 +47,7 @@ var (
 	port            int
 	token           string
 	configPath      string
+	debug           bool
 )
 
 func initArgs() {
@@ -57,6 +59,7 @@ func initArgs() {
 	flag.IntVar(&port, "port", 18080, "port")
 	flag.StringVar(&token, "token", "", "token")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
+	flag.BoolVar(&debug, "debug", false, "debug")
 }
 
 // PolarisClient is a consumer of the circuit breaker calleeService.
@@ -67,6 +70,26 @@ type PolarisClient struct {
 	consumer       polaris.ConsumerAPI
 	circuitBreaker polaris.CircuitBreakerAPI
 	webSvr         *http.Server
+}
+
+// reportServiceCallResult 上报服务调用结果的辅助方法
+func (svr *PolarisClient) reportServiceCallResult(instance model.Instance, retStatus model.RetStatus, statusCode int, delay time.Duration) {
+	ret := &polaris.ServiceCallResult{
+		ServiceCallResult: model.ServiceCallResult{
+			EmptyInstanceGauge: model.EmptyInstanceGauge{},
+			CalledInstance:     instance,
+			Method:             "/echo",
+			RetStatus:          retStatus,
+		},
+	}
+	ret.SetDelay(delay)
+	ret.SetRetCode(int32(statusCode))
+	if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+		log.Printf("do report service call result : %+v", err)
+	} else {
+		log.Printf("report service call result success: instance=%s:%d, status=%v, retCode=%d, delay=%v",
+			instance.GetHost(), instance.GetPort(), ret.RetStatus, ret.GetRetCode(), delay)
+	}
 }
 
 func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
@@ -111,6 +134,11 @@ func (svr *PolarisClient) runWebServer() {
 				instance.GetHost(), instance.GetPort(), err)))
 
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+
+			// 上报服务调用结果
+			delay := time.Since(start)
+			svr.reportServiceCallResult(instance, model.RetFail, http.StatusInternalServerError, delay)
+
 			// 上报熔断结果，用于熔断计算
 			svr.reportCircuitBreak(instance, model.RetFail, strconv.Itoa(http.StatusInternalServerError), start)
 			return
@@ -118,6 +146,16 @@ func (svr *PolarisClient) runWebServer() {
 		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
 		defer resp.Body.Close()
+
+		// 上报服务调用结果
+		delay := time.Since(start)
+		retStatus := model.RetSuccess
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retStatus = model.RetFlowControl
+		} else if resp.StatusCode != http.StatusOK {
+			retStatus = model.RetFail
+		}
+		svr.reportServiceCallResult(instance, retStatus, resp.StatusCode, delay)
 
 		// 上报熔断结果，用于熔断计算
 		if resp.StatusCode != http.StatusOK {
@@ -270,6 +308,14 @@ func main() {
 	if len(calleeNamespace) == 0 || len(calleeService) == 0 {
 		log.Print("calleeNamespace and calleeService are required")
 		return
+	}
+	if debug {
+		// 设置日志级别为DEBUG
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("fail to set log level to DEBUG, err is %v", err)
+		} else {
+			log.Printf("successfully set log level to DEBUG")
+		}
 	}
 	cfg, err := config.LoadConfigurationByFile(configPath)
 	if err != nil {

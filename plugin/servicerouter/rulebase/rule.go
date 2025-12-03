@@ -88,8 +88,9 @@ func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, cl
 	dstRoutes := g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
 	sourceRoutes := g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
 	enabled := len(dstRoutes) > 0 || len(sourceRoutes) > 0
+	destStr := model.ToStringService(routeInfo.DestService, true)
 	log.GetBaseLogger().Debugf("RuleBasedRouter.Enable: dest=%s, dstRoutes=%d, sourceRoutes=%d, enabled=%v",
-		routeInfo.DestService, len(dstRoutes), len(sourceRoutes), enabled)
+		destStr, len(dstRoutes), len(sourceRoutes), enabled)
 	return enabled
 }
 

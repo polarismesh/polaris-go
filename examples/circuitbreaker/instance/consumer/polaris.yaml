@@ -12,3 +12,45 @@ global:
         type: push
         address: ${POLARIS_SERVER}:9091
         interval: 10s
+#描述:主调端配置
+consumer:
+  #描述:节点熔断相关配置
+  circuitBreaker:
+    #描述:是否启用节点熔断功能
+    #类型:bool
+    #默认值:true
+    enable: true
+    # 描述：是否启用默认熔断规则
+    #类型:bool
+    #默认值:true
+    defaultRuleEnable: true
+    # 描述：连续错误数熔断器默认连续错误数
+    #类型:int
+    #默认值:10
+    defaultErrorCount: 10
+    # 描述：错误率熔断器默认错误率
+    #类型:int
+    #默认值:50
+    defaultErrorPercent: 50
+    # 描述：错误率熔断器默认统计周期
+    #类型:int64
+    #默认值:60s
+    defaultInterval: 60s
+    # 描述：错误率熔断器默认最小请求数
+    #类型:int
+    #默认值:10
+    defaultMinimumRequest: 10
+    #描述:熔断周期，被熔断后多久可以变为半开
+    #类型:duration
+    #默认值:30s
+    sleepWindow: 30s
+    #描述:半开状态后多少个成功请求则恢复
+    #类型:int
+    #默认值:3
+    successCountAfterHalfOpen: 3
+    #描述:熔断策略，SDK会根据策略名称加载对应的熔断器插件
+    #类型:list
+    #范围:已注册的熔断器插件名
+    #默认值：composite 适配服务/接口/实例 熔断插件
+    chain:
+      - composite
