@@ -432,7 +432,6 @@ type CircuitBreakerConfig interface {
 	// SetChain 设置熔断器插件链
 	SetChain([]string)
 	// GetCheckPeriod 熔断器定时检测时间
-	// Deprecated: 不在使用
 	GetCheckPeriod() time.Duration
 	// SetCheckPeriod 设置熔断器定时检测时间
 	// Deprecated: 不在使用
@@ -469,15 +468,25 @@ type CircuitBreakerConfig interface {
 	// GetErrorRateConfig 错误率熔断配置
 	// Deprecated: 不在使用
 	GetErrorRateConfig() ErrorRateConfig
+	// IsDefaultRuleEnable 是否启用默认实例级熔断规则
 	IsDefaultRuleEnable() bool
+	// SetDefaultRuleEnable 设置是否启用默认实例级熔断规则
 	SetDefaultRuleEnable(enable bool)
+	// GetDefaultErrorCount 获取默认实例级熔断连续错误数阈值
 	GetDefaultErrorCount() int
+	// SetDefaultErrorCount 设置默认实例级熔断连续错误数阈值
 	SetDefaultErrorCount(count int)
+	// GetDefaultErrorPercent 获取默认实例级熔断错误率阈值（百分比）
 	GetDefaultErrorPercent() int
+	// SetDefaultErrorPercent 设置默认实例级熔断错误率阈值（百分比）
 	SetDefaultErrorPercent(rate int)
+	// GetDefaultInterval 获取默认实例级熔断统计时间窗口
 	GetDefaultInterval() time.Duration
+	// SetDefaultInterval 设置默认实例级熔断统计时间窗口
 	SetDefaultInterval(interval time.Duration)
+	// GetDefaultMinimumRequest 获取默认实例级熔断最小请求数阈值
 	GetDefaultMinimumRequest() int
+	// SetDefaultMinimumRequest 设置默认实例级熔断最小请求数阈值
 	SetDefaultMinimumRequest(count int)
 }
 
