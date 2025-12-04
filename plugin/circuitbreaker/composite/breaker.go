@@ -19,6 +19,7 @@ package composite
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -166,15 +167,49 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 }
 
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
-	if stat == nil || stat.Resource == nil || stat.Resource.GetLevel() == fault_tolerance.Level_UNKNOWN {
+	// 第一层：检查 stat 是否为 nil
+	if stat == nil {
+		c.log.Errorf("[CircuitBreaker] doReport failed: stat is nil")
+		return nil
+	}
+	// 第二层：检查 stat.Resource 接口是否为 nil
+	if stat.Resource == nil {
+		c.log.Errorf("[CircuitBreaker] doReport failed: stat.Resource is nil, stat=%+v", stat)
 		return nil
 	}
 	resource := stat.Resource
+	// 第三层：使用反射检查接口底层值是否为 nil（避免 Go 接口陷阱）
+	rv := reflect.ValueOf(resource)
+	if !rv.IsValid() {
+		c.log.Errorf("[CircuitBreaker] doReport failed: resource reflect value is invalid, resource type=%T", resource)
+		return nil
+	}
+	if rv.IsNil() {
+		c.log.Errorf("[CircuitBreaker] doReport failed: resource underlying value is nil (Go interface trap), "+
+			"resource type=%T", resource)
+		return nil
+	}
+	// 第四层：检查 Service 是否为 nil
+	service := resource.GetService()
+	if service == nil {
+		c.log.Errorf("[CircuitBreaker] doReport failed: resource.GetService() returns nil, resource=%s, level=%v",
+			resource.String(), resource.GetLevel())
+		return nil
+	}
+	// 第五层：检查 Level 是否有效
+	level := resource.GetLevel()
+	if level == fault_tolerance.Level_UNKNOWN {
+		c.log.Errorf("[CircuitBreaker] doReport failed: resource level is UNKNOWN, resource=%s, service=%s",
+			resource.String(), service.String())
+		return nil
+	}
+
 	retStatus := stat.RetStatus
 	// 因为限流、熔断被拒绝的请求，不需要进入熔断数据上报
 	if retStatus == model.RetReject || retStatus == model.RetFlowControl {
 		return nil
 	}
+
 	counters, exist := c.getResourceCounters(resource)
 	if !exist {
 		c.containers.LoadOrStore(resource.String(), newRuleContainer(c.taskCtx, resource, c))
