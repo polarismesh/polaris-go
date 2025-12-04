@@ -166,10 +166,10 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 }
 
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
-	resource := stat.Resource
-	if resource == nil || resource.GetLevel() == fault_tolerance.Level_UNKNOWN {
+	if stat == nil || stat.Resource == nil || stat.Resource.GetLevel() == fault_tolerance.Level_UNKNOWN {
 		return nil
 	}
+	resource := stat.Resource
 	retStatus := stat.RetStatus
 	// 因为限流、熔断被拒绝的请求，不需要进入熔断数据上报
 	if retStatus == model.RetReject || retStatus == model.RetFlowControl {
