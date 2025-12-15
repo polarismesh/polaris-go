@@ -231,6 +231,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableNearbyRoute = true
 	if nil != srcService {
 		c.HasSrcService = true
 		c.SrcService.Namespace = srcService.Namespace
@@ -287,6 +288,7 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = false
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
 		c.SrcService.Namespace = srcService.Namespace
@@ -315,6 +317,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
 		c.SrcService.Namespace = srcService.Namespace
@@ -352,6 +355,7 @@ func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.Serv
 	c.DstService.Service = redirectedService.Service
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableNearbyRoute = true
 	c.RouteInfo.DestRouteRule = nil
 	c.DstInstances = nil
 }
