@@ -274,13 +274,30 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 		}
 	}
 	if trigger.EnableDstRoute {
+		// 加载自定义路由规则
 		_, err := registry.LoadServiceRouteRule(dstService)
 		if err != nil {
 			return false, err.(model.SDKError)
 		}
+		// 加载就近路由规则
+		_, err = registry.LoadServiceNearByRouteRule(dstService)
+		if err != nil {
+			return false, err.(model.SDKError)
+		}
+
 		routeRule := registry.GetServiceRouteRule(dstService, true)
+		nearbyRouteRule := registry.GetServiceNearByRouteRule(dstService, true)
+
+		// 同时设置自定义路由规则和就近路由规则到不同的字段
 		if routeRule.IsInitialized() {
 			request.SetDstRoute(routeRule)
+		}
+		if nearbyRouteRule.IsInitialized() {
+			request.SetDstNearbyRoute(nearbyRouteRule)
+		}
+
+		// 如果至少有一个规则已初始化，则标记为已启用
+		if routeRule.IsInitialized() || nearbyRouteRule.IsInitialized() {
 			trigger.EnableDstRoute = false
 		} else {
 			failNum++
