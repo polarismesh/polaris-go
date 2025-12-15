@@ -52,6 +52,7 @@ var (
 	selfRegister  bool
 	port          int64
 	token         string
+	debug         bool
 )
 
 func initArgs() {
@@ -62,6 +63,7 @@ func initArgs() {
 	flag.StringVar(&selfService, "selfService", "RouteNearbyEchoClient", "selfService")
 	flag.Int64Var(&port, "port", 18080, "port")
 	flag.StringVar(&token, "token", "", "token")
+	flag.BoolVar(&debug, "debug", false, "debug")
 }
 
 // PolarisConsumer .
@@ -199,6 +201,15 @@ func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) 
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = namespace
 	getOneRequest.Service = service
+	// 设置源服务信息，用于路由规则匹配
+	// SourceService 的 Metadata 会用于匹配 inbound 路由规则中的 source metadata
+	queryMeta := convertQuery(r.URL.RawQuery)
+	getOneRequest.SourceService = &model.ServiceInfo{
+		Namespace: selfNamespace,
+		Service:   selfService,
+		Metadata:  queryMeta,
+	}
+	//getOneRequest.Metadata = queryMeta
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance, err is %v", err)
@@ -268,7 +279,14 @@ func main() {
 		log.Fatalf("fail to create sdk context, err is %v", err)
 	}
 	defer sdkCtx.Destroy()
-
+	if debug {
+		// 设置日志级别为DEBUG
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("fail to set log level to DEBUG, err is %v", err)
+		} else {
+			log.Printf("successfully set log level to DEBUG")
+		}
+	}
 	svcRouter := sdkCtx.GetConfig().GetConsumer().GetServiceRouter()
 	log.Printf("service router config: %+v", jsonEncode(svcRouter))
 	loc := sdkCtx.GetConfig().GetGlobal().GetLocation()
