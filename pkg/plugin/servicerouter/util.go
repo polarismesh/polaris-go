@@ -60,10 +60,13 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
-	sourceStr := model.ToStringService(routeInfo.SourceService, true)
-	destStr := model.ToStringService(routeInfo.DestService, true)
-	log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%d",
-		sourceStr, destStr, len(routers), cluster.GetClusterValue().GetInstancesSet(false, false).Count())
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		sourceStr := model.ToStringService(routeInfo.SourceService, true)
+		destStr := model.ToStringService(routeInfo.DestService, true)
+		instancesCount := cluster.GetClusterValue().GetInstancesSet(false, false).Count()
+		log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%v",
+			sourceStr, destStr, len(routers), instancesCount)
+	}
 
 	for _, router := range routers {
 		routerName := router.Name()
@@ -71,8 +74,10 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		isEnabled := router.Enable(routeInfo, svcClusters)
 
 		if !isRouterEnabled || !isEnabled {
-			log.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
-				routerName, isRouterEnabled, isEnabled)
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
+					routerName, isRouterEnabled, isEnabled)
+			}
 			continue
 		}
 
@@ -85,20 +90,24 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if err != nil {
+		if err != nil || result == nil {
 			log.GetBaseLogger().Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
 			// 转发规则
-			redirectStr := model.ToStringService(result.RedirectDestService, true)
-			log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s",
-				routerName, redirectStr)
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				redirectStr := model.ToStringService(result.RedirectDestService, true)
+				log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s", routerName, redirectStr)
+			}
 			return result, nil
 		}
 		cluster = result.OutputCluster
-		log.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%d, status=%s",
-			routerName, cluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status.String())
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
+			log.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,
+				instances, result.Status.String())
+		}
 	}
 	if !routeInfo.ignoreFilterOnlyOnEndChain {
 		// 需要执行一遍全死全活
@@ -110,13 +119,15 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		if result != nil && result.OutputCluster != cluster {
 			cluster.PoolPut()
 		}
-		if err != nil {
+		if err != nil || result == nil {
 			log.GetBaseLogger().Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
-		log.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%d",
-			cluster.GetClusterValue().GetInstancesSet(false, false).Count())
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
+			log.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%s", instances)
+		}
 	}
 	return result, nil
 }

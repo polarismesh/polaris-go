@@ -22,3 +22,6 @@ goimports-reviser
 /examples/**/polaris
 
 /examples/**/bin
+
+/examples/**/provider/provider-a/
+/examples/**/provider/provider-b/

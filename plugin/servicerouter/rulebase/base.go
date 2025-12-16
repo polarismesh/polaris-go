@@ -214,20 +214,42 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 	ruleMatchType int, ruleCache model.RuleCache) (success bool, matched *apitraffic.Source,
 	notMatched []*apitraffic.Source, invalidRegexInfos *invalidRegexInfo) {
 	if len(sources) == 0 {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: sources is empty, return matched")
+		}
 		return true, nil, nil, nil
 	}
 	sourceService := routeInfo.SourceService
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		sourceServiceInfo := model.ToStringService(sourceService, false)
+		var sourceMetadata map[string]string
+		if sourceService != nil {
+			sourceMetadata = sourceService.GetMetadata()
+		}
+		log.GetBaseLogger().Debugf(
+			"[RuleBasedRouter] matchSource start, sourcesCount: %d, sourceService: %s, sourceMetadata: %v, "+
+				"ruleMatchType: %d", len(sources), sourceServiceInfo, sourceMetadata, ruleMatchType)
+	}
 	var invalidRegexError error
 	var invalidRegex string
 	// source匹配成功标志
 	// matched = true
 	// invalidRegexes = false
-	for _, source := range sources {
+	for i, source := range sources {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf(
+				"[RuleBasedRouter] matchSource: checking source[%d], ns=%s, svc=%s, metadataCount=%d, metadata=%v", i,
+				source.Namespace.GetValue(), source.Service.GetValue(), len(source.Metadata), source.Metadata)
+		}
 		// 对于inbound规则, 需要匹配source服务
 		if ruleMatchType == dstRouteRuleMatch {
 			if reflect2.IsNil(sourceService) {
 				// 如果没有source服务信息, 判断rule是否支持全匹配
 				if source.Namespace.GetValue() != matchAll || source.Service.GetValue() != matchAll {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, "+
+							"sourceService is nil and rule not matchAll", i)
+					}
 					success = false
 					notMatched = append(notMatched, source)
 					continue
@@ -237,12 +259,20 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 				// 如果命名空间|服务不为"*"且不等于原服务, 则匹配失败
 				if source.Namespace.GetValue() != matchAll &&
 					source.Namespace.GetValue() != sourceService.GetNamespace() {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] namespace not matched, "+
+							"rule=%s, actual=%s", i, source.Namespace.GetValue(), sourceService.GetNamespace())
+					}
 					success = false
 					notMatched = append(notMatched, source)
 					continue
 				}
 				if source.Service.GetValue() != matchAll &&
 					source.Service.GetValue() != sourceService.GetService() {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] service not matched, "+
+							"rule=%s, actual=%s", i, source.Service.GetValue(), sourceService.GetService())
+					}
 					success = false
 					notMatched = append(notMatched, source)
 					continue
@@ -252,6 +282,9 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 
 		// 如果rule中metadata为空, 匹配成功, 结束
 		if len(source.Metadata) == 0 {
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched, metadata is empty", i)
+			}
 			success = true
 			matched = source
 			break
@@ -259,13 +292,24 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 
 		// 如果没有源服务信息, 本次匹配失败
 		if reflect2.IsNil(sourceService) {
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, sourceService is "+
+					"nil but metadata required", i)
+			}
 			success = false
 			notMatched = append(notMatched, source)
 			continue
 		}
 
 		success, invalidRegex, invalidRegexError = g.matchSourceMetadata(source.Metadata, routeInfo, ruleCache)
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] metadata match result: success=%v, "+
+				"invalidRegex=%s", i, success, invalidRegex)
+		}
 		if success {
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched successfully", i)
+			}
 			matched = source
 			break
 		}
@@ -285,6 +329,10 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 		}
 	}
 
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource finished, success=%v, notMatchedCount=%d", success,
+			len(notMatched))
+	}
 	return success, matched, notMatched, invalidRegexInfos
 }
 
@@ -305,7 +353,8 @@ func validateInMetadata(ruleMetaKey string, ruleMetaValue *apimodel.MatchString,
 		for value := range values {
 			m, err := matcher.FindStringMatch(value)
 			if err != nil {
-				log.GetBaseLogger().Errorf("regex match metadata error. ruleMetaKey: %s, value: %s, errors: %s", ruleMetaKey, value, err)
+				log.GetBaseLogger().Errorf("regex match metadata error. ruleMetaKey: %s, value: %s, errors: %s",
+					ruleMetaKey, value, err)
 				return false
 			}
 			if m == nil || m.String() == "" {
@@ -361,7 +410,8 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 			for value, composedValue := range metaValues {
 				m, err := regexObj.FindStringMatch(value)
 				if err != nil {
-					log.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, errors: %s", ruleMetaValueStr, value, err)
+					log.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, "+
+						"errors: %s", ruleMetaValueStr, value, err)
 					continue
 				}
 				if m == nil || m.String() == "" {
@@ -464,10 +514,18 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerouter.RouteInfo,
 	svcCache model.ServiceClusters, ruleCache model.RuleCache, dst *apitraffic.Destination,
 	subsetsMap map[uint32]*prioritySubsets, inCluster *model.Cluster) (matched bool, invalidRegexInfos *invalidRegexInfo) {
-	// 获取subset
-	cluster, ok,
-		invalidRegex, invalidRegexError := g.matchDstMetadata(routeInfo, dst.Metadata, ruleCache, svcCache, inCluster)
-	if !ok {
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 开始填充目标子集, dstMetadata: %v, "+
+			"priority: %d, weight: %d", dst.Metadata, dst.Priority.GetValue(), dst.Weight.GetValue())
+	}
+	// 获取subset：根据目标metadata匹配实例集群
+	cluster, ok, invalidRegex, invalidRegexError := g.matchDstMetadata(routeInfo, dst.Metadata, ruleCache, svcCache,
+		inCluster)
+	if !ok || cluster == nil {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 目标metadata匹配失败, "+
+				"invalidRegex: %s, error: %v", invalidRegex, invalidRegexError)
+		}
 		var invalidInfo *invalidRegexInfo
 		if invalidRegexError != nil {
 			invalidInfo = &invalidRegexInfo{
@@ -480,52 +538,85 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 		return false, invalidInfo
 	}
 
-	// 根据优先级填充subset列表
+	// 根据优先级填充subset列表：将匹配到的cluster按优先级和权重组织到subsetsMap中
 	priority := dst.Priority.GetValue()
 	weight := dst.Weight.GetValue()
 	weightedSubsets, ok := subsetsMap[priority]
 	if !ok {
+		// 该优先级首次出现，创建新的prioritySubsets并设置为单一子集模式
 		pSubSet := g.poolGetPrioritySubsets()
 		pSubSet.singleSubset.weight = weight
 		pSubSet.singleSubset.cluster = cluster
 		pSubSet.totalWeight = weight
 		subsetsMap[priority] = pSubSet
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 创建新优先级子集, priority: %d, "+
+				"weight: %d, clusterInstances: %d", priority, weight, cluster.GetClusterValue().Count())
+		}
 	} else {
+		// 该优先级已存在，追加到子集列表中（用于权重选择）
 		weightedSubsets.totalWeight += weight
 		if len(weightedSubsets.subsets) == 0 {
+			// 从单一子集模式转为多子集模式
 			weightedSubsets.subsets = append(weightedSubsets.subsets, weightedSubsets.singleSubset)
 		}
 		weightedSubsets.subsets = append(weightedSubsets.subsets, weightedSubset{
 			cluster: cluster,
 			weight:  weightedSubsets.totalWeight,
 		})
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 追加子集到已有优先级, priority: %d, "+
+				"weight: %d, totalWeight: %d, subsetsCount: %d", priority, weight, weightedSubsets.totalWeight,
+				len(weightedSubsets.subsets))
+		}
 	}
 	return true, nil
 }
 
 // selectCluster 从subset中选取实例
+// 选择逻辑：1.按优先级排序(数值越小优先级越高) 2.取最高优先级的子集组 3.按权重随机选择一个cluster
 func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*prioritySubsets) *model.Cluster {
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 开始从%d个优先级组中选择cluster", len(subsetsMap))
+	}
+	// 步骤1: 提取所有优先级值
 	prioritySet := make([]uint32, 0, len(subsetsMap))
 	for k := range subsetsMap {
 		prioritySet = append(prioritySet, k)
 	}
+	// 步骤2: 按优先级排序(数值越小优先级越高)
 	if len(prioritySet) > 1 {
 		// 从小到大排序, priority小的在前(越小越高)
 		sort.Slice(prioritySet, func(i, j int) bool {
 			return prioritySet[i] < prioritySet[j]
 		})
 	}
-	// 取优先级最高的
+	// 步骤3: 取优先级最高的子集组
 	priorityFirst := prioritySet[0]
 	weightedSubsets := subsetsMap[priorityFirst]
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 选中最高优先级: %d, 该优先级下子集数: %d, 总权重: %d",
+			priorityFirst, len(weightedSubsets.subsets), weightedSubsets.totalWeight)
+	}
 	var retCluster *model.Cluster
+	// 步骤4: 从子集中选择cluster(单一子集直接返回，多子集按权重随机选择)
 	if len(weightedSubsets.subsets) == 0 {
+		// 单一子集模式：直接返回该cluster
 		retCluster = weightedSubsets.singleSubset.cluster
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 单一子集模式, 直接选中cluster, 实例数: %d",
+				retCluster.GetClusterValue().Count())
+		}
 	} else {
+		// 多子集模式：按权重随机选择
 		index := rand.SelectWeightedRandItem(g.scalableRand, weightedSubsets)
 		retCluster = weightedSubsets.subsets[index].cluster
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 多子集模式, 按权重随机选中index: %d, 实例数: %d",
+				index, retCluster.GetClusterValue().Count())
+		}
 	}
-	// 复用cluster
+	// 步骤5: 回收未选中的cluster到对象池(内存复用优化)
 	for _, prioritySubset := range subsetsMap {
 		if len(prioritySubset.subsets) == 0 {
 			if retCluster != prioritySubset.singleSubset.cluster {
@@ -539,6 +630,10 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 			}
 		}
 		g.poolReturnPrioritySubsets(prioritySubset)
+	}
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 完成, 最终选中cluster实例数: %d",
+			retCluster.GetClusterValue().Count())
 	}
 	return retCluster
 }
@@ -610,9 +705,23 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 	} else {
 		ruleCache = routeInfo.SourceRouteRule.GetRuleCache()
 	}
-	for _, route := range routes {
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances start, ruleMatchType: %d, "+
+			"routesCount: %d, destService: %s/%s", ruleMatchType, len(routes), routeInfo.DestService.GetNamespace(),
+			routeInfo.DestService.GetService())
+	}
+	for i, route := range routes {
 		// 匹配source规则
-		sourceMatched, matchSource, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType, ruleCache)
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] matching route[%d], sourcesCount: %d, "+
+				"destinationsCount: %d, route: %s", i, len(route.Sources), len(route.Destinations), route.String())
+		}
+		sourceMatched, matchSource, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType,
+			ruleCache)
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source match result: matched=%v, "+
+				"notMatchedCount=%d", i, sourceMatched, len(notMatches))
+		}
 
 		if invalidRegex != nil {
 			// summary.invalidRegexSources = append(summary.invalidRegexSources, invalidRegex.invalidRegexes...)
@@ -632,23 +741,38 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 
 		// 如果source匹配成功, 继续匹配destination规则
 		// 然后将结果写进map(key: 权重, value: 带权重的实例分组)
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source匹配成功, 开始匹配%d个destination规则", i,
+				len(route.Destinations))
+		}
 		subsetsMap := make(map[uint32]*prioritySubsets)
-		for _, dst := range route.Destinations {
+		for dstIdx, dst := range route.Destinations {
 			// 对于outbound规则, 需要匹配DestService服务
 			if ruleMatchType == sourceRouteRuleMatch {
 				if dst.Namespace.GetValue() != matchAll &&
 					dst.Namespace.GetValue() != routeInfo.DestService.GetNamespace() {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] namespace不匹配: rule=%s, "+
+							"actual=%s", i, dstIdx, dst.Namespace.GetValue(), routeInfo.DestService.GetNamespace())
+					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
 					continue
 				}
 
 				if dst.Service.GetValue() != matchAll &&
 					dst.Service.GetValue() != routeInfo.DestService.GetService() {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] service不匹配: rule=%s, "+
+							"actual=%s", i, dstIdx, dst.Service.GetValue(), routeInfo.DestService.GetService())
+					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
 					continue
 				}
 			}
 			if dst.Weight.GetValue() == 0 {
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 权重为0, 跳过", i, dstIdx)
+				}
 				summary.weightZeroDestinations = append(summary.weightZeroDestinations, dst)
 				continue
 			}
@@ -656,22 +780,45 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 			// 判断实例的metadata信息，看是否符合
 			if !destMatched {
 				if invalidRegex != nil {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败(正则错误): %v",
+							i, dstIdx, invalidRegex.invalidRegexErrors)
+					}
 					// summary.invalidRegexDestinations = append(summary.invalidRegexDestinations, dst)
 					summary.appendErrorRegexes(invalidRegex)
 				} else {
+					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败, "+
+							"dstMetadata: %v", i, dstIdx, dst.Metadata)
+					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
+				}
+			} else {
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 匹配成功, priority: %d, weight: %d",
+						i, dstIdx, dst.Priority.GetValue(), dst.Weight.GetValue())
 				}
 			}
 		}
 		// 如果未匹配到分组, 继续匹配
 		if len(subsetsMap) == 0 {
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] no matched subsets, continue to next route", i)
+			}
 			continue
 		}
 		// 匹配到分组, 返回
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] matched %d priority subsets, selecting cluster",
+				i, len(subsetsMap))
+		}
 		return g.selectCluster(subsetsMap), nil
 	}
 
 	// 全部匹配完成, 未匹配到任何分组, 返回空
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances finished, no matched cluster found")
+	}
 	return nil, nil
 }
 

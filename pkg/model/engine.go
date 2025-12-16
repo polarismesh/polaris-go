@@ -25,6 +25,7 @@ import (
 type NotifyTrigger struct {
 	EnableDstInstances bool
 	EnableDstRoute     bool
+	EnableNearbyRoute  bool
 	EnableSrcRoute     bool
 	EnableDstRateLimit bool
 	EnableServices     bool
@@ -34,6 +35,7 @@ type NotifyTrigger struct {
 func (n *NotifyTrigger) Clear() {
 	n.EnableDstInstances = false
 	n.EnableDstRoute = false
+	n.EnableNearbyRoute = false
 	n.EnableSrcRoute = false
 	n.EnableDstRateLimit = false
 	n.EnableServices = false
