@@ -209,7 +209,7 @@ func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) 
 		Service:   selfService,
 		Metadata:  queryMeta,
 	}
-	//getOneRequest.Metadata = queryMeta
+	getOneRequest.Metadata = queryMeta
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance, err is %v", err)
