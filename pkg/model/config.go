@@ -79,6 +79,7 @@ type SimpleConfigFile struct {
 	Namespace   string
 	FileGroup   string
 	FileName    string
+	FileContent string
 	Version     uint64
 	Md5         string
 	ReleaseTime time.Time

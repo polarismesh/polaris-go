@@ -97,7 +97,7 @@ func main() {
 	if len(files) > 0 {
 		log.Println("Config files in group:")
 		for _, file := range files {
-			log.Printf("  - %s (version: %d, md5: %s)", file.FileName, file.Version, file.Md5)
+			log.Printf("  - %s (version: %d, md5: %s, content: %s)", file.FileName, file.Version, file.Md5, file.FileContent)
 		}
 	} else {
 		log.Println("No config files found in group")

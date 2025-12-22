@@ -74,6 +74,7 @@ func (r *ConfigGroupResponse) ParseFromSpec(resp *config_manage.ConfigClientList
 			Namespace:   item.GetNamespace().GetValue(),
 			FileGroup:   item.GetGroup().GetValue(),
 			FileName:    item.GetFileName().GetValue(),
+			FileContent: item.GetContent().GetValue(),
 			Version:     item.GetVersion().GetValue(),
 			Md5:         item.GetMd5().GetValue(),
 			ReleaseTime: releaseTime,
