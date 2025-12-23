@@ -73,6 +73,30 @@ func (c *defaultConfigFile) GetPersistent() model.Persistent {
 	return c.persistent
 }
 
+// GetVersionName 获取配置文件版本名称
+func (c *defaultConfigFile) GetVersionName() string {
+	if c.fileRepo == nil || c.fileRepo.loadRemoteFile() == nil {
+		return ""
+	}
+	return c.fileRepo.loadRemoteFile().GetVersionName()
+}
+
+// GetVersion 获取配置文件版本号
+func (c *defaultConfigFile) GetVersion() uint64 {
+	if c.fileRepo == nil || c.fileRepo.loadRemoteFile() == nil {
+		return 0
+	}
+	return c.fileRepo.loadRemoteFile().GetVersion()
+}
+
+// GetMd5 获取配置文件MD5值
+func (c *defaultConfigFile) GetMd5() string {
+	if c.fileRepo == nil || c.fileRepo.loadRemoteFile() == nil {
+		return ""
+	}
+	return c.fileRepo.loadRemoteFile().GetMd5()
+}
+
 // HasContent 是否有配置内容
 func (c *defaultConfigFile) HasContent() bool {
 	return c.content != "" && c.content != NotExistedFileContent
