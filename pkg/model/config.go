@@ -117,6 +117,12 @@ type ConfigFile interface {
 	AddChangeListener(cb OnConfigFileChange)
 	// GetPersistent 获取文件持久化数据
 	GetPersistent() Persistent
+	// GetVersionName 获取配置文件版本名称
+	GetVersionName() string
+	// GetVersion 获取配置文件版本
+	GetVersion() uint64
+	// GetMd5 获取配置文件md5值
+	GetMd5() string
 }
 
 // DefaultConfigFileMetadata 默认 ConfigFileMetadata 实现类
