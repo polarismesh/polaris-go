@@ -139,6 +139,12 @@ type ConsumerAPI interface {
 	GetAllInstances(req *GetAllInstancesRequest) (*model.InstancesResponse, error)
 	// GetRouteRule 同步获取服务路由规则
 	GetRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetCircuitBreakerRule 同步获取熔断规则
+	GetCircuitBreakerRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetRateLimitRule 同步获取限流规则
+	GetRateLimitRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetNearbyRouteRule 同步获取就近路由规则
+	GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// UpdateServiceCallResult 上报服务调用结果
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// Destroy 销毁API，销毁后无法再进行调用
