@@ -145,6 +145,12 @@ type ConsumerAPI interface {
 	GetRateLimitRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// GetNearbyRouteRule 同步获取就近路由规则
 	GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetLossLessRule 同步获取无损上下线规则
+	GetLossLessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetBlockAllowRule 同步获取鉴权规则
+	GetBlockAllowRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetLane 同步获取泳道规则
+	GetLane(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// UpdateServiceCallResult 上报服务调用结果
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// Destroy 销毁API，销毁后无法再进行调用

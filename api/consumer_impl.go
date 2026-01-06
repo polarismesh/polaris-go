@@ -113,7 +113,7 @@ func (c *consumerAPI) GetRateLimitRule(req *GetServiceRuleRequest) (*model.Servi
 	return c.context.GetEngine().SyncGetServiceRule(model.EventRateLimiting, &req.GetServiceRuleRequest)
 }
 
-// GetRateLimitRule 同步获取就近路由规则
+// GetNearbyRouteRule 同步获取就近路由规则
 func (c *consumerAPI) GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
 	if err := checkAvailable(c); err != nil {
 		return nil, err
@@ -122,6 +122,39 @@ func (c *consumerAPI) GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.Ser
 		return nil, err
 	}
 	return c.context.GetEngine().SyncGetServiceRule(model.EventNearbyRouteRule, &req.GetServiceRuleRequest)
+}
+
+// GetLossLessRule 同步获取服务预热规则
+func (c *consumerAPI) GetLossLessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncGetServiceRule(model.EventLOSSLESS, &req.GetServiceRuleRequest)
+}
+
+// GetBlockAllowRule 同步获取服务鉴权规则
+func (c *consumerAPI) GetBlockAllowRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncGetServiceRule(model.EventBlockAllowRule, &req.GetServiceRuleRequest)
+}
+
+// GetLane 同步获取就近路由规则
+func (c *consumerAPI) GetLane(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncGetServiceRule(model.EventLane, &req.GetServiceRuleRequest)
 }
 
 // GetServices 同步获取批量服务

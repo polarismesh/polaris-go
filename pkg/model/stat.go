@@ -188,6 +188,9 @@ const (
 	ApiGetCircuitBreakerRule
 	ApiGetRateLimitRule
 	ApiGetNearbyRouteRule
+	ApiGetLossLessRule
+	ApiGetBlockAllowRule
+	ApiGetLane
 )
 
 // API标识到别名.
@@ -209,6 +212,9 @@ var (
 		ApiGetCircuitBreakerRule:   "Consumer::GetCircuitBreakerRule",
 		ApiGetRateLimitRule:        "Consumer::GetRateLimitRule",
 		ApiGetNearbyRouteRule:      "Consumer::GetNearbyRouteRule",
+		ApiGetLossLessRule:         "Consumer::GetLossLessRule",
+		ApiGetBlockAllowRule:       "Consumer::GetBlockAllowRule",
+		ApiGetLane:                 "Consumer::GetLane",
 	}
 )
 

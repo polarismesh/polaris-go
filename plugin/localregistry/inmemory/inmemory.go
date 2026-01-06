@@ -165,6 +165,9 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 	g.eventToCacheHandlers[model.EventRateLimiting] = g.newRateLimitCacheHandler()
 	g.eventToCacheHandlers[model.EventCircuitBreaker] = g.newCircuitBreakerCacheHandler()
 	g.eventToCacheHandlers[model.EventFaultDetect] = g.newFaultDetectCacheHandler()
+	g.eventToCacheHandlers[model.EventLOSSLESS] = g.newLossLessCacheHandler()
+	g.eventToCacheHandlers[model.EventBlockAllowRule] = g.newBlockAllowRuleCacheHandler()
+	g.eventToCacheHandlers[model.EventLane] = g.newLaneCacheHandler()
 	// 批量服务
 	g.eventToCacheHandlers[model.EventServices] = g.newServicesHandler()
 	g.cacheFromPersistAvailableInterval = ctx.Config.GetConsumer().GetLocalCache().GetPersistAvailableInterval()
@@ -736,6 +739,33 @@ func (g *LocalCache) newRuleCacheHandler() CacheHandlers {
 
 // 创建就近路由规则缓存操作回调集合
 func (g *LocalCache) newNearByRouteRuleCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建无损上下线规则缓存操作回调集合
+func (g *LocalCache) newLossLessCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建鉴权规则缓存操作回调集合
+func (g *LocalCache) newBlockAllowRuleCacheHandler() CacheHandlers {
+	return CacheHandlers{
+		CompareMessage:      compareResource,
+		MessageToCacheValue: messageToServiceRule,
+		OnEventDeleted:      g.deleteRule,
+	}
+}
+
+// 创建泳道规则缓存操作回调集合
+func (g *LocalCache) newLaneCacheHandler() CacheHandlers {
 	return CacheHandlers{
 		CompareMessage:      compareResource,
 		MessageToCacheValue: messageToServiceRule,
