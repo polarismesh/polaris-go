@@ -99,7 +99,7 @@ func (repo *ConfigGroupRepo) pull() error {
 
 		responseCode := response.Code
 		log.GetBaseLogger().Infof("[Config][Group] pull finished. code=%d, revision=%+v, duration=%dms",
-			responseCode, responseCode, response.Revision, time.Since(startTime).Milliseconds())
+			responseCode, response.Revision, time.Since(startTime).Milliseconds())
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
