@@ -34,6 +34,7 @@ require (
 )
 
 replace (
+	github.com/polarismesh/specification v1.6.0 => github.com/lambdaxs/specification v1.7.0
 	golang.org/x/net v0.2.0 => golang.org/x/net v0.0.0-20221019024206-cb67ada4b0ad
 	golang.org/x/sys v0.2.0 => golang.org/x/sys v0.0.0-20220906165534-d0df966e6959
 	google.golang.org/grpc v1.51.0 => google.golang.org/grpc v1.46.2
