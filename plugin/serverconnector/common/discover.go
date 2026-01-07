@@ -870,6 +870,9 @@ func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
 	}
+	if s.Direction != nil {
+		request.Direction = *s.Direction
+	}
 	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
 		log.GetNetworkLogger().Debugf(

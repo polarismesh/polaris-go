@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // EventType 事件类型，用于标识各种不同的事件
@@ -143,11 +144,14 @@ type ServiceEventKey struct {
 	// MeshKey
 	// 值类型
 	Type EventType
+	// 可选，标识查询服务是主调方还是被调方
+	Direction *apiservice.DiscoverDirection
 }
 
 // String ToString方法
 func (s ServiceEventKey) String() string {
-	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v}", s.Namespace, s.Service, s.Type)
+	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v, direction: %v}",
+		s.Namespace, s.Service, s.Type, s.Direction)
 }
 
 // InstanceKey 服务实例的唯一标识
