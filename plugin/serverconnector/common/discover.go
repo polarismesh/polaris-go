@@ -893,6 +893,8 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	updateTask.Service = svcEventHandler.Service
 	updateTask.Namespace = svcEventHandler.Namespace
 	updateTask.Type = svcEventHandler.Type
+	updateTask.Direction = svcEventHandler.Direction
+
 	// 增加随机秒数[0~3)，为了让更新不要聚集
 	mu.Lock()
 	diffSecond := g.scalableRand.Intn(3)
