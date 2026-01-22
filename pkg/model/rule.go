@@ -196,7 +196,7 @@ func (g *GetServiceRuleRequest) Validate() error {
 }
 
 // GetDirection 获取主被调标识
-func (g *GetServiceRuleRequest) GetDirection() *apiservice.DiscoverDirection {
+func (g *GetServiceRuleRequest) GetDirection() apiservice.DiscoverDirection {
 	return g.Direction
 }
 
