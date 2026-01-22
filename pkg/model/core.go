@@ -145,7 +145,7 @@ type ServiceEventKey struct {
 	// 值类型
 	Type EventType
 	// 可选，标识查询服务是主调方还是被调方
-	Direction *apiservice.DiscoverDirection
+	Direction apiservice.DiscoverDirection
 }
 
 // String ToString方法

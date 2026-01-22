@@ -139,7 +139,7 @@ type GetServiceRuleRequest struct {
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
 	// 可选，标识查询服务是主调方还是被调方
-	Direction *apiservice.DiscoverDirection
+	Direction apiservice.DiscoverDirection
 	// 应答对象，由主流程填充并返回
 	response ServiceRuleResponse
 }

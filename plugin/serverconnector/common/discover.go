@@ -520,7 +520,8 @@ func (s *StreamingClient) receiveAndNotify() {
 				Namespace: resp.GetService().GetNamespace().GetValue(),
 				Service:   resp.GetService().GetName().GetValue(),
 			},
-			Type: pb.GetEventType(resp.Type),
+			Type:      pb.GetEventType(resp.Type),
+			Direction: resp.GetDirection(),
 		}
 		// 获取服务的回调列表
 		tasks := s.getSvcUpdateTasks(svcKey)
@@ -869,9 +870,7 @@ func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
 			Revision:  &wrappers.StringValue{Value: s.handler.GetRevision()},
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
-	}
-	if s.Direction != nil {
-		request.Direction = *s.Direction
+		Direction: s.Direction,
 	}
 	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
