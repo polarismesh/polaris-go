@@ -533,6 +533,7 @@ func (cr *CommonRuleRequest) InitByGetRuleRequest(
 	cr.DstService.Namespace = request.Namespace
 	cr.DstService.Service = request.Service
 	cr.DstService.Type = eventType
+	cr.DstService.Direction = request.Direction
 	cr.response = request.GetResponse()
 	BuildControlParam(request, cfg, &cr.ControlParam)
 }

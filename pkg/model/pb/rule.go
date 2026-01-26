@@ -44,6 +44,9 @@ var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
 	model.EventCircuitBreaker:  &CircuitBreakAssistant{},
 	model.EventFaultDetect:     &FaultDetectAssistant{},
 	model.EventNearbyRouteRule: &NearbyRoutingAssistant{},
+	model.EventLossless:        &LosslessAssistant{},
+	model.EventBlockAllowRule:  &BlockAllowAssistant{},
+	model.EventLane:            &LaneAssistant{},
 }
 
 // ServiceRuleInProto 路由规则配置对象.

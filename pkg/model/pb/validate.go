@@ -36,6 +36,9 @@ var (
 		model.EventCircuitBreaker:  apiservice.DiscoverRequest_CIRCUIT_BREAKER,
 		model.EventFaultDetect:     apiservice.DiscoverRequest_FAULT_DETECTOR,
 		model.EventNearbyRouteRule: apiservice.DiscoverRequest_NEARBY_ROUTE_RULE,
+		model.EventLossless:        apiservice.DiscoverRequest_LOSSLESS,
+		model.EventBlockAllowRule:  apiservice.DiscoverRequest_BLOCK_ALLOW_RULE,
+		model.EventLane:            apiservice.DiscoverRequest_LANE,
 	}
 
 	protoRespTypeToEventType = map[apiservice.DiscoverResponse_DiscoverResponseType]model.EventType{
@@ -46,6 +49,9 @@ var (
 		apiservice.DiscoverResponse_CIRCUIT_BREAKER:   model.EventCircuitBreaker,
 		apiservice.DiscoverResponse_FAULT_DETECTOR:    model.EventFaultDetect,
 		apiservice.DiscoverResponse_NEARBY_ROUTE_RULE: model.EventNearbyRouteRule,
+		apiservice.DiscoverResponse_LOSSLESS:          model.EventLossless,
+		apiservice.DiscoverResponse_BLOCK_ALLOW_RULE:  model.EventBlockAllowRule,
+		apiservice.DiscoverResponse_LANE:              model.EventLane,
 	}
 )
 

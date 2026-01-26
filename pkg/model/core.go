@@ -19,6 +19,7 @@ package model
 
 import (
 	"fmt"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // EventType 事件类型，用于标识各种不同的事件
@@ -41,6 +42,12 @@ const (
 	EventFaultDetect EventType = 0x2007
 	//EventNearbyRouteRule 就近路由事件
 	EventNearbyRouteRule EventType = 0x2008
+	// EventLossless 服务预热
+	EventLossless = 0x2009
+	// EventBlockAllowRule 服务鉴权 = 0x2009
+	EventBlockAllowRule EventType = 0x2010
+	// EventLane 服务泳道
+	EventLane EventType = 0x2011
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
@@ -75,6 +82,9 @@ var (
 		EventCircuitBreaker:  "circuit_breaker",
 		EventFaultDetect:     "fault_detect",
 		EventNearbyRouteRule: "nearby_route_rule",
+		EventLossless:        "lossless",
+		EventBlockAllowRule:  "block_allow_rule",
+		EventLane:            "lane",
 	}
 
 	presentToEventType = map[string]EventType{
@@ -85,6 +95,9 @@ var (
 		"circuit_breaker":   EventCircuitBreaker,
 		"fault_detect":      EventFaultDetect,
 		"nearby_route_rule": EventNearbyRouteRule,
+		"lossless":          EventLossless,
+		"block_allow_rule":  EventBlockAllowRule,
+		"lane":              EventLane,
 	}
 )
 
@@ -131,11 +144,14 @@ type ServiceEventKey struct {
 	// MeshKey
 	// 值类型
 	Type EventType
+	// 可选，标识查询服务是主调方还是被调方
+	Direction apiservice.DiscoverDirection
 }
 
 // String ToString方法
 func (s ServiceEventKey) String() string {
-	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v}", s.Namespace, s.Service, s.Type)
+	return fmt.Sprintf("{namespace: \"%s\", service: \"%s\", event: %v, direction: %v}",
+		s.Namespace, s.Service, s.Type, s.Direction)
 }
 
 // InstanceKey 服务实例的唯一标识
