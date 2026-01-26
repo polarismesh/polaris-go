@@ -44,7 +44,7 @@ var eventTypeToAssistant = map[model.EventType]ServiceRuleAssistant{
 	model.EventCircuitBreaker:  &CircuitBreakAssistant{},
 	model.EventFaultDetect:     &FaultDetectAssistant{},
 	model.EventNearbyRouteRule: &NearbyRoutingAssistant{},
-	model.EventLOSSLESS:        &LossLessAssistant{},
+	model.EventLossless:        &LosslessAssistant{},
 	model.EventBlockAllowRule:  &BlockAllowAssistant{},
 	model.EventLane:            &LaneAssistant{},
 }

@@ -145,8 +145,8 @@ type ConsumerAPI interface {
 	GetRateLimitRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// GetNearbyRouteRule 同步获取就近路由规则
 	GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
-	// GetLossLessRule 同步获取无损上下线规则
-	GetLossLessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetLosslessRule 同步获取无损上下线规则
+	GetLosslessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// GetBlockAllowRule 同步获取鉴权规则
 	GetBlockAllowRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// GetLane 同步获取泳道规则

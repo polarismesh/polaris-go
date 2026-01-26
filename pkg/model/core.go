@@ -42,8 +42,8 @@ const (
 	EventFaultDetect EventType = 0x2007
 	//EventNearbyRouteRule 就近路由事件
 	EventNearbyRouteRule EventType = 0x2008
-	// EventLOSSLESS 服务预热
-	EventLOSSLESS = 0x2009
+	// EventLossless 服务预热
+	EventLossless = 0x2009
 	// EventBlockAllowRule 服务鉴权 = 0x2009
 	EventBlockAllowRule EventType = 0x2010
 	// EventLane 服务泳道
@@ -82,7 +82,7 @@ var (
 		EventCircuitBreaker:  "circuit_breaker",
 		EventFaultDetect:     "fault_detect",
 		EventNearbyRouteRule: "nearby_route_rule",
-		EventLOSSLESS:        "lossless",
+		EventLossless:        "lossless",
 		EventBlockAllowRule:  "block_allow_rule",
 		EventLane:            "lane",
 	}
@@ -95,7 +95,7 @@ var (
 		"circuit_breaker":   EventCircuitBreaker,
 		"fault_detect":      EventFaultDetect,
 		"nearby_route_rule": EventNearbyRouteRule,
-		"lossless":          EventLOSSLESS,
+		"lossless":          EventLossless,
 		"block_allow_rule":  EventBlockAllowRule,
 		"lane":              EventLane,
 	}

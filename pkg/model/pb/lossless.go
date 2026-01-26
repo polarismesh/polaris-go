@@ -45,12 +45,12 @@ func (w *LosslessRuleWrapper) String() string { return "" }
 // ProtoMessage 实现 proto.Message 接口
 func (w *LosslessRuleWrapper) ProtoMessage() {}
 
-// LossLessAssistant 无损上下线规则解析助手
-type LossLessAssistant struct {
+// LosslessAssistant 无损上下线规则解析助手
+type LosslessAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (l *LossLessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -63,12 +63,12 @@ func (l *LossLessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (p
 	// 返回 LosslessRules 数组
 	losslessRules := resp.LosslessRules
 	if len(losslessRules) == 0 {
-		log.GetBaseLogger().Debugf("LossLessAssistant.ParseRuleValue: service=%s, no lossless rules found, using service revision=%s",
+		log.GetBaseLogger().Debugf("LosslessAssistant.ParseRuleValue: service=%s, no lossless rules found, using service revision=%s",
 			serviceKey, revision)
 		return nil, revision
 	}
 
-	log.GetBaseLogger().Debugf("LossLessAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
+	log.GetBaseLogger().Debugf("LosslessAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
 		serviceKey, revision, len(losslessRules))
 
 	// 将规则数组包装到结构体中并返回
@@ -83,7 +83,7 @@ func (l *LossLessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (p
 }
 
 // Validate 规则校验
-func (l *LossLessAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
+func (l *LosslessAssistant) Validate(message proto.Message, ruleCache model.RuleCache) error {
 	if reflect2.IsNil(message) {
 		return nil
 	}
@@ -92,6 +92,6 @@ func (l *LossLessAssistant) Validate(message proto.Message, ruleCache model.Rule
 }
 
 // SetDefault 设置默认值
-func (l *LossLessAssistant) SetDefault(message proto.Message) {
+func (l *LosslessAssistant) SetDefault(message proto.Message) {
 	// do nothing
 }

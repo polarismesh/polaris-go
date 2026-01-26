@@ -124,15 +124,15 @@ func (c *consumerAPI) GetNearbyRouteRule(req *GetServiceRuleRequest) (*model.Ser
 	return c.context.GetEngine().SyncGetServiceRule(model.EventNearbyRouteRule, &req.GetServiceRuleRequest)
 }
 
-// GetLossLessRule 同步获取服务预热规则
-func (c *consumerAPI) GetLossLessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
+// GetLosslessRule 同步获取服务预热规则
+func (c *consumerAPI) GetLosslessRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error) {
 	if err := checkAvailable(c); err != nil {
 		return nil, err
 	}
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
-	return c.context.GetEngine().SyncGetServiceRule(model.EventLOSSLESS, &req.GetServiceRuleRequest)
+	return c.context.GetEngine().SyncGetServiceRule(model.EventLossless, &req.GetServiceRuleRequest)
 }
 
 // GetBlockAllowRule 同步获取服务鉴权规则

@@ -188,7 +188,7 @@ const (
 	ApiGetCircuitBreakerRule
 	ApiGetRateLimitRule
 	ApiGetNearbyRouteRule
-	ApiGetLossLessRule
+	ApiGetLosslessRule
 	ApiGetBlockAllowRule
 	ApiGetLane
 )
@@ -212,7 +212,7 @@ var (
 		ApiGetCircuitBreakerRule:   "Consumer::GetCircuitBreakerRule",
 		ApiGetRateLimitRule:        "Consumer::GetRateLimitRule",
 		ApiGetNearbyRouteRule:      "Consumer::GetNearbyRouteRule",
-		ApiGetLossLessRule:         "Consumer::GetLossLessRule",
+		ApiGetLosslessRule:         "Consumer::GetLosslessRule",
 		ApiGetBlockAllowRule:       "Consumer::GetBlockAllowRule",
 		ApiGetLane:                 "Consumer::GetLane",
 	}
