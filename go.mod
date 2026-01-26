@@ -19,7 +19,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/polarismesh/specification v1.6.0
+	github.com/polarismesh/specification v1.7.0-alpha.2
 	github.com/prometheus/client_golang v1.12.2
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/spaolacci/murmur3 v1.1.0
@@ -34,7 +34,6 @@ require (
 )
 
 replace (
-	github.com/polarismesh/specification v1.6.0 => github.com/lambdaxs/specification v1.7.2
 	golang.org/x/net v0.2.0 => golang.org/x/net v0.0.0-20221019024206-cb67ada4b0ad
 	golang.org/x/sys v0.2.0 => golang.org/x/sys v0.0.0-20220906165534-d0df966e6959
 	google.golang.org/grpc v1.51.0 => google.golang.org/grpc v1.46.2
