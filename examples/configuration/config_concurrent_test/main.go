@@ -26,11 +26,12 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
 	namespace string
-	service   string
+	fileGroup string
 	fileCount int
 	threads   int
 	duration  int
@@ -38,7 +39,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "", "service")
+	flag.StringVar(&fileGroup, "fileGroup", "polaris-config-example", "fileGroup")
 	flag.IntVar(&fileCount, "fileCount", 100, "number of config files to test")
 	flag.IntVar(&threads, "threads", 50, "number of concurrent threads")
 	flag.IntVar(&duration, "duration", 30, "test duration in seconds")
@@ -47,20 +48,19 @@ func initArgs() {
 func main() {
 	initArgs()
 	flag.Parse()
-	
-	if len(namespace) == 0 || len(service) == 0 {
-		log.Print("namespace and service are required")
+
+	if len(namespace) == 0 || len(fileGroup) == 0 {
+		log.Print("namespace and fileGroup are required")
 		return
 	}
 
-	consumer, err := polaris.NewConsumerAPI()
+	configAPI, err := polaris.NewConfigAPI()
 	if err != nil {
-		log.Fatalf("fail to create consumerAPI, err is %v", err)
+		log.Fatalf("fail to create configAPI, err is %v", err)
 	}
-	defer consumer.Destroy()
 
 	log.Printf("Starting concurrent config file access test...")
-	log.Printf("Namespace: %s, Service: %s", namespace, service)
+	log.Printf("Namespace: %s, FileGroup: %s", namespace, fileGroup)
 	log.Printf("Files: %d, Threads: %d, Duration: %ds", fileCount, threads, duration)
 
 	// 测试数据准备
@@ -73,7 +73,7 @@ func main() {
 	var successCount int64
 	var errorCount int64
 	var wg sync.WaitGroup
-	
+
 	stopChan := make(chan struct{})
 	timer := time.NewTimer(time.Duration(duration) * time.Second)
 
@@ -81,7 +81,7 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -99,7 +99,7 @@ func main() {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			
+
 			for {
 				select {
 				case <-stopChan:
@@ -108,18 +108,20 @@ func main() {
 					// 随机选择一个配置文件进行获取
 					fileIndex := threadID % fileCount
 					fileName := fileNames[fileIndex]
-					
+
 					req := &polaris.GetConfigFileRequest{
-						Namespace: namespace,
-						FileGroup: service,
-						FileName:  fileName,
-						Subscribe: false,
+						GetConfigFileRequest: &model.GetConfigFileRequest{
+							Namespace: namespace,
+							FileGroup: fileGroup,
+							FileName:  fileName,
+							Subscribe: true,
+						},
 					}
-					
+
 					startTime := time.Now()
-					configFile, err := consumer.GetConfigFile(req)
+					configFile, err := configAPI.FetchConfigFile(req)
 					elapsed := time.Since(startTime)
-					
+
 					if err != nil {
 						atomic.AddInt64(&errorCount, 1)
 						log.Printf("Thread %d failed to get config file %s: %v", threadID, fileName, err)
@@ -144,14 +146,14 @@ func main() {
 	finalSuccess := atomic.LoadInt64(&successCount)
 	finalError := atomic.LoadInt64(&errorCount)
 	totalOps := finalSuccess + finalError
-	
+
 	log.Printf("\n=== Test Results ===")
 	log.Printf("Total operations: %d", totalOps)
 	log.Printf("Successful operations: %d", finalSuccess)
 	log.Printf("Failed operations: %d", finalError)
 	log.Printf("Success rate: %.2f%%", float64(finalSuccess)/float64(totalOps)*100)
 	log.Printf("Operations per second: %.2f", float64(totalOps)/float64(duration))
-	
+
 	if finalError == 0 {
 		log.Printf("✅ Test PASSED - All operations completed successfully")
 	} else {
