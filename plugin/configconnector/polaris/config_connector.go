@@ -384,9 +384,11 @@ func (c *Connector) waitDiscoverReady() error {
 			// 超时
 			return nil
 		default:
-			if c.connManager.IsReady() && atomic.CompareAndSwapUint32(&c.hasPrintedReady, 0, 1) {
-				// 准备就绪
-				log.GetBaseLogger().Infof("%s, waitDiscover: config service is ready", c.GetSDKContextID())
+			if c.connManager.IsReady() {
+				// 准备就绪，仅首次打印日志
+				if atomic.CompareAndSwapUint32(&c.hasPrintedReady, 0, 1) {
+					log.GetBaseLogger().Infof("%s, waitDiscover: config service is ready", c.GetSDKContextID())
+				}
 				return nil
 			}
 			time.Sleep(clock.TimeStep())
