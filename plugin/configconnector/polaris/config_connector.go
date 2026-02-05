@@ -110,19 +110,31 @@ func (c *Connector) Destroy() error {
 // GetConfigFile Get config file.
 func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
 	var err error
+	totalStart := clock.GetClock().Now()
+
+	// 等待服务发现就绪
+	waitStart := clock.GetClock().Now()
 	if err = c.waitDiscoverReady(); err != nil {
 		return nil, err
 	}
+	waitDuration := clock.GetClock().Now().Sub(waitStart)
+
 	opKey := connector.OpKeyGetConfigFile
 	startTime := clock.GetClock().Now()
+
 	// 获取server连接
+	connStart := clock.GetClock().Now()
 	conn, err := c.connManager.GetConnection(opKey, config.ConfigCluster)
+	connDuration := clock.GetClock().Now().Sub(connStart)
 	if err != nil {
 		return nil, connector.NetworkError(c.connManager, conn, int32(model.ErrCodeConnectError), err, startTime,
 			fmt.Sprintf("fail to get connection, opKey %s", opKey))
 	}
 	// 释放server连接
 	defer conn.Release(opKey)
+
+	// 创建gRPC客户端
+	grpcClientStart := clock.GetClock().Now()
 	configClient := config_manage.NewPolarisConfigGRPCClient(network.ToGRPCConn(conn.Conn))
 	reqID := connector.NextRegisterInstanceReqID()
 	ctx, cancel := connector.CreateHeadersContext(0, connector.AppendAuthHeader(c.token),
@@ -130,14 +142,34 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	if cancel != nil {
 		defer cancel()
 	}
+	grpcClientDuration := clock.GetClock().Now().Sub(grpcClientStart)
+
 	// 打印请求报文
 	info := transferToClientConfigFileInfo(configFile)
 	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(info)
 		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
+
+	// gRPC调用
+	grpcCallStart := clock.GetClock().Now()
 	pbResp, err := configClient.GetConfigFile(ctx, info)
-	return c.handleResponse(info.String(), reqID, opKey, pbResp, err, conn, startTime)
+	grpcCallDuration := clock.GetClock().Now().Sub(grpcCallStart)
+
+	// 处理响应
+	handleStart := clock.GetClock().Now()
+	resp, respErr := c.handleResponse(info.String(), reqID, opKey, pbResp, err, conn, startTime)
+	handleDuration := clock.GetClock().Now().Sub(handleStart)
+
+	totalDuration := clock.GetClock().Now().Sub(totalStart)
+
+	// 打印详细耗时日志
+	log.GetBaseLogger().Infof("[Config][Connector] GetConfigFile耗时统计 - file=%s/%s/%s, 总耗时=%dms, 等待就绪=%dms, 获取连接=%dms, 创建客户端=%dms, gRPC调用=%dms, 处理响应=%dms, connID=%s",
+		configFile.Namespace, configFile.FileGroup, configFile.FileName,
+		totalDuration.Milliseconds(), waitDuration.Milliseconds(), connDuration.Milliseconds(),
+		grpcClientDuration.Milliseconds(), grpcCallDuration.Milliseconds(), handleDuration.Milliseconds(), conn.ConnID)
+
+	return resp, respErr
 }
 
 // WatchConfigFiles Watch config files.

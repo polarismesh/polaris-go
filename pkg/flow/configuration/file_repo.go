@@ -153,6 +153,8 @@ func (r *ConfigFileRepo) getDataKey() string {
 }
 
 func (r *ConfigFileRepo) pull() error {
+	pullStartTime := time.Now()
+
 	pullConfigFileReq := &configconnector.ConfigFile{
 		Namespace: r.configFileMetadata.GetNamespace(),
 		FileGroup: r.configFileMetadata.GetFileGroup(),
@@ -167,6 +169,7 @@ func (r *ConfigFileRepo) pull() error {
 			Value: v,
 		})
 	}
+	prepareReqDuration := time.Since(pullStartTime)
 
 	log.GetBaseLogger().Infof("[Config] start pull config file. config file = %+v, version = %d",
 		r.configFileMetadata, r.notifiedVersion)
@@ -178,10 +181,13 @@ func (r *ConfigFileRepo) pull() error {
 	for retryTimes < 3 {
 		startTime := time.Now()
 
+		// 执行过滤器链和网络请求
+		chainStartTime := time.Now()
 		response, err := r.chain.Execute(pullConfigFileReq, r.connector.GetConfigFile)
+		chainDuration := time.Since(chainStartTime)
 
 		if err != nil {
-			log.GetBaseLogger().Errorf("[Config] failed to pull config file. retry times = %d, err = %v", retryTimes, err)
+			log.GetBaseLogger().Errorf("[Config] failed to pull config file. retry times = %d, err = %v, chain耗时 = %dms", retryTimes, err, chainDuration.Milliseconds())
 			r.retryPolicy.fail()
 			retryTimes++
 			r.retryPolicy.delay()
@@ -197,8 +203,8 @@ func (r *ConfigFileRepo) pull() error {
 		if pulledConfigFile != nil {
 			pulledConfigFileVersion = int64(pulledConfigFile.GetVersion())
 		}
-		log.GetBaseLogger().Infof("[Config] pull config file finished. config file = %+v, code = %d, version = %d, duration = %d ms",
-			pulledConfigFile.String(), responseCode, pulledConfigFileVersion, time.Since(startTime).Milliseconds())
+		log.GetBaseLogger().Infof("[Config] pull config file finished. config file = %+v, code = %d, version = %d, duration = %d ms, chain耗时 = %d ms",
+			pulledConfigFile.String(), responseCode, pulledConfigFileVersion, time.Since(startTime).Milliseconds(), chainDuration.Milliseconds())
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
@@ -206,8 +212,19 @@ func (r *ConfigFileRepo) pull() error {
 			// 本地配置文件落后，更新内存缓存
 			if remoteConfigFile == nil || pulledConfigFile.Version >= remoteConfigFile.Version {
 				// save into local_cache
+				saveCacheStart := time.Now()
 				r.saveCacheConfigFile(pulledConfigFile)
+				saveCacheDuration := time.Since(saveCacheStart)
+
+				fireEventStart := time.Now()
 				r.fireChangeEvent(pulledConfigFile)
+				fireEventDuration := time.Since(fireEventStart)
+
+				totalPullDuration := time.Since(pullStartTime)
+				log.GetBaseLogger().Infof("[Config][Repo] pull耗时统计 - file=%s/%s/%s, 总耗时=%dms, 准备请求=%dms, chain执行=%dms, 保存缓存=%dms, 触发事件=%dms",
+					pullConfigFileReq.Namespace, pullConfigFileReq.FileGroup, pullConfigFileReq.FileName,
+					totalPullDuration.Milliseconds(), prepareReqDuration.Milliseconds(), chainDuration.Milliseconds(),
+					saveCacheDuration.Milliseconds(), fireEventDuration.Milliseconds())
 			}
 			return nil
 		}

@@ -19,6 +19,8 @@
 package configfilter
 
 import (
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -33,13 +35,27 @@ type Chain []ConfigFilter
 
 // Execute 执行链中的过滤器
 func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHandleFunc) (*configconnector.ConfigFileResponse, error) {
-	log.GetBaseLogger().Infof("[Config] chain execute, chain length:%d\n", len(c))
+	chainStart := time.Now()
+	log.GetBaseLogger().Infof("[Config] chain execute, chain length:%d, file=%s/%s/%s\n",
+		len(c), configFile.Namespace, configFile.FileGroup, configFile.FileName)
+
 	for i := len(c) - 1; i >= 0; i-- {
 		curFunc := next
 		curFilter := c[i]
 		next = curFilter.DoFilter(configFile, curFunc)
 	}
-	return next(configFile)
+
+	buildChainDuration := time.Since(chainStart)
+	execStart := time.Now()
+	resp, err := next(configFile)
+	execDuration := time.Since(execStart)
+
+	totalDuration := time.Since(chainStart)
+	log.GetBaseLogger().Infof("[Config][Chain] Execute耗时统计 - file=%s/%s/%s, 总耗时=%dms, 构建链=%dms, 执行链=%dms",
+		configFile.Namespace, configFile.FileGroup, configFile.FileName,
+		totalDuration.Milliseconds(), buildChainDuration.Milliseconds(), execDuration.Milliseconds())
+
+	return resp, err
 }
 
 // ConfigFilter 配置过滤器接口
