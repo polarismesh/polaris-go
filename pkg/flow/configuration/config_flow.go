@@ -296,9 +296,11 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 		configFileMetadata, version)
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
-	// 已经开启了分段锁,这里再加锁会造成死锁
+	// 使用全局锁保护对 configFilePool 和 notifiedVersion 的写操作
+	c.fclock.Lock()
 	c.configFilePool[cacheKey] = fileRepo
 	c.notifiedVersion[cacheKey] = version
+	c.fclock.Unlock()
 
 	// 开启长轮询任务
 	c.startLongPollingTaskOnce.Do(func() {
@@ -460,15 +462,15 @@ func (c *ConfigFileFlow) assembleWatchConfigFiles() []*configconnector.ConfigFil
 }
 
 func (c *ConfigFileFlow) updateNotifiedVersion(cacheKey string, version uint64) {
-	c.getShardLock(cacheKey)
-	defer c.getShardUnlock(cacheKey)
+	c.fclock.Lock()
+	defer c.fclock.Unlock()
 	c.notifiedVersion[cacheKey] = version
 }
 
 func (c *ConfigFileFlow) getConfigFileNotifiedVersion(cacheKey string, locking bool) uint64 {
 	if locking {
-		c.getShardRLock(cacheKey)
-		defer c.getShardRUnlock(cacheKey)
+		c.fclock.RLock()
+		defer c.fclock.RUnlock()
 	}
 	version, ok := c.notifiedVersion[cacheKey]
 	if !ok {
@@ -478,8 +480,8 @@ func (c *ConfigFileFlow) getConfigFileNotifiedVersion(cacheKey string, locking b
 }
 
 func (c *ConfigFileFlow) getRemoteConfigFileRepo(cacheKey string) *ConfigFileRepo {
-	c.getShardRLock(cacheKey)
-	defer c.getShardRUnlock(cacheKey)
+	c.fclock.RLock()
+	defer c.fclock.RUnlock()
 	fileRepo, ok := c.configFilePool[cacheKey]
 	if !ok {
 		return nil
