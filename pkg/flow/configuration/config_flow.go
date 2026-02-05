@@ -20,6 +20,7 @@ package configuration
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"sync"
 	"time"
@@ -38,8 +39,12 @@ import (
 type ConfigFileFlow struct {
 	cancel context.CancelFunc
 
+	// 分段锁，支持并发获取不同文件的配置
+	shardLocks     []sync.RWMutex
+	shardLockCount int
+	// 全局锁，用于保护需要全局遍历的操作（如assembleWatchConfigFiles）
 	fclock          sync.RWMutex
-	configFileCache map[string]model.ConfigFile
+	configFileCache sync.Map // 使用sync.Map确保并发安全
 	repos           []*ConfigFileRepo
 	configFilePool  map[string]*ConfigFileRepo
 	notifiedVersion map[string]uint64
@@ -73,11 +78,14 @@ func NewConfigFileFlow(connector configconnector.ConfigConnector, chain configfi
 		chain:              chain,
 		conf:               conf,
 		repos:              make([]*ConfigFileRepo, 0, 8),
-		configFileCache:    map[string]model.ConfigFile{},
+		configFileCache:    sync.Map{},
 		configFilePool:     map[string]*ConfigFileRepo{},
 		notifiedVersion:    map[string]uint64{},
 		persistHandler:     persistHandler,
 		eventReporterChain: eventReporterChain,
+		shardLockCount:     16, // 使用16个分段锁
+		shardLocks:         make([]sync.RWMutex, 16),
+		fclock:             sync.RWMutex{}, // 初始化全局锁
 	}
 
 	return configFileService, nil
@@ -101,32 +109,33 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
 
-	c.fclock.RLock()
-	configFile, ok := c.configFileCache[cacheKey]
-	c.fclock.RUnlock()
-	if ok {
-		return configFile, nil
+	// 使用sync.Map的Load方法检查缓存
+	if configFile, ok := c.configFileCache.Load(cacheKey); ok {
+		return configFile.(model.ConfigFile), nil
 	}
 
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	// 使用分段写锁进行双重检查
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 
 	// double check
-	configFile, ok = c.configFileCache[cacheKey]
-	if ok {
-		return configFile, nil
+	if configFile, ok := c.configFileCache.Load(cacheKey); ok {
+		return configFile.(model.ConfigFile), nil
 	}
 
 	fileRepo, err := newConfigFileRepo(configFileMetadata, c.connector, c.chain, c.conf, c.persistHandler, c.eventReporterChain)
 	if err != nil {
 		return nil, err
 	}
-	configFile = newDefaultConfigFile(configFileMetadata, fileRepo)
+	configFile := newDefaultConfigFile(configFileMetadata, fileRepo)
 
 	if req.Subscribe {
 		c.addConfigFileToLongPollingPool(fileRepo)
+		// 使用全局锁保护repos切片的操作
+		c.fclock.Lock()
 		c.repos = append(c.repos, fileRepo)
-		c.configFileCache[cacheKey] = configFile
+		c.fclock.Unlock()
+		c.configFileCache.Store(cacheKey, configFile)
 	}
 	return configFile, nil
 }
@@ -145,8 +154,9 @@ func (c *ConfigFileFlow) CreateConfigFile(namespace, fileGroup, fileName, conten
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
 	}
 
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	cacheKey := genCacheKey(namespace, fileGroup, fileName)
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 
 	resp, err := c.connector.CreateConfigFile(configFile)
 	if err != nil {
@@ -180,8 +190,9 @@ func (c *ConfigFileFlow) UpdateConfigFile(namespace, fileGroup, fileName, conten
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
 	}
 
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	cacheKey := genCacheKey(namespace, fileGroup, fileName)
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 
 	resp, err := c.connector.UpdateConfigFile(configFile)
 	if err != nil {
@@ -214,8 +225,9 @@ func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
 	}
 
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	cacheKey := genCacheKey(namespace, fileGroup, fileName)
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 
 	resp, err := c.connector.PublishConfigFile(configFile)
 	if err != nil {
@@ -250,8 +262,9 @@ func (c *ConfigFileFlow) UpsertAndPublishConfigFile(namespace, fileGroup, fileNa
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "")
 	}
 
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	cacheKey := genCacheKey(namespace, fileGroup, fileName)
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 
 	resp, err := c.connector.UpsertAndPublishConfigFile(configFile)
 	if err != nil {
@@ -283,6 +296,12 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 		configFileMetadata, version)
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
+	
+	// 使用分段锁保护长轮询池的添加操作
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
+	
+	// 使用普通map赋值操作
 	c.configFilePool[cacheKey] = fileRepo
 	c.notifiedVersion[cacheKey] = version
 
@@ -302,18 +321,21 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 	defer ticker.Stop()
 
 	versionCheck := func() {
-		c.fclock.RLock()
-		defer c.fclock.RUnlock()
+		// 对每个repo分别获取对应的分段锁进行检查
 		for _, repo := range c.repos {
 			// 没有通知版本号
 			if repo.GetNotifiedVersion() == initVersion {
 				continue
 			}
 
+			cacheKey := genCacheKeyByMetadata(repo.configFileMetadata)
+			c.getShardRLock(cacheKey)
+			
 			remoteConfigFile := repo.loadRemoteFile()
 
 			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
 			if !(remoteConfigFile == nil || repo.GetNotifiedVersion() > remoteConfigFile.GetVersion()) {
+				c.getShardRUnlock(cacheKey)
 				continue
 			}
 
@@ -326,6 +348,8 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 					"file = %+v, notified version = %d, pulled version = %d",
 					repo.configFileMetadata, repo.notifiedVersion, remoteConfigFile.GetVersion())
 			}
+
+			c.getShardRUnlock(cacheKey)
 
 			if err := repo.pull(); err != nil {
 				log.GetBaseLogger().Errorf("[Config] pull config file error by check version task.", err)
@@ -418,6 +442,9 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 }
 
 func (c *ConfigFileFlow) assembleWatchConfigFiles() []*configconnector.ConfigFile {
+	// 使用全局锁保护configFilePool的遍历操作
+	// 由于需要遍历整个pool，这里仍然使用原来的fclock锁机制
+	// 但实际的长轮询操作频率较低，对性能影响有限
 	c.fclock.RLock()
 	defer c.fclock.RUnlock()
 	watchConfigFiles := make([]*configconnector.ConfigFile, 0, len(c.configFilePool))
@@ -437,26 +464,26 @@ func (c *ConfigFileFlow) assembleWatchConfigFiles() []*configconnector.ConfigFil
 }
 
 func (c *ConfigFileFlow) updateNotifiedVersion(cacheKey string, version uint64) {
-	c.fclock.Lock()
-	defer c.fclock.Unlock()
+	c.getShardLock(cacheKey)
+	defer c.getShardUnlock(cacheKey)
 	c.notifiedVersion[cacheKey] = version
 }
 
 func (c *ConfigFileFlow) getConfigFileNotifiedVersion(cacheKey string, locking bool) uint64 {
 	if locking {
-		c.fclock.RLock()
-		defer c.fclock.RUnlock()
+		c.getShardRLock(cacheKey)
+		defer c.getShardRUnlock(cacheKey)
 	}
 	version, ok := c.notifiedVersion[cacheKey]
 	if !ok {
-		version = initVersion
+		return initVersion
 	}
 	return version
 }
 
 func (c *ConfigFileFlow) getRemoteConfigFileRepo(cacheKey string) *ConfigFileRepo {
-	c.fclock.RLock()
-	defer c.fclock.RUnlock()
+	c.getShardRLock(cacheKey)
+	defer c.getShardRUnlock(cacheKey)
 	fileRepo, ok := c.configFilePool[cacheKey]
 	if !ok {
 		return nil
@@ -487,4 +514,35 @@ func extractConfigFileMetadata(key string) model.ConfigFileMetadata {
 		FileGroup: info[1],
 		FileName:  info[2],
 	}
+}
+
+// getShardIndex 根据cacheKey获取对应的分段锁索引
+func (c *ConfigFileFlow) getShardIndex(cacheKey string) int {
+	hash := fnv.New32a()
+	hash.Write([]byte(cacheKey))
+	return int(hash.Sum32()) % c.shardLockCount
+}
+
+// getShardRLock 获取指定cacheKey的读锁
+func (c *ConfigFileFlow) getShardRLock(cacheKey string) {
+	index := c.getShardIndex(cacheKey)
+	c.shardLocks[index].RLock()
+}
+
+// getShardRUnlock 释放指定cacheKey的读锁
+func (c *ConfigFileFlow) getShardRUnlock(cacheKey string) {
+	index := c.getShardIndex(cacheKey)
+	c.shardLocks[index].RUnlock()
+}
+
+// getShardLock 获取指定cacheKey的写锁
+func (c *ConfigFileFlow) getShardLock(cacheKey string) {
+	index := c.getShardIndex(cacheKey)
+	c.shardLocks[index].Lock()
+}
+
+// getShardUnlock 释放指定cacheKey的写锁
+func (c *ConfigFileFlow) getShardUnlock(cacheKey string) {
+	index := c.getShardIndex(cacheKey)
+	c.shardLocks[index].Unlock()
 }
