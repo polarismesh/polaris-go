@@ -15,6 +15,39 @@
  * specific language governing permissions and limitations under the License.
  */
 
+/**
+ * 配置中心并发安全优化方案
+ * 
+ * 本文件实现了配置中心核心服务的并发安全机制，通过多级锁策略确保高并发场景下的数据一致性：
+ * 
+ * 1. 分段锁机制 (Sharded Locking)
+ *    - 使用16个分段锁，根据配置文件的cacheKey进行哈希分片
+ *    - 不同文件的读写操作可以并行执行，提升并发性能
+ *    - 通过getShardIndex()方法计算锁索引，确保锁的均匀分布
+ * 
+ * 2. 全局锁保护 (Global Lock Protection)
+ *    - 使用fclock全局读写锁保护需要遍历整个配置池的操作
+ *    - 如assembleWatchConfigFiles()等需要访问所有配置文件的场景
+ *    - 由于长轮询操作频率较低，对性能影响有限
+ * 
+ * 3. sync.Map并发安全缓存
+ *    - configFileCache使用sync.Map确保并发安全
+ *    - 避免了传统map+mutex的复杂锁管理
+ *    - 支持高效的Load/Store操作，适合读多写少的场景
+ * 
+ * 4. 双重检查锁模式 (Double-Checked Locking)
+ *    - 在GetConfigFile方法中实现双重检查
+ *    - 先无锁检查缓存，再获取分段锁进行二次检查
+ *    - 减少锁竞争，提升性能
+ * 
+ * 5. 长轮询任务管理
+ *    - 使用startLongPollingTaskOnce确保长轮询任务只启动一次
+ *    - 支持配置变更的实时通知
+ *    - 版本号管理确保数据一致性
+ * 
+ * 该方案有效解决了配置中心在高并发场景下的数据竞争问题，同时保持了良好的性能表现。
+ */
+
 package configuration
 
 import (
@@ -25,14 +58,14 @@ import (
 	"sync"
 	"time"
 
-	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
-
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
+
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 // ConfigFileFlow 配置中心核心服务门面类
