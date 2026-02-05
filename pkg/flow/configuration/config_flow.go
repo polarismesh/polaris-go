@@ -296,12 +296,7 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 		configFileMetadata, version)
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
-	
-	// 使用分段锁保护长轮询池的添加操作
-	c.getShardLock(cacheKey)
-	defer c.getShardUnlock(cacheKey)
-	
-	// 使用普通map赋值操作
+	// 已经开启了分段锁,这里再加锁会造成死锁
 	c.configFilePool[cacheKey] = fileRepo
 	c.notifiedVersion[cacheKey] = version
 
@@ -316,6 +311,7 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 	})
 }
 
+// TODO delete
 func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -330,7 +326,7 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 
 			cacheKey := genCacheKeyByMetadata(repo.configFileMetadata)
 			c.getShardRLock(cacheKey)
-			
+
 			remoteConfigFile := repo.loadRemoteFile()
 
 			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
