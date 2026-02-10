@@ -140,14 +140,15 @@ func (repo *ConfigGroupRepo) AddChangeListener(listener func(*configconnector.Co
 func (repo *ConfigGroupRepo) fireChangeEvent(f *configconnector.ConfigGroupResponse, exist bool) {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
-	for _, listener := range repo.listeners {
-		listener(f)
-	}
-
+	// 先存储
 	if !exist {
 		repo.remoteRef = &atomic.Value{}
 	} else {
 		repo.remoteRef.Store(f)
+	}
+	// 后通知
+	for _, listener := range repo.listeners {
+		listener(f)
 	}
 }
 

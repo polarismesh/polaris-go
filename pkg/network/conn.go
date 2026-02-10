@@ -39,7 +39,7 @@ var (
 	// DefaultServerServiceToConnectionControl 不同系统服务使用不同的连接持有模式
 	DefaultServerServiceToConnectionControl = map[config.ClusterType]int{
 		config.DiscoverCluster:    ConnectionLong,
-		config.ConfigCluster:      ConnectionShort,
+		config.ConfigCluster:      ConnectionLong,
 		config.HealthCheckCluster: ConnectionShort,
 		config.MonitorCluster:     ConnectionShort,
 	}
