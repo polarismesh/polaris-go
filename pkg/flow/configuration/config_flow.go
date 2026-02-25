@@ -111,8 +111,15 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 
 	// 使用sync.Map的Load方法检查缓存
 	if configFile, ok := c.configFileCache.Load(cacheKey); ok {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][Flow] 命中配置文件缓存. file=%s/%s/%s",
+				req.Namespace, req.FileGroup, req.FileName)
+		}
 		return configFile.(model.ConfigFile), nil
 	}
+
+	log.GetBaseLogger().Infof("[Config][Flow] 配置文件缓存未命中，开始创建. file=%s/%s/%s, subscribe=%v",
+		req.Namespace, req.FileGroup, req.FileName, req.Subscribe)
 
 	// 使用分段写锁进行双重检查
 	c.getShardLock(cacheKey)
@@ -136,6 +143,8 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		c.repos = append(c.repos, fileRepo)
 		c.fclock.Unlock()
 		c.configFileCache.Store(cacheKey, configFile)
+		log.GetBaseLogger().Infof("[Config][Flow] 配置文件已订阅并加入长轮询池. file=%s/%s/%s, version=%d",
+			req.Namespace, req.FileGroup, req.FileName, fileRepo.getVersion())
 	}
 	return configFile, nil
 }
@@ -292,8 +301,8 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 	configFileMetadata := fileRepo.configFileMetadata
 	version := fileRepo.getVersion()
 
-	log.GetBaseLogger().Infof("[Config] add long polling config file. metadata %#v, version: %+v",
-		configFileMetadata, version)
+	log.GetBaseLogger().Infof("[Config] add long polling config file. metadata %#v, version: %+v, notifiedVersion: %d",
+		configFileMetadata, version, fileRepo.GetNotifiedVersion())
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
 	// 使用全局锁保护对 configFilePool 和 notifiedVersion 的写操作
@@ -323,6 +332,11 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 		for _, repo := range c.repos {
 			// 没有通知版本号
 			if repo.GetNotifiedVersion() == initVersion {
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					log.GetBaseLogger().Debugf("[Config][CheckVersion] 跳过未通知的配置文件. file=%s/%s/%s, notifiedVersion=%d",
+						repo.configFileMetadata.GetNamespace(), repo.configFileMetadata.GetFileGroup(),
+						repo.configFileMetadata.GetFileName(), repo.GetNotifiedVersion())
+				}
 				continue
 			}
 
@@ -333,6 +347,11 @@ func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
 
 			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
 			if !(remoteConfigFile == nil || repo.GetNotifiedVersion() > remoteConfigFile.GetVersion()) {
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					log.GetBaseLogger().Debugf("[Config][CheckVersion] 版本一致，无需重新拉取. file=%s/%s/%s, notifiedVersion=%d, remoteVersion=%d",
+						repo.configFileMetadata.GetNamespace(), repo.configFileMetadata.GetFileGroup(),
+						repo.configFileMetadata.GetFileName(), repo.GetNotifiedVersion(), remoteConfigFile.GetVersion())
+				}
 				c.getShardRUnlock(cacheKey)
 				continue
 			}
@@ -381,6 +400,15 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 		// 1. 生成订阅配置列表
 		watchConfigFiles := c.assembleWatchConfigFiles()
 
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][LongPolling] 开始长轮询. configFileSize=%d, delayTime=%d",
+				len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
+			for _, wf := range watchConfigFiles {
+				log.GetBaseLogger().Debugf("[Config][LongPolling] watch文件详情: file=%s/%s/%s, version=%d",
+					wf.GetNamespace(), wf.GetFileGroup(), wf.GetFileName(), wf.GetVersion())
+			}
+		}
+
 		log.GetBaseLogger().Infof("[Config] do long polling. config file size = %d, delay time = %d",
 			len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
 
@@ -415,11 +443,15 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 			// 更新版本号
 			c.updateNotifiedVersion(cacheKey, maxVersion)
 
-			log.GetBaseLogger().Infof("[Config] received change event by long polling. file = %+v, new version = %d, old version = %d",
-				changedConfigFile, newNotifiedVersion, oldNotifiedVersion)
+			log.GetBaseLogger().Infof("[Config] received change event by long polling. file = %+v, new version = %d, old version = %d, maxVersion = %d",
+				changedConfigFile, newNotifiedVersion, oldNotifiedVersion, maxVersion)
 
 			// 通知 remoteConfigFileRepo 拉取最新配置
 			remoteConfigFileRepo := c.getRemoteConfigFileRepo(cacheKey)
+			if remoteConfigFileRepo == nil {
+				log.GetBaseLogger().Errorf("[Config][LongPolling] 未找到配置文件Repo. cacheKey=%s", cacheKey)
+				continue
+			}
 			remoteConfigFileRepo.onLongPollingNotified(maxVersion)
 
 			continue
@@ -428,7 +460,11 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 		// 3.2 如果没有变更，打印日志
 		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			pollingRetryPolicy.success()
-			log.GetBaseLogger().Infof("[Config] long polling result: data no change")
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[Config] long polling result: data no change. watchFileCount=%d", len(watchConfigFiles))
+			} else {
+				log.GetBaseLogger().Infof("[Config] long polling result: data no change")
+			}
 			continue
 		}
 
