@@ -131,6 +131,10 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	}
 	c.content = newContent
 
+	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, chanListenerCount=%d",
+		configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
+		changeType, len(c.changeListeners), len(c.changeListenerChans))
+
 	c.fireChangeEvent(event)
 	return nil
 }
@@ -153,11 +157,28 @@ func (c *defaultConfigFile) AddChangeListener(cb model.OnConfigFileChange) {
 }
 
 func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
-	for _, listenerChan := range c.changeListenerChans {
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[Config] 开始分发配置变更事件. file=%s/%s/%s, changeType=%v, chanCount=%d, listenerCount=%d",
+			event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
+			event.ConfigFileMetadata.GetFileName(), event.ChangeType,
+			len(c.changeListenerChans), len(c.changeListeners))
+	}
+
+	for i, listenerChan := range c.changeListenerChans {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config] 发送变更事件到channel[%d]. file=%s/%s/%s",
+				i, event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
+				event.ConfigFileMetadata.GetFileName())
+		}
 		listenerChan <- event
 	}
 
-	for _, changeListener := range c.changeListeners {
+	for i, changeListener := range c.changeListeners {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config] 调用变更监听器[%d]. file=%s/%s/%s",
+				i, event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
+				event.ConfigFileMetadata.GetFileName())
+		}
 		changeListener(event)
 	}
 }
@@ -211,10 +232,26 @@ func (c *defaultConfigGroup) repoChangeListener(val *configconnector.ConfigGroup
 		event.Before = oldVal.ReleaseFiles
 	}
 
+	oldFileCount := 0
+	if oldVal != nil {
+		oldFileCount = len(oldVal.ReleaseFiles)
+	}
+	log.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. namespace=%s, group=%s, beforeFileCount=%d, afterFileCount=%d",
+		c.namespace, c.group, oldFileCount, len(val.ReleaseFiles))
+
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[Config][Group] 配置分组变更详情. namespace=%s, group=%s, revision=%s, listenerCount=%d",
+			c.namespace, c.group, val.Revision, len(c.changeListeners))
+	}
+
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	for i := range c.changeListeners {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. namespace=%s, group=%s",
+				i, c.namespace, c.group)
+		}
 		c.changeListeners[i](event)
 	}
 }

@@ -203,19 +203,20 @@ func fetchAndWatchConfigFile(configFileAPI polaris.ConfigAPI, ns, group, fileNam
 
 	// 方式一: 使用回调函数监听
 	configFile.AddChangeListener(func(event model.ConfigFileChangeEvent) {
-		handleConfigFileChange(key, event)
+		handleConfigFileChange(key, event, configFile)
 	})
 
 	// 方式二: 使用通道监听 (启动 goroutine 处理)
 	changeChan := configFile.AddChangeListenerWithChannel()
-	go watchConfigFileChanges(key, changeChan)
+	go watchConfigFileChanges(key, changeChan, configFile)
 
 	log.Printf("配置文件 %s 监听已添加", key)
 }
 
 // handleConfigFileChange 处理配置文件变更事件（回调方式）
-func handleConfigFileChange(key string, event model.ConfigFileChangeEvent) {
-	log.Printf("通过回调函数收到配置文件 %s 变更事件:", key)
+func handleConfigFileChange(key string, event model.ConfigFileChangeEvent, configFile model.ConfigFile) {
+	log.Printf("通过回调函数收到配置文件 %s 变更事件: %+v, 版本: %d, 内容: %s", key, event, configFile.GetVersion(),
+		configFile.GetContent())
 	log.Printf("  - 变更类型: %v", event.ChangeType)
 	log.Printf("  - 命名空间: %s", event.ConfigFileMetadata.GetNamespace())
 	log.Printf("  - 文件组: %s", event.ConfigFileMetadata.GetFileGroup())
@@ -228,9 +229,10 @@ func handleConfigFileChange(key string, event model.ConfigFileChangeEvent) {
 }
 
 // watchConfigFileChanges 监听配置文件变更（通道方式）
-func watchConfigFileChanges(key string, changeChan <-chan model.ConfigFileChangeEvent) {
+func watchConfigFileChanges(key string, changeChan <-chan model.ConfigFileChangeEvent, configFile model.ConfigFile) {
 	for event := range changeChan {
-		log.Printf("通过通道收到配置文件 %s 变更事件: %+v", key, event)
+		log.Printf("通过通道收到配置文件 %s 变更事件: %+v, 版本: %d, 内容: %s", key, event, configFile.GetVersion(),
+			configFile.GetContent())
 
 		if event.ChangeType == model.Deleted {
 			log.Printf("配置文件 %s 已被删除，停止监听", key)
