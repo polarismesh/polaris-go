@@ -61,8 +61,15 @@ func (flow *ConfigGroupFlow) GetConfigGroup(namespace, fileGroup string) (model.
 	configGroup, ok := flow.groupCache[cacheKey]
 	flow.fclock.RUnlock()
 	if ok {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][GroupFlow] 命中配置分组缓存. namespace=%s, group=%s",
+				namespace, fileGroup)
+		}
 		return configGroup, nil
 	}
+
+	log.GetBaseLogger().Infof("[Config][GroupFlow] 配置分组缓存未命中，开始创建. namespace=%s, group=%s",
+		namespace, fileGroup)
 
 	flow.fclock.Lock()
 	defer flow.fclock.Unlock()
@@ -91,8 +98,15 @@ func (flow *ConfigGroupFlow) GetConfigGroupWithReq(req *model.GetConfigGroupRequ
 	configGroup, ok := flow.groupCache[cacheKey]
 	flow.fclock.RUnlock()
 	if ok {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][GroupFlow] 命中配置分组缓存(WithReq). namespace=%s, group=%s",
+				req.Namespace, req.FileGroup)
+		}
 		return configGroup, nil
 	}
+
+	log.GetBaseLogger().Infof("[Config][GroupFlow] 配置分组缓存未命中，开始创建(WithReq). namespace=%s, group=%s, mode=%v",
+		req.Namespace, req.FileGroup, req.Mode)
 
 	flow.fclock.Lock()
 	defer flow.fclock.Unlock()
@@ -123,10 +137,19 @@ func (flow *ConfigGroupFlow) doSync(ctx context.Context) {
 		flow.fclock.RLock()
 		defer flow.fclock.RUnlock()
 
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][GroupFlow] 开始定时同步配置分组. repoCount=%d", len(flow.repos))
+		}
+
 		for i := range flow.repos {
 			repo := flow.repos[i]
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[Config][GroupFlow] 同步配置分组. namespace=%s, group=%s, currentRevision=%s",
+					repo.namespace, repo.groupName, repo.notifiedVersion)
+			}
 			if err := repo.pull(); err != nil {
-				log.GetBaseLogger().Errorf("[Config] pull config grup error.", err)
+				log.GetBaseLogger().Errorf("[Config] pull config group error. namespace=%s, group=%s, err=%v",
+					repo.namespace, repo.groupName, err)
 			}
 		}
 	}
