@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-configuration
+module github.com/polarismesh/polaris-go/examples/configuration/normal
 
 go 1.24
 

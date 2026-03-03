@@ -2,6 +2,9 @@ global:
   serverConnector:
     addresses:
       - ${POLARIS_SERVER}:8091
+  client:
+    labels:
+      env: pre
 config:
   configConnector:
     addresses:
