@@ -184,6 +184,13 @@ const (
 	ApiProcessLoadBalance
 	// ApiOperationMax 这个必须在最下面
 	ApiOperationMax
+	// 新增 API 调用标识
+	ApiGetCircuitBreakerRule
+	ApiGetRateLimitRule
+	ApiGetNearbyRouteRule
+	ApiGetLosslessRule
+	ApiGetBlockAllowRule
+	ApiGetLane
 )
 
 // API标识到别名.
@@ -202,6 +209,12 @@ var (
 		ApiInitCalleeServices:      "Consumer::InitCalleeServices",
 		ApiProcessRouters:          "Router::ProcessRouters",
 		ApiProcessLoadBalance:      "Router::ProcessLoadBalance",
+		ApiGetCircuitBreakerRule:   "Consumer::GetCircuitBreakerRule",
+		ApiGetRateLimitRule:        "Consumer::GetRateLimitRule",
+		ApiGetNearbyRouteRule:      "Consumer::GetNearbyRouteRule",
+		ApiGetLosslessRule:         "Consumer::GetLosslessRule",
+		ApiGetBlockAllowRule:       "Consumer::GetBlockAllowRule",
+		ApiGetLane:                 "Consumer::GetLane",
 	}
 )
 

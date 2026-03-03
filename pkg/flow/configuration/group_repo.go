@@ -64,9 +64,19 @@ func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequest
 		remoteRef: &atomic.Value{},
 		listeners: make([]func(*configconnector.ConfigGroupResponse), 0, 4),
 	}
+
+	log.GetBaseLogger().Infof("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
+		namespace, group, mode)
+
 	if err := repo.pull(); err != nil {
+		log.GetBaseLogger().Errorf("[Config][Group] 初始拉取配置分组失败. namespace=%s, group=%s, err=%v",
+			namespace, group, err)
 		return nil, err
 	}
+
+	log.GetBaseLogger().Infof("[Config][Group] 初始拉取配置分组完成. namespace=%s, group=%s, revision=%s",
+		namespace, group, repo.notifiedVersion)
+
 	return repo, nil
 }
 
@@ -76,6 +86,11 @@ func (repo *ConfigGroupRepo) pull() error {
 		Group:     repo.groupName,
 		Revision:  repo.notifiedVersion,
 		Mode:      repo.mode,
+	}
+
+	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		log.GetBaseLogger().Debugf("[Config][Group] 开始拉取配置分组. namespace=%s, group=%s, currentRevision=%s, mode=%v",
+			repo.namespace, repo.groupName, repo.notifiedVersion, repo.mode)
 	}
 
 	log.GetBaseLogger().Infof("[Config][Group] start pull. namespace=%+v, group=%s, version=%+v",
@@ -104,9 +119,36 @@ func (repo *ConfigGroupRepo) pull() error {
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {
 			remoteConfigFile := repo.loadRemoteGroup()
+			oldRevision := ""
+			oldFileCount := 0
+			if remoteConfigFile != nil {
+				oldRevision = remoteConfigFile.Revision
+				oldFileCount = len(remoteConfigFile.ReleaseFiles)
+			}
+
+			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				log.GetBaseLogger().Debugf("[Config][Group] 拉取成功，比较版本. namespace=%s, group=%s, newRevision=%s, oldRevision=%s, newFileCount=%d, oldFileCount=%d",
+					repo.namespace, repo.groupName, response.Revision, oldRevision, len(response.ReleaseFiles), oldFileCount)
+			}
+
 			// 本地配置文件落后，更新内存缓存
 			if remoteConfigFile == nil || response.Revision != remoteConfigFile.Revision {
+				log.GetBaseLogger().Infof("[Config][Group] 配置分组发生变更，触发更新. namespace=%s, group=%s, oldRevision=%s, newRevision=%s, fileCount=%d",
+					repo.namespace, repo.groupName, oldRevision, response.Revision, len(response.ReleaseFiles))
+
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					for _, f := range response.ReleaseFiles {
+						log.GetBaseLogger().Debugf("[Config][Group] 分组文件详情: namespace=%s, group=%s, fileName=%s, version=%s, md5=%s",
+							repo.namespace, repo.groupName, f.FileName, f.Version, f.Md5)
+					}
+				}
+
 				repo.fireChangeEvent(response, true)
+			} else {
+				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					log.GetBaseLogger().Debugf("[Config][Group] 配置分组未变更. namespace=%s, group=%s, revision=%s",
+						repo.namespace, repo.groupName, response.Revision)
+				}
 			}
 			return nil
 		}
@@ -140,14 +182,23 @@ func (repo *ConfigGroupRepo) AddChangeListener(listener func(*configconnector.Co
 func (repo *ConfigGroupRepo) fireChangeEvent(f *configconnector.ConfigGroupResponse, exist bool) {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
-	for _, listener := range repo.listeners {
-		listener(f)
-	}
 
+	log.GetBaseLogger().Infof("[Config][Group] 触发分组变更事件. namespace=%s, group=%s, exist=%v, revision=%s, fileCount=%d, listenerCount=%d",
+		repo.namespace, repo.groupName, exist, f.Revision, len(f.ReleaseFiles), len(repo.listeners))
+
+	// 先存储
 	if !exist {
 		repo.remoteRef = &atomic.Value{}
 	} else {
 		repo.remoteRef.Store(f)
+	}
+	// 后通知
+	for i, listener := range repo.listeners {
+		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			log.GetBaseLogger().Debugf("[Config][Group] 通知分组变更监听器[%d]. namespace=%s, group=%s",
+				i, repo.namespace, repo.groupName)
+		}
+		listener(f)
 	}
 }
 

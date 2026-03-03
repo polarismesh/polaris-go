@@ -520,7 +520,8 @@ func (s *StreamingClient) receiveAndNotify() {
 				Namespace: resp.GetService().GetNamespace().GetValue(),
 				Service:   resp.GetService().GetName().GetValue(),
 			},
-			Type: pb.GetEventType(resp.Type),
+			Type:      pb.GetEventType(resp.Type),
+			Direction: resp.GetDirection(),
 		}
 		// 获取服务的回调列表
 		tasks := s.getSvcUpdateTasks(svcKey)
@@ -869,6 +870,7 @@ func (s *serviceUpdateTask) toDiscoverRequest() *apiservice.DiscoverRequest {
 			Revision:  &wrappers.StringValue{Value: s.handler.GetRevision()},
 			Business:  &wrappers.StringValue{Value: s.handler.GetBusiness()},
 		},
+		Direction: s.Direction,
 	}
 	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		reqJSON, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
@@ -890,6 +892,8 @@ func (g *DiscoverConnector) RegisterServiceHandler(svcEventHandler *serverconnec
 	updateTask.Service = svcEventHandler.Service
 	updateTask.Namespace = svcEventHandler.Namespace
 	updateTask.Type = svcEventHandler.Type
+	updateTask.Direction = svcEventHandler.Direction
+
 	// 增加随机秒数[0~3)，为了让更新不要聚集
 	mu.Lock()
 	diffSecond := g.scalableRand.Intn(3)

@@ -24,6 +24,7 @@ import (
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/golang/protobuf/proto"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
 // 网格规则类型.
@@ -137,6 +138,8 @@ type GetServiceRuleRequest struct {
 	Timeout *time.Duration
 	// 可选，重试次数，默认直接获取全局的超时配置
 	RetryCount *int
+	// 可选，标识查询服务是主调方还是被调方
+	Direction apiservice.DiscoverDirection
 	// 应答对象，由主流程填充并返回
 	response ServiceRuleResponse
 }
@@ -190,6 +193,11 @@ func (g *GetServiceRuleRequest) Validate() error {
 		return NewSDKError(ErrCodeAPIInvalidArgument, err, "fail to validate GetServiceRuleRequest")
 	}
 	return nil
+}
+
+// GetDirection 获取主被调标识
+func (g *GetServiceRuleRequest) GetDirection() apiservice.DiscoverDirection {
+	return g.Direction
 }
 
 // ServiceRuleResponse 服务规则应答.
