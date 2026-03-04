@@ -112,13 +112,13 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 	// 使用sync.Map的Load方法检查缓存
 	if configFile, ok := c.configFileCache.Load(cacheKey); ok {
 		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][Flow] 命中配置文件缓存. file=%s/%s/%s",
+			log.GetBaseLogger().Debugf("[ConfigFileFlow] 命中配置文件缓存. file=%s/%s/%s",
 				req.Namespace, req.FileGroup, req.FileName)
 		}
 		return configFile.(model.ConfigFile), nil
 	}
 
-	log.GetBaseLogger().Infof("[Config][Flow] 配置文件缓存未命中，开始创建. file=%s/%s/%s, subscribe=%v",
+	log.GetBaseLogger().Infof("[ConfigFileFlow] 配置文件缓存未命中，开始创建. file=%s/%s/%s, subscribe=%v",
 		req.Namespace, req.FileGroup, req.FileName, req.Subscribe)
 
 	// 使用分段写锁进行双重检查
@@ -143,7 +143,7 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		c.repos = append(c.repos, fileRepo)
 		c.fclock.Unlock()
 		c.configFileCache.Store(cacheKey, configFile)
-		log.GetBaseLogger().Infof("[Config][Flow] 配置文件已订阅并加入长轮询池. file=%s/%s/%s, version=%d",
+		log.GetBaseLogger().Infof("[ConfigFileFlow] 配置文件已订阅并加入长轮询池. file=%s/%s/%s, version=%d",
 			req.Namespace, req.FileGroup, req.FileName, fileRepo.getVersion())
 	}
 	return configFile, nil
@@ -175,7 +175,7 @@ func (c *ConfigFileFlow) CreateConfigFile(namespace, fileGroup, fileName, conten
 	responseCode := resp.GetCode()
 
 	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
-		log.GetBaseLogger().Infof("[Config] failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+		log.GetBaseLogger().Infof("[ConfigFileFlow] failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
 		errMsg := fmt.Sprintf("failed to create config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
@@ -211,7 +211,7 @@ func (c *ConfigFileFlow) UpdateConfigFile(namespace, fileGroup, fileName, conten
 	responseCode := resp.GetCode()
 
 	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
-		log.GetBaseLogger().Infof("[Config] failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
+		log.GetBaseLogger().Infof("[ConfigFileFlow] failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
 		errMsg := fmt.Sprintf("failed to update config file. namespace = %s, fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
@@ -247,7 +247,7 @@ func (c *ConfigFileFlow) PublishConfigFile(namespace, fileGroup, fileName string
 	responseMessage := resp.GetMessage()
 
 	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
-		log.GetBaseLogger().Infof("[Config] failed to publish config file. namespace = %s, fileGroup = %s, "+
+		log.GetBaseLogger().Infof("[ConfigFileFlow] failed to publish config file. namespace = %s, fileGroup = %s, "+
 			"fileName = %s, response code = %d, msg:%v", namespace, fileGroup, fileName, responseCode, responseMessage)
 		errMsg := fmt.Sprintf("failed to publish config file. namespace = %s, fileGroup = %s, fileName = %s, "+
 			"response code = %d, msg:%v", namespace, fileGroup, fileName, responseCode, responseMessage)
@@ -277,7 +277,7 @@ func (c *ConfigFileFlow) UpsertAndPublishConfigFile(namespace, fileGroup, fileNa
 
 	resp, err := c.connector.UpsertAndPublishConfigFile(configFile)
 	if err != nil {
-		log.GetBaseLogger().Infof("[Config] failed to UpsertAndPublishConfigFile. namespace = %s, "+
+		log.GetBaseLogger().Infof("[ConfigFileFlow] failed to UpsertAndPublishConfigFile. namespace = %s, "+
 			"fileGroup = %s, fileName = %s, err:%+v", namespace, fileGroup, fileName, err)
 		return err
 	}
@@ -285,7 +285,7 @@ func (c *ConfigFileFlow) UpsertAndPublishConfigFile(namespace, fileGroup, fileNa
 	responseCode := resp.GetCode()
 
 	if responseCode != uint32(apimodel.Code_ExecuteSuccess) {
-		log.GetBaseLogger().Infof("[Config] failed to upsert and publish config file. namespace = %s, "+
+		log.GetBaseLogger().Infof("[ConfigFileFlow] failed to upsert and publish config file. namespace = %s, "+
 			"fileGroup = %s, fileName = %s, response code = %d",
 			namespace, fileGroup, fileName, responseCode)
 		errMsg := fmt.Sprintf("failed to upsert and publish config file. namespace = %s, fileGroup = %s, "+
@@ -301,7 +301,7 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 	configFileMetadata := fileRepo.configFileMetadata
 	version := fileRepo.getVersion()
 
-	log.GetBaseLogger().Infof("[Config] add long polling config file. metadata %#v, version: %+v, notifiedVersion: %d",
+	log.GetBaseLogger().Infof("[ConfigFileFlow] add long polling config file. metadata %#v, version: %+v, notifiedVersion: %d",
 		configFileMetadata, version, fileRepo.GetNotifiedVersion())
 
 	cacheKey := genCacheKeyByMetadata(configFileMetadata)
@@ -322,68 +322,6 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 	})
 }
 
-// TODO delete
-func (c *ConfigFileFlow) startCheckVersionTask(ctx context.Context) {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-
-	versionCheck := func() {
-		// 对每个repo分别获取对应的分段锁进行检查
-		for _, repo := range c.repos {
-			// 没有通知版本号
-			if repo.GetNotifiedVersion() == initVersion {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[Config][CheckVersion] 跳过未通知的配置文件. file=%s/%s/%s, notifiedVersion=%d",
-						repo.configFileMetadata.GetNamespace(), repo.configFileMetadata.GetFileGroup(),
-						repo.configFileMetadata.GetFileName(), repo.GetNotifiedVersion())
-				}
-				continue
-			}
-
-			cacheKey := genCacheKeyByMetadata(repo.configFileMetadata)
-			c.getShardRLock(cacheKey)
-
-			remoteConfigFile := repo.loadRemoteFile()
-
-			// 从服务端获取的配置文件版本号落后于通知的版本号，重新拉取配置
-			if !(remoteConfigFile == nil || repo.GetNotifiedVersion() > remoteConfigFile.GetVersion()) {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[Config][CheckVersion] 版本一致，无需重新拉取. file=%s/%s/%s, notifiedVersion=%d, remoteVersion=%d",
-						repo.configFileMetadata.GetNamespace(), repo.configFileMetadata.GetFileGroup(),
-						repo.configFileMetadata.GetFileName(), repo.GetNotifiedVersion(), remoteConfigFile.GetVersion())
-				}
-				c.getShardRUnlock(cacheKey)
-				continue
-			}
-
-			if remoteConfigFile == nil {
-				log.GetBaseLogger().Warnf("[Config] client does not pull the configuration, it will be pulled again."+
-					"file = %+v, notified version = %d",
-					repo.configFileMetadata, repo.notifiedVersion)
-			} else {
-				log.GetBaseLogger().Warnf("[Config] notified version greater than pulled version, will pull config file again. "+
-					"file = %+v, notified version = %d, pulled version = %d",
-					repo.configFileMetadata, repo.notifiedVersion, remoteConfigFile.GetVersion())
-			}
-
-			c.getShardRUnlock(cacheKey)
-
-			if err := repo.pull(); err != nil {
-				log.GetBaseLogger().Errorf("[Config] pull config file error by check version task.", err)
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			break
-		case <-ticker.C:
-			versionCheck()
-		}
-	}
-}
-
 func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 	for {
 		select {
@@ -401,21 +339,21 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 		watchConfigFiles := c.assembleWatchConfigFiles()
 
 		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][LongPolling] 开始长轮询. configFileSize=%d, delayTime=%d",
+			log.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] 开始长轮询. configFileSize=%d, delayTime=%d",
 				len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
 			for _, wf := range watchConfigFiles {
-				log.GetBaseLogger().Debugf("[Config][LongPolling] watch文件详情: file=%s/%s/%s, version=%d",
+				log.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] watch文件详情: file=%s/%s/%s, version=%d",
 					wf.GetNamespace(), wf.GetFileGroup(), wf.GetFileName(), wf.GetVersion())
 			}
 		}
 
-		log.GetBaseLogger().Infof("[Config] do long polling. config file size = %d, delay time = %d",
+		log.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] do long polling. config file size = %d, delay time = %d",
 			len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
 
 		// 2. 调用 connector watch接口
 		response, err := c.connector.WatchConfigFiles(watchConfigFiles)
 		if err != nil {
-			log.GetBaseLogger().Errorf("[Config] long polling failed.", err)
+			log.GetBaseLogger().Errorf("[ConfigFileFlow][LongPolling] long polling failed. err:%v", err)
 			pollingRetryPolicy.fail()
 			pollingRetryPolicy.delay()
 			continue
@@ -443,13 +381,14 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 			// 更新版本号
 			c.updateNotifiedVersion(cacheKey, maxVersion)
 
-			log.GetBaseLogger().Infof("[Config] received change event by long polling. file = %+v, new version = %d, old version = %d, maxVersion = %d",
-				changedConfigFile, newNotifiedVersion, oldNotifiedVersion, maxVersion)
+			log.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] received change event by long polling. file = %+v, new "+
+				"version = %d, old version = %d, maxVersion = %d", changedConfigFile, newNotifiedVersion,
+				oldNotifiedVersion, maxVersion)
 
 			// 通知 remoteConfigFileRepo 拉取最新配置
 			remoteConfigFileRepo := c.getRemoteConfigFileRepo(cacheKey)
 			if remoteConfigFileRepo == nil {
-				log.GetBaseLogger().Errorf("[Config][LongPolling] 未找到配置文件Repo. cacheKey=%s", cacheKey)
+				log.GetBaseLogger().Errorf("[ConfigFileFlow][LongPolling] 未找到配置文件Repo. cacheKey=%s", cacheKey)
 				continue
 			}
 			remoteConfigFileRepo.onLongPollingNotified(maxVersion)
@@ -461,15 +400,17 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			pollingRetryPolicy.success()
 			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[Config] long polling result: data no change. watchFileCount=%d", len(watchConfigFiles))
+				log.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] long polling result: data no change. "+
+					"watchFileCount=%d", len(watchConfigFiles))
 			} else {
-				log.GetBaseLogger().Infof("[Config] long polling result: data no change")
+				log.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] long polling result: data no change")
 			}
 			continue
 		}
 
 		// 3.3 预期之外的状态，退避重试
-		log.GetBaseLogger().Errorf("[Config] long polling result with unexpect code. code = {}", responseCode)
+		log.GetBaseLogger().Errorf("[ConfigFileFlow][LongPolling] long polling result with unexpect code. code = %d",
+			responseCode)
 		pollingRetryPolicy.fail()
 		pollingRetryPolicy.delay()
 	}
