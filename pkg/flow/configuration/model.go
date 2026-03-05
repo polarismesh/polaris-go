@@ -132,8 +132,8 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	}
 	c.content = newContent
 
-	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, chanListenerCount=%d",
-		configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
+	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
+		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
 		changeType, len(c.changeListeners), len(c.changeListenerChans))
 
 	c.fireChangeEvent(event)

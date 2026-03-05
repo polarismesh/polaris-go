@@ -17,7 +17,10 @@
 
 package model
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // ChangeType 配置文件变更类型
 type ChangeType int
@@ -32,6 +35,22 @@ const (
 	// NotChanged 没有变更
 	NotChanged
 )
+
+// String 返回 ChangeType 的可读字符串
+func (c ChangeType) String() string {
+	switch c {
+	case Modified:
+		return "Modified"
+	case Deleted:
+		return "Deleted"
+	case Added:
+		return "Added"
+	case NotChanged:
+		return "NotChanged"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(c))
+	}
+}
 
 type (
 	// OnConfigFileChange 配置文件变更回调监听器

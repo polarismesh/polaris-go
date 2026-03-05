@@ -99,7 +99,7 @@ func main() {
 	for {
 		select {
 		case event := <-changeChan:
-			log.Printf("通过通道接收到配置变更事件: %+v", event)
+			log.Printf("通过通道接收到配置变更事件: %+v, content:%v", event, configFile.GetContent())
 		}
 	}
 }
