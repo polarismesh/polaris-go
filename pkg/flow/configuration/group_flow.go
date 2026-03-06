@@ -137,8 +137,11 @@ func (flow *ConfigGroupFlow) doSync(ctx context.Context) {
 		flow.fclock.RLock()
 		defer flow.fclock.RUnlock()
 
+		if len(flow.repos) == 0 {
+			return
+		}
 		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][GroupFlow] 开始定时同步配置分组. repoCount=%d", len(flow.repos))
+			log.GetBaseLogger().Debugf("[Config][GroupFlow] 开始定时同步配置分组. groupCount=%d", len(flow.repos))
 		}
 
 		for i := range flow.repos {

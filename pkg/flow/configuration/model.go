@@ -18,6 +18,7 @@
 package configuration
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -131,9 +132,9 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	}
 	c.content = newContent
 
-	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, chanListenerCount=%d",
-		configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
-		changeType, len(c.changeListeners), len(c.changeListenerChans))
+	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
+		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(),
+		configFileMetadata.GetFileName(), changeType, len(c.changeListeners), len(c.changeListenerChans))
 
 	c.fireChangeEvent(event)
 	return nil
@@ -222,11 +223,10 @@ func (c *defaultConfigGroup) GetFiles() ([]*model.SimpleConfigFile, string, bool
 	return files, val.Revision, true
 }
 
-func (c *defaultConfigGroup) repoChangeListener(val *configconnector.ConfigGroupResponse) {
-	oldVal := c.repo.loadRemoteGroup()
-
+func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGroupResponse,
+	newVal *configconnector.ConfigGroupResponse) {
 	event := &model.ConfigGroupChangeEvent{
-		After: val.ReleaseFiles,
+		After: newVal.ReleaseFiles,
 	}
 	if oldVal != nil {
 		event.Before = oldVal.ReleaseFiles
@@ -236,21 +236,16 @@ func (c *defaultConfigGroup) repoChangeListener(val *configconnector.ConfigGroup
 	if oldVal != nil {
 		oldFileCount = len(oldVal.ReleaseFiles)
 	}
-	log.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. namespace=%s, group=%s, beforeFileCount=%d, afterFileCount=%d",
-		c.namespace, c.group, oldFileCount, len(val.ReleaseFiles))
-
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[Config][Group] 配置分组变更详情. namespace=%s, group=%s, revision=%s, listenerCount=%d",
-			c.namespace, c.group, val.Revision, len(c.changeListeners))
-	}
+	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d, event=%v",
+		c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles), event.GetString())
+	log.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(c.changeListeners), info)
 
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	for i := range c.changeListeners {
 		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. namespace=%s, group=%s",
-				i, c.namespace, c.group)
+			log.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. %s", i, info)
 		}
 		c.changeListeners[i](event)
 	}

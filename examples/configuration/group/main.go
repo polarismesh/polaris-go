@@ -18,107 +18,208 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"sync"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
-	namesapceVal string
-	groupVal     string
+	debug         bool
+	namespace     string
+	fileGroup     string
+	configPath    string
+	subscribeFile bool
 )
 
-func init() {
-	flag.StringVar(&namesapceVal, "namespace", "default", "namespace")
-	flag.StringVar(&groupVal, "group", "polaris-config-example", "group")
+// configCache 统一的配置文件缓存，key 为 namespace/fileGroup/fileName
+type configCacheEntry struct {
+	Version    uint64
+	ConfigFile model.ConfigFile
 }
 
-// isConfigGroupEqual 比较两个配置组是否相等（忽略数组顺序）
-func isConfigGroupEqual(before, after []*model.SimpleConfigFile) bool {
-	if len(before) != len(after) {
-		return false
-	}
+var configCache sync.Map // key: namespace/fileGroup/fileName, value: *configCacheEntry
 
-	// 创建 map 用于快速查找和比较
-	beforeMap := make(map[string]*model.SimpleConfigFile)
-	for _, file := range before {
-		key := file.Namespace + "/" + file.FileGroup + "/" + file.FileName
-		beforeMap[key] = file
-	}
-
-	// 检查 after 中的每个文件是否在 before 中存在且内容相同
-	for _, file := range after {
-		key := file.Namespace + "/" + file.FileGroup + "/" + file.FileName
-		beforeFile, exists := beforeMap[key]
-		if !exists {
-			return false
-		}
-		// 比较版本号和 MD5
-		if beforeFile.Version != file.Version || beforeFile.Md5 != file.Md5 {
-			return false
-		}
-	}
-
-	return true
+func initArgs() {
+	flag.BoolVar(&debug, "debug", false, "是否开启调试模式")
+	flag.StringVar(&namespace, "namespace", "default", "命名空间")
+	flag.StringVar(&fileGroup, "group", "polaris-config-example", "配置文件组")
+	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
+	flag.BoolVar(&subscribeFile, "subscribeFile", true, "是否订阅配置文件")
 }
 
 func main() {
+	initArgs()
 	flag.Parse()
-	log.Printf("Starting config group example with namespace: %s, group: %s", namesapceVal, groupVal)
-
-	configAPI, err := polaris.NewConfigGroupAPI()
-
-	if err != nil {
-		log.Printf("fail to create ConfigGroupAPI: %v", err)
-		return
-	}
-	log.Println("ConfigGroupAPI created successfully")
-
-	log.Printf("Fetching config group: namespace=%s, group=%s", namesapceVal, groupVal)
-	group, err := configAPI.GetConfigGroup(namesapceVal, groupVal)
-	if err != nil {
-		log.Panicf("fail to get config group: %v", err)
-		return
+	// 设置日志输出格式：日期 + 时间 + 文件名:行号
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.Println("开始启动配置分组监听示例...")
+	if debug {
+		// 设置日志级别为DEBUG
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("fail to set log level to DEBUG, err is %v", err)
+		} else {
+			log.Printf("successfully set log level to DEBUG")
+		}
 	}
 
-	// 获取配置组中的所有文件
+	cfg, err := config.LoadConfigurationByFile(configPath)
+	if err != nil {
+		log.Fatalf("load configuration by file %s failed: %v", configPath, err)
+	}
+	sdkCtx, err := polaris.NewSDKContextByConfig(cfg)
+	if err != nil {
+		log.Fatalf("fail to create sdkContext, err is %v", err)
+	}
+	// 步骤1: 创建配置分组 API 和 配置文件 API
+	configGroupAPI := polaris.NewConfigGroupAPIByContext(sdkCtx)
+	log.Println("配置分组API创建成功")
+
+	configFileAPI := polaris.NewConfigAPIByContext(sdkCtx)
+	log.Println("配置文件API创建成功")
+
+	// 步骤2: 拉取配置分组
+	log.Printf("准备获取配置分组 - namespace: %s, fileGroup: %s", namespace, fileGroup)
+	group, err := configGroupAPI.GetConfigGroup(namespace, fileGroup)
+	if err != nil {
+		log.Printf("获取配置分组失败: %v", err)
+		return
+	}
+	log.Println("配置分组获取成功")
+
+	// 获取分组下的所有配置文件列表
 	files, revision, success := group.GetFiles()
 	if !success {
-		log.Println("Warning: Failed to get files from config group or group is empty")
+		log.Println("警告: 获取配置分组文件列表失败或分组为空")
 	} else {
-		log.Printf("Config group fetched successfully, revision: %s, file count: %d", revision, len(files))
+		log.Printf("配置分组获取成功, revision: %s, 文件数量: %d", revision, len(files))
 	}
 
-	// 打印配置组中的所有文件名
+	// 打印配置组中的所有文件名，并初始化本地缓存
 	if len(files) > 0 {
-		log.Println("Config files in group:")
+		log.Println("配置分组中的文件列表:")
 		for _, file := range files {
-			log.Printf("  - %s (version: %d, md5: %s)", file.FileName, file.Version, file.Md5)
+			log.Printf("  - %s (version: %d)", file.FileName, file.Version)
+			// 初始化本地缓存
+			key := getConfigFileKey(file.Namespace, file.FileGroup, file.FileName)
+			configCache.Store(key, &configCacheEntry{Version: file.Version})
 		}
 	} else {
-		log.Println("No config files found in group")
+		log.Println("配置分组中没有配置文件")
 	}
 
-	log.Println("Adding change listener for config group...")
+	// 步骤3: 监听配置分组变化
+	log.Println("添加配置分组变更监听器...")
 	group.AddChangeListener(func(event *model.ConfigGroupChangeEvent) {
-		// 判断配置是否真的发生了变化（忽略数组顺序）
-		if isConfigGroupEqual(event.Before, event.After) {
-			//log.Println("Config group polled, but no changes detected (content unchanged)")
-			return
-		}
-
-		before, _ := json.Marshal(event.Before)
-		after, _ := json.Marshal(event.After)
-		log.Printf("receive config_group change event\nbefore: %s\nafter: %s", string(before), string(after))
+		handleConfigGroupChange(event, configFileAPI)
 	})
-	log.Println("Change listener added successfully")
+	log.Println("配置分组变更监听器添加成功")
 
-	log.Println("Listening for config group changes... Press Ctrl+C to exit")
+	// 步骤4: 拉取分组下的所有配置文件并监听
+	log.Println("开始拉取分组下的所有配置文件...")
+	for _, file := range files {
+		fetchConfigFile(configFileAPI, file.Namespace, file.FileGroup, file.FileName)
+	}
+
+	// 使用 WaitGroup 保持程序运行
 	wait := sync.WaitGroup{}
 	wait.Add(1)
 	wait.Wait()
+}
+
+// handleConfigGroupChange 处理配置分组变更事件
+// 使用本地缓存 localConfigCache 与 event.After 进行比较，而非 event.Before 与 event.After
+func handleConfigGroupChange(event *model.ConfigGroupChangeEvent, configFileAPI polaris.ConfigAPI) {
+	log.Printf("收到配置分组变更事件, %s", event.GetString())
+	// 遍历 after，构建 afterMap 并与本地缓存比较，找出新增和变更的配置文件
+	afterMap := make(map[string]*model.SimpleConfigFile)
+	for _, file := range event.After {
+		key := getConfigFileKey(file.Namespace, file.FileGroup, file.FileName)
+		afterMap[key] = file
+		cached, exists := configCache.Load(key)
+		if !exists {
+			// 缓存中不存在，说明是新增的配置文件
+			log.Printf("检测到新增配置文件: %s (version: %d)", key, file.Version)
+			fetchConfigFile(configFileAPI, file.Namespace, file.FileGroup, file.FileName)
+		} else {
+			// 缓存中存在，检查版本变化
+			entry := cached.(*configCacheEntry)
+			if entry.Version != file.Version {
+				log.Printf("检测到配置文件变更: %s (version: %d->%d), file:%v",
+					key, entry.Version, file.Version, entry.ConfigFile.GetContent())
+				fetchConfigFile(configFileAPI, file.Namespace, file.FileGroup, file.FileName)
+			}
+		}
+	}
+
+	// 遍历缓存，找出在 after 中不存在的（即被删除的）配置文件
+	configCache.Range(func(k, v interface{}) bool {
+		key := k.(string)
+		if _, exists := afterMap[key]; !exists {
+			log.Printf("检测到配置文件被删除: %s", key)
+			configCache.Delete(key)
+		}
+		return true
+	})
+}
+
+// fetchConfigFile 拉取并监听单个配置文件
+func fetchConfigFile(configFileAPI polaris.ConfigAPI, ns, group, fileName string) {
+	key := getConfigFileKey(ns, group, fileName)
+
+	log.Printf("正在拉取配置文件: %s", key)
+	configFile, err := configFileAPI.FetchConfigFile(&polaris.GetConfigFileRequest{
+		GetConfigFileRequest: &model.GetConfigFileRequest{
+			Namespace: ns,
+			FileGroup: group,
+			FileName:  fileName,
+			Subscribe: subscribeFile,
+		},
+	})
+	if err != nil {
+		log.Printf("获取配置文件 %s 失败: %v", key, err)
+		return
+	}
+
+	log.Printf("配置文件 %s 获取成功:\n%s", key, getString(configFile))
+
+	// 打印配置文件内容
+	content := configFile.GetContent()
+	if len(content) > 200 {
+		log.Printf("配置文件 %s 内容 (前200字符):\n%s...", key, content[:200])
+	} else {
+		log.Printf("配置文件 %s 内容:\n%s", key, content)
+	}
+
+	// 存储配置文件到缓存
+	configCache.Store(key, &configCacheEntry{
+		Version:    configFile.GetVersion(),
+		ConfigFile: configFile,
+	})
+}
+
+// getConfigFileKey 生成配置文件的唯一标识
+func getConfigFileKey(namespace, fileGroup, fileName string) string {
+	return fmt.Sprintf("%s/%s/%s", namespace, fileGroup, fileName)
+}
+
+// getString 获取配置文件的字符串表示
+func getString(c model.ConfigFile) string {
+	return fmt.Sprintf("ConfigFile{Namespace=%s, FileGroup=%s, FileName=%s, Version=%d, VersionName=%s, Md5=%s, "+
+		"Labels=%v, HasContent=%t, ContentLength=%d}",
+		c.GetNamespace(),
+		c.GetFileGroup(),
+		c.GetFileName(),
+		c.GetVersion(),
+		c.GetVersionName(),
+		c.GetMd5(),
+		c.GetLabels(),
+		c.HasContent(),
+		len(c.GetContent()),
+	)
 }

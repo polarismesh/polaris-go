@@ -17,7 +17,11 @@
 
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // ChangeType 配置文件变更类型
 type ChangeType int
@@ -32,6 +36,22 @@ const (
 	// NotChanged 没有变更
 	NotChanged
 )
+
+// String 返回 ChangeType 的可读字符串
+func (c ChangeType) String() string {
+	switch c {
+	case Modified:
+		return "Modified"
+	case Deleted:
+		return "Deleted"
+	case Added:
+		return "Added"
+	case NotChanged:
+		return "NotChanged"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(c))
+	}
+}
 
 type (
 	// OnConfigFileChange 配置文件变更回调监听器
@@ -88,6 +108,14 @@ type SimpleConfigFile struct {
 type ConfigGroupChangeEvent struct {
 	Before []*SimpleConfigFile
 	After  []*SimpleConfigFile
+}
+
+func (event *ConfigGroupChangeEvent) GetString() string {
+	str, err := json.Marshal(event)
+	if err != nil {
+		return ""
+	}
+	return string(str)
 }
 
 // ConfigFileMetadata 配置文件元信息
