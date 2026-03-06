@@ -133,8 +133,8 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	c.content = newContent
 
 	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
-		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
-		changeType, len(c.changeListeners), len(c.changeListenerChans))
+		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(),
+		configFileMetadata.GetFileName(), changeType, len(c.changeListeners), len(c.changeListenerChans))
 
 	c.fireChangeEvent(event)
 	return nil
@@ -236,9 +236,8 @@ func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGr
 	if oldVal != nil {
 		oldFileCount = len(oldVal.ReleaseFiles)
 	}
-	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d, eventBefore=%v, "+
-		"eventAfter=%v", c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles), event.Before,
-		event.After)
+	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d, event=%v",
+		c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles), event.GetString())
 	log.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(c.changeListeners), info)
 
 	c.lock.RLock()

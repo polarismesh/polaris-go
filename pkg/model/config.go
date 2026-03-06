@@ -18,6 +18,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -107,6 +108,14 @@ type SimpleConfigFile struct {
 type ConfigGroupChangeEvent struct {
 	Before []*SimpleConfigFile
 	After  []*SimpleConfigFile
+}
+
+func (event *ConfigGroupChangeEvent) GetString() string {
+	str, err := json.Marshal(event)
+	if err != nil {
+		return ""
+	}
+	return string(str)
 }
 
 // ConfigFileMetadata 配置文件元信息

@@ -50,7 +50,7 @@ func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "命名空间")
 	flag.StringVar(&fileGroup, "group", "polaris-config-example", "配置文件组")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
-	flag.BoolVar(&subscribeFile, "subscribeFile", false, "是否订阅配置文件")
+	flag.BoolVar(&subscribeFile, "subscribeFile", true, "是否订阅配置文件")
 }
 
 func main() {
@@ -135,9 +135,7 @@ func main() {
 // handleConfigGroupChange 处理配置分组变更事件
 // 使用本地缓存 localConfigCache 与 event.After 进行比较，而非 event.Before 与 event.After
 func handleConfigGroupChange(event *model.ConfigGroupChangeEvent, configFileAPI polaris.ConfigAPI) {
-
-	log.Printf("收到配置分组变更事件, after:%v, before:%v", event.After, event.Before)
-
+	log.Printf("收到配置分组变更事件, %s", event.GetString())
 	// 遍历 after，构建 afterMap 并与本地缓存比较，找出新增和变更的配置文件
 	afterMap := make(map[string]*model.SimpleConfigFile)
 	for _, file := range event.After {
@@ -152,8 +150,8 @@ func handleConfigGroupChange(event *model.ConfigGroupChangeEvent, configFileAPI 
 			// 缓存中存在，检查版本变化
 			entry := cached.(*configCacheEntry)
 			if entry.Version != file.Version {
-				log.Printf("检测到配置文件变更: %s (version: %d->%d)",
-					key, entry.Version, file.Version)
+				log.Printf("检测到配置文件变更: %s (version: %d->%d), file:%v",
+					key, entry.Version, file.Version, entry.ConfigFile.GetContent())
 				fetchConfigFile(configFileAPI, file.Namespace, file.FileGroup, file.FileName)
 			}
 		}
