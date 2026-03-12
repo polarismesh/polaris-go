@@ -30,3 +30,4 @@ CLAUDE.md
 /examples/**/provider/provider-a/
 /examples/**/provider/provider-b/
 /examples/**/cache/
+/.codebuddy/
