@@ -20,6 +20,7 @@ package servicerouter
 import (
 	"sync"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -55,16 +56,31 @@ func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeIn
 	return instances, result.OutputCluster, nil, nil
 }
 
+// getLogCtx 从ValueContext获取上下文日志
+func getLogCtx(ctx model.ValueContext) *config.ContextLogger {
+	if logCtxIf, ok := ctx.GetValue(model.ContextKeyLogCtx); ok {
+		if logCtx, ok := logCtxIf.(*config.ContextLogger); ok {
+			return logCtx
+		}
+	}
+	return nil
+}
+
 // processServiceRouters 执行路由链
 func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	logCtx := getLogCtx(ctx)
+	baseLogger := log.GetBaseLogger()
+	if logCtx != nil {
+		baseLogger = logCtx.GetBaseLogger()
+	}
+	if baseLogger.IsLevelEnabled(log.DebugLog) {
 		sourceStr := model.ToStringService(routeInfo.SourceService, true)
 		destStr := model.ToStringService(routeInfo.DestService, true)
 		instancesCount := cluster.GetClusterValue().GetInstancesSet(false, false).Count()
-		log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%v",
+		baseLogger.Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%v",
 			sourceStr, destStr, len(routers), instancesCount)
 	}
 
@@ -74,8 +90,8 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		isEnabled := router.Enable(routeInfo, svcClusters)
 
 		if !isRouterEnabled || !isEnabled {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
+			if baseLogger.IsLevelEnabled(log.DebugLog) {
+				baseLogger.Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
 					routerName, isRouterEnabled, isEnabled)
 			}
 			continue
@@ -91,21 +107,21 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil || result == nil {
-			log.GetBaseLogger().Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
+			baseLogger.Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
 			// 转发规则
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			if baseLogger.IsLevelEnabled(log.DebugLog) {
 				redirectStr := model.ToStringService(result.RedirectDestService, true)
-				log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s", routerName, redirectStr)
+				baseLogger.Debugf("processServiceRouters: router=%v redirect to %s", routerName, redirectStr)
 			}
 			return result, nil
 		}
 		cluster = result.OutputCluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		if baseLogger.IsLevelEnabled(log.DebugLog) {
 			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
-			log.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,
+			baseLogger.Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,
 				instances, result.Status.String())
 		}
 	}
@@ -120,13 +136,13 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil || result == nil {
-			log.GetBaseLogger().Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
+			baseLogger.Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		if baseLogger.IsLevelEnabled(log.DebugLog) {
 			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
-			log.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%s", instances)
+			baseLogger.Debugf("processServiceRouters: FilterOnlyRouter done, instances=%s", instances)
 		}
 	}
 	return result, nil

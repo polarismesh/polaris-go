@@ -23,7 +23,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -70,7 +69,7 @@ func (r *RemoteQuotaCallBack) Process(
 	rateLimitWindow.WindowSet.PurgeWindows(nowMilli)
 	// 规则变更触发的删除
 	if rateLimitWindow.GetStatus() == Deleted {
-		log.GetBaseLogger().Infof("[RateLimit]window %s deleted, start terminate task", taskKey.(string))
+		rateLimitWindow.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window %s deleted, start terminate task", taskKey.(string))
 		return model.TERMINATE
 	}
 	// 状态机

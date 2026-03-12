@@ -49,6 +49,8 @@ type RuleBasedInstancesFilter struct {
 	prioritySubsetPool    *sync.Pool
 	systemCfg             config.SystemConfig
 	routerConf            *RuleRouterConfig
+	// 上下文日志
+	logCtx *config.ContextLogger
 }
 
 // Type 插件类型
@@ -66,6 +68,7 @@ func (g *RuleBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
 	g.PluginBase = plugin.NewPluginBase(ctx)
+	g.logCtx = ctx.Config.GetContextLogger()
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.scalableRand = rand.NewScalableRand()
 	g.valueCtx = ctx.ValueCtx
@@ -88,10 +91,10 @@ func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, cl
 	dstRoutes := g.getRoutesFromRule(routeInfo, dstRouteRuleMatch)
 	sourceRoutes := g.getRoutesFromRule(routeInfo, sourceRouteRuleMatch)
 	enabled := len(dstRoutes) > 0 || len(sourceRoutes) > 0
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		destStr := model.ToStringService(routeInfo.DestService, true)
 		sourceStr := model.ToStringService(routeInfo.SourceService, true)
-		log.GetBaseLogger().Debugf("RuleBasedRouter.Enable: source=%s, dest=%s, dstRoutes(inbound)=%d, "+
+		g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter.Enable: source=%s, dest=%s, dstRoutes(inbound)=%d, "+
 			"sourceRoutes(outbound)=%d, enabled=%v", sourceStr, destStr, len(dstRoutes), len(sourceRoutes), enabled)
 	}
 	return enabled
@@ -127,13 +130,13 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		}
 		dstFilteredInstances = filteredInstances
 		if nil == dstFilteredInstances {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched but no instances, status=fail")
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched but no instances, status=fail")
 			}
 			ruleStatus = dstRuleFail
 		} else {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched, instances=%d",
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter: dest inbound matched, instances=%d",
 					dstFilteredInstances.GetClusterValue().Count())
 			}
 			ruleStatus = dstRuleSuccess
@@ -153,13 +156,13 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		}
 		sourceFilteredInstances = filteredInstances
 		if nil == sourceFilteredInstances {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched but no instances, status=fail")
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched but no instances, status=fail")
 			}
 			ruleStatus = sourceRuleFail
 		} else {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched, instances=%d",
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter: source outbound matched, instances=%d",
 					sourceFilteredInstances.GetClusterValue().Count())
 			}
 			ruleStatus = sourceRuleSuccess
@@ -181,8 +184,8 @@ finally:
 		if failoverType == nil {
 			failoverType = &g.routerConf.failoverType
 		}
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("RuleBasedRouter: route failed, failover=%v", *failoverType)
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("RuleBasedRouter: route failed, failover=%v", *failoverType)
 		}
 
 		if *failoverType == servicerouter.FailOverNone {

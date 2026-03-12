@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -38,10 +38,11 @@ const (
 	_headerValueAsyncRegis  = "true"
 )
 
-func NewRegisterStateManager(minRegisterInterval time.Duration) *RegisterStateManager {
+func NewRegisterStateManager(minRegisterInterval time.Duration, logCtx *config.ContextLogger) *RegisterStateManager {
 	return &RegisterStateManager{
 		minRegisterInterval: minRegisterInterval,
 		states:              map[string]*registerState{},
+		logCtx:              logCtx,
 	}
 }
 
@@ -49,6 +50,7 @@ type RegisterStateManager struct {
 	mu                  sync.RWMutex
 	minRegisterInterval time.Duration
 	states              map[string]*registerState
+	logCtx              *config.ContextLogger
 }
 
 type registerState struct {
@@ -105,7 +107,7 @@ func buildRegisterStateKey(namespace string, service string, host string, port i
 
 func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *registerState, regis registerFunc, beat heartbeatFunc) {
 	instance := state.instance
-	log.GetBaseLogger().Infof("[Provider][Heartbeat] instance heartbeat task started {%s, %s, %s:%d}",
+	c.logCtx.GetBaseLogger().Infof("[Provider][Heartbeat] instance heartbeat task started {%s, %s, %s:%d}",
 		instance.Namespace, instance.Service, instance.Host, instance.Port)
 	ticker := time.NewTicker(time.Duration(*instance.TTL) * time.Second)
 	defer ticker.Stop()
@@ -116,7 +118,7 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 	for {
 		select {
 		case <-ctx.Done():
-			log.GetBaseLogger().Infof("[Provider][Heartbeat] instance heartbeat task stopped {%s, %s, %s:%d}",
+			c.logCtx.GetBaseLogger().Infof("[Provider][Heartbeat] instance heartbeat task stopped {%s, %s, %s:%d}",
 				instance.Namespace, instance.Service, instance.Host, instance.Port)
 			return
 		case <-ticker.C:
@@ -130,7 +132,7 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 			}
 			start := time.Now()
 			if err := beat(hbReq); err != nil {
-				log.GetBaseLogger().Errorf("[Provider][Heartbeat] heartbeat failed {%s, %s, %s:%d}",
+				c.logCtx.GetBaseLogger().Errorf("[Provider][Heartbeat] heartbeat failed {%s, %s, %s:%d}",
 					instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 				errCnt++
 
@@ -140,16 +142,16 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 					state.lastRegisterTime = time.Now()
 					_, err = regis(instance, CreateRegisterV2Header())
 					if err == nil {
-						log.GetBaseLogger().Infof("[Provider][Heartbeat] re-register instatnce success {%s, %s, %s:%d}",
+						c.logCtx.GetBaseLogger().Infof("[Provider][Heartbeat] re-register instatnce success {%s, %s, %s:%d}",
 							instance.Namespace, instance.Service, instance.Host, instance.Port)
 					} else {
-						log.GetBaseLogger().Warnf("[Provider][Heartbeat] re-register instatnce failed {%s, %s, %s:%d}",
+						c.logCtx.GetBaseLogger().Warnf("[Provider][Heartbeat] re-register instatnce failed {%s, %s, %s:%d}",
 							instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 					}
 				}
 				break
 			}
-			log.GetBaseLogger().Debugf("[Provider][Heartbeat] success {%s, %s, %s:%d} cost:%d ms",
+			c.logCtx.GetBaseLogger().Debugf("[Provider][Heartbeat] success {%s, %s, %s:%d} cost:%d ms",
 				instance.Namespace, instance.Service, instance.Host, instance.Port, time.Since(start).Milliseconds())
 			errCnt = 0
 			break

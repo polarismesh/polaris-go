@@ -28,6 +28,7 @@ import (
 // RateLimiterReject 基于直接拒绝策略的限流控制器
 type RateLimiterReject struct {
 	*plugin.PluginBase
+	logCtx *config.ContextLogger
 }
 
 // Type 插件类型
@@ -43,6 +44,7 @@ func (g *RateLimiterReject) Name() string {
 // Init 初始化插件
 func (g *RateLimiterReject) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
+	g.logCtx = ctx.Config.GetContextLogger()
 	return nil
 }
 
@@ -60,7 +62,7 @@ func (g *RateLimiterReject) IsEnable(cfg config.Configuration) bool {
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterReject) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
 	return &QuotaBucketReject{
-		bucket: NewRemoteAwareQpsBucket(criteria),
+		bucket: NewRemoteAwareQpsBucket(criteria, g.logCtx),
 	}
 }
 

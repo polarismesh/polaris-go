@@ -86,7 +86,8 @@ func (t *TableSelector) buildTableEntries(
 
 // NewTable 创建maglev向量选择器
 func NewTable(
-	instanceSet *model.InstanceSet, tableSize uint64, hashFunc hash.HashFuncWithSeed, id int32) (*TableSelector, error) {
+	instanceSet *model.InstanceSet, tableSize uint64, hashFunc hash.HashFuncWithSeed, id int32,
+	baseLogger log.Logger) (*TableSelector, error) {
 	var selector = &TableSelector{
 		hashFunc:  hashFunc,
 		tableSize: tableSize,
@@ -131,7 +132,7 @@ func NewTable(
 		selector.maxEntriesPerHost = math.Max(float64(entry.count), selector.maxEntriesPerHost)
 	}
 	svcInstances := instanceSet.GetServiceClusters().GetServiceInstances()
-	log.GetBaseLogger().Debugf("maglev: build for %s:%s, maxEntriesPerHost %.1f, minEntriesPerHost %.1f",
+	baseLogger.Debugf("maglev: build for %s:%s, maxEntriesPerHost %.1f, minEntriesPerHost %.1f",
 		svcInstances.GetNamespace(), svcInstances.GetService(), selector.maxEntriesPerHost, selector.minEntriesPerHost)
 	return selector, nil
 }

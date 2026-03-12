@@ -69,12 +69,12 @@ func (s *ServerAddressList) getAndConnectServer(
 	defer s.connectMutex.Unlock()
 	address, instance, err := s.getServerAddress(s.manager.GetHashKey())
 	if err != nil {
-		log.GetNetworkLogger().Errorf("fail get server address from service %s, error %v", svc, err)
+		s.manager.logNetwork.Errorf("fail get server address from service %s, error %v", svc, err)
 		return nil
 	}
 	conn, err := s.connectServer(force, address, instance, svc, timeout)
 	if err != nil {
-		log.GetNetworkLogger().Errorf("fail get connect %s from service %s, error %v", address, svc, err)
+		s.manager.logNetwork.Errorf("fail get connect %s from service %s, error %v", address, svc, err)
 		return nil
 	}
 	return conn
@@ -139,7 +139,7 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 	service config.ClusterService, timeout time.Duration) (*Connection, error) {
 	var lastConn = s.loadCurrentConnection()
 	if !force && IsAvailableConnection(lastConn) && lastConn.Address == addr {
-		log.GetNetworkLogger().Debugf("address %s not changed, no need to switch server", addr)
+		s.manager.logNetwork.Debugf("address %s not changed, no need to switch server", addr)
 		// 服务地址没有发生变更，无需切换
 		return lastConn, nil
 	}
@@ -166,13 +166,14 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 	}
 
 	conn := &Connection{
-		Conn:   tcpConn,
-		ConnID: connID,
+		Conn:       tcpConn,
+		ConnID:     connID,
+		logNetwork: s.manager.logNetwork,
 	}
 	if ctrl, ok := DefaultServerServiceToConnectionControl[s.service.ClusterType]; ok && ctrl == ConnectionLong {
-		log.GetNetworkLogger().Infof("long connection %v, target address %s: create", conn.ConnID, addr)
+		s.manager.logNetwork.Infof("long connection %v, target address %s: create", conn.ConnID, addr)
 	} else {
-		log.GetNetworkLogger().Debugf("short connection %v, target address %s: create", conn.ConnID, addr)
+		s.manager.logNetwork.Debugf("short connection %v, target address %s: create", conn.ConnID, addr)
 	}
 	s.curConn.Store(conn)
 	return conn, nil
@@ -195,8 +196,9 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 		instance: instance,
 	}
 	conn := &Connection{
-		Conn:   tcpConn,
-		ConnID: connID,
+		Conn:       tcpConn,
+		ConnID:     connID,
+		logNetwork: s.manager.logNetwork,
 	}
 	conn.acquire(addr)
 	return conn, nil
@@ -226,7 +228,7 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 func (s *ServerAddressList) closeCurrentConnection(force bool) {
 	conn := s.loadCurrentConnection()
 	if IsAvailableConnection(conn) {
-		log.GetNetworkLogger().Debugf("current connection for %s has been closed", s.service)
+		s.manager.logNetwork.Debugf("current connection for %s has been closed", s.service)
 		conn.lazyClose(force)
 	}
 }
@@ -259,6 +261,8 @@ type connectionManager struct {
 	protocol string
 	// 连接创建器
 	creator ConnCreator
+	// 带有客户端标识的日志
+	logNetwork log.Logger
 }
 
 // NewConnectionManager 创建连接管理器
@@ -275,6 +279,7 @@ func NewConnectionManager(
 		valueCtx:         valueCtx,
 		protocol:         protocol,
 		discoverEventSet: make(map[model.EventType]bool, 0),
+		logNetwork:       cfg.GetContextLogger().GetNetworkLogger(),
 	}
 	serverServices := config.GetServerServices(cfg)
 	for _, svc := range serverServices {
@@ -314,11 +319,13 @@ func NewConfigConnectionManager(cfg config.Configuration, valueCtx model.ValueCo
 	configConnectTimeout := cfg.GetConfigFile().GetConfigConnectorConfig().GetConnectTimeout()
 	configProtocol := cfg.GetConfigFile().GetConfigConnectorConfig().GetProtocol()
 	configManager := &connectionManager{
-		connectTimeout: configConnectTimeout,
-		switchInterval: configSwitchInterval,
-		serverServices: make(map[config.ClusterType]*ServerAddressList),
-		valueCtx:       valueCtx,
-		protocol:       configProtocol,
+		connectTimeout:   configConnectTimeout,
+		switchInterval:   configSwitchInterval,
+		serverServices:   make(map[config.ClusterType]*ServerAddressList),
+		valueCtx:         valueCtx,
+		protocol:         configProtocol,
+		logNetwork:       cfg.GetContextLogger().GetNetworkLogger(),
+		discoverEventSet: make(map[model.EventType]bool, 0),
 	}
 
 	configAddresses := cfg.GetConfigFile().GetConfigConnectorConfig().GetAddresses()
@@ -375,7 +382,7 @@ func (c *connectionManager) GetConnectionByHashKey(
 	for {
 		conn, err := c.tryGetConnection(clusterType, hashKey)
 		if err != nil {
-			log.GetNetworkLogger().Errorf(
+			c.logNetwork.Errorf(
 				"fail to get connection, opKey is %s, cluster %v, error is %s", opKey, clusterType, err)
 			return nil, err
 		}
@@ -406,26 +413,26 @@ func (c *connectionManager) ConnectByAddr(clusterType config.ClusterType, addr s
 
 // ReportSuccess 上报服务成功
 func (c *connectionManager) ReportSuccess(connID ConnID, retCode int32, timeout time.Duration) {
-	log.GetNetworkLogger().Debugf("service %s: reported success", connID.Service)
+	c.logNetwork.Debugf("service %s: reported success", connID.Service)
 }
 
 // ReportFail 上报服务失败
 func (c *connectionManager) ReportFail(connID ConnID, retCode int32, timeout time.Duration) {
-	log.GetNetworkLogger().Warnf("connection %s: reported fail", connID)
+	c.logNetwork.Warnf("connection %s: reported fail", connID)
 }
 
 // ReportConnectionDown 报告连接故障
 func (c *connectionManager) ReportConnectionDown(connID ConnID) {
-	log.GetNetworkLogger().Tracef("connection %s: reported down", connID)
+	c.logNetwork.Tracef("connection %s: reported down", connID)
 	var svc = connID.Service
 	var serverList *ServerAddressList
 	var ok bool
 	serverList, ok = c.serverServices[svc.ClusterType]
 	if !ok {
-		log.GetNetworkLogger().Warnf("connection %s down received from unknown service %s", connID, svc)
+		c.logNetwork.Warnf("connection %s down received from unknown service %s", connID, svc)
 		return
 	}
-	log.GetNetworkLogger().Infof("connection %s down received from service %s", connID, svc.String())
+	c.logNetwork.Infof("connection %s down received from service %s", connID, svc.String())
 	curConn := serverList.loadCurrentConnection()
 	if nil != curConn && connID.ID != curConn.ConnID.ID {
 		// 已经切换新连接，忽略
@@ -458,7 +465,7 @@ func (c *connectionManager) doSwitchRoutine() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			log.GetNetworkLogger().Infof("doSwitchRoutine of connection manager has been terminated")
+			c.logNetwork.Infof("doSwitchRoutine of connection manager has been terminated")
 			return
 		// case <-buildInCloseTicker.C:
 		// 	serverList := c.serverServices[config.BuiltinCluster]
@@ -470,14 +477,14 @@ func (c *connectionManager) doSwitchRoutine() {
 					curConn := serverList.loadCurrentConnection()
 					if IsAvailableConnection(curConn) {
 						// 只有成功后，才进行切换
-						log.GetNetworkLogger().Infof("start switch for %s", serverList.service.ServiceKey)
+						c.logNetwork.Infof("start switch for %s", serverList.service.ServiceKey)
 						conn := serverList.getAndConnectServer(false, serverList.service, c.connectTimeout)
 						if nil != conn {
-							log.GetNetworkLogger().Infof("discover server switched to %s", conn.Address)
+							c.logNetwork.Infof("discover server switched to %s", conn.Address)
 						}
 						continue
 					}
-					log.GetNetworkLogger().Infof("skip switch for %s", serverList.service.ServiceKey)
+					c.logNetwork.Infof("skip switch for %s", serverList.service.ServiceKey)
 				}
 			}
 		}
@@ -492,7 +499,7 @@ func (c *connectionManager) UpdateServers(svcEventKey model.ServiceEventKey) {
 			return
 		}
 		value := atomic.AddUint32(&c.ready, 1)
-		log.GetNetworkLogger().Infof("discover server updated to ready %v, event is %s", value, svcEventKey)
+		c.logNetwork.Infof("discover server updated to ready %v, event is %s", value, svcEventKey)
 	}
 }
 

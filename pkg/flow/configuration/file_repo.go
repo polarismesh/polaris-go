@@ -50,6 +50,7 @@ type ConfigFileRepo struct {
 	connector configconnector.ConfigConnector
 	chain     configfilter.Chain
 	conf      config.Configuration
+	logCtx    *config.ContextLogger
 
 	configFileMetadata model.ConfigFileMetadata
 	// 长轮询通知的版本号
@@ -80,6 +81,7 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		connector:          connector,
 		chain:              chain,
 		conf:               conf,
+		logCtx:             conf.GetContextLogger(),
 		configFileMetadata: metadata,
 		notifiedVersion:    initVersion,
 		retryPolicy: retryPolicy{
@@ -99,18 +101,18 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		Mode:      metadata.GetFileMode(),
 	})
 
-	log.GetBaseLogger().Infof("[Config][FileRepo] 创建配置文件仓库. file=%s/%s/%s, mode=%v, initVersion=%d",
+	repo.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 创建配置文件仓库. file=%s/%s/%s, mode=%v, initVersion=%d",
 		metadata.GetNamespace(), metadata.GetFileGroup(), metadata.GetFileName(),
 		metadata.GetFileMode(), initVersion)
 
 	// 1. 同步从服务端拉取配置
 	if err := repo.pull(); err != nil {
-		log.GetBaseLogger().Errorf("[Config][FileRepo] 初始拉取配置失败. file=%s/%s/%s, err=%v",
+		repo.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] 初始拉取配置失败. file=%s/%s/%s, err=%v",
 			metadata.GetNamespace(), metadata.GetFileGroup(), metadata.GetFileName(), err)
 		return nil, err
 	}
 
-	log.GetBaseLogger().Infof("[Config][FileRepo] 初始拉取配置完成. file=%s/%s/%s, version=%d, notifiedVersion=%d",
+	repo.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 初始拉取配置完成. file=%s/%s/%s, version=%d, notifiedVersion=%d",
 		metadata.GetNamespace(), metadata.GetFileGroup(), metadata.GetFileName(),
 		repo.getVersion(), repo.notifiedVersion)
 
@@ -166,9 +168,9 @@ func (r *ConfigFileRepo) getDataKey() string {
 func (r *ConfigFileRepo) pull() error {
 	pullStartTime := time.Now()
 
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[Config][FileRepo] 开始拉取配置文件. file=%s/%s/%s, notifiedVersion=%d, currentVersion=%d",
-			r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
+	if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 开始拉取配置文件. file=%s/%s/%s, notifiedVersion=%d, "+
+			"currentVersion=%d", r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 			r.configFileMetadata.GetFileName(), r.notifiedVersion, r.getVersion())
 	}
 
@@ -188,24 +190,25 @@ func (r *ConfigFileRepo) pull() error {
 	}
 	prepareReqDuration := time.Since(pullStartTime)
 
-	log.GetBaseLogger().Infof("[Config][FileRepo] start pull config file. config file = %+v, version = %d",
+	r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] start pull config file. config file = %+v, version = %d",
 		r.configFileMetadata, r.notifiedVersion)
 
 	var (
 		retryTimes = 0
 		err        error
+		response   *configconnector.ConfigFileResponse
 	)
 	for retryTimes < 3 {
 		startTime := time.Now()
 
 		// 执行过滤器链和网络请求
 		chainStartTime := time.Now()
-		response, err := r.chain.Execute(pullConfigFileReq, r.connector.GetConfigFile)
+		response, err = r.chain.Execute(pullConfigFileReq, r.connector.GetConfigFile, r.logCtx)
 		chainDuration := time.Since(chainStartTime)
 
 		if err != nil {
-			log.GetBaseLogger().Errorf("[Config][FileRepo] failed to pull config file. retry times = %d, err = %v, "+
-				"chain耗时 = %dms", retryTimes, err, chainDuration.Milliseconds())
+			r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] failed to pull config file. retry times = %d, "+
+				"err = %v, chain耗时 = %dms", retryTimes, err, chainDuration.Milliseconds())
 			r.retryPolicy.fail()
 			retryTimes++
 			r.retryPolicy.delay()
@@ -223,9 +226,9 @@ func (r *ConfigFileRepo) pull() error {
 			pulledConfigFileVersion = int64(pulledConfigFile.GetVersion())
 			pulledConfigFileStr = pulledConfigFile.String()
 		}
-		log.GetBaseLogger().Infof("[Config][FileRepo] pull config file finished. config file = %v, code = %d, version = %d, "+
-			"duration = %d ms, chain耗时 = %d ms", pulledConfigFileStr, responseCode, pulledConfigFileVersion,
-			time.Since(startTime).Milliseconds(), chainDuration.Milliseconds())
+		r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] pull config file finished. config file = %v, code = %d, "+
+			"version = %d, duration = %d ms, chain耗时 = %d ms", pulledConfigFileStr, responseCode,
+			pulledConfigFileVersion, time.Since(startTime).Milliseconds(), chainDuration.Milliseconds())
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) && pulledConfigFile != nil {
@@ -236,15 +239,15 @@ func (r *ConfigFileRepo) pull() error {
 				oldVersion = remoteConfigFile.GetVersion()
 			}
 
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[Config][FileRepo] 拉取成功，比较版本. file=%s/%s/%s, pulledVersion=%d, "+
+			if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 拉取成功，比较版本. file=%s/%s/%s, pulledVersion=%d, "+
 					"localVersion=%d, remoteConfigFileNil=%v", pullConfigFileReq.Namespace, pullConfigFileReq.FileGroup,
 					pullConfigFileReq.FileName, pulledConfigFile.Version, oldVersion, remoteConfigFile == nil)
 			}
 
 			// 本地配置文件落后，更新内存缓存
 			if remoteConfigFile == nil || pulledConfigFile.Version >= remoteConfigFile.Version {
-				log.GetBaseLogger().Infof("[Config][FileRepo] 更新notifiedVersion. file=%s/%s/%s, "+
+				r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 更新notifiedVersion. file=%s/%s/%s, "+
 					"reqNotifiedVersion=%d, newNotifiedVersion=%d, pulledVersion=%d", pullConfigFileReq.Namespace,
 					pullConfigFileReq.FileGroup, pullConfigFileReq.FileName, r.notifiedVersion, r.notifiedVersion,
 					pulledConfigFile.Version)
@@ -260,14 +263,14 @@ func (r *ConfigFileRepo) pull() error {
 				fireEventDuration := time.Since(fireEventStart)
 
 				totalPullDuration := time.Since(pullStartTime)
-				log.GetBaseLogger().Infof("[Config][FileRepo] pull耗时统计 - file=%s/%s/%s, 总耗时=%dms, 准备请求=%dms, "+
-					"chain执行=%dms, 保存缓存=%dms, 触发事件=%dms", pullConfigFileReq.Namespace,
+				r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] pull耗时统计 - file=%s/%s/%s, 总耗时=%dms, "+
+					"准备请求=%dms, chain执行=%dms, 保存缓存=%dms, 触发事件=%dms", pullConfigFileReq.Namespace,
 					pullConfigFileReq.FileGroup, pullConfigFileReq.FileName,
 					totalPullDuration.Milliseconds(), prepareReqDuration.Milliseconds(), chainDuration.Milliseconds(),
 					saveCacheDuration.Milliseconds(), fireEventDuration.Milliseconds())
 			} else {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[Config][FileRepo] 拉取的版本不比本地新，跳过更新. file=%s/%s/%s, "+
+				if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 拉取的版本不比本地新，跳过更新. file=%s/%s/%s, "+
 						"pulledVersion=%d, localVersion=%d", pullConfigFileReq.Namespace, pullConfigFileReq.FileGroup,
 						pullConfigFileReq.FileName, pulledConfigFile.Version, oldVersion)
 				}
@@ -278,8 +281,8 @@ func (r *ConfigFileRepo) pull() error {
 		// 远端没有此配置文件
 		if responseCode == uint32(apimodel.Code_NotFoundResource) {
 			r.retryPolicy.success()
-			log.GetBaseLogger().Warnf("[Config][FileRepo] config file not found, please check whether config file "+
-				"released. %+v", r.configFileMetadata)
+			r.logCtx.GetBaseLogger().Warnf("[Config][FileRepo] config file not found, please check whether config "+
+				"file released. %+v", r.configFileMetadata)
 			// 删除配置文件
 			r.removeCacheConfigFile(&configconnector.ConfigFile{
 				Namespace: pullConfigFileReq.Namespace,
@@ -287,7 +290,7 @@ func (r *ConfigFileRepo) pull() error {
 				FileName:  pullConfigFileReq.FileName,
 			})
 			if remoteConfigFile := r.loadRemoteFile(); remoteConfigFile != nil {
-				log.GetBaseLogger().Infof("[Config][FileRepo] 配置文件已删除，触发变更事件. file=%s/%s/%s",
+				r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 配置文件已删除，触发变更事件. file=%s/%s/%s",
 					pullConfigFileReq.Namespace, pullConfigFileReq.FileGroup, pullConfigFileReq.FileName)
 				r.fireChangeEvent(_notExistFile)
 			}
@@ -296,13 +299,13 @@ func (r *ConfigFileRepo) pull() error {
 		// 数据没有变更，服务端会等待30秒才返回data no change
 		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			r.retryPolicy.success()
-			log.GetBaseLogger().Infof("[Config][FileRepo] data no change, code:%v. file=%s/%s/%s", responseCode,
+			r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] data no change, code:%v. file=%s/%s/%s", responseCode,
 				pullConfigFileReq.Namespace, pullConfigFileReq.FileGroup, pullConfigFileReq.FileName)
 			return nil
 		}
 		err = fmt.Errorf("pull config file with unexpect code. %d", responseCode)
 		// 预期之外的状态码，重试
-		log.GetBaseLogger().Errorf("[Config][FileRepo] %v, retry-times=%d, code=%d", err, retryTimes, responseCode)
+		r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] %v, retry-times=%d, code=%d", err, retryTimes, responseCode)
 		r.retryPolicy.fail()
 		retryTimes++
 		r.retryPolicy.delay()
@@ -340,12 +343,12 @@ func (r *ConfigFileRepo) fallbackIfNecessary(retryTimes int, req *configconnecto
 				Tags:          cacheVal.Tags,
 			},
 		}, nil
-	})
+	}, r.logCtx)
 	if err != nil {
-		log.GetBaseLogger().Errorf("[Config][FileRepo] fallback to local cache fail. %+v", err)
+		r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] fallback to local cache fail. %+v", err)
 		return
 	}
-	log.GetBaseLogger().Infof("[Config][FileRepo] fallback to local cache success.")
+	r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] fallback to local cache success.")
 	localFile := response.ConfigFile
 	r.fireChangeEvent(localFile)
 }
@@ -377,7 +380,7 @@ func (r *ConfigFileRepo) handleEventReporterChain(f *configconnector.ConfigFile)
 	}
 	for _, chain := range r.eventReporterChain {
 		if err := chain.ReportEvent(e); err != nil {
-			log.GetBaseLogger().Errorf("[Config][FileRepo] report event(%+v) err: %+v", e, err)
+			r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] report event(%+v) err: %+v", e, err)
 			continue
 		}
 	}
@@ -411,28 +414,28 @@ func (r *ConfigFileRepo) onLongPollingNotified(newVersion uint64) {
 		currentVersion = remoteConfigFile.GetVersion()
 	}
 
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[Config][FileRepo] 收到长轮询通知. file=%s/%s/%s, newVersion=%d, currentVersion=%d, notifiedVersion=%d",
+	if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 收到长轮询通知. file=%s/%s/%s, newVersion=%d, currentVersion=%d, notifiedVersion=%d",
 			r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 			r.configFileMetadata.GetFileName(), newVersion, currentVersion, r.notifiedVersion)
 	}
 
 	if remoteConfigFile != nil && remoteConfigFile.GetVersion() >= newVersion {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][FileRepo] 本地版本不落后，跳过拉取. file=%s/%s/%s, localVersion=%d, notifiedNewVersion=%d",
+		if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 本地版本不落后，跳过拉取. file=%s/%s/%s, localVersion=%d, notifiedNewVersion=%d",
 				r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 				r.configFileMetadata.GetFileName(), remoteConfigFile.GetVersion(), newVersion)
 		}
 		return
 	}
 
-	log.GetBaseLogger().Infof("[Config][FileRepo] 长轮询通知版本更新，开始拉取. file=%s/%s/%s, newVersion=%d, currentVersion=%d",
+	r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 长轮询通知版本更新，开始拉取. file=%s/%s/%s, newVersion=%d, currentVersion=%d",
 		r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 		r.configFileMetadata.GetFileName(), newVersion, currentVersion)
 
 	r.notifiedVersion = newVersion
 	if err := r.pull(); err != nil {
-		log.GetBaseLogger().Errorf("[Config][FileRepo] pull config file error by long polling notification. file=%s/%s/%s, err=%v",
+		r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] pull config file error by long polling notification. file=%s/%s/%s, err=%v",
 			r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 			r.configFileMetadata.GetFileName(), err)
 	}
@@ -448,12 +451,12 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 		f.SetContent(f.GetSourceContent())
 	}
 
-	log.GetBaseLogger().Infof("[Config][FileRepo] 触发配置变更事件. file=%s/%s/%s, version=%d, notExist=%v, listenerCount=%d",
+	r.logCtx.GetBaseLogger().Infof("[Config][FileRepo] 触发配置变更事件. file=%s/%s/%s, version=%d, notExist=%v, listenerCount=%d",
 		r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 		r.configFileMetadata.GetFileName(), f.GetVersion(), f.NotExist, len(r.listeners))
 
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[Config][FileRepo] 配置变更事件详情. file=%s/%s/%s, version=%d, md5=%s, contentLen=%d",
+	if r.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetBaseLogger().Debugf("[Config][FileRepo] 配置变更事件详情. file=%s/%s/%s, version=%d, md5=%s, contentLen=%d",
 			r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 			r.configFileMetadata.GetFileName(), f.GetVersion(), f.GetMd5(), len(f.GetContent()))
 	}
@@ -466,7 +469,7 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 
 	for i, listener := range r.listeners {
 		if err := listener(r.configFileMetadata, f.GetContent(), f.Persistent); err != nil {
-			log.GetBaseLogger().Errorf("[Config][FileRepo] invoke config file repo change listener[%d] failed. file=%s/%s/%s, err=%v",
+			r.logCtx.GetBaseLogger().Errorf("[Config][FileRepo] invoke config file repo change listener[%d] failed. file=%s/%s/%s, err=%v",
 				i, r.configFileMetadata.GetNamespace(), r.configFileMetadata.GetFileGroup(),
 				r.configFileMetadata.GetFileName(), err)
 		}

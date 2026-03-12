@@ -24,7 +24,6 @@ import (
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -53,6 +52,7 @@ type Connector struct {
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
 	token           string
+	logCtx          *config.ContextLogger
 }
 
 // Type 插件类型
@@ -67,6 +67,7 @@ func (g *Connector) Name() string {
 
 // Init 初始化插件
 func (g *Connector) Init(ctx *plugin.InitContext) error {
+	g.logCtx = ctx.Config.GetContextLogger()
 	g.RunContext = common.NewRunContext()
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	cfgValue := ctx.Config.GetGlobal().GetServerConnector().GetPluginConfig(g.Name())
@@ -79,7 +80,7 @@ func (g *Connector) Init(ctx *plugin.InitContext) error {
 	g.valueCtx = ctx.ValueCtx
 	protocol := ctx.Config.GetGlobal().GetServerConnector().GetProtocol()
 	if protocol == g.Name() {
-		log.GetBaseLogger().Infof("set %s plugin as connectionCreator", g.Name())
+		g.logCtx.GetBaseLogger().Infof("set %s plugin as connectionCreator", g.Name())
 		g.connManager.SetConnCreator(g)
 	}
 	g.discoverConnector = &connector.DiscoverConnector{}

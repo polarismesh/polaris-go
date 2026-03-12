@@ -33,7 +33,7 @@ type NearbyRoutingAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (n *NearbyRoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (n *NearbyRoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -43,7 +43,7 @@ func (n *NearbyRoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverRespons
 	if resp.NearbyRouteRules == nil || len(resp.NearbyRouteRules) == 0 {
 		// 当没有就近路由规则时，使用 service.revision
 		revision = resp.GetService().GetRevision().GetValue()
-		log.GetBaseLogger().Debugf("NearbyRoutingAssistant.ParseRuleValue: service=%s, no nearby route rules found, using service revision=%s",
+		baseLogger.Debugf("NearbyRoutingAssistant.ParseRuleValue: service=%s, no nearby route rules found, using service revision=%s",
 			serviceKey, revision)
 		return nil, revision
 	}
@@ -80,7 +80,7 @@ func (n *NearbyRoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverRespons
 		Revision:  wrapperspb.String(revision),
 	}
 
-	log.GetBaseLogger().Debugf("NearbyRoutingAssistant.ParseRuleValue: service=%s, rules=%d, revision=%s, enabled=%v, priority=%d",
+	baseLogger.Debugf("NearbyRoutingAssistant.ParseRuleValue: service=%s, rules=%d, revision=%s, enabled=%v, priority=%d",
 		serviceKey, len(resp.NearbyRouteRules), revision, selectedRule.GetEnable(), selectedRule.GetPriority())
 
 	return routing, revision

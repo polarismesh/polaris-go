@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
 )
 
@@ -43,6 +44,8 @@ const (
 	ContextKeyFinishInitTime = "SDKFinishInitTime"
 	// ContextKeySelfIP sdk bind ip
 	ContextKeySelfIP = "__sdk_bind_ip__"
+	// ContextKeyLogCtx 上下文日志
+	ContextKeyLogCtx = "__log_ctx__"
 )
 
 // SDKToken sdkContext的唯一标识

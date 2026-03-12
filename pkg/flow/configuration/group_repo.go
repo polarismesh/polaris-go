@@ -42,6 +42,7 @@ type ConfigGroupRepo struct {
 	retryPolicy     retryPolicy
 	// 从服务端获取的原始配置对象 *configconnector.ConfigFile
 	remoteRef *atomic.Value
+	logCtx    *config.ContextLogger
 
 	lock      sync.RWMutex
 	listeners []func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse)
@@ -62,18 +63,19 @@ func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequest
 		},
 		remoteRef: &atomic.Value{},
 		listeners: make([]func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse), 0, 4),
+		logCtx:    configuration.GetContextLogger(),
 	}
 
-	log.GetBaseLogger().Infof("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
+	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
 		namespace, group, mode)
 
 	if err := repo.pull(); err != nil {
-		log.GetBaseLogger().Errorf("[Config][Group] 初始拉取配置分组失败. namespace=%s, group=%s, err=%v",
+		repo.logCtx.GetBaseLogger().Errorf("[Config][Group] 初始拉取配置分组失败. namespace=%s, group=%s, err=%v",
 			namespace, group, err)
 		return nil, err
 	}
 
-	log.GetBaseLogger().Infof("[Config][Group] 初始拉取配置分组完成. namespace=%s, group=%s, revision=%s",
+	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 初始拉取配置分组完成. namespace=%s, group=%s, revision=%s",
 		namespace, group, repo.notifiedVersion)
 
 	return repo, nil
@@ -88,7 +90,7 @@ func (repo *ConfigGroupRepo) pull() error {
 	}
 	groupInfo := fmt.Sprintf("{namespace=%s, group=%s, oldRevision=%s, mode=%v}", req.Namespace, req.Group,
 		req.Revision, req.Mode)
-	log.GetBaseLogger().Infof("[Config][Group] start pull. groupInfo:%s", groupInfo)
+	repo.logCtx.GetBaseLogger().Infof("[Config][Group] start pull. groupInfo:%s", groupInfo)
 
 	var (
 		retryTimes = 0
@@ -99,7 +101,7 @@ func (repo *ConfigGroupRepo) pull() error {
 		response, err := repo.connector.GetConfigGroup(req)
 
 		if err != nil {
-			log.GetBaseLogger().Errorf("[Config][Group] failed to pull. retry times = %d, err = %v, groupInfo:%s",
+			repo.logCtx.GetBaseLogger().Errorf("[Config][Group] failed to pull. retry times = %d, err = %v, groupInfo:%s",
 				retryTimes, err, groupInfo)
 			repo.retryPolicy.fail()
 			retryTimes++
@@ -108,7 +110,7 @@ func (repo *ConfigGroupRepo) pull() error {
 		}
 
 		responseCode := response.Code
-		log.GetBaseLogger().Infof("[Config][Group] pull finished. respCode=%d, respRevision=%+v, duration=%dms, "+
+		repo.logCtx.GetBaseLogger().Infof("[Config][Group] pull finished. respCode=%d, respRevision=%+v, duration=%dms, "+
 			"groupInfo:%s", responseCode, response.Revision, time.Since(startTime).Milliseconds(), groupInfo)
 
 		// 拉取成功
@@ -122,22 +124,22 @@ func (repo *ConfigGroupRepo) pull() error {
 				oldFileCount = len(remoteConfigFile.ReleaseFiles)
 			}
 
-			log.GetBaseLogger().Infof("[Config][Group] 拉取成功，比较版本. newRevision=%s, oldRevision=%s, "+
+			repo.logCtx.GetBaseLogger().Infof("[Config][Group] 拉取成功，比较版本. newRevision=%s, oldRevision=%s, "+
 				"newFileCount=%d, oldFileCount=%d, groupInfo:%s, hasCache=%v", response.Revision, oldRevision,
 				len(response.ReleaseFiles), oldFileCount, groupInfo, remoteConfigFile != nil)
 
 			// 本地配置文件落后，更新内存缓存
 			if remoteConfigFile == nil || response.Revision != remoteConfigFile.Revision {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				if repo.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 					for _, f := range response.ReleaseFiles {
-						log.GetBaseLogger().Debugf("[Config][Group] 分组文件详情: fileName=%s, version=%d, md5=%s, "+
+						repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 分组文件详情: fileName=%s, version=%d, md5=%s, "+
 							"groupInfo:%s", f.FileName, f.Version, f.Md5, groupInfo)
 					}
 				}
 				repo.fireChangeEvent(response, true)
 			} else {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[Config][Group] 配置分组未变更. namespace=%s, group=%s, revision=%s",
+				if repo.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 配置分组未变更. namespace=%s, group=%s, revision=%s",
 						repo.namespace, repo.groupName, response.Revision)
 				}
 			}
@@ -147,7 +149,7 @@ func (repo *ConfigGroupRepo) pull() error {
 		// 远端没有此配置文件
 		if responseCode == uint32(apimodel.Code_NotFoundResource) {
 			repo.retryPolicy.success()
-			log.GetBaseLogger().Warnf("[Config][Group] not found, check config group exist. groupInfo:%s", groupInfo)
+			repo.logCtx.GetBaseLogger().Warnf("[Config][Group] not found, check config group exist. groupInfo:%s", groupInfo)
 			if remoteConfigFile := repo.loadRemoteGroup(); remoteConfigFile != nil {
 				repo.fireChangeEvent(response, false)
 			}
@@ -157,15 +159,15 @@ func (repo *ConfigGroupRepo) pull() error {
 		// 数据没有变更，正常返回
 		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			repo.retryPolicy.success()
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[Config][Group] data no change. groupInfo:%s", groupInfo)
+			if repo.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				repo.logCtx.GetBaseLogger().Debugf("[Config][Group] data no change. groupInfo:%s", groupInfo)
 			}
 			return nil
 		}
 
 		err = fmt.Errorf("pull config group with unexpect code. %d", responseCode)
 		// 预期之外的状态码，重试
-		log.GetBaseLogger().Errorf("[Config][Group] %v, retry-times=%d, code=%d, groupInfo:%s", err, retryTimes,
+		repo.logCtx.GetBaseLogger().Errorf("[Config][Group] %v, retry-times=%d, code=%d, groupInfo:%s", err, retryTimes,
 			responseCode, groupInfo)
 
 		repo.retryPolicy.fail()
@@ -186,7 +188,7 @@ func (repo *ConfigGroupRepo) fireChangeEvent(f *configconnector.ConfigGroupRespo
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
-	log.GetBaseLogger().Infof("[Config][Group] 触发分组变更事件. namespace=%s, group=%s, exist=%v, revision=%s, "+
+	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 触发分组变更事件. namespace=%s, group=%s, exist=%v, revision=%s, "+
 		"fileCount=%d, listenerCount=%d", repo.namespace, repo.groupName, exist, f.Revision, len(f.ReleaseFiles),
 		len(repo.listeners))
 
@@ -203,8 +205,8 @@ func (repo *ConfigGroupRepo) fireChangeEvent(f *configconnector.ConfigGroupRespo
 	}
 	// 后通知，将旧值和新值一起传递给监听器
 	for i, listener := range repo.listeners {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][Group] 通知分组变更监听器[%d]. namespace=%s, group=%s, revision=%s",
+		if repo.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 通知分组变更监听器[%d]. namespace=%s, group=%s, revision=%s",
 				i, repo.namespace, repo.groupName, repo.notifiedVersion)
 		}
 		listener(oldVal, f)

@@ -132,6 +132,7 @@ type StreamCounterSet struct {
 	createTimeMilli int64
 	// 时间差
 	timeDiff int64
+	logCtx   *config.ContextLogger
 }
 
 // NewStreamCounterSet 新建流管理器
@@ -141,6 +142,7 @@ func NewStreamCounterSet(asyncConnector *asyncRateLimitConnector, identifier *Ho
 		asyncConnector:  asyncConnector,
 		HostIdentifier:  identifier,
 		createTimeMilli: model.CurrentMillisecond(),
+		logCtx:          asyncConnector.logCtx,
 	}
 	return streamCounterSet
 }
@@ -190,7 +192,7 @@ func (s *StreamCounterSet) preInitCheck(
 	if nil == s.conn {
 		conn, err := s.createConnection()
 		if err != nil {
-			log.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s:%d, err is %v",
+			s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s:%d, err is %v",
 				s.HostIdentifier.host, s.HostIdentifier.port, err)
 			return nil
 		}
@@ -204,7 +206,7 @@ func (s *StreamCounterSet) preInitCheck(
 		ctx := createHeaderContext(map[string]string{headerKeyClientIP: selfHost})
 		serviceStream, err := s.client.Service(ctx)
 		if err != nil {
-			log.GetNetworkLogger().Errorf("[RateLimit]fail to create serviceStream to %s:%d, err is %v",
+			s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to create serviceStream to %s:%d, err is %v",
 				s.HostIdentifier.host, s.HostIdentifier.port, err)
 			s.conn.Close()
 			return nil
@@ -256,12 +258,12 @@ func (s *StreamCounterSet) SendInitRequest(initReq *ratelimiter.RateLimitInitReq
 		Cmd:                  ratelimiter.RateLimitCmd_INIT,
 		RateLimitInitRequest: initReq,
 	}
-	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
+	if s.logCtx.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		initReqStr, _ := (&jsonpb.Marshaler{}).MarshalToString(initReq)
-		log.GetNetworkLogger().Debugf("[RateLimit]Send init request: %s\n", initReqStr)
+		s.logCtx.GetNetworkLogger().Debugf("[RateLimit]Send init request: %s\n", initReqStr)
 	}
 	if err := serviceStream.Send(request); err != nil {
-		log.GetNetworkLogger().Errorf("[RateLimit]fail to send init message to %s:%d, key is %s, err is %v",
+		s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to send init message to %s:%d, key is %s, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, counterIdentifier, err)
 	}
 }
@@ -278,11 +280,11 @@ func (s *StreamCounterSet) checkAndCreateClient() (ratelimiter.RateLimitGRPCV2Cl
 		return nil, fmt.Errorf("reconnect interval should exceed %v", s.asyncConnector.reconnectInterval)
 	}
 	if nil == s.conn {
-		log.GetNetworkLogger().Infof("[RateLimit]createConnection to %s", *s.HostIdentifier)
+		s.logCtx.GetNetworkLogger().Infof("[RateLimit]createConnection to %s", *s.HostIdentifier)
 		s.lastConnectFailTimeMilli = curTimeMilli
 		conn, err := s.createConnection()
 		if err != nil {
-			log.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s, err is %v",
+			s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to connect to %s, err is %v",
 				*s.HostIdentifier, err)
 			return nil, err
 		}
@@ -352,7 +354,7 @@ func (s *StreamCounterSet) AdjustTime() int64 {
 	timeResp, err := client.TimeAdjust(ctx, &ratelimiter.TimeAdjustRequest{})
 	atomic.StoreInt64(&s.lastSyncTimeMilli, model.CurrentMillisecond())
 	if err != nil {
-		log.GetNetworkLogger().Errorf("[RateLimit]fail to send timeAdjust message to %s:%d, key is %s, err is %v",
+		s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to send timeAdjust message to %s:%d, key is %s, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, err)
 		return atomic.LoadInt64(&s.timeDiff)
 	}
@@ -361,7 +363,7 @@ func (s *StreamCounterSet) AdjustTime() int64 {
 	latency := recvClientTimeMilli - sendTimeMilli
 	timeDiff := serverTimeMill + latency/2 - recvClientTimeMilli
 	atomic.StoreInt64(&s.timeDiff, timeDiff)
-	log.GetNetworkLogger().Infof(
+	s.logCtx.GetNetworkLogger().Infof(
 		"[RateLimit]adjust timediff to %s:%d is %v, server time is %d, latency is %d",
 		s.HostIdentifier.host, s.HostIdentifier.port, timeDiff, serverTimeMill, latency)
 	return timeDiff
@@ -440,7 +442,7 @@ func (s *StreamCounterSet) processInitResponse(initResp *ratelimiter.RateLimitIn
 		s.mutex.RUnlock()
 		return true
 	}
-	log.GetNetworkLogger().Errorf(
+	s.logCtx.GetNetworkLogger().Errorf(
 		"[RateLimit]received init response with error, code %d, counter %s", initResp.Code, identifier)
 	return false
 }
@@ -460,7 +462,7 @@ func (s *StreamCounterSet) processReportResponse(reportRsp *ratelimiter.RateLimi
 		s.mutex.RUnlock()
 		return true
 	}
-	log.GetNetworkLogger().Errorf("[RateLimit]received init response with error, code %d, window %s",
+	s.logCtx.GetNetworkLogger().Errorf("[RateLimit]received init response with error, code %d, window %s",
 		reportRsp.GetCode(), *s.HostIdentifier)
 	return false
 }
@@ -472,7 +474,7 @@ func (s *StreamCounterSet) processResponse(serviceStream ratelimiter.RateLimitGR
 		resp, err := serviceStream.Recv()
 		if err != nil {
 			if err != io.EOF {
-				log.GetNetworkLogger().Errorf("[RateLimit]fail to receive message from %s:%d, err is %v",
+				s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to receive message from %s:%d, err is %v",
 					s.HostIdentifier.host, s.HostIdentifier.port, err)
 			}
 			return
@@ -480,18 +482,18 @@ func (s *StreamCounterSet) processResponse(serviceStream ratelimiter.RateLimitGR
 		switch resp.Cmd {
 		case ratelimiter.RateLimitCmd_INIT:
 			initResp := resp.GetRateLimitInitResponse()
-			if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
+			if s.logCtx.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 				initRspStr, _ := (&jsonpb.Marshaler{}).MarshalToString(initResp)
-				log.GetNetworkLogger().Debugf("[RateLimit]Recv init response: %s\n", initRspStr)
+				s.logCtx.GetNetworkLogger().Debugf("[RateLimit]Recv init response: %s\n", initRspStr)
 			}
 			if !s.processInitResponse(initResp) {
 				return
 			}
 		case ratelimiter.RateLimitCmd_ACQUIRE:
 			reportResp := resp.GetRateLimitReportResponse()
-			if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
+			if s.logCtx.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 				reportRspStr, _ := (&jsonpb.Marshaler{}).MarshalToString(reportResp)
-				log.GetNetworkLogger().Debugf("[RateLimit]Recv report response: %s\n", reportRspStr)
+				s.logCtx.GetNetworkLogger().Debugf("[RateLimit]Recv report response: %s\n", reportRspStr)
 			}
 			if !s.processReportResponse(reportResp) {
 				return
@@ -536,12 +538,12 @@ func (s *StreamCounterSet) SendReportRequest(clientReportReq *limitpb.ClientRate
 		Cmd:                    ratelimiter.RateLimitCmd_ACQUIRE,
 		RateLimitReportRequest: reportReq,
 	}
-	if log.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
+	if s.logCtx.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		reportReqStr, _ := (&jsonpb.Marshaler{}).MarshalToString(reportReq)
-		log.GetNetworkLogger().Debugf("[RateLimit]Send report request: %s\n", reportReqStr)
+		s.logCtx.GetNetworkLogger().Debugf("[RateLimit]Send report request: %s\n", reportReqStr)
 	}
 	if err := s.serviceStream.Send(request); err != nil {
-		log.GetNetworkLogger().Errorf("[RateLimit]fail to send request message to %s:%d, err is %v",
+		s.logCtx.GetNetworkLogger().Errorf("[RateLimit]fail to send request message to %s:%d, err is %v",
 			s.HostIdentifier.host, s.HostIdentifier.port, err)
 	}
 	return nil
@@ -598,6 +600,7 @@ type asyncRateLimitConnector struct {
 	reconnectInterval time.Duration
 	// 协议
 	protocol string
+	logCtx   *config.ContextLogger
 }
 
 // NewAsyncRateLimitConnector .
@@ -620,6 +623,7 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 		clientHostMutex:   &sync.Mutex{},
 		protocol:          protocol,
 		stopChan:          make(chan struct{}),
+		logCtx:            cfg.GetContextLogger(),
 	}
 	go c.startClearTask()
 	return c
@@ -699,7 +703,7 @@ func (a *asyncRateLimitConnector) getIPString(remoteHost string, remotePort uint
 	addr := fmt.Sprintf("%s:%d", remoteHost, remotePort)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		log.GetNetworkLogger().Errorf("fail to dial %s to get local host, err is %v", err)
+		a.logCtx.GetNetworkLogger().Errorf("fail to dial %s to get local host, err is %v", addr, err)
 		return ""
 	}
 	localAddr := conn.LocalAddr().String()
@@ -734,7 +738,7 @@ func (a *asyncRateLimitConnector) startClearTask() {
 		case <-ticker.C:
 			a.clearCounterSet()
 		case <-a.stopChan:
-			log.GetBaseLogger().Infof("[RateLimit] stop clear task")
+			a.logCtx.GetBaseLogger().Infof("[RateLimit] stop clear task")
 			return
 		}
 	}
@@ -758,7 +762,7 @@ func (a *asyncRateLimitConnector) clearCounterSet() {
 			delete(a.streams, *counterSet.HostIdentifier)
 			a.mutex.Unlock()
 			counterSet.closeConnection()
-			log.GetBaseLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
+			a.logCtx.GetBaseLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
 		}
 	}
 }

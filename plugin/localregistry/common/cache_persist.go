@@ -31,7 +31,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 )
@@ -53,6 +53,8 @@ type CachePersistHandler struct {
 	maxReadRetry  int
 	retryInterval time.Duration
 	marshaler     *jsonpb.Marshaler
+	// 上下文日志
+	logCtx *config.ContextLogger
 }
 
 // CacheFileInfo 文件信息
@@ -63,8 +65,9 @@ type CacheFileInfo struct {
 
 // NewCachePersistHandler create persistence handler
 func NewCachePersistHandler(persistEnable bool, persistDir string, maxWriteRetry int,
-	maxReadRetry int, retryInterval time.Duration) (*CachePersistHandler, error) {
+	maxReadRetry int, retryInterval time.Duration, logCtx *config.ContextLogger) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
+	handler.logCtx = logCtx
 	handler.persistEnable = persistEnable
 	handler.persistDir = persistDir
 	handler.maxReadRetry = maxReadRetry
@@ -98,7 +101,7 @@ func (cph *CachePersistHandler) LoadPersistedServices() map[model.ServiceEventKe
 		msg := &apiservice.DiscoverResponse{}
 		svcValueKey, fileInfo, err := cph.loadCacheFromFile(cacheFile, msg)
 		if err != nil {
-			log.GetBaseLogger().Errorf("fail to load cache from file %s, error is %v", cacheFile, err)
+			cph.logCtx.GetBaseLogger().Errorf("fail to load cache from file %s, error is %v", cacheFile, err)
 			continue
 		}
 		// 加载缓存时，也要将实例进行排序
@@ -142,7 +145,7 @@ func (cph *CachePersistHandler) LoadMessageFromFile(relativeFile string, message
 // 从绝对文件中加载缓存
 func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, message proto.Message,
 	maxRetry int) error {
-	log.GetBaseLogger().Infof("Start to load cache from %s", cacheFile)
+	cph.logCtx.GetBaseLogger().Infof("Start to load cache from %s", cacheFile)
 	var lastErr error
 	var retryTimes int
 	for retryTimes = 0; retryTimes <= maxRetry; retryTimes++ {
@@ -192,20 +195,20 @@ func (cph *CachePersistHandler) fileNameToServiceEventKey(fileName string) (*mod
 // DeleteCacheFromFile 删除缓存文件
 func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	fileToDelete := filepath.Join(cph.persistDir, fileName)
-	log.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
+	cph.logCtx.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
 	for retryTimes := 0; retryTimes <= cph.maxWriteRetry; retryTimes++ {
 		err := os.Remove(fileToDelete)
 		if err != nil {
 			if !os.IsNotExist(err) {
-				log.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
+				cph.logCtx.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
 					" because %s, next retrytimes %d", fileToDelete, err.Error(), retryTimes)
 			} else {
-				log.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
+				cph.logCtx.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
 					" error %s is not retryable, stop retrying", fileToDelete, err.Error())
 				return
 			}
 		} else {
-			log.GetBaseLogger().Infof("Success to delete cache file %s", fileToDelete)
+			cph.logCtx.GetBaseLogger().Infof("Success to delete cache file %s", fileToDelete)
 			return
 		}
 		time.Sleep(cph.retryInterval)
@@ -215,21 +218,21 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 // SaveMessageToFile 按服务来进行缓存存储
 func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp proto.Message) {
 	fileToAdd := filepath.Join(cph.persistDir, fileName)
-	log.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
+	cph.logCtx.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
 	msg, err := cph.marshaler.MarshalToString(svcResp)
 	if err != nil {
-		log.GetBaseLogger().Warnf("Fail to marshal the service response for %s", fileToAdd)
+		cph.logCtx.GetBaseLogger().Warnf("Fail to marshal the service response for %s", fileToAdd)
 		return
 	}
 	for retryTimes := 0; retryTimes <= cph.maxWriteRetry; retryTimes++ {
 		err = cph.doWriteFile(fileToAdd, []byte(msg))
 		if err != nil {
 			if retryTimes > 0 {
-				log.GetBaseLogger().Warnf("Fail to write cache file %s, error: %s,"+
+				cph.logCtx.GetBaseLogger().Warnf("Fail to write cache file %s, error: %s,"+
 					" retry times: %v", fileToAdd, err.Error(), retryTimes)
 			}
 		} else {
-			log.GetBaseLogger().Infof("Success to write cache file %s", fileToAdd)
+			cph.logCtx.GetBaseLogger().Infof("Success to write cache file %s", fileToAdd)
 			return
 		}
 		time.Sleep(cph.retryInterval)

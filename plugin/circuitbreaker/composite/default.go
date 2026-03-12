@@ -49,7 +49,7 @@ type defaultInstanceCircuitBreakerConfig struct {
 }
 
 func (c *RuleContainer) getCircuitBreakerRule(object *model.ServiceRuleResponse) *fault_tolerance.CircuitBreakerRule {
-	rule := selectCircuitBreakerRule(c.res, object, c.regexFunction)
+	rule := selectCircuitBreakerRule(c.res, object, c.regexFunction, c.log)
 	if rule != nil {
 		c.log.Debugf("[CircuitBreaker] found matched rule: %s for resource: %s", rule.Name, c.res.String())
 		return rule

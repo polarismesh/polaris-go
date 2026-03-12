@@ -25,7 +25,6 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -265,7 +264,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) {
 	atomic.StoreUint32(&s.hasRemoteUpdated, 1)
 	atomic.StoreUint32(&s.hasRemoteError, 0)
 	if err != nil {
-		log.GetBaseLogger().Errorf("OnServiceUpdate: fail to update %s for err %v", *svcEventKey, err)
+		s.registry.logCtx.GetBaseLogger().Errorf("OnServiceUpdate: fail to update %s for err %v", *svcEventKey, err)
 		if err.ErrorCode() == model.ErrCodeInvalidServerResponse {
 			// 网络错误问题，这里塞入一个空的 value, 避免每次获取都需要等待
 			atomic.StoreUint32(&s.hasRemoteError, 1)
@@ -276,7 +275,7 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) {
 		cachedStatus := s.Handler.CompareMessage(cachedValue, message)
 		if reflect2.IsNil(cachedValue) || cachedStatus == CacheChanged || cachedStatus == CacheAdded ||
 			cachedStatus == CacheDeleted {
-			log.GetBaseLogger().Infof(
+			s.registry.logCtx.GetBaseLogger().Infof(
 				"OnServiceUpdate: cache %s is pending to update, status %s", *svcEventKey, cachedStatus)
 			svcCacheFile := lrplug.ServiceEventKeyToFileName(*svcEventKey)
 			_ = s.registry.PersistMessage(svcCacheFile, message)
@@ -312,7 +311,7 @@ func (s *CacheObject) GetRevision() string {
 // SetValue 设置缓存对象
 func (s *CacheObject) SetValue(cacheValue model.RegistryValue) {
 	s.value.Store(cacheValue)
-	log.GetBaseLogger().Infof(
+	s.registry.logCtx.GetBaseLogger().Infof(
 		"CacheObject: value for %s is updated, revision %s", *s.serviceValueKey, cacheValue.GetRevision())
 }
 

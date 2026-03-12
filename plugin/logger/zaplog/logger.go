@@ -202,6 +202,23 @@ func (z *zapLogger) GetLogDir() string {
 	return z.logDir
 }
 
+// WithFields 创建一个携带固定字段的子Logger，字段以key-value对形式传入
+// 例如: logger.AddFields("userId", "userA", "tenant", "tenantX")
+func (z *zapLogger) WithFields(kvs ...string) plog.Logger {
+	if len(kvs) == 0 {
+		return z
+	}
+	fields := make([]zap.Field, 0, len(kvs)/2)
+	for i := 0; i+1 < len(kvs); i += 2 {
+		fields = append(fields, zap.String(kvs[i], kvs[i+1]))
+	}
+	return &zapLogger{
+		outputLevel: atomic.LoadInt32(&z.outputLevel),
+		logger:      z.logger.With(fields...),
+		logDir:      z.logDir,
+	}
+}
+
 // 通用打印函数
 func (z *zapLogger) printf(
 	logFun func(msg string, fields ...zap.Field), level int, format string, args ...interface{}) {

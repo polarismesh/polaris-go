@@ -31,7 +31,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -89,10 +88,12 @@ type Engine struct {
 	watchEngine *WatchEngine
 	// 配置过滤链
 	configFilterChain configfilter.Chain
+	logCtx            *config.ContextLogger
 }
 
 // InitFlowEngine 初始化flowEngine实例
 func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
+	flowEngine.logCtx = initContext.Config.GetContextLogger()
 	var err error
 	cfg := initContext.Config
 	plugins := initContext.Plugins
@@ -160,10 +161,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 		}
 		flowEngine.circuitBreakerFlow = newCircuitBreakerFlow(flowEngine, breakers[0])
 	}
-	flowEngine.watchEngine = NewWatchEngine(flowEngine.registry)
+	flowEngine.watchEngine = NewWatchEngine(flowEngine.registry, flowEngine.logCtx)
 	flowEngine.subscribe = &subscribeChannel{
 		registerServices: []model.ServiceKey{},
 		eventChannelMap:  make(map[model.ServiceKey]chan model.SubScribeEvent),
+		logCtx:           flowEngine.logCtx,
 	}
 	callbackHandler := common.PluginEventHandler{
 		Callback: flowEngine.ServiceEventCallback,
@@ -182,7 +184,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 
 	// 初始注册状态管理器
-	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval())
+	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval(), flowEngine.logCtx)
 	return nil
 }
 
@@ -239,7 +241,7 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 	}
 	ch, err := e.subscribe.WatchService(req.Key)
 	if err != nil {
-		log.GetBaseLogger().Errorf("watch service %s %s error:%s", req.Key.Namespace, req.Key.Service,
+		e.logCtx.GetBaseLogger().Errorf("watch service %s %s error:%s", req.Key.Namespace, req.Key.Service,
 			err.Error())
 		return nil, err
 	}
@@ -262,7 +264,7 @@ func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
 func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {
 		if err := e.subscribe.DoSubScribe(event); err != nil {
-			log.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe error:%s", err.Error())
+			e.logCtx.GetBaseLogger().Errorf("subscribePlugin.DoSubScribe error:%s", err.Error())
 		}
 	}
 	return e.watchEngine.ServiceEventCallback(event)
@@ -289,14 +291,14 @@ func (e *Engine) Start() error {
 	if nil != discoverSvc {
 		schedule.StartTask(
 			taskServerService, serverServiceTaskValues, map[interface{}]model.TaskValue{
-				keyDiscoverService: &data.ServiceKeyComparable{SvcKey: discoverSvc.ServiceKey}})
+				keyDiscoverService: &data.ServiceKeyComparable{SvcKey: discoverSvc.ServiceKey}}, e.logCtx)
 	}
 	schedule.StartTask(
 		taskClientReport, clientReportTaskValues, map[interface{}]model.TaskValue{
-			taskClientReport: &data.AllEqualsComparable{}})
+			taskClientReport: &data.AllEqualsComparable{}}, e.logCtx)
 	schedule.StartTask(
 		taskConfigReport, configReportTaskValues, map[interface{}]model.TaskValue{
-			taskConfigReport: &data.AllEqualsComparable{}})
+			taskConfigReport: &data.AllEqualsComparable{}}, e.logCtx)
 	return nil
 }
 
@@ -381,16 +383,16 @@ func (e *Engine) loadLocation() {
 	}
 	locationProvider, err := e.plugins.GetPlugin(common.TypeLocationProvider, location.ProviderName)
 	if err != nil {
-		log.GetBaseLogger().Errorf("get location provider plugin fail, error:%v", err)
+		e.logCtx.GetBaseLogger().Errorf("get location provider plugin fail, error:%v", err)
 		return
 	}
 	loc, err := locationProvider.(location.Provider).GetLocation()
 	if err != nil {
-		log.GetBaseLogger().Errorf("location provider get location fail, error:%v", err)
+		e.logCtx.GetBaseLogger().Errorf("location provider get location fail, error:%v", err)
 		return
 	}
 
-	log.GetBaseLogger().Infof("location provider get location result: %v", loc)
+	e.logCtx.GetBaseLogger().Infof("location provider get location result: %v", loc)
 	e.globalCtx.SetCurrentLocation(&model.Location{
 		Region: loc.Region,
 		Zone:   loc.Zone,
@@ -411,6 +413,7 @@ type subscribeChannel struct {
 	registerServices []model.ServiceKey
 	eventChannelMap  map[model.ServiceKey]chan model.SubScribeEvent
 	lock             sync.RWMutex
+	logCtx           *config.ContextLogger
 }
 
 var (
@@ -433,7 +436,7 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 	channel, ok := s.eventChannelMap[serviceEvent.SvcEventKey.ServiceKey]
 	s.lock.RUnlock()
 	if !ok {
-		log.GetBaseLogger().Debugf("%s %s not watch", serviceEvent.SvcEventKey.ServiceKey.Namespace,
+		s.logCtx.GetBaseLogger().Debugf("%s %s not watch", serviceEvent.SvcEventKey.ServiceKey.Namespace,
 			serviceEvent.SvcEventKey.ServiceKey.Service)
 		return nil
 	}
@@ -452,7 +455,7 @@ func (s *subscribeChannel) DoSubScribe(event *common.PluginEvent) error {
 		}
 	}
 	if err != nil {
-		log.GetBaseLogger().Errorf("DoSubScribe %s %s pushToBufferChannel err:%s",
+		s.logCtx.GetBaseLogger().Errorf("DoSubScribe %s %s pushToBufferChannel err:%s",
 			serviceEvent.SvcEventKey.ServiceKey.Namespace, serviceEvent.SvcEventKey.ServiceKey.Service, err.Error())
 	}
 	return err

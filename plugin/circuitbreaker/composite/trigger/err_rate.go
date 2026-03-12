@@ -72,8 +72,8 @@ func (c *ErrRateCounter) init() {
 	c.metricWindow = time.Duration(c.triggerCondition.Interval) * time.Second
 	c.errorPercent = int(c.triggerCondition.ErrorPercent)
 	c.minimumRequest = int32(c.triggerCondition.MinimumRequest)
-	c.sliceWindow = metric.NewSliceWindow(c.res.String(), bucketCount, getBucketInterval(c.metricWindow), maxDimension,
-		clock.GetClock().Now().UnixNano())
+	c.sliceWindow = metric.NewSliceWindow(c.log, c.res.String(), bucketCount, getBucketInterval(c.metricWindow),
+		maxDimension, clock.GetClock().Now().UnixNano())
 }
 
 func (c *ErrRateCounter) Report(success bool) {

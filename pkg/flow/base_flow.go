@@ -22,8 +22,8 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
@@ -118,7 +118,7 @@ func buildRedirectedFilter(filters *cacheFilters, redirectedService model.Servic
 
 // getAndLoadCacheValues 同步加载缓存资源，包括实例以及规则
 func getAndLoadCacheValues(registry localregistry.LocalRegistry,
-	request model.CacheValueQuery, load bool) (*CombineNotifyContext, model.SDKError) {
+	request model.CacheValueQuery, load bool, logCtx *config.ContextLogger) (*CombineNotifyContext, model.SDKError) {
 	var notifiers []*SingleNotifyContext
 
 	trigger := request.GetNotifierTrigger()
@@ -133,12 +133,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		}
 		if load && (instances.IsCacheLoaded() || !instances.IsInitialized()) {
 			dstInstKey := &ContextKey{ServiceKey: dstService, Operation: keyDstInstances}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstInstKey)
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstInstKey)
 			notifier, err := registry.LoadInstances(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstInstKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstInstKey, notifier, logCtx))
 		}
 	}
 	if trigger.EnableSrcRoute {
@@ -149,12 +149,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		}
 		if load && (routeRule.IsCacheLoaded() || !routeRule.IsInitialized()) {
 			srcRouterKey := &ContextKey{ServiceKey: srcService, Operation: keySourceRoute}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", srcRouterKey)
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", srcRouterKey)
 			notifier, err := registry.LoadServiceRouteRule(srcService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(srcRouterKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(srcRouterKey, notifier, logCtx))
 		}
 	}
 	if trigger.EnableDstRoute {
@@ -165,12 +165,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		}
 		if load && (routeRule.IsCacheLoaded() || !routeRule.IsInitialized()) {
 			dstRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRoute}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRouterKey)
 			notifier, err := registry.LoadServiceRouteRule(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier, logCtx))
 		}
 	}
 	if trigger.EnableNearbyRoute {
@@ -181,12 +181,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		}
 		if load && (nearbyRouteRule.IsCacheLoaded() || !nearbyRouteRule.IsInitialized()) {
 			dstNearbyRouterKey := &ContextKey{ServiceKey: dstService, Operation: keyDstNearByRouteRule}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstNearbyRouterKey)
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstNearbyRouterKey)
 			notifier, err := registry.LoadServiceNearByRouteRule(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstNearbyRouterKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstNearbyRouterKey, notifier, logCtx))
 		}
 	}
 	if trigger.EnableDstRateLimit {
@@ -196,12 +196,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			trigger.EnableDstRateLimit = false
 		} else if load {
 			dstRateLimitKey := &ContextKey{ServiceKey: dstService, Operation: keyDstRateLimit}
-			log.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRateLimitKey)
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstRateLimitKey)
 			notifier, err := registry.LoadServiceRateLimitRule(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstRateLimitKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstRateLimitKey, notifier, logCtx))
 		}
 	}
 	if trigger.EnableServices {
@@ -209,16 +209,16 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		if services.IsInitialized() {
 			// 复用接口
 			request.SetServices(services)
-			log.GetBaseLogger().Debugf("services by meta IsInitialized")
+			logCtx.GetBaseLogger().Debugf("services by meta IsInitialized")
 			trigger.EnableServices = false
 		} else {
 			dstServicesKey := &ContextKey{ServiceKey: dstService, Operation: keyDstServices}
-			log.GetBaseLogger().Debugf("services value not initialized, scheduled context %s", dstServicesKey)
+			logCtx.GetBaseLogger().Debugf("services value not initialized, scheduled context %s", dstServicesKey)
 			notifier, err := registry.LoadServices(dstService)
 			if err != nil {
 				return nil, err.(model.SDKError)
 			}
-			notifiers = append(notifiers, NewSingleNotifyContext(dstServicesKey, notifier))
+			notifiers = append(notifiers, NewSingleNotifyContext(dstServicesKey, notifier, logCtx))
 		}
 	}
 	// 构造远程获取的复合上下文
@@ -226,12 +226,12 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 		return nil, nil
 	}
 	// deadline为空代表已经超时或者重试次数已经用完，因此无需继续重试获取
-	return NewCombineNotifyContext(dstService, notifiers), nil
+	return NewCombineNotifyContext(dstService, notifiers, logCtx), nil
 }
 
 // tryGetServiceValuesFromCache 尝试加载服务信息，来源包括缓存文件加载的信息
 // 返回值为是否成功加载了所需信息和这个过程中可能发生的错误
-func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request model.CacheValueQuery) (bool, error) {
+func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request model.CacheValueQuery, logCtx *config.ContextLogger) (bool, error) {
 	failNum := 0
 	trigger := request.GetNotifierTrigger()
 	dstService := request.GetDstService()
@@ -304,7 +304,7 @@ func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request 
 		}
 	}
 	if trigger.EnableServices {
-		log.GetBaseLogger().Debugf("tryGetServiceValuesFromCache services")
+		logCtx.GetBaseLogger().Debugf("tryGetServiceValuesFromCache services")
 		_, err := registry.LoadServices(dstService)
 		if err != nil {
 			return false, err.(model.SDKError)

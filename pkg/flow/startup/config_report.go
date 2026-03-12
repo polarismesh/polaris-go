@@ -21,16 +21,16 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // NewConfigReportCallBack 创建配置上报回调
-func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext) *ConfigReportCallBack {
+func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext, logCtx *config.ContextLogger) *ConfigReportCallBack {
 	return &ConfigReportCallBack{
 		engine:    engine,
 		globalCtx: globalCtx,
 		interval:  config.DefaultReportSDKConfigurationInterval,
+		logCtx:    logCtx,
 	}
 }
 
@@ -39,6 +39,7 @@ type ConfigReportCallBack struct {
 	engine    model.Engine
 	globalCtx model.ValueContext
 	interval  time.Duration
+	logCtx    *config.ContextLogger
 }
 
 // Process 执行任务
@@ -51,7 +52,7 @@ func (c *ConfigReportCallBack) Process(
 	t, _ := c.globalCtx.GetValue(model.ContextKeyToken)
 	token := t.(model.SDKToken)
 	if err != nil {
-		log.GetBaseLogger().Errorf("report sdk config info, IP: %s, PID: %d, UID: %s, error:%s",
+		c.logCtx.GetBaseLogger().Errorf("report sdk config info, IP: %s, PID: %d, UID: %s, error:%s",
 			token.IP, token.PID, token.UID, err)
 		// 发生错误则进行重试，直到上报成功为止
 		return model.SKIP

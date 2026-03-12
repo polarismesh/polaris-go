@@ -77,6 +77,7 @@ type ContinuumSelector struct {
 	svcClusters model.ServiceClusters
 	ring        points
 	hashFunc    hash.HashFuncWithSeed
+	baseLogger  log.Logger
 }
 
 const (
@@ -86,10 +87,12 @@ const (
 
 // NewContinuum 创建hash环
 func NewContinuum(
-	instanceSet *model.InstanceSet, vnodeCount int, hashFunc hash.HashFuncWithSeed, id int32) (*ContinuumSelector, error) {
+	instanceSet *model.InstanceSet, vnodeCount int, hashFunc hash.HashFuncWithSeed, id int32,
+	baseLogger log.Logger) (*ContinuumSelector, error) {
 	var continuum = &ContinuumSelector{
 		svcClusters: instanceSet.GetServiceClusters(),
 		hashFunc:    hashFunc,
+		baseLogger:  baseLogger,
 	}
 	continuum.Id = id
 	if instanceSet.Count() == 0 {
@@ -121,10 +124,10 @@ func NewContinuum(
 			}
 			if addr, ok := hashValues[hashValue]; ok {
 				// hash冲突
-				log.GetBaseLogger().Debugf("hash conflict between %s and %s", addr, hashKey)
+				continuum.baseLogger.Debugf("hash conflict between %s and %s", addr, hashKey)
 				hashValue, hashKey, err = continuum.doRehash(hashValue, hashValues, 1)
 				if err != nil {
-					log.GetBaseLogger().Errorf("fail to generate hash at %s:%d(id=%s, limit=%d), error %v",
+					continuum.baseLogger.Errorf("fail to generate hash at %s:%d(id=%s, limit=%d), error %v",
 						realInstance.GetHost(), realInstance.GetPort(), realInstance.GetId(), i, err)
 					continue
 				}
@@ -141,12 +144,12 @@ func NewContinuum(
 	if len(continuum.ring) > 1 {
 		sort.Sort(continuum.ring)
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if continuum.baseLogger.IsLevelEnabled(log.DebugLog) {
 		svcKey := &model.ServiceKey{
 			Namespace: svcInstances.GetNamespace(),
 			Service:   svcInstances.GetService(),
 		}
-		log.GetBaseLogger().Debugf("hash ring for service %s is \n%s", *svcKey, continuum.String())
+		continuum.baseLogger.Debugf("hash ring for service %s is \n%s", *svcKey, continuum.String())
 	}
 	return continuum, nil
 }
@@ -187,7 +190,7 @@ func (c *ContinuumSelector) doRehash(
 		return 0, "", err
 	}
 	if key, ok := hashValues[hashValue]; ok {
-		log.GetBaseLogger().Debugf("hash conflict between %s and %d", key, lastHash)
+		c.baseLogger.Debugf("hash conflict between %s and %d", key, lastHash)
 		return c.doRehash(hashValue, hashValues, iteration+1)
 	}
 	lastHashStr := strconv.FormatInt(int64(lastHash), 10)

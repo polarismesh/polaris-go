@@ -29,7 +29,6 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -46,6 +45,8 @@ type Detector struct {
 	cfg     *Config
 	timeout time.Duration
 	client  HttpSender
+	// 上下文日志
+	logCtx *config.ContextLogger
 }
 
 // Type 插件类型
@@ -67,6 +68,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 	}
 	g.client = &http.Client{}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
+	g.logCtx = ctx.Config.GetContextLogger()
 	return nil
 }
 
@@ -109,7 +111,7 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.FaultDetectRule) (string, bool) {
 	resp, err := g.client.Do(detReq)
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
 		return "", false
 	}
 	defer resp.Body.Close()
@@ -156,7 +158,7 @@ func (g *Detector) generateHttpRequest(ctx context.Context, ins model.Instance, 
 
 	request, err := http.NewRequestWithContext(ctx, rule.GetHttpConfig().Method, address, bytes.NewBufferString(rule.HttpConfig.GetBody()))
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
 		return nil, err
 	}
 

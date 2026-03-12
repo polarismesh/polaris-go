@@ -25,7 +25,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -113,6 +112,7 @@ type manager struct {
 	eventSubscriber map[common.PluginEventType][]common.PluginEventHandler
 	// 是否已经初始化，初始化后不允许修改任何数据结构
 	initialized uint32
+	logCtx      *config.ContextLogger
 }
 
 // instanceOf 判断是否实现了对应的接口
@@ -189,6 +189,7 @@ func createPluginProxy(typ common.Type) PluginProxy {
 // InitPlugins 初始化所有已注册插件
 func (m *manager) InitPlugins(
 	ctx InitContext, types []common.Type, engine model.Engine, delegateInit func() error) (err error) {
+	m.logCtx = ctx.Config.GetContextLogger()
 	if atomic.LoadUint32(&m.initialized) > 0 {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil, "manager has been initialized")
 	}
@@ -233,9 +234,8 @@ func (m *manager) InitPlugins(
 				"InitPlugins: fail to init plugin name %v:%s", plug.instance.Type(), plug.instance.Name()))
 		}
 		m.idToPlugins[plug.id] = plug.instance
-		log.GetBaseLogger().Infof(
-			"Initialized plugin type %v, name %s, id %d",
-			plug.instance.Type(), plug.instance.Name(), ctx.PluginIndex)
+		m.logCtx.GetBaseLogger().Infof("Initialized plugin type %v, name %s, id %d", plug.instance.Type(),
+			plug.instance.Name(), ctx.PluginIndex)
 	}
 	if err = delegateInit(); err != nil {
 		return m.cleanupWhenError(model.NewSDKError(model.ErrCodePluginError, err,
@@ -255,7 +255,7 @@ func (m *manager) StartPlugins() error {
 	for id, plug := range m.idToPlugins {
 		startedPlugins.Add(id)
 		if err = plug.Start(); err != nil {
-			log.GetBaseLogger().Errorf("fail to start plugin %s, err is %v", plug.Name(), err)
+			m.logCtx.GetBaseLogger().Errorf("fail to start plugin %s, err is %v", plug.Name(), err)
 			break
 		}
 	}
@@ -282,7 +282,7 @@ func (m *manager) cleanupWhenError(sdkErr model.SDKError) error {
 		}
 		for name, plugInst := range plugInstances {
 			if err := plugInst.instance.Destroy(); err != nil {
-				log.GetBaseLogger().Errorf("fail to destroy plugin %v:%s, err %v", typ, name, err)
+				m.logCtx.GetBaseLogger().Errorf("fail to destroy plugin %v:%s, err %v", typ, name, err)
 			}
 		}
 	}

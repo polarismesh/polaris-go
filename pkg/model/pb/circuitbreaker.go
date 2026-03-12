@@ -21,6 +21,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -28,7 +29,7 @@ type CircuitBreakAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (a *CircuitBreakAssistant) ParseRuleValue(resp *service_manage.DiscoverResponse) (proto.Message, string) {
+func (a *CircuitBreakAssistant) ParseRuleValue(resp *service_manage.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	circuitBreakerValue := resp.CircuitBreaker
 	if nil == circuitBreakerValue {
@@ -52,7 +53,7 @@ type FaultDetectAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (a *FaultDetectAssistant) ParseRuleValue(resp *service_manage.DiscoverResponse) (proto.Message, string) {
+func (a *FaultDetectAssistant) ParseRuleValue(resp *service_manage.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	faultDetectValue := resp.FaultDetector
 	if nil == faultDetectValue {

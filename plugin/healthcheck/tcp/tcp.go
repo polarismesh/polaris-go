@@ -27,7 +27,6 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -41,6 +40,8 @@ type Detector struct {
 	SendPackageBytes    []byte
 	ReceivePackageBytes [][]byte
 	timeout             time.Duration
+	// 上下文日志
+	logCtx *config.ContextLogger
 }
 
 // Destroy 销毁插件，可用于释放资源
@@ -66,6 +67,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 		g.cfg = cfgValue.(*Config)
 	}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
+	g.logCtx = ctx.Config.GetContextLogger()
 	return nil
 }
 
@@ -100,7 +102,7 @@ func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetect
 	// 建立连接
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
 		return false
 	}
 	defer func() {

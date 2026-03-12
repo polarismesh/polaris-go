@@ -22,7 +22,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 )
@@ -186,7 +185,7 @@ func (h *DefaultInvokeHandler) OnSuccess(respCtx *model.ResponseContext) {
 		code = h.reqCtx.CodeConvert.OnSuccess(respCtx.Result)
 	}
 	if err := h.commonReport(h.reqCtx, delay, code, retStatus); err != nil {
-		log.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnSuccess: %v", err)
+		h.flow.engine.logCtx.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnSuccess: %v", err)
 	}
 }
 
@@ -201,7 +200,7 @@ func (h *DefaultInvokeHandler) OnError(respCtx *model.ResponseContext) {
 		retStatus = model.RetReject
 	}
 	if err := h.commonReport(h.reqCtx, delay, code, retStatus); err != nil {
-		log.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnError: %v", err)
+		h.flow.engine.logCtx.GetBaseLogger().Errorf("DefaultInvokeHandler.commonReport in OnError: %v", err)
 	}
 }
 

@@ -27,7 +27,7 @@ import (
 	"github.com/modern-go/reflect2"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
@@ -35,12 +35,13 @@ import (
 )
 
 // NewRemoteAwareQpsBucket 创建QPS远程限流窗口
-func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria) *RemoteAwareQpsBucket {
+func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *config.ContextLogger) *RemoteAwareQpsBucket {
 	raqb := &RemoteAwareQpsBucket{
 		uniqueKey:      criteria.WindowKey,
 		identifierPool: &sync.Pool{},
+		logCtx:         logCtx,
 	}
-	raqb.tokenBuckets = initTokenBuckets(criteria.DstRule, criteria.WindowKey)
+	raqb.tokenBuckets = initTokenBuckets(criteria.DstRule, criteria.WindowKey, logCtx)
 	raqb.tokenBucketMap = make(map[int64]*TokenBucket, len(raqb.tokenBuckets))
 	for _, tokenBucket := range raqb.tokenBuckets {
 		raqb.tokenBucketMap[tokenBucket.validDurationMilli] = tokenBucket
@@ -58,6 +59,7 @@ type RemoteAwareQpsBucket struct {
 	tokenBucketMap map[int64]*TokenBucket
 	// 存放[]UpdateIdentifier数据
 	identifierPool *sync.Pool
+	logCtx         *config.ContextLogger
 }
 
 const (
@@ -159,14 +161,14 @@ func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas ratelimiter.RemoteQuo
 			// 当前周期没有更新，则重置当前周期配额，避免出现时间周期开始时候的误限
 			remoteQuotas.ServerTimeMilli = curStartTimeMilli
 			remoteQuotas.Left = tokenBucket.GetRuleTotal()
-			log.GetBaseLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
+			r.logCtx.GetBaseLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft is %d, "+
 				"reset to %d", clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli,
 				remoteStartTimeMilli, durationMilli, remoteLeft, remoteQuotas.Left)
 		} else {
 			tokenBucket.UpdateRemoteClientCount(remoteQuotas)
 			// 不在一个时间段内，丢弃
-			log.GetBaseLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
+			r.logCtx.GetBaseLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft %d",
 				clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli, remoteStartTimeMilli,
 				durationMilli, remoteLeft)
@@ -239,11 +241,13 @@ type TokenBucket struct {
 	sliceWindow *common.SlidingWindow
 	// 共享的规则数据
 	shareInfo *BucketShareInfo
+	logCtx    *config.ContextLogger
 }
 
 // NewTokenBucket 创建令牌桶
 func NewTokenBucket(
-	windowKey string, validDuration time.Duration, tokenAmount uint32, shareInfo *BucketShareInfo) *TokenBucket {
+	windowKey string, validDuration time.Duration, tokenAmount uint32, shareInfo *BucketShareInfo,
+	logCtx *config.ContextLogger) *TokenBucket {
 	bucket := &TokenBucket{}
 	bucket.windowKey = windowKey
 	bucket.mutex = &sync.RWMutex{}
@@ -254,6 +258,7 @@ func NewTokenBucket(
 	bucket.sliceWindow = common.NewSlidingWindow(1, int(bucket.validDurationMilli))
 	bucket.shareInfo = shareInfo
 	bucket.instanceCount = 1
+	bucket.logCtx = logCtx
 	return bucket
 }
 
@@ -307,7 +312,7 @@ func (t *TokenBucket) updateRemoteClientCount(remoteQuotas ratelimiter.RemoteQuo
 		}
 		lastClientCount = atomic.SwapUint32(&t.instanceCount, curClientCount)
 		if lastClientCount != curClientCount {
-			log.GetBaseLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
+			t.logCtx.GetBaseLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
 				lastClientCount, curClientCount, t.windowKey)
 		}
 		atomic.StoreInt64(&t.lastRemoteClientUpdateMilli, remoteQuotas.ServerTimeMilli)
@@ -506,7 +511,7 @@ func (tbs TokenBuckets) Swap(i, j int) {
 }
 
 // initTokenBuckets 初始化令牌桶
-func initTokenBuckets(rule *apitraffic.Rule, windowKey string) TokenBuckets {
+func initTokenBuckets(rule *apitraffic.Rule, windowKey string, logCtx *config.ContextLogger) TokenBuckets {
 	shareInfo := &BucketShareInfo{}
 	if rule.GetAmountMode() == apitraffic.Rule_SHARE_EQUALLY {
 		shareInfo.shareEqual = true
@@ -521,7 +526,7 @@ func initTokenBuckets(rule *apitraffic.Rule, windowKey string) TokenBuckets {
 	buckets := make(TokenBuckets, 0, len(amounts))
 	for _, amount := range amounts {
 		goDuration, _ := pb.ConvertDuration(amount.GetValidDuration())
-		bucket := NewTokenBucket(windowKey, goDuration, amount.GetMaxAmount().GetValue(), shareInfo)
+		bucket := NewTokenBucket(windowKey, goDuration, amount.GetMaxAmount().GetValue(), shareInfo, logCtx)
 		buckets = append(buckets, bucket)
 	}
 	if len(buckets) > 1 {

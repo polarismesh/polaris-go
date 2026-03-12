@@ -23,8 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -51,14 +51,16 @@ type WatchEngine struct {
 	watchContexts map[uint64]WatchContext
 	indexSeed     uint64
 	registry      localregistry.LocalRegistry
+	logCtx        *config.ContextLogger
 }
 
-func NewWatchEngine(registry localregistry.LocalRegistry) *WatchEngine {
+func NewWatchEngine(registry localregistry.LocalRegistry, logCtx *config.ContextLogger) *WatchEngine {
 	return &WatchEngine{
 		instancesWatch: map[string]map[string]map[uint64]WatchContext{},
 		servicesWatch:  map[string]map[uint64]WatchContext{},
 		watchContexts:  make(map[uint64]WatchContext),
 		registry:       registry,
+		logCtx:         logCtx,
 	}
 }
 
@@ -228,7 +230,7 @@ func (w *WatchEngine) longPullAllServices(
 	pullContext := NewLongPullContext(nextId, request.WaitIndex, request.WaitTime, model.ServiceEventKey{
 		ServiceKey: serviceKey,
 		Type:       model.EventServices,
-	})
+	}, w.logCtx)
 	w.rwMutex.Lock()
 	w.addServiceWatchContext(nextId, request.Namespace, pullContext)
 	w.watchContexts[nextId] = pullContext
@@ -323,7 +325,7 @@ func (w *WatchEngine) longPullAllInstances(
 	pullContext := NewLongPullContext(nextId, request.WaitIndex, request.WaitTime, model.ServiceEventKey{
 		ServiceKey: request.ServiceKey,
 		Type:       model.EventInstances,
-	})
+	}, w.logCtx)
 	w.rwMutex.Lock()
 	w.addInstanceWatchContext(nextId, request.Namespace, request.Service, pullContext)
 	w.watchContexts[nextId] = pullContext
@@ -396,15 +398,17 @@ type LongPullContext struct {
 	waitCancel    context.CancelFunc
 	waitIndex     uint64
 	valueChan     chan model.RegistryValue
+	logCtx        *config.ContextLogger
 }
 
 func NewLongPullContext(
-	id uint64, waitIndex uint64, waitTime time.Duration, svcEventKey model.ServiceEventKey) *LongPullContext {
+	id uint64, waitIndex uint64, waitTime time.Duration, svcEventKey model.ServiceEventKey, logCtx *config.ContextLogger) *LongPullContext {
 	pullCtx := &LongPullContext{
 		id:          id,
 		waitIndex:   waitIndex,
 		svcEventKey: svcEventKey,
 		valueChan:   make(chan model.RegistryValue, 1),
+		logCtx:      logCtx,
 	}
 	pullCtx.waitCtx, pullCtx.waitCancel = context.WithTimeout(context.Background(), waitTime)
 	return pullCtx
@@ -436,7 +440,7 @@ func (l *LongPullContext) Start() {
 	for {
 		select {
 		case <-l.waitCtx.Done():
-			log.GetBaseLogger().Infof("wait context %d exit", l.id)
+			l.logCtx.GetBaseLogger().Infof("wait context %d exit", l.id)
 			return
 		}
 	}

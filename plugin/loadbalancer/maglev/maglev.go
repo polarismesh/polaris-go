@@ -33,6 +33,8 @@ type MaglevLoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
+	// 上下文日志
+	logCtx *mconfig.ContextLogger
 }
 
 // Type 插件类型
@@ -48,6 +50,7 @@ func (m *MaglevLoadBalancer) Name() string {
 // Init 初始化插件
 func (m *MaglevLoadBalancer) Init(ctx *plugin.InitContext) error {
 	m.PluginBase = plugin.NewPluginBase(ctx)
+	m.logCtx = ctx.Config.GetContextLogger()
 	m.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(m.Name()).(*Config)
 	var err error
 	m.hashFunc, err = hash.GetHashFunc(m.cfg.HashFunction)
@@ -71,7 +74,7 @@ func (m *MaglevLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (mod
 	if nil != selector {
 		return selector, nil
 	}
-	tableSelector, err := NewTable(instSet, uint64(m.cfg.TableSize), m.hashFunc, m.ID())
+	tableSelector, err := NewTable(instSet, uint64(m.cfg.TableSize), m.hashFunc, m.ID(), m.logCtx.GetBaseLogger())
 	instSet.SetSelector(tableSelector)
 	return tableSelector, err
 }

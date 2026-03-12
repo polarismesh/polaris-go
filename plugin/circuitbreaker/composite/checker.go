@@ -33,7 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
-	pb "github.com/polarismesh/polaris-go/pkg/model/pb"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 )
 
@@ -72,6 +72,7 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 		},
 		healthCheckers: breaker.healthCheckers,
 		instances:      make(map[string]*ProtocolInstance, 16),
+		log:            breaker.logCtx.GetStatLogger(),
 	}
 	if insRes, ok := res.(*model.InstanceResource); ok {
 		checker.addInstance(insRes, false)

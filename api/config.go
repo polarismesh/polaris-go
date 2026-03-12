@@ -123,11 +123,11 @@ func (s *sdkContext) Destroy() {
 	atomic.StoreUint32(&s.destroyed, 1)
 	err = s.engine.Destroy()
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
+		s.config.GetContextLogger().GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
 	}
 	err = s.plugins.DestroyPlugins()
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
+		s.config.GetContextLogger().GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
 	}
 }
 
@@ -242,21 +242,23 @@ func getHostName() string {
 
 // InitContextByConfig InitContextByStream 通过配置对象新建上下文
 func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
+	logCtx := cfg.GetContextLogger()
 	startTime := time.Now()
 	globalCtx := model.NewValueContext()
 	globalCtx.SetValue(model.ContextKeyTakeEffectTime, startTime)
 	if logErr := checkLoggersDir(); nil != logErr {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, logErr, "logger init error")
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		text, err := yaml.Marshal(cfg)
 		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to marshal input config")
 		}
-		log.GetBaseLogger().Debugf("Input config:\n%s", string(text))
+		logCtx.GetBaseLogger().Debugf("Input config:\n%s", string(text))
 	}
-
+	// SetDefault内部会用context带有的客户端信息去初始化logger
 	cfg.SetDefault()
+	// 此时logCtx里面已经包含了context的client label
 	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
@@ -271,10 +273,12 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	}
 	token.InitUID()
 	initSelfLabels(cfg, token)
-	log.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, CONTAINER: "+"%s, HOSTNAME:%s-------",
-		version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
+	logCtx.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, "+
+		"CONTAINER: "+"%s, "+
+		"HOSTNAME:%s-------", version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
 
 	globalCtx.SetValue(model.ContextKeyToken, *token)
+	globalCtx.SetValue(model.ContextKeyLogCtx, logCtx)
 	plugManager := plugin.NewPluginManager()
 	globalCtx.SetValue(model.ContextKeyPlugins, plugManager)
 	connManager, err := network.NewConnectionManager(cfg, globalCtx)
@@ -298,11 +302,11 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		finalErrs = multierror.Append(finalErrs, model.NewSDKError(model.ErrCodeAPIInvalidConfig, terr,
 			"fail to marshal input config"))
 	}
-	log.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
+	logCtx.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
 	if finalErrs != nil {
 		return nil, finalErrs
 	}
-	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
+	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
 	// 启动所有插件
 	if err = plugManager.StartPlugins(); err != nil {
 		return nil, err
@@ -310,14 +314,14 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if err = engine.Start(); err != nil {
 		return nil, err
 	}
-	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
+	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
 	ctx := &sdkContext{config: cfg, plugins: plugManager, engine: engine, valueContext: globalCtx}
 	if err = onContextInitialized(ctx); err != nil {
 		ctx.Destroy()
 		return nil, err
 	}
 	globalCtx.SetValue(model.ContextKeyFinishInitTime, time.Now())
-	log.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
+	logCtx.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
 }
 

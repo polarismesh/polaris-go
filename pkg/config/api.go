@@ -501,6 +501,8 @@ type Configuration interface {
 	GetProvider() ProviderConfig
 	// GetConfigFile config前缀开头的所有配置项
 	GetConfigFile() ConfigFileConfig
+	// GetContextLogger 获取日志配置
+	GetContextLogger() *ContextLogger
 }
 
 // When when to active health check.

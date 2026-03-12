@@ -50,7 +50,7 @@ type BlockAllowAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (b *BlockAllowAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (b *BlockAllowAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -63,12 +63,12 @@ func (b *BlockAllowAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) 
 	// 返回 BlockAllowListRule 数组
 	blockAllowListRule := resp.BlockAllowListRule
 	if len(blockAllowListRule) == 0 {
-		log.GetBaseLogger().Debugf("BlockAllowAssistant.ParseRuleValue: service=%s, no block allow rule found, using service revision=%s",
+		baseLogger.Debugf("BlockAllowAssistant.ParseRuleValue: service=%s, no block allow rule found, using service revision=%s",
 			serviceKey, revision)
 		return nil, revision
 	}
 
-	log.GetBaseLogger().Debugf("BlockAllowAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
+	baseLogger.Debugf("BlockAllowAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
 		serviceKey, revision, len(blockAllowListRule))
 
 	// 将规则数组包装到结构体中并返回

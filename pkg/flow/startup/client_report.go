@@ -25,7 +25,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -51,6 +50,7 @@ func NewReportClientCallBack(
 	callback.configuration = cfg
 	callback.globalCtx = globalCtx
 	callback.interval = cfg.GetGlobal().GetAPI().GetReportInterval()
+	callback.logCtx = cfg.GetContextLogger()
 	callback.loadLocalClientReportResult()
 	return callback, nil
 }
@@ -63,6 +63,7 @@ type ReportClientCallBack struct {
 	globalCtx     model.ValueContext
 	interval      time.Duration
 	reporterChain []statreporter.StatReporter
+	logCtx        *config.ContextLogger
 }
 
 const (
@@ -72,11 +73,12 @@ const (
 
 // loadLocalClientReportResult 从本地缓存加载上报结果信息
 func (r *ReportClientCallBack) loadLocalClientReportResult() {
+	logBase := r.logCtx.GetBaseLogger()
 	resp := &apiservice.Response{}
 	cachedFile := clientInfoPersistFile
 	err := r.registry.LoadPersistedMessage(cachedFile, resp)
 	if err != nil {
-		log.GetBaseLogger().Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
+		logBase.Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
 		return
 	}
 	location := resp.GetClient().GetLocation()
@@ -126,13 +128,13 @@ func (r *ReportClientCallBack) Process(
 	}
 	reportClientReq := r.reportClientRequest()
 	if err := reportClientReq.Validate(); err != nil {
-		log.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
+		r.logCtx.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
 		return model.TERMINATE
 	}
 
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
-		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
+		r.logCtx.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		r.updateLocation(nil, err.(model.SDKError))
 		// 发生错误也要重试，直到获取到地域信息为止
 		return model.CONTINUE
@@ -160,10 +162,10 @@ func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr 
 
 	if nil != location {
 		// 已获取到客户端的地域信息，更新到全局上下文
-		log.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
+		r.logCtx.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
 			location.Region, location.Zone, location.Campus)
 	}
 	if r.globalCtx.SetCurrentLocation(location, lastErr) {
-		log.GetBaseLogger().Infof("client area info is ready")
+		r.logCtx.GetBaseLogger().Infof("client area info is ready")
 	}
 }

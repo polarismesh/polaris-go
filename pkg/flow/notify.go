@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -55,11 +55,12 @@ func (c ContextKey) String() string {
 type SingleNotifyContext struct {
 	name     *ContextKey
 	notifier *common.Notifier
+	logCtx   *config.ContextLogger
 }
 
 // NewSingleNotifyContext 创建回调上下文
-func NewSingleNotifyContext(name *ContextKey, notifier *common.Notifier) *SingleNotifyContext {
-	return &SingleNotifyContext{name: name, notifier: notifier}
+func NewSingleNotifyContext(name *ContextKey, notifier *common.Notifier, logCtx *config.ContextLogger) *SingleNotifyContext {
+	return &SingleNotifyContext{name: name, notifier: notifier, logCtx: logCtx}
 }
 
 // Err 返回异常信息返回异常信息
@@ -74,7 +75,7 @@ func (s *SingleNotifyContext) Wait(timeout time.Duration) bool {
 	case <-afterTimer:
 		return true
 	case <-s.notifier.GetContext().Done():
-		log.GetBaseLogger().Debugf("context %s has been notified", *s.name)
+		s.logCtx.GetBaseLogger().Debugf("context %s has been notified", *s.name)
 		return false
 	}
 }
@@ -85,23 +86,26 @@ type CombineNotifyContext struct {
 	waitCount       int32
 	notifiers       []*SingleNotifyContext
 	doneContextKeys *model.SyncHashSet
+	logCtx          *config.ContextLogger
 }
 
 // NewCombineNotifyContext 创建复合回调上下文
-func NewCombineNotifyContext(svcKey *model.ServiceKey, notifiers []*SingleNotifyContext) *CombineNotifyContext {
+func NewCombineNotifyContext(svcKey *model.ServiceKey, notifiers []*SingleNotifyContext,
+	logCtx *config.ContextLogger) *CombineNotifyContext {
 	maxWaitCount := len(notifiers)
 	combineCtx := &CombineNotifyContext{
 		svcKey:          svcKey,
 		notifiers:       notifiers,
 		waitCount:       int32(maxWaitCount),
 		doneContextKeys: model.NewSyncHashSet(),
+		logCtx:          logCtx,
 	}
 	return combineCtx
 }
 
 // IsDone 是否已经完成
 func (c *CombineNotifyContext) IsDone() bool {
-	log.GetBaseLogger().Debugf("CombineNotifyContext waitCount %d", atomic.LoadInt32(&c.waitCount))
+	c.logCtx.GetBaseLogger().Debugf("CombineNotifyContext waitCount %d", atomic.LoadInt32(&c.waitCount))
 	return atomic.LoadInt32(&c.waitCount) <= 0
 }
 
@@ -119,7 +123,7 @@ func (c *CombineNotifyContext) Errs() map[ContextKey]model.SDKError {
 
 // logNotifier 打印通知日志
 func (c *CombineNotifyContext) logNotifier(operation string, notifier *SingleNotifyContext, restWait int32) {
-	log.GetBaseLogger().Debugf("notifier %s of %s has been notified, rest %v", *notifier.name, c.svcKey, restWait)
+	c.logCtx.GetBaseLogger().Debugf("notifier %s of %s has been notified, rest %v", *notifier.name, c.svcKey, restWait)
 }
 
 // Wait notify 异步任务执行回调函数
@@ -129,7 +133,7 @@ func (c *CombineNotifyContext) Wait(timeout time.Duration) (exceedTime bool) {
 	if restWait == 0 {
 		return false
 	}
-	log.GetBaseLogger().Debugf("notifiers of %s start to wait, rest %d", *c.svcKey, restWait)
+	c.logCtx.GetBaseLogger().Debugf("notifiers of %s start to wait, rest %d", *c.svcKey, restWait)
 	doneKeyChan := make(chan string)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

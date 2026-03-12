@@ -29,7 +29,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -70,6 +69,7 @@ type FlowQuotaAssistant struct {
 
 	remoteNamespace string
 	remoteService   string
+	logCtx          *config.ContextLogger
 }
 
 // AsyncRateLimitConnector 异步限流连接器
@@ -112,6 +112,7 @@ func (f *FlowQuotaAssistant) TaskValues() model.TaskValues {
 func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
 	f.engine = engine
 	f.supplier = supplier
+	f.logCtx = cfg.GetContextLogger()
 	f.asyncRateLimitConnector = NewAsyncRateLimitConnector(engine.GetContext(), cfg)
 	f.enable = cfg.GetProvider().GetRateLimit().IsEnable()
 	if !f.enable {
@@ -287,7 +288,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 		}
 	}
 	// 2. 寻找匹配的规则
-	rules := lookupRules(commonRequest.RateLimitRule, commonRequest.Method, commonRequest.Arguments)
+	rules := lookupRules(commonRequest.RateLimitRule, commonRequest.Method, commonRequest.Arguments, f.logCtx)
 	if len(rules) == 0 {
 		return nil, nil
 	}
@@ -308,7 +309,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	return windows, nil
 }
 
-func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache) bool {
+func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache, logCtx *config.ContextLogger) bool {
 	if pb.IsMatchAllValue(matchString) {
 		return true
 	}
@@ -321,13 +322,13 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 	case apimodel.MatchString_REGEX:
 		regexObj, err := ruleCache.GetRegexMatcher(matchValue)
 		if nil != err {
-			log.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
 		m, err := regexObj.FindStringMatch(value)
 		if err != nil {
-			log.GetBaseLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetBaseLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
@@ -358,7 +359,7 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 }
 
 // lookupRule 寻址规则
-func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string) []*apitraffic.Rule {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string, logCtx *config.ContextLogger) []*apitraffic.Rule {
 	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
 		return nil
@@ -384,7 +385,7 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraf
 		}
 		methodMatcher := rule.Method
 		if nil != methodMatcher {
-			matchMethod := matchStringValue(methodMatcher, method, ruleCache)
+			matchMethod := matchStringValue(methodMatcher, method, ruleCache, logCtx)
 			if !matchMethod {
 				continue
 			}
@@ -402,7 +403,7 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraf
 				if !ok {
 					matched = false
 				} else {
-					matched = matchStringValue(argumentMatcher.GetValue(), labelValue, ruleCache)
+					matched = matchStringValue(argumentMatcher.GetValue(), labelValue, ruleCache, logCtx)
 				}
 				if !matched {
 					break

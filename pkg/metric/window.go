@@ -25,6 +25,7 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -72,10 +73,12 @@ type SliceWindow struct {
 	PeriodStartTime int64
 	// 同一周期已经上报的个数
 	// PeriodAcquired int64
+	logStat log.Logger
 }
 
 // NewSliceWindow 创建资源滑窗
-func NewSliceWindow(typ string, bucketCount int, bucketInterval time.Duration, metricSize int,
+func NewSliceWindow(logStat log.Logger, typ string, bucketCount int, bucketInterval time.Duration,
+	metricSize int,
 	curTime int64) *SliceWindow {
 	window := &SliceWindow{
 		Type:                typ,
@@ -86,6 +89,7 @@ func NewSliceWindow(typ string, bucketCount int, bucketInterval time.Duration, m
 		bucketMutex:         &sync.Mutex{},
 		bucketCount:         bucketCount,
 		PeriodStartTime:     0,
+		logStat:             logStat,
 	}
 	window.lastUpdateTime = curTime
 	window.lastReadTime = curTime - 1
@@ -108,6 +112,7 @@ func (s *SliceWindow) initBucket() []Bucket {
 	curTime := s.CalcStartTime(model.ParseMilliSeconds(time.Now().UnixNano()))
 	for i := 0; i < s.bucketCount; i++ {
 		idx := s.calcBucketIndex(curTime)
+		buckets[idx].logStat = s.logStat
 		buckets[idx].mutex = &sync.RWMutex{}
 		buckets[idx].window = s
 		buckets[idx].startTime = curTime

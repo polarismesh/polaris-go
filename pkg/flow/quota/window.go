@@ -30,7 +30,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
@@ -157,7 +156,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	if !window.Expired(nowMilli) {
 		return false
 	}
-	log.GetBaseLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
+	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
 		window.uniqueKey, nowMilli, model.ToMilliSeconds(window.expireDuration))
 	revision := window.Rule.GetRevision().GetValue()
 	container := rs.windowByRule[revision]
@@ -240,13 +239,13 @@ func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEve
 func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	container := rs.windowByRule[revision]
 	delete(rs.windowByRule, revision)
-	log.GetBaseLogger().Infof("[RateLimit]container %s has deleted", revision)
+	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]container %s has deleted", revision)
 	if nil == container {
 		return
 	}
 	if nil != container.MainWindow {
 		rs.deleteWindow(container.MainWindow)
-		log.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
 			"[RateLimit]container main window %s has deleted", container.MainWindow.uniqueKey)
 	}
 	if len(container.WindowByLabel) == 0 {
@@ -254,7 +253,7 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	}
 	for _, window := range container.WindowByLabel {
 		rs.deleteWindow(window)
-		log.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
 			"[RateLimit]container spread window %s has deleted", window.uniqueKey)
 	}
 }
@@ -431,7 +430,7 @@ func (r *RateLimitWindow) toServerTimeMilli(timeMilli int64) int64 {
 func (r *RateLimitWindow) UpdateTimeDiff(timeDiff int64) {
 	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
 	if lastTimeDiff != timeDiff {
-		log.GetBaseLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
+		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
 	}
 }
 

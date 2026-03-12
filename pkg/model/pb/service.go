@@ -83,7 +83,7 @@ func (is InstSlice) Less(i, j int) bool {
 
 // NewServiceInstancesInProto ServiceInstancesResponse的构造函数.
 func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalValue func(string) local.InstanceLocalValue,
-	pluginValues *SvcPluginValues, svcLocalValue local.ServiceLocalValue,
+	pluginValues *SvcPluginValues, svcLocalValue local.ServiceLocalValue, baseLogger log.Logger,
 ) *ServiceInstancesInProto {
 	// 未初始化
 	if nil == resp {
@@ -103,7 +103,7 @@ func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalVa
 	}
 	clusterCache := model.NewServiceClusters(instancesInProto)
 	if clusterCache.IsNearbyEnabled() {
-		log.GetBaseLogger().Infof("service %s::%s nearby enabled",
+		baseLogger.Infof("service %s::%s nearby enabled",
 			instancesInProto.GetNamespace(), instancesInProto.GetService())
 	}
 	instancesInProto.clusterCache.Store(clusterCache)
@@ -119,7 +119,7 @@ func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalVa
 		var err error
 		instancesInProto.hashValue, err = model.GetCrc64Hash(instancesInProto.revision)
 		if err != nil {
-			log.GetBaseLogger().Errorf("fail to calc crc64 hash for instance %s: %v", svcKey, err)
+			baseLogger.Errorf("fail to calc crc64 hash for instance %s: %v", svcKey, err)
 		}
 	}
 	if len(resp.Instances) > 0 {
@@ -521,7 +521,7 @@ type ServicesProto struct {
 }
 
 // NewServicesProto 新建服务proto.
-func NewServicesProto(resp *apiservice.DiscoverResponse) *ServicesProto {
+func NewServicesProto(resp *apiservice.DiscoverResponse, baseLogger log.Logger) *ServicesProto {
 	value := &ServicesProto{}
 	if nil == resp {
 		value.initialized = false
@@ -542,7 +542,7 @@ func NewServicesProto(resp *apiservice.DiscoverResponse) *ServicesProto {
 	var err error
 	value.hashValue, err = model.GetCrc64Hash(value.revision)
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to calc crc64 hash for services: %v", err)
+		baseLogger.Errorf("fail to calc crc64 hash for services: %v", err)
 	}
 	return value
 }

@@ -123,6 +123,7 @@ type Bucket struct {
 	window *SliceWindow
 	// 统计序列
 	metrics *ResMetricArray
+	logStat log.Logger
 }
 
 // GetMetric 获取统计值
@@ -147,10 +148,10 @@ func (b *Bucket) CalcBucketMetrics(dimensions []int, startTime int64, endTime in
 	bucketStartTime := atomic.LoadInt64(&b.startTime)
 	bucketEndTime := bucketStartTime + b.window.bucketIntervalMilli
 	if !b.inRange(startTime, endTime, bucketStartTime, rangeType) {
-		if log.GetBaseLogger().IsLevelEnabled(log.TraceLog) {
-			log.GetBaseLogger().Tracef(
-				"bucket %s start not matched, startTime %v, endTime %v, rangeType %s, bucketStartTime %v, bucketEndTime %v",
-				b.window.Type, startTime, endTime, rangeType, atomic.LoadInt64(&b.startTime), bucketEndTime)
+		if b.logStat != nil && b.logStat.IsLevelEnabled(log.TraceLog) {
+			b.logStat.Tracef("bucket %s start not matched, startTime %v, endTime %v, rangeType %s, "+
+				"bucketStartTime %v, bucketEndTime %v", b.window.Type, startTime, endTime, rangeType,
+				atomic.LoadInt64(&b.startTime), bucketEndTime)
 		}
 		return nil
 	}

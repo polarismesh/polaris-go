@@ -54,6 +54,27 @@ type Logger interface {
 	SetLogLevel(l int) error
 }
 
+// FieldLogger 支持携带固定字段的可选日志接口。
+// 如果 Logger 实现了此接口，则可以通过 WithFields 创建携带固定字段的子 Logger。
+// 此接口与 Logger 接口分离，以保持对已有 Logger 实现的向后兼容性。
+type FieldLogger interface {
+	Logger
+	// WithFields 创建一个携带固定字段的子Logger，字段以key-value对形式传入
+	WithFields(kvs ...string) Logger
+}
+
+// LoggerWithFields 为 Logger 添加固定字段。如果 logger 实现了 FieldLogger 接口，则调用 WithFields；
+// 否则返回原始 logger（不支持字段注入时的降级处理）。
+func LoggerWithFields(logger Logger, kvs ...string) Logger {
+	if len(kvs) == 0 || logger == nil {
+		return logger
+	}
+	if fl, ok := logger.(FieldLogger); ok {
+		return fl.WithFields(kvs...)
+	}
+	return logger
+}
+
 // DirLogger 可以返回日志目录的日志对象
 type DirLogger interface {
 	Logger

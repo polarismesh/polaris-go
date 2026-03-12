@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
@@ -32,6 +33,7 @@ type defaultConfigFile struct {
 	fileRepo   *ConfigFileRepo
 	content    string
 	persistent model.Persistent
+	logCtx     *config.ContextLogger
 
 	lock                sync.RWMutex
 	changeListeners     []func(event model.ConfigFileChangeEvent)
@@ -43,6 +45,7 @@ func newDefaultConfigFile(metadata model.ConfigFileMetadata, repo *ConfigFileRep
 		fileRepo:   repo,
 		content:    repo.GetContent(),
 		persistent: repo.GetPersistent(),
+		logCtx:     repo.logCtx,
 	}
 	configFile.Namespace = metadata.GetNamespace()
 	configFile.FileGroup = metadata.GetFileGroup()
@@ -106,7 +109,7 @@ func (c *defaultConfigFile) HasContent() bool {
 func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error {
 	oldContent := c.content
 
-	log.GetBaseLogger().Infof("[Config] update content. file = %+v, old content = %s, new content = %s",
+	c.logCtx.GetBaseLogger().Infof("[Config] update content. file = %+v, old content = %s, new content = %s",
 		configFileMetadata, oldContent, newContent)
 
 	var changeType model.ChangeType
@@ -132,7 +135,7 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	}
 	c.content = newContent
 
-	log.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
+	c.logCtx.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
 		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(),
 		configFileMetadata.GetFileName(), changeType, len(c.changeListeners), len(c.changeListenerChans))
 
@@ -158,16 +161,16 @@ func (c *defaultConfigFile) AddChangeListener(cb model.OnConfigFileChange) {
 }
 
 func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[Config] 开始分发配置变更事件. file=%s/%s/%s, changeType=%v, chanCount=%d, listenerCount=%d",
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		c.logCtx.GetBaseLogger().Debugf("[Config] 开始分发配置变更事件. file=%s/%s/%s, changeType=%v, chanCount=%d, listenerCount=%d",
 			event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
 			event.ConfigFileMetadata.GetFileName(), event.ChangeType,
 			len(c.changeListenerChans), len(c.changeListeners))
 	}
 
 	for i, listenerChan := range c.changeListenerChans {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config] 发送变更事件到channel[%d]. file=%s/%s/%s",
+		if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			c.logCtx.GetBaseLogger().Debugf("[Config] 发送变更事件到channel[%d]. file=%s/%s/%s",
 				i, event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
 				event.ConfigFileMetadata.GetFileName())
 		}
@@ -175,8 +178,8 @@ func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
 	}
 
 	for i, changeListener := range c.changeListeners {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config] 调用变更监听器[%d]. file=%s/%s/%s",
+		if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			c.logCtx.GetBaseLogger().Debugf("[Config] 调用变更监听器[%d]. file=%s/%s/%s",
 				i, event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
 				event.ConfigFileMetadata.GetFileName())
 		}
@@ -188,6 +191,7 @@ type defaultConfigGroup struct {
 	namespace       string
 	group           string
 	repo            *ConfigGroupRepo
+	logCtx          *config.ContextLogger
 	lock            sync.RWMutex
 	changeListeners []model.OnConfigGroupChange
 }
@@ -197,6 +201,7 @@ func newDefaultConfigGroup(ns, group string, repo *ConfigGroupRepo) *defaultConf
 		namespace:       ns,
 		group:           group,
 		repo:            repo,
+		logCtx:          repo.logCtx,
 		changeListeners: []model.OnConfigGroupChange{},
 	}
 	repo.AddChangeListener(configGroup.repoChangeListener)
@@ -238,14 +243,14 @@ func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGr
 	}
 	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d, event=%v",
 		c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles), event.GetString())
-	log.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(c.changeListeners), info)
+	c.logCtx.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(c.changeListeners), info)
 
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	for i := range c.changeListeners {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. %s", i, info)
+		if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			c.logCtx.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. %s", i, info)
 		}
 		c.changeListeners[i](event)
 	}
