@@ -15,6 +15,10 @@ angevil_test/
 style_tool/
 goimports-reviser
 
+.codebuddy/
+.claude/
+CLAUDE.md
+
 /examples/**/provider
 /examples/**/consumer
 !/examples/**/provider/
