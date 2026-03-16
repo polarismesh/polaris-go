@@ -46,6 +46,10 @@ type ConfigGroupRepo struct {
 
 	lock      sync.RWMutex
 	listeners []func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse)
+
+	// 用于控制 pull 日志打印频率，每半小时打印一次 Info，避免日志过于频繁
+	lastPullLogTime time.Time
+	pullCount       uint64
 }
 
 func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequestMode, connector configconnector.ConfigConnector,
@@ -61,9 +65,10 @@ func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequest
 			delayMinTime: delayMinTime,
 			delayMaxTime: delayMaxTime,
 		},
-		remoteRef: &atomic.Value{},
-		listeners: make([]func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse), 0, 4),
-		logCtx:    configuration.GetContextLogger(),
+		remoteRef:       &atomic.Value{},
+		listeners:       make([]func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse), 0, 4),
+		logCtx:          configuration.GetContextLogger(),
+		lastPullLogTime: time.Now(),
 	}
 
 	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
@@ -90,7 +95,20 @@ func (repo *ConfigGroupRepo) pull() error {
 	}
 	groupInfo := fmt.Sprintf("{namespace=%s, group=%s, oldRevision=%s, mode=%v}", req.Namespace, req.Group,
 		req.Revision, req.Mode)
-	repo.logCtx.GetBaseLogger().Infof("[Config][Group] start pull. groupInfo:%s", groupInfo)
+
+	// 每半小时打印一次 Info 日志，避免日志过于频繁
+	const pullLogInterval = 30 * time.Minute
+	now := time.Now()
+	needInfoLog := now.Sub(repo.lastPullLogTime) >= pullLogInterval
+	if needInfoLog {
+		repo.logCtx.GetBaseLogger().Infof("[Config][Group] start pull. groupInfo:%s (pullCount=%d in last %.0f min)",
+			groupInfo, repo.pullCount, now.Sub(repo.lastPullLogTime).Minutes())
+		repo.lastPullLogTime = now
+		repo.pullCount = 0
+	} else {
+		repo.logCtx.GetBaseLogger().Debugf("[Config][Group] start pull. groupInfo:%s", groupInfo)
+	}
+	repo.pullCount++
 
 	var (
 		retryTimes = 0
@@ -110,8 +128,13 @@ func (repo *ConfigGroupRepo) pull() error {
 		}
 
 		responseCode := response.Code
-		repo.logCtx.GetBaseLogger().Infof("[Config][Group] pull finished. respCode=%d, respRevision=%+v, duration=%dms, "+
-			"groupInfo:%s", responseCode, response.Revision, time.Since(startTime).Milliseconds(), groupInfo)
+		if needInfoLog {
+			repo.logCtx.GetBaseLogger().Infof("[Config][Group] pull finished. respCode=%d, respRevision=%+v, duration=%dms, "+
+				"groupInfo:%s", responseCode, response.Revision, time.Since(startTime).Milliseconds(), groupInfo)
+		} else {
+			repo.logCtx.GetBaseLogger().Debugf("[Config][Group] pull finished. respCode=%d, respRevision=%+v, duration=%dms, "+
+				"groupInfo:%s", responseCode, response.Revision, time.Since(startTime).Milliseconds(), groupInfo)
+		}
 
 		// 拉取成功
 		if responseCode == uint32(apimodel.Code_ExecuteSuccess) {

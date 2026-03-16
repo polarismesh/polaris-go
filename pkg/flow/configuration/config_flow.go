@@ -326,6 +326,11 @@ func (c *ConfigFileFlow) addConfigFileToLongPollingPool(fileRepo *ConfigFileRepo
 }
 
 func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
+	// 每半小时打印一次 Info 日志，确认长轮询在正常工作
+	const infoLogInterval = 30 * time.Minute
+	lastInfoLogTime := time.Now()
+	noChangeCount := uint64(0)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -350,7 +355,15 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 			}
 		}
 
-		c.logCtx.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] do long polling. config file size = %d, delay time = %d",
+		// 每半小时打印一次 Info 级别日志，确认长轮询在正常工作
+		now := time.Now()
+		if now.Sub(lastInfoLogTime) >= infoLogInterval {
+			c.logCtx.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] 长轮询运行中. watchFileCount=%d, noChangeCount=%d (最近%.0f分钟)",
+				len(watchConfigFiles), noChangeCount, now.Sub(lastInfoLogTime).Minutes())
+			lastInfoLogTime = now
+			noChangeCount = 0
+		}
+		c.logCtx.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] do long polling. config file size = %d, delay time = %d",
 			len(watchConfigFiles), pollingRetryPolicy.currentDelayTime)
 
 		// 2. 调用 connector watch接口
@@ -402,12 +415,9 @@ func (c *ConfigFileFlow) mainLoop(ctx context.Context) {
 		// 3.2 如果没有变更，打印日志
 		if responseCode == uint32(apimodel.Code_DataNoChange) {
 			pollingRetryPolicy.success()
-			if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				c.logCtx.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] long polling result: data no change. "+
-					"watchFileCount=%d", len(watchConfigFiles))
-			} else {
-				c.logCtx.GetBaseLogger().Infof("[ConfigFileFlow][LongPolling] long polling result: data no change")
-			}
+			noChangeCount++
+			c.logCtx.GetBaseLogger().Debugf("[ConfigFileFlow][LongPolling] long polling result: data no change. "+
+				"watchFileCount=%d", len(watchConfigFiles))
 			continue
 		}
 
