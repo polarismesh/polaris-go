@@ -21,22 +21,56 @@ var (
 	debug        bool
 	namespaceVal string
 	serviceVal   string
-	serverA      string
-	serverB      string
+	clientsVal   string
 )
 
 func init() {
 	flag.BoolVar(&debug, "debug", false, "是否开启调试模式")
 	flag.StringVar(&namespaceVal, "namespace", "default", "namespace")
 	flag.StringVar(&serviceVal, "service", "DiscoverEchoServer", "service name")
-	flag.StringVar(&serverA, "serverA", "", "address of server A")
-	flag.StringVar(&serverB, "serverB", "", "address of server B")
+	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=114.132.192.60,ctxB=114.132.29.62")
+}
+
+// parseClients 解析 -clients 参数，返回 clientId -> serverAddr 的映射
+func parseClients(clientsStr string) (map[string]string, error) {
+	result := make(map[string]string)
+	if clientsStr == "" {
+		return nil, fmt.Errorf("-clients 参数不能为空，格式: clientId=serverAddr，多个用逗号分隔")
+	}
+	pairs := strings.Split(clientsStr, ",")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return nil, fmt.Errorf("无效的 client 配置: %q，格式应为 clientId=serverAddr", pair)
+		}
+		clientId := strings.TrimSpace(parts[0])
+		serverAddr := strings.TrimSpace(parts[1])
+		if _, exists := result[clientId]; exists {
+			return nil, fmt.Errorf("重复的 clientId: %s", clientId)
+		}
+		result[clientId] = serverAddr
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("-clients 参数解析后为空，格式: clientId=serverAddr，多个用逗号分隔")
+	}
+	return result, nil
 }
 
 func main() {
 	flag.Parse()
+
+	// 解析 -clients 参数
+	clientMap, err := parseClients(clientsVal)
+	if err != nil {
+		log.Fatalf("解析 -clients 参数失败: %v", err)
+	}
+
 	log.Printf("Starting serviceInstance example with namespace: %s, service: %s", namespaceVal, serviceVal)
-	log.Printf("serverA: %s, serverB: %s", serverA, serverB)
+	log.Printf("clients: %v", clientMap)
 	if debug {
 		// 设置日志级别为DEBUG
 		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
@@ -46,23 +80,19 @@ func main() {
 		}
 	}
 	// errCh 用于收集 serverProcess 的错误，当所有 serverProcess 都异常退出时主动结束
-	errCh := make(chan error, 2)
+	errCh := make(chan error, len(clientMap))
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(len(clientMap))
 
-	go func() {
-		defer wg.Done()
-		if err := serverProcess(serverA, "ctxA"); err != nil {
-			errCh <- fmt.Errorf("ctxA 异常退出: %v", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		if err := serverProcess(serverB, "ctxB"); err != nil {
-			errCh <- fmt.Errorf("ctxB 异常退出: %v", err)
-		}
-	}()
+	for clientId, serverAddr := range clientMap {
+		go func(cid, addr string) {
+			defer wg.Done()
+			if err := serverProcess(addr, cid); err != nil {
+				errCh <- fmt.Errorf("%s 异常退出: %v", cid, err)
+			}
+		}(clientId, serverAddr)
+	}
 
 	// 监听系统信号
 	sigCh := make(chan os.Signal, 1)
