@@ -292,6 +292,7 @@ func (pa *PullAction) Close() {
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
+	lastRevisionLogTime := time.Time{}
 
 	action := func() {
 		defer func() {
@@ -299,7 +300,7 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 				pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] stat metrics prometheus panic", zap.Any("error", err))
 			}
 		}()
-		pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] start aggregation stat metrics prometheus")
+		pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][pull] start aggregation stat metrics prometheus")
 
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 			pa.reporter.insCollector.GetCurrentRevision())
@@ -307,8 +308,13 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.rateLimitCollector,
 			pa.reporter.rateLimitCollector.GetCurrentRevision())
 
-		pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
-		pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
+		insRevision := pa.reporter.insCollector.IncRevision()
+		rateLimitRevision := pa.reporter.rateLimitCollector.IncRevision()
+		if time.Since(lastRevisionLogTime) >= 30*time.Minute {
+			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] revision collector inc current revision to %d", insRevision)
+			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] collector inc current revision to %d", rateLimitRevision)
+			lastRevisionLogTime = time.Now()
+		}
 	}
 
 	for {
@@ -317,6 +323,7 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 			action()
 		case <-ctx.Done():
 			ticker.Stop()
+			return
 		}
 	}
 }
@@ -329,7 +336,7 @@ func (pa *PullAction) Run(ctx context.Context) {
 	go func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err != nil {
-			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][push] start metrics http-server fail: %v", err)
+			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] start metrics http-server fail: %v", err)
 			pa.bindPort.Store(-1)
 			return
 		}
@@ -339,9 +346,9 @@ func (pa *PullAction) Run(ctx context.Context) {
 			handler: promhttp.HandlerFor(pa.reporter.registry, promhttp.HandlerOpts{}),
 		}
 
-		pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
+		pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err := http.Serve(ln, &handler); err != nil {
-			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][push] start metrics http-server fail : %s", err)
+			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] start metrics http-server fail : %s", err)
 			return
 		}
 	}()
@@ -389,6 +396,7 @@ func (pa *PushAction) Close() {
 func (pa *PushAction) Run(ctx context.Context) {
 	go func() {
 		pushTicker := time.NewTicker(pa.cfg.Interval)
+		lastRevisionLogTime := time.Time{}
 
 		action := func() {
 			defer func() {
@@ -397,7 +405,7 @@ func (pa *PushAction) Run(ctx context.Context) {
 				}
 			}()
 
-			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] start push stat metrics to pushgateway")
+			pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] start push stat metrics to pushgateway")
 
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 				pa.reporter.insCollector.GetCurrentRevision())
@@ -411,8 +419,13 @@ func (pa *PushAction) Run(ctx context.Context) {
 				return
 			}
 
-			pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
-			pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
+			insRevision := pa.reporter.insCollector.IncRevision()
+			rateLimitRevision := pa.reporter.rateLimitCollector.IncRevision()
+			if time.Since(lastRevisionLogTime) >= 30*time.Minute {
+				pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] revision collector inc current revision to %d", insRevision)
+				pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] collector inc current revision to %d", rateLimitRevision)
+				lastRevisionLogTime = time.Now()
+			}
 		}
 
 		for {

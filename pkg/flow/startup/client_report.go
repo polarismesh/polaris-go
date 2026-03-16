@@ -192,9 +192,11 @@ func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr 
 	}
 
 	if nil != location {
-		// 已获取到客户端的地域信息，更新到全局上下文
-		r.logCtx.GetStatReportLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
-			location.Region, location.Zone, location.Campus)
+		// 只在地域信息首次获取或发生变化时打印日志，避免重复输出相同内容
+		if r.lastLocation == nil || *r.lastLocation != *location {
+			r.logCtx.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
+				location.Region, location.Zone, location.Campus)
+		}
 	}
 	if r.globalCtx.SetCurrentLocation(location, lastErr) {
 		r.logCtx.GetBaseLogger().Infof("client area info is ready")
