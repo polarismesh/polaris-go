@@ -33,7 +33,7 @@ func init() {
 	flag.BoolVar(&debug, "debug", false, "是否开启调试模式")
 	flag.StringVar(&namespaceVal, "namespace", "default", "namespace")
 	flag.StringVar(&serviceVal, "service", "provider-demo", "service name")
-	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=10.0.0.1,ctxB=10.0.0.2")
+	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=<server1>,ctxB=<server2>")
 	flag.StringVar(&port, "port", ":38080", "HTTP 监听地址")
 }
 
@@ -71,6 +71,7 @@ var consumerAPIs sync.Map // key: clientId(string), value: api.ConsumerAPI
 
 func main() {
 	flag.Parse()
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	// 解析 -clients 参数
 	clientMap, err := parseClients(clientsVal)
@@ -362,7 +363,7 @@ func defaultHandler(c *gin.Context) {
 如果请求体中未传入参数，将使用启动参数的默认值。
 
 启动参数示例:
-  -clients     clientId与server地址映射（格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=10.0.0.1,ctxB=10.0.0.2）
+  -clients     clientId与server地址映射（格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=<server1>,ctxB=<server2>）
   -namespace   默认命名空间（默认 default）
   -service     默认服务名（默认 provider-demo）
   -port        HTTP 监听地址（默认 :38080）

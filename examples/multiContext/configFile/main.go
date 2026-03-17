@@ -49,7 +49,7 @@ func init() {
 	flag.StringVar(&fileGroup, "group", "polaris-config-example", "配置文件组")
 	flag.StringVar(&fileName, "file", "example.yaml", "配置文件名")
 	flag.BoolVar(&subscribe, "subscribe", true, "是否订阅配置文件变更")
-	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=114.132.192.60,ctxB=114.132.29.62")
+	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=<server1>,ctxB=<server2>")
 }
 
 // parseClients 解析 -clients 参数，返回 clientId -> serverAddr 的映射

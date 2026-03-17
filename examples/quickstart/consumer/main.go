@@ -164,6 +164,8 @@ func (svr *PolarisConsumer) runWebServer() {
 		ret.SetRetCode(int32(resp.StatusCode))
 		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
 			log.Printf("do report service call result : %+v", err)
+		} else {
+			log.Printf("do report service call result : %+v", ret)
 		}
 
 		defer resp.Body.Close()
@@ -240,6 +242,8 @@ func (svr *PolarisConsumer) runWebServer() {
 		ret.SetRetCode(int32(resp.StatusCode))
 		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
 			log.Printf("do report service call result : %+v", err)
+		} else {
+			log.Printf("do report service call result : %+v", ret)
 		}
 
 		defer resp.Body.Close()
@@ -267,6 +271,8 @@ func (svr *PolarisConsumer) runWebServer() {
 func main() {
 	initArgs()
 	flag.Parse()
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return

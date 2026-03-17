@@ -28,7 +28,7 @@ func init() {
 	flag.BoolVar(&debug, "debug", false, "是否开启调试模式")
 	flag.StringVar(&namespaceVal, "namespace", "default", "namespace")
 	flag.StringVar(&configGroup, "configGroup", "polaris-config-example", "config group name")
-	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=114.132.192.60,ctxB=114.132.29.62")
+	flag.StringVar(&clientsVal, "clients", "", "clientId与server地址映射，格式: clientId=serverAddr，多个用逗号分隔，例如: ctxA=<server1>,ctxB=<server2>")
 }
 
 // parseClients 解析 -clients 参数，返回 clientId -> serverAddr 的映射
@@ -62,6 +62,7 @@ func parseClients(clientsStr string) (map[string]string, error) {
 
 func main() {
 	flag.Parse()
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	// 解析 -clients 参数
 	clientMap, err := parseClients(clientsVal)
