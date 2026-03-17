@@ -21,11 +21,12 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // NewConfigReportCallBack 创建配置上报回调
-func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext, logCtx *config.ContextLogger) *ConfigReportCallBack {
+func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext, logCtx *ctx.ContextLogger) *ConfigReportCallBack {
 	return &ConfigReportCallBack{
 		engine:    engine,
 		globalCtx: globalCtx,
@@ -39,7 +40,7 @@ type ConfigReportCallBack struct {
 	engine    model.Engine
 	globalCtx model.ValueContext
 	interval  time.Duration
-	logCtx    *config.ContextLogger
+	logCtx    *ctx.ContextLogger
 }
 
 // Process 执行任务

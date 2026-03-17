@@ -31,15 +31,10 @@ import (
 
 // ConfigurationImpl cl5全局配置.
 type ConfigurationImpl struct {
-	Global        *GlobalConfigImpl     `yaml:"global" json:"global"`
-	Consumer      *ConsumerConfigImpl   `yaml:"consumer" json:"consumer"`
-	Provider      *ProviderConfigImpl   `yaml:"provider" json:"provider"`
-	Config        *ConfigFileConfigImpl `yaml:"config" json:"config"`
-	ContextLogger *ContextLogger        `yaml:"-" json:"-"`
-}
-
-func (c *ConfigurationImpl) GetContextLogger() *ContextLogger {
-	return c.ContextLogger
+	Global   *GlobalConfigImpl     `yaml:"global" json:"global"`
+	Consumer *ConsumerConfigImpl   `yaml:"consumer" json:"consumer"`
+	Provider *ProviderConfigImpl   `yaml:"provider" json:"provider"`
+	Config   *ConfigFileConfigImpl `yaml:"config" json:"config"`
 }
 
 // GetGlobal cl5.global前缀开头的所有配置项.

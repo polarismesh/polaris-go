@@ -21,8 +21,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 )
@@ -31,7 +31,7 @@ const (
 	locationProviderName string = "remoteHttp"
 )
 
-func New(ctx *plugin.InitContext, logCtx *config.ContextLogger) (*LocationProviderImpl, error) {
+func New(ctx *plugin.InitContext, logCtx *ctx.ContextLogger) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }
@@ -40,7 +40,7 @@ func New(ctx *plugin.InitContext, logCtx *config.ContextLogger) (*LocationProvid
 type LocationProviderImpl struct {
 	address *model.Location
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Init 初始化插件

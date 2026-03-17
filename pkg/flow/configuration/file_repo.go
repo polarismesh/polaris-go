@@ -27,6 +27,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -47,11 +48,11 @@ var (
 
 // ConfigFileRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
 type ConfigFileRepo struct {
-	connector configconnector.ConfigConnector
-	chain     configfilter.Chain
-	conf      config.Configuration
-	logCtx    *config.ContextLogger
-
+	connector          configconnector.ConfigConnector
+	chain              configfilter.Chain
+	conf               config.Configuration
+	logCtx             *ctx.ContextLogger
+	globalCtx          model.ValueContext
 	configFileMetadata model.ConfigFileMetadata
 	// 长轮询通知的版本号
 	notifiedVersion uint64
@@ -71,7 +72,7 @@ type ConfigFileRepo struct {
 type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error
 
 // newConfigFileRepo 创建远程配置文件
-func newConfigFileRepo(metadata model.ConfigFileMetadata,
+func newConfigFileRepo(globalCtx model.ValueContext, metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
 	conf config.Configuration,
@@ -81,7 +82,8 @@ func newConfigFileRepo(metadata model.ConfigFileMetadata,
 		connector:          connector,
 		chain:              chain,
 		conf:               conf,
-		logCtx:             conf.GetContextLogger(),
+		logCtx:             globalCtx.GetContextLogger(),
+		globalCtx:          globalCtx,
 		configFileMetadata: metadata,
 		notifiedVersion:    initVersion,
 		retryPolicy: retryPolicy{

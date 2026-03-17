@@ -28,6 +28,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+
+	ctx_log "github.com/polarismesh/polaris-go/pkg/log/ctx"
 )
 
 const (
@@ -110,6 +113,8 @@ type ValueContext interface {
 	Now() time.Time
 	// Since 计算时间间隔
 	Since(time.Time) time.Duration
+	// GetContextLogger 获取日志配置
+	GetContextLogger() *ctx_log.ContextLogger
 }
 
 // NewValueContext 创建kv上下文对象
@@ -123,6 +128,8 @@ func NewValueContext() ValueContext {
 	})
 	ctx.locationInitializedNotify.Context, ctx.locationInitializedNotify.cancel = context.WithCancel(context.Background())
 	ctx.locationReadyNotify.Context, ctx.locationReadyNotify.cancel = context.WithCancel(context.Background())
+	ctx.contextLogger = &ctx_log.ContextLogger{}
+	ctx.contextLogger.Init()
 	return ctx
 }
 
@@ -199,7 +206,8 @@ type valueContext struct {
 	// 时钟，用于获取当前时间戳
 	clock clock.Clock
 	// 使用线程安全的map进行值的存储
-	coreMap *sync.Map
+	coreMap       *sync.Map
+	contextLogger *ctx.ContextLogger
 }
 
 // WaitLocationInfo 等待地域信息状态
@@ -306,4 +314,8 @@ func (v *valueContext) GetEngine() Engine {
 		return nil
 	}
 	return value.(Engine)
+}
+
+func (c *valueContext) GetContextLogger() *ctx.ContextLogger {
+	return c.contextLogger
 }

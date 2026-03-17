@@ -27,6 +27,7 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -41,7 +42,7 @@ type Detector struct {
 	ReceivePackageBytes [][]byte
 	timeout             time.Duration
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Destroy 销毁插件，可用于释放资源
@@ -67,7 +68,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 		g.cfg = cfgValue.(*Config)
 	}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
-	g.logCtx = ctx.Config.GetContextLogger()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 

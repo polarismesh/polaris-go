@@ -21,7 +21,7 @@ package configfilter
 import (
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
@@ -34,7 +34,7 @@ type ConfigFileHandleFunc func(configFile *configconnector.ConfigFile) (*configc
 type Chain []ConfigFilter
 
 // Execute 执行链中的过滤器
-func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHandleFunc, logCtx *config.ContextLogger) (*configconnector.ConfigFileResponse, error) {
+func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHandleFunc, logCtx *ctx.ContextLogger) (*configconnector.ConfigFileResponse, error) {
 	chainStart := time.Now()
 	logCtx.GetBaseLogger().Infof("[Config] chain execute, chain length:%d, file=%s/%s/%s\n", len(c),
 		configFile.Namespace, configFile.FileGroup, configFile.FileName)

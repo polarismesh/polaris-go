@@ -28,6 +28,7 @@ import (
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -90,7 +91,7 @@ type LocalCache struct {
 	// 缓存文件的有效时间
 	cacheFromPersistAvailableInterval time.Duration
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 	// 空占位对象，使用上下文 logger 初始化
 	emptyInstance           *pb.ServiceInstancesInProto
 	emptyRule               *pb.ServiceRuleInProto
@@ -147,7 +148,7 @@ func (g *LocalCache) Init(ctx *plugin.InitContext) error {
 		return err
 	}
 	g.globalConfig = ctx.Config
-	g.logCtx = ctx.Config.GetContextLogger()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	// 使用上下文 logger 初始化空占位对象
 	g.emptyInstance = pb.NewServiceInstancesInProto(nil, nil, nil, nil, g.logCtx.GetBaseLogger())
 	g.emptyRule = pb.NewServiceRuleInProto(nil, g.logCtx.GetBaseLogger())

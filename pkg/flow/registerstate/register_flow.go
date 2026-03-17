@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -38,7 +38,7 @@ const (
 	_headerValueAsyncRegis  = "true"
 )
 
-func NewRegisterStateManager(minRegisterInterval time.Duration, logCtx *config.ContextLogger) *RegisterStateManager {
+func NewRegisterStateManager(minRegisterInterval time.Duration, logCtx *ctx.ContextLogger) *RegisterStateManager {
 	return &RegisterStateManager{
 		minRegisterInterval: minRegisterInterval,
 		states:              map[string]*registerState{},
@@ -50,7 +50,7 @@ type RegisterStateManager struct {
 	mu                  sync.RWMutex
 	minRegisterInterval time.Duration
 	states              map[string]*registerState
-	logCtx              *config.ContextLogger
+	logCtx              *ctx.ContextLogger
 }
 
 type registerState struct {

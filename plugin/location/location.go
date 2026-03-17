@@ -22,7 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -82,13 +82,13 @@ type Provider struct {
 	*plugin.PluginBase
 	pluginChains []LocationPlugin
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Init 初始化插件
 func (p *Provider) Init(ctx *plugin.InitContext) error {
 	p.PluginBase = plugin.NewPluginBase(ctx)
-	p.logCtx = ctx.Config.GetContextLogger()
+	p.logCtx = ctx.ValueCtx.GetContextLogger()
 	providers := ctx.Config.GetGlobal().GetLocation().GetProviders()
 	p.pluginChains = make([]LocationPlugin, 0, len(providers))
 	for _, provider := range providers {

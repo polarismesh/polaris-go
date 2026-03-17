@@ -20,6 +20,7 @@ package ringhash
 import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	mconfig "github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -33,7 +34,7 @@ type KetamaLoadBalancer struct {
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
 	// 上下文日志
-	logCtx *mconfig.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型
@@ -49,7 +50,7 @@ func (k *KetamaLoadBalancer) Name() string {
 // Init 初始化插件
 func (k *KetamaLoadBalancer) Init(ctx *plugin.InitContext) error {
 	k.PluginBase = plugin.NewPluginBase(ctx)
-	k.logCtx = ctx.Config.GetContextLogger()
+	k.logCtx = ctx.ValueCtx.GetContextLogger()
 	k.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(k.Name()).(*Config)
 	var err error
 	k.hashFunc, err = hash.GetHashFunc(k.cfg.HashFunction)

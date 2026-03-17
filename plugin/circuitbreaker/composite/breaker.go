@@ -27,7 +27,7 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -69,7 +69,7 @@ type CompositeCircuitBreaker struct {
 	// localCache
 	localCache localregistry.LocalRegistry
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 	// start
 	start int32
 	// destroy .
@@ -143,7 +143,7 @@ func (c *CompositeCircuitBreaker) Start() error {
 		return err
 	}
 	c.localCache = registryPlugin.(localregistry.LocalRegistry)
-	c.logCtx = c.pluginCtx.Config.GetContextLogger()
+	c.logCtx = c.pluginCtx.ValueCtx.GetContextLogger()
 	return nil
 }
 

@@ -25,6 +25,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -50,7 +51,7 @@ func NewReportClientCallBack(
 	callback.configuration = cfg
 	callback.globalCtx = globalCtx
 	callback.interval = cfg.GetGlobal().GetAPI().GetReportInterval()
-	callback.logCtx = cfg.GetContextLogger()
+	callback.logCtx = globalCtx.GetContextLogger()
 	callback.loadLocalClientReportResult()
 	return callback, nil
 }
@@ -63,7 +64,7 @@ type ReportClientCallBack struct {
 	globalCtx     model.ValueContext
 	interval      time.Duration
 	reporterChain []statreporter.StatReporter
-	logCtx        *config.ContextLogger
+	logCtx        *ctx.ContextLogger
 	// lastLocation 记录上次成功持久化的地域信息，用于对比判断是否需要重新写入 client_info.json
 	lastLocation *model.Location
 }

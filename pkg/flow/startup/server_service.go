@@ -22,6 +22,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -39,7 +40,7 @@ func NewServerServiceCallBack(
 	callback.engine = engine
 	callback.cfg = cfg
 	callback.interval = config.DefaultDiscoverServiceRetryInterval
-	callback.logCtx = cfg.GetContextLogger()
+	callback.logCtx = engine.GetContext().GetContextLogger()
 	return callback, nil
 }
 
@@ -49,7 +50,7 @@ type ServerServiceCallBack struct {
 	connector serverconnector.ServerConnector
 	cfg       config.Configuration
 	interval  time.Duration
-	logCtx    *config.ContextLogger
+	logCtx    *ctx.ContextLogger
 }
 
 // Process 执行系统服务初始化任务

@@ -28,6 +28,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -47,7 +48,7 @@ type NearbyBasedInstancesFilter struct {
 	unHealthyRatio        float64
 	locationReadyTimeout  time.Duration
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型
@@ -65,7 +66,7 @@ func (g *NearbyBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
 	g.PluginBase = plugin.NewPluginBase(ctx)
-	g.logCtx = ctx.Config.GetContextLogger()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.valueCtx = ctx.ValueCtx
 	g.wholeCfg = ctx.Config

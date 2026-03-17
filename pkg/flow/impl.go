@@ -31,6 +31,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -88,12 +89,12 @@ type Engine struct {
 	watchEngine *WatchEngine
 	// 配置过滤链
 	configFilterChain configfilter.Chain
-	logCtx            *config.ContextLogger
+	logCtx            *ctx.ContextLogger
 }
 
 // InitFlowEngine 初始化flowEngine实例
 func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
-	flowEngine.logCtx = initContext.Config.GetContextLogger()
+	flowEngine.logCtx = initContext.ValueCtx.GetContextLogger()
 	var err error
 	cfg := initContext.Config
 	plugins := initContext.Plugins
@@ -176,7 +177,8 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
-		configFlow, err := configuration.NewConfigFlow(flowEngine.configConnector, flowEngine.configFilterChain, flowEngine.configuration, flowEngine.eventChain)
+		configFlow, err := configuration.NewConfigFlow(globalCtx, flowEngine.configConnector,
+			flowEngine.configFilterChain, flowEngine.configuration, flowEngine.eventChain)
 		if err != nil {
 			return err
 		}
@@ -413,7 +415,7 @@ type subscribeChannel struct {
 	registerServices []model.ServiceKey
 	eventChannelMap  map[model.ServiceKey]chan model.SubScribeEvent
 	lock             sync.RWMutex
-	logCtx           *config.ContextLogger
+	logCtx           *ctx.ContextLogger
 }
 
 var (

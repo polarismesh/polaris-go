@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -34,7 +35,7 @@ type InstancesFilter struct {
 	valueCtx              model.ValueContext
 	recoverAll            bool
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型
@@ -54,7 +55,7 @@ func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.valueCtx = ctx.ValueCtx
-	g.logCtx = ctx.Config.GetContextLogger()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 

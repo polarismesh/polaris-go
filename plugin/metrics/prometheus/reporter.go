@@ -32,7 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/zap"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -94,7 +94,7 @@ type PrometheusReporter struct {
 
 	cancel context.CancelFunc
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型.
@@ -114,7 +114,7 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	s.globalCtx = ctx.ValueCtx
 	s.plugins = ctx.Plugins
 	s.PluginBase = plugin.NewPluginBase(ctx)
-	s.logCtx = ctx.Config.GetContextLogger()
+	s.logCtx = ctx.ValueCtx.GetContextLogger()
 	s.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	s.bindIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)

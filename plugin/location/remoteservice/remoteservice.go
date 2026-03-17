@@ -22,7 +22,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/plugin/location/remoteservice/proto"
@@ -32,7 +32,7 @@ const (
 	locationProviderName string = "remoteService"
 )
 
-func New(ctx *plugin.InitContext, logCtx *config.ContextLogger) (*LocationProviderImpl, error) {
+func New(ctx *plugin.InitContext, logCtx *ctx.ContextLogger) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }
@@ -42,7 +42,7 @@ type LocationProviderImpl struct {
 	address  string
 	clientIp string
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Init 初始化插件

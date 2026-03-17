@@ -27,6 +27,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
@@ -42,7 +43,7 @@ type ConfigGroupRepo struct {
 	retryPolicy     retryPolicy
 	// 从服务端获取的原始配置对象 *configconnector.ConfigFile
 	remoteRef *atomic.Value
-	logCtx    *config.ContextLogger
+	logCtx    *ctx.ContextLogger
 
 	lock      sync.RWMutex
 	listeners []func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse)
@@ -52,7 +53,8 @@ type ConfigGroupRepo struct {
 	pullCount       uint64
 }
 
-func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequestMode, connector configconnector.ConfigConnector,
+func newConfigGroupRepo(globalCtx model.ValueContext, namespace, group string, mode model.GetConfigFileRequestMode,
+	connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigGroupRepo, error) {
 	repo := &ConfigGroupRepo{
 		namespace:       namespace,
@@ -67,7 +69,7 @@ func newConfigGroupRepo(namespace, group string, mode model.GetConfigFileRequest
 		},
 		remoteRef:       &atomic.Value{},
 		listeners:       make([]func(oldVal *configconnector.ConfigGroupResponse, newVal *configconnector.ConfigGroupResponse), 0, 4),
-		logCtx:          configuration.GetContextLogger(),
+		logCtx:          globalCtx.GetContextLogger(),
 		lastPullLogTime: time.Now(),
 	}
 

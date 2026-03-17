@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -38,7 +39,7 @@ type ZeroProtectFilter struct {
 	*plugin.PluginBase
 	valueCtx model.ValueContext
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型
@@ -55,7 +56,7 @@ func (g *ZeroProtectFilter) Name() string {
 func (g *ZeroProtectFilter) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.valueCtx = ctx.ValueCtx
-	g.logCtx = ctx.Config.GetContextLogger()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 

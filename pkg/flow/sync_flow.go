@@ -24,6 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
@@ -259,7 +260,7 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 }
 
 // verifyCluster 缓存对账，确保cluster的根与当前查询出来的服务实例一致
-func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster, logCtx *config.ContextLogger) *model.Cluster {
+func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster, logCtx *ctx.ContextLogger) *model.Cluster {
 	clsServices := cluster.GetClusters().GetServiceInstances()
 	if clsServices.GetRevision() == svcInstances.GetRevision() {
 		return cluster

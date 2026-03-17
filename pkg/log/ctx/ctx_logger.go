@@ -16,7 +16,7 @@
  *
  */
 
-package config
+package ctx
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/log"

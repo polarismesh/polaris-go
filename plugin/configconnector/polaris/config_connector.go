@@ -34,6 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/network"
@@ -61,7 +62,7 @@ type Connector struct {
 	hasPrintedReady uint32
 	token           string
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 // Type 插件类型.
@@ -78,7 +79,7 @@ func (c *Connector) Name() string {
 func (c *Connector) Init(ctx *plugin.InitContext) error {
 	c.RunContext = common.NewRunContext()
 	c.PluginBase = plugin.NewPluginBase(ctx)
-	c.logCtx = ctx.Config.GetContextLogger()
+	c.logCtx = ctx.ValueCtx.GetContextLogger()
 	cfgValue := ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetPluginConfig(c.Name())
 	if cfgValue != nil {
 		c.cfg = cfgValue.(*networkConfig)

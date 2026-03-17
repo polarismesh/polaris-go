@@ -541,8 +541,6 @@ func (c *ConfigurationImpl) Init() {
 	c.Provider.Init()
 	c.Config = &ConfigFileConfigImpl{}
 	c.Config.Init()
-	c.ContextLogger = &ContextLogger{}
-	c.ContextLogger.Init()
 }
 
 // Verify 检验configuration配置.
@@ -573,7 +571,6 @@ func (c *ConfigurationImpl) SetDefault() {
 	c.Consumer.SetDefault()
 	c.Provider.SetDefault()
 	c.Config.SetDefault()
-	c.ContextLogger.AddFields(c.Global.Client.Labels)
 }
 
 // Init systemConfig init.

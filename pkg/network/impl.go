@@ -279,7 +279,7 @@ func NewConnectionManager(
 		valueCtx:         valueCtx,
 		protocol:         protocol,
 		discoverEventSet: make(map[model.EventType]bool, 0),
-		logNetwork:       cfg.GetContextLogger().GetNetworkLogger(),
+		logNetwork:       valueCtx.GetContextLogger().GetNetworkLogger(),
 	}
 	serverServices := config.GetServerServices(cfg)
 	for _, svc := range serverServices {
@@ -324,7 +324,7 @@ func NewConfigConnectionManager(cfg config.Configuration, valueCtx model.ValueCo
 		serverServices:   make(map[config.ClusterType]*ServerAddressList),
 		valueCtx:         valueCtx,
 		protocol:         configProtocol,
-		logNetwork:       cfg.GetContextLogger().GetNetworkLogger(),
+		logNetwork:       valueCtx.GetContextLogger().GetNetworkLogger(),
 		discoverEventSet: make(map[model.EventType]bool, 0),
 	}
 

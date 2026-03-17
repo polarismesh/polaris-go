@@ -29,6 +29,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -69,7 +70,7 @@ type FlowQuotaAssistant struct {
 
 	remoteNamespace string
 	remoteService   string
-	logCtx          *config.ContextLogger
+	logCtx          *ctx.ContextLogger
 }
 
 // AsyncRateLimitConnector 异步限流连接器
@@ -112,7 +113,7 @@ func (f *FlowQuotaAssistant) TaskValues() model.TaskValues {
 func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
 	f.engine = engine
 	f.supplier = supplier
-	f.logCtx = cfg.GetContextLogger()
+	f.logCtx = engine.GetContext().GetContextLogger()
 	f.asyncRateLimitConnector = NewAsyncRateLimitConnector(engine.GetContext(), cfg)
 	f.enable = cfg.GetProvider().GetRateLimit().IsEnable()
 	if !f.enable {
@@ -309,7 +310,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	return windows, nil
 }
 
-func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache, logCtx *config.ContextLogger) bool {
+func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache, logCtx *ctx.ContextLogger) bool {
 	if pb.IsMatchAllValue(matchString) {
 		return true
 	}
@@ -359,7 +360,7 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 }
 
 // lookupRule 寻址规则
-func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string, logCtx *config.ContextLogger) []*apitraffic.Rule {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string, logCtx *ctx.ContextLogger) []*apitraffic.Rule {
 	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
 		return nil

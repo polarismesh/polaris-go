@@ -28,7 +28,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -47,7 +47,7 @@ type CachePersistHandler struct {
 	maxWriteRetry int
 	maxReadRetry  int
 	retryInterval time.Duration
-	logCtx        *config.ContextLogger
+	logCtx        *ctx.ContextLogger
 }
 
 // CacheFileInfo 文件信息
@@ -58,7 +58,7 @@ type CacheFileInfo struct {
 
 // NewCachePersistHandler create persistence handler
 func NewCachePersistHandler(persistDir string, maxWriteRetry int,
-	maxReadRetry int, retryInterval time.Duration, logCtx *config.ContextLogger) (*CachePersistHandler, error) {
+	maxReadRetry int, retryInterval time.Duration, logCtx *ctx.ContextLogger) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
 	handler.persistDir = persistDir
 	handler.maxReadRetry = maxReadRetry

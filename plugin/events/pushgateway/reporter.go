@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -56,7 +56,7 @@ type PushgatewayReporter struct {
 	httpClient *http.Client
 	targetUrl  string
 	// 上下文日志
-	logCtx *config.ContextLogger
+	logCtx *ctx.ContextLogger
 }
 
 func init() {
@@ -96,7 +96,7 @@ func (p *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	p.valueCtx = ctx.ValueCtx
 	p.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	p.clientID = ctx.Config.GetGlobal().GetClient().GetId()
-	p.logCtx = ctx.Config.GetContextLogger()
+	p.logCtx = ctx.ValueCtx.GetContextLogger()
 
 	cfgValue := ctx.Config.GetGlobal().GetEventReporter().GetPluginConfig(PluginName)
 	if cfgValue != nil {

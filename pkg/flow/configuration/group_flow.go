@@ -24,6 +24,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
@@ -37,10 +38,12 @@ type ConfigGroupFlow struct {
 
 	connector     configconnector.ConfigConnector
 	configuration config.Configuration
-	logCtx        *config.ContextLogger
+	logCtx        *ctx.ContextLogger
+	globalCtx     model.ValueContext
 }
 
-func newConfigGroupFlow(connector configconnector.ConfigConnector, configuration config.Configuration) (*ConfigGroupFlow, error) {
+func newConfigGroupFlow(globalCtx model.ValueContext, connector configconnector.ConfigConnector,
+	configuration config.Configuration) (*ConfigGroupFlow, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	groupFlow := &ConfigGroupFlow{
@@ -49,7 +52,8 @@ func newConfigGroupFlow(connector configconnector.ConfigConnector, configuration
 		configuration: configuration,
 		repos:         map[string]*ConfigGroupRepo{},
 		groupCache:    map[string]model.ConfigFileGroup{},
-		logCtx:        configuration.GetContextLogger(),
+		globalCtx:     globalCtx,
+		logCtx:        globalCtx.GetContextLogger(),
 	}
 
 	go groupFlow.doSync(ctx)
@@ -82,7 +86,8 @@ func (flow *ConfigGroupFlow) GetConfigGroup(namespace, fileGroup string) (model.
 		return configGroup, nil
 	}
 
-	groupRepo, err := newConfigGroupRepo(namespace, fileGroup, model.SDKMode, flow.connector, flow.configuration)
+	groupRepo, err := newConfigGroupRepo(flow.globalCtx, namespace, fileGroup, model.SDKMode, flow.connector,
+		flow.configuration)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +124,8 @@ func (flow *ConfigGroupFlow) GetConfigGroupWithReq(req *model.GetConfigGroupRequ
 		return configGroup, nil
 	}
 
-	groupRepo, err := newConfigGroupRepo(req.Namespace, req.FileGroup, req.Mode, flow.connector, flow.configuration)
+	groupRepo, err := newConfigGroupRepo(flow.globalCtx, req.Namespace, req.FileGroup, req.Mode, flow.connector,
+		flow.configuration)
 	if err != nil {
 		return nil, err
 	}

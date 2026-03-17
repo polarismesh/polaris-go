@@ -123,11 +123,11 @@ func (s *sdkContext) Destroy() {
 	atomic.StoreUint32(&s.destroyed, 1)
 	err = s.engine.Destroy()
 	if err != nil {
-		s.config.GetContextLogger().GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
+		s.valueContext.GetContextLogger().GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
 	}
 	err = s.plugins.DestroyPlugins()
 	if err != nil {
-		s.config.GetContextLogger().GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
+		s.valueContext.GetContextLogger().GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
 	}
 }
 
@@ -242,13 +242,15 @@ func getHostName() string {
 
 // InitContextByConfig InitContextByStream 通过配置对象新建上下文
 func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
-	logCtx := cfg.GetContextLogger()
 	startTime := time.Now()
 	globalCtx := model.NewValueContext()
+	// 初始化logCtx的labels
+	globalCtx.GetContextLogger().AddFields(cfg.GetGlobal().GetClient().GetLabels())
 	globalCtx.SetValue(model.ContextKeyTakeEffectTime, startTime)
 	if logErr := checkLoggersDir(); nil != logErr {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, logErr, "logger init error")
 	}
+	logCtx := globalCtx.GetContextLogger()
 	if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		text, err := yaml.Marshal(cfg)
 		if err != nil {

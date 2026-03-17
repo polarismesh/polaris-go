@@ -36,6 +36,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
@@ -132,7 +133,7 @@ type StreamCounterSet struct {
 	createTimeMilli int64
 	// 时间差
 	timeDiff int64
-	logCtx   *config.ContextLogger
+	logCtx   *ctx.ContextLogger
 }
 
 // NewStreamCounterSet 新建流管理器
@@ -600,7 +601,7 @@ type asyncRateLimitConnector struct {
 	reconnectInterval time.Duration
 	// 协议
 	protocol string
-	logCtx   *config.ContextLogger
+	logCtx   *ctx.ContextLogger
 }
 
 // NewAsyncRateLimitConnector .
@@ -623,7 +624,7 @@ func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configur
 		clientHostMutex:   &sync.Mutex{},
 		protocol:          protocol,
 		stopChan:          make(chan struct{}),
-		logCtx:            cfg.GetContextLogger(),
+		logCtx:            valueCtx.GetContextLogger(),
 	}
 	go c.startClearTask()
 	return c
