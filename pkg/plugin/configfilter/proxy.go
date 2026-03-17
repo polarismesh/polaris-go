@@ -19,7 +19,7 @@
 package configfilter
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
@@ -28,11 +28,11 @@ import (
 // Proxy is a config connector proxy
 type Proxy struct {
 	ConfigFilter
-	engine model.Engine
+	engine global.Engine
 }
 
 // SetRealPlugin set real plugin
-func (p *Proxy) SetRealPlugin(pg plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(pg plugin.Plugin, engine global.Engine) {
 	p.ConfigFilter = pg.(ConfigFilter)
 	p.engine = engine
 }

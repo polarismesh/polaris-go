@@ -23,7 +23,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -37,9 +38,9 @@ const (
 // ZeroProtectFilter 基于路由规则的服务实例过滤器
 type ZeroProtectFilter struct {
 	*plugin.PluginBase
-	valueCtx model.ValueContext
+	valueCtx global.ValueContext
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型

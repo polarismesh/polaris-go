@@ -27,7 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -43,7 +44,7 @@ const (
 type PushgatewayReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
-	valueCtx model.ValueContext
+	valueCtx global.ValueContext
 
 	cfg      *Config
 	clientIP string
@@ -56,7 +57,7 @@ type PushgatewayReporter struct {
 	httpClient *http.Client
 	targetUrl  string
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 func init() {

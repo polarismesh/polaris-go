@@ -23,7 +23,8 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
@@ -118,7 +119,7 @@ func buildRedirectedFilter(filters *cacheFilters, redirectedService model.Servic
 
 // getAndLoadCacheValues 同步加载缓存资源，包括实例以及规则
 func getAndLoadCacheValues(registry localregistry.LocalRegistry,
-	request model.CacheValueQuery, load bool, logCtx *ctx.ContextLogger) (*CombineNotifyContext, model.SDKError) {
+	request global.CacheValueQuery, load bool, logCtx *log.ContextLogger) (*CombineNotifyContext, model.SDKError) {
 	var notifiers []*SingleNotifyContext
 
 	trigger := request.GetNotifierTrigger()
@@ -231,7 +232,7 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 
 // tryGetServiceValuesFromCache 尝试加载服务信息，来源包括缓存文件加载的信息
 // 返回值为是否成功加载了所需信息和这个过程中可能发生的错误
-func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request model.CacheValueQuery, logCtx *ctx.ContextLogger) (bool, error) {
+func tryGetServiceValuesFromCache(registry localregistry.LocalRegistry, request global.CacheValueQuery, logCtx *log.ContextLogger) (bool, error) {
 	failNum := 0
 	trigger := request.GetNotifierTrigger()
 	dstService := request.GetDstService()

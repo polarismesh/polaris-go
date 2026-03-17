@@ -27,7 +27,8 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -55,7 +56,7 @@ type CompositeCircuitBreaker struct {
 	// containers model.Resource -> *RuleContainer
 	containers *sync.Map
 	// engineFlow
-	engineFlow model.Engine
+	engineFlow global.Engine
 	// regexpCache regexp -> *regexp.Regexp
 	rlock sync.RWMutex
 	// regexpCache
@@ -69,7 +70,7 @@ type CompositeCircuitBreaker struct {
 	// localCache
 	localCache localregistry.LocalRegistry
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 	// start
 	start int32
 	// destroy .

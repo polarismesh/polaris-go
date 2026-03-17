@@ -28,7 +28,8 @@ import (
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -75,11 +76,11 @@ type LocalCache struct {
 	serverServicesSet map[model.ServiceKey]clusterAndInterval
 	// 全局配置
 	globalConfig config.Configuration
-	globalCtx    model.ValueContext
+	globalCtx    global.ValueContext
 	// 插件工厂
 	plugins plugin.Supplier
 	// 主流程engine
-	engine model.Engine
+	engine global.Engine
 	// 服务到服务级插件映射
 	svcToPluginValues map[model.ServiceKey]*pb.SvcPluginValues
 	// 命名空间到服务级插件映射，比如针对Polaris命名空间下的服务，都使用元数据路由
@@ -91,7 +92,7 @@ type LocalCache struct {
 	// 缓存文件的有效时间
 	cacheFromPersistAvailableInterval time.Duration
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 	// 空占位对象，使用上下文 logger 初始化
 	emptyInstance           *pb.ServiceInstancesInProto
 	emptyRule               *pb.ServiceRuleInProto
@@ -535,8 +536,8 @@ func (g *LocalCache) UpdateInstances(svcUpdateReq *localregistry.ServiceUpdateRe
 			"UpdateInstances in %s: service %s not found", g.Name(), svcUpdateReq.ServiceKey)
 	}
 	if g.engine == nil {
-		e, _ := g.globalCtx.GetValue(model.ContextKeyEngine)
-		g.engine = e.(model.Engine)
+		e, _ := g.globalCtx.GetValue(global.ContextKeyEngine)
+		g.engine = e.(global.Engine)
 	}
 	for i := 0; i < len(svcUpdateReq.Properties); i++ {
 		// 更新实例的本地信息，包括熔断状态、健康检测状态

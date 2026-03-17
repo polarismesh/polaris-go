@@ -21,12 +21,13 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // NewConfigReportCallBack 创建配置上报回调
-func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext, logCtx *ctx.ContextLogger) *ConfigReportCallBack {
+func NewConfigReportCallBack(engine global.Engine, globalCtx global.ValueContext, logCtx *log.ContextLogger) *ConfigReportCallBack {
 	return &ConfigReportCallBack{
 		engine:    engine,
 		globalCtx: globalCtx,
@@ -37,10 +38,10 @@ func NewConfigReportCallBack(engine model.Engine, globalCtx model.ValueContext, 
 
 // ConfigReportCallBack 自身配置上报任务回调
 type ConfigReportCallBack struct {
-	engine    model.Engine
-	globalCtx model.ValueContext
+	engine    global.Engine
+	globalCtx global.ValueContext
 	interval  time.Duration
-	logCtx    *ctx.ContextLogger
+	logCtx    *log.ContextLogger
 }
 
 // Process 执行任务
@@ -50,8 +51,8 @@ func (c *ConfigReportCallBack) Process(
 		return model.SKIP
 	}
 	err := c.engine.SyncReportStat(model.SDKCfgStat, nil)
-	t, _ := c.globalCtx.GetValue(model.ContextKeyToken)
-	token := t.(model.SDKToken)
+	t, _ := c.globalCtx.GetValue(global.ContextKeyToken)
+	token := t.(global.SDKToken)
 	if err != nil {
 		c.logCtx.GetBaseLogger().Errorf("report sdk config info, IP: %s, PID: %d, UID: %s, error:%s",
 			token.IP, token.PID, token.UID, err)

@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 )
@@ -33,7 +32,7 @@ type defaultConfigFile struct {
 	fileRepo   *ConfigFileRepo
 	content    string
 	persistent model.Persistent
-	logCtx     *ctx.ContextLogger
+	logCtx     *log.ContextLogger
 
 	lock                sync.RWMutex
 	changeListeners     []func(event model.ConfigFileChangeEvent)
@@ -191,7 +190,7 @@ type defaultConfigGroup struct {
 	namespace       string
 	group           string
 	repo            *ConfigGroupRepo
-	logCtx          *ctx.ContextLogger
+	logCtx          *log.ContextLogger
 	lock            sync.RWMutex
 	changeListeners []model.OnConfigGroupChange
 }

@@ -19,7 +19,7 @@ package configuration
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
@@ -31,7 +31,7 @@ type ConfigFlow struct {
 }
 
 // NewConfigFlow 创建配置中心服务
-func NewConfigFlow(globalCtx model.ValueContext, connector configconnector.ConfigConnector, chain configfilter.Chain,
+func NewConfigFlow(globalCtx global.ValueContext, connector configconnector.ConfigConnector, chain configfilter.Chain,
 	configuration config.Configuration, eventChain []events.EventReporter) (*ConfigFlow, error) {
 	fileFlow, err := NewConfigFileFlow(globalCtx, connector, chain, configuration, eventChain)
 	if err != nil {

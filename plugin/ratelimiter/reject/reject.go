@@ -19,7 +19,7 @@ package reject
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -29,7 +29,7 @@ import (
 // RateLimiterReject 基于直接拒绝策略的限流控制器
 type RateLimiterReject struct {
 	*plugin.PluginBase
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型

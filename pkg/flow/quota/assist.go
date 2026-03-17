@@ -29,7 +29,8 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -50,7 +51,7 @@ type FlowQuotaAssistant struct {
 	// 是否启用限流，如果不启用，默认都会放通
 	enable bool
 	// 流程执行引擎
-	engine model.Engine
+	engine global.Engine
 	// 插件工厂
 	supplier plugin.Supplier
 	// 并发锁，控制windowSet的加入
@@ -70,7 +71,7 @@ type FlowQuotaAssistant struct {
 
 	remoteNamespace string
 	remoteService   string
-	logCtx          *ctx.ContextLogger
+	logCtx          *log.ContextLogger
 }
 
 // AsyncRateLimitConnector 异步限流连接器
@@ -110,7 +111,7 @@ func (f *FlowQuotaAssistant) TaskValues() model.TaskValues {
 }
 
 // Init 初始化限额辅助
-func (f *FlowQuotaAssistant) Init(engine model.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
+func (f *FlowQuotaAssistant) Init(engine global.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
 	f.engine = engine
 	f.supplier = supplier
 	f.logCtx = engine.GetContext().GetContextLogger()
@@ -310,7 +311,7 @@ func (f *FlowQuotaAssistant) lookupRateLimitWindow(
 	return windows, nil
 }
 
-func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache, logCtx *ctx.ContextLogger) bool {
+func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache model.RuleCache, logCtx *log.ContextLogger) bool {
 	if pb.IsMatchAllValue(matchString) {
 		return true
 	}
@@ -360,7 +361,7 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 }
 
 // lookupRule 寻址规则
-func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string, logCtx *ctx.ContextLogger) []*apitraffic.Rule {
+func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraffic.MatchArgument_Type]map[string]string, logCtx *log.ContextLogger) []*apitraffic.Rule {
 	if reflect2.IsNil(svcRule) || reflect2.IsNil(svcRule.GetValue()) {
 		// 规则集为空
 		return nil

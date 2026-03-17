@@ -30,6 +30,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -93,11 +94,11 @@ func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Inst
 			s.curIndex++
 		}
 	} else {
-		engineValue, ok := s.manager.valueCtx.GetValue(model.ContextKeyEngine)
+		engineValue, ok := s.manager.valueCtx.GetValue(global.ContextKeyEngine)
 		if !ok {
 			return "", nil, fmt.Errorf("flow engine is not ready")
 		}
-		engine := engineValue.(model.Engine)
+		engine := engineValue.(global.Engine)
 		// 返回错误，使得外部流程可以使用埋点进行发现
 		if s.useDefault && atomic.LoadUint32(&s.manager.ready) < serviceReadyStatus {
 			return "", nil, fmt.Errorf("discover service %s is not ready", s.service)
@@ -256,7 +257,7 @@ type connectionManager struct {
 	// 系统服务信息
 	serverServices map[config.ClusterType]*ServerAddressList
 	// 全局上下文信息
-	valueCtx model.ValueContext
+	valueCtx global.ValueContext
 	// 当前使用的协议
 	protocol string
 	// 连接创建器
@@ -267,7 +268,7 @@ type connectionManager struct {
 
 // NewConnectionManager 创建连接管理器
 func NewConnectionManager(
-	cfg config.Configuration, valueCtx model.ValueContext) (ConnectionManager, error) {
+	cfg config.Configuration, valueCtx global.ValueContext) (ConnectionManager, error) {
 	addresses := cfg.GetGlobal().GetServerConnector().GetAddresses()
 	switchInterval := cfg.GetGlobal().GetServerConnector().GetServerSwitchInterval()
 	connectTimeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
@@ -314,7 +315,7 @@ func NewConnectionManager(
 }
 
 // NewConfigConnectionManager 创建配置中心连接管理器
-func NewConfigConnectionManager(cfg config.Configuration, valueCtx model.ValueContext) (ConnectionManager, error) {
+func NewConfigConnectionManager(cfg config.Configuration, valueCtx global.ValueContext) (ConnectionManager, error) {
 	configSwitchInterval := cfg.GetConfigFile().GetConfigConnectorConfig().GetServerSwitchInterval()
 	configConnectTimeout := cfg.GetConfigFile().GetConfigConnectorConfig().GetConnectTimeout()
 	configProtocol := cfg.GetConfigFile().GetConfigConnectorConfig().GetProtocol()

@@ -33,6 +33,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
@@ -77,11 +78,11 @@ type SDKContext interface {
 
 	// GetEngine
 	// @brief 获取执行引擎
-	GetEngine() model.Engine
+	GetEngine() global.Engine
 
 	// GetValueContext
 	// @brief 获取值上下文
-	GetValueContext() model.ValueContext
+	GetValueContext() global.ValueContext
 }
 
 // SDKOwner 获取SDK上下文接口
@@ -111,8 +112,8 @@ func checkAvailable(owner SDKOwner) error {
 type sdkContext struct {
 	config       config.Configuration
 	plugins      plugin.Manager
-	engine       model.Engine
-	valueContext model.ValueContext
+	engine       global.Engine
+	valueContext global.ValueContext
 	// 标识是否已经销毁，0未销毁，1已销毁
 	destroyed uint32
 }
@@ -147,12 +148,12 @@ func (s *sdkContext) GetPlugins() plugin.Manager {
 }
 
 // GetEngine 获取执行引擎
-func (s *sdkContext) GetEngine() model.Engine {
+func (s *sdkContext) GetEngine() global.Engine {
 	return s.engine
 }
 
 // GetValueContext 获取值上下文
-func (s *sdkContext) GetValueContext() model.ValueContext {
+func (s *sdkContext) GetValueContext() global.ValueContext {
 	return s.valueContext
 }
 
@@ -243,10 +244,10 @@ func getHostName() string {
 // InitContextByConfig InitContextByStream 通过配置对象新建上下文
 func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	startTime := time.Now()
-	globalCtx := model.NewValueContext()
+	globalCtx := global.NewValueContext()
 	// 初始化logCtx的labels
 	globalCtx.GetContextLogger().AddFields(cfg.GetGlobal().GetClient().GetLabels())
-	globalCtx.SetValue(model.ContextKeyTakeEffectTime, startTime)
+	globalCtx.SetValue(global.ContextKeyTakeEffectTime, startTime)
 	if logErr := checkLoggersDir(); nil != logErr {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, logErr, "logger init error")
 	}
@@ -265,7 +266,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
 	initSelfIP(cfg)
-	token := &model.SDKToken{
+	token := &global.SDKToken{
 		IP:       cfg.GetGlobal().GetAPI().GetBindIP(),
 		PID:      int32(os.Getpid()),
 		Client:   version.ClientType,
@@ -279,10 +280,9 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		"CONTAINER: "+"%s, "+
 		"HOSTNAME:%s-------", version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
 
-	globalCtx.SetValue(model.ContextKeyToken, *token)
-	globalCtx.SetValue(model.ContextKeyLogCtx, logCtx)
+	globalCtx.SetValue(global.ContextKeyToken, *token)
 	plugManager := plugin.NewPluginManager()
-	globalCtx.SetValue(model.ContextKeyPlugins, plugManager)
+	globalCtx.SetValue(global.ContextKeyPlugins, plugManager)
 	connManager, err := network.NewConnectionManager(cfg, globalCtx)
 	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create connectionManager")
@@ -322,7 +322,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		ctx.Destroy()
 		return nil, err
 	}
-	globalCtx.SetValue(model.ContextKeyFinishInitTime, time.Now())
+	globalCtx.SetValue(global.ContextKeyFinishInitTime, time.Now())
 	logCtx.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
 }
@@ -353,7 +353,7 @@ func initSelfIP(cfg config.Configuration) {
 	}
 }
 
-func initSelfLabels(cfg config.Configuration, sdkToken *model.SDKToken) {
+func initSelfLabels(cfg config.Configuration, sdkToken *global.SDKToken) {
 	clientCfg := cfg.GetGlobal().GetClient().(*config.ClientConfigImpl)
 	if clientCfg.GetId() == "" {
 		clientCfg.SetId(sdkToken.UID)

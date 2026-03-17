@@ -30,6 +30,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
@@ -513,7 +514,7 @@ func (r *RateLimitWindow) buildInitTargetStr() string {
 }
 
 // Engine 获取SDK引擎
-func (r *RateLimitWindow) Engine() model.Engine {
+func (r *RateLimitWindow) Engine() global.Engine {
 	return r.WindowSet.flowAssistant.engine
 }
 

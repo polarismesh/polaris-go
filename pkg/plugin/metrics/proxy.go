@@ -18,7 +18,7 @@
 package statreporter
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -26,11 +26,11 @@ import (
 // Proxy is a proxy plugin for stat reporter
 type Proxy struct {
 	StatReporter
-	engine model.Engine
+	engine global.Engine
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
 	p.StatReporter = plug.(StatReporter)
 	p.engine = engine
 }

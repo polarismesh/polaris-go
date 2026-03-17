@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
@@ -51,10 +51,10 @@ type WatchEngine struct {
 	watchContexts map[uint64]WatchContext
 	indexSeed     uint64
 	registry      localregistry.LocalRegistry
-	logCtx        *ctx.ContextLogger
+	logCtx        *log.ContextLogger
 }
 
-func NewWatchEngine(registry localregistry.LocalRegistry, logCtx *ctx.ContextLogger) *WatchEngine {
+func NewWatchEngine(registry localregistry.LocalRegistry, logCtx *log.ContextLogger) *WatchEngine {
 	return &WatchEngine{
 		instancesWatch: map[string]map[string]map[uint64]WatchContext{},
 		servicesWatch:  map[string]map[uint64]WatchContext{},
@@ -398,11 +398,11 @@ type LongPullContext struct {
 	waitCancel    context.CancelFunc
 	waitIndex     uint64
 	valueChan     chan model.RegistryValue
-	logCtx        *ctx.ContextLogger
+	logCtx        *log.ContextLogger
 }
 
 func NewLongPullContext(
-	id uint64, waitIndex uint64, waitTime time.Duration, svcEventKey model.ServiceEventKey, logCtx *ctx.ContextLogger) *LongPullContext {
+	id uint64, waitIndex uint64, waitTime time.Duration, svcEventKey model.ServiceEventKey, logCtx *log.ContextLogger) *LongPullContext {
 	pullCtx := &LongPullContext{
 		id:          id,
 		waitIndex:   waitIndex,

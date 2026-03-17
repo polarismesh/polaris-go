@@ -28,8 +28,8 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -53,8 +53,8 @@ type ConfigFileFlow struct {
 	connector configconnector.ConfigConnector
 	chain     configfilter.Chain
 	conf      config.Configuration
-	globalCtx model.ValueContext
-	logCtx    *ctx.ContextLogger
+	globalCtx global.ValueContext
+	logCtx    *log.ContextLogger
 
 	persistHandler *CachePersistHandler
 
@@ -64,7 +64,7 @@ type ConfigFileFlow struct {
 }
 
 // NewConfigFileFlow 创建配置中心服务
-func NewConfigFileFlow(globalCtx model.ValueContext, connector configconnector.ConfigConnector,
+func NewConfigFileFlow(globalCtx global.ValueContext, connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
 	conf config.Configuration, eventReporterChain []events.EventReporter) (*ConfigFileFlow, error) {
 	persistHandler, err := NewCachePersistHandler(

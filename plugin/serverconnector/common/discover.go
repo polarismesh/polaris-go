@@ -32,8 +32,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/network"
@@ -81,7 +81,7 @@ type DiscoverConnector struct {
 	updateTaskSet *sync.Map
 	// 连接管理器
 	connManager network.ConnectionManager
-	valueCtx    model.ValueContext
+	valueCtx    global.ValueContext
 	// 通过本地缓存加载成功的系统服务
 	cachedServerServices []model.ServiceEventKey
 	// discover服务的命名空间和服务名
@@ -94,7 +94,7 @@ type DiscoverConnector struct {
 	// 创建具体调度客户端的逻辑
 	createClient DiscoverClientCreator
 	scalableRand *rand.ScalableRand
-	logCtx       *ctx.ContextLogger
+	logCtx       *log.ContextLogger
 }
 
 // 任务对象，用于在connector协程中做轮转处理
@@ -286,7 +286,7 @@ func (g *DiscoverConnector) retryUpdateTask(updateTask *serviceUpdateTask, err e
 const maxLogMsgSize = 4 * 1024 * 1024
 
 // 打印应答消息
-func logDiscoverResponse(logCtx *ctx.ContextLogger, resp *apiservice.DiscoverResponse, connection *network.Connection) {
+func logDiscoverResponse(logCtx *log.ContextLogger, resp *apiservice.DiscoverResponse, connection *network.Connection) {
 	if logCtx.GetNetworkLogger().IsLevelEnabled(log.DebugLog) {
 		svcKey := model.ServiceEventKey{
 			ServiceKey: model.ServiceKey{
@@ -308,7 +308,7 @@ func logDiscoverResponse(logCtx *ctx.ContextLogger, resp *apiservice.DiscoverRes
 }
 
 // 服务发现应答转为事件，从应答里面获取调用discover的返回码
-func discoverResponseToEvent(logCtx *ctx.ContextLogger, resp *apiservice.DiscoverResponse,
+func discoverResponseToEvent(logCtx *log.ContextLogger, resp *apiservice.DiscoverResponse,
 	svcEventKey model.ServiceEventKey, connection *network.Connection) (*serverconnector.ServiceEvent, model.ErrCode) {
 	svcEvent := &serverconnector.ServiceEvent{ServiceEventKey: svcEventKey}
 	retCode := resp.GetCode().GetValue()
@@ -863,7 +863,7 @@ func (s *serviceUpdateTask) needLog() bool {
 }
 
 // 转换为服务发现的请求对象
-func (s *serviceUpdateTask) toDiscoverRequest(logCtx *ctx.ContextLogger) *apiservice.DiscoverRequest {
+func (s *serviceUpdateTask) toDiscoverRequest(logCtx *log.ContextLogger) *apiservice.DiscoverRequest {
 	var request = &apiservice.DiscoverRequest{
 		Type: pb.GetProtoRequestType(s.Type),
 		Service: &apiservice.Service{

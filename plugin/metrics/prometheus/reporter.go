@@ -32,7 +32,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/zap"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -70,7 +71,7 @@ type PrometheusReporter struct {
 	// 本插件的配置
 	cfg *Config
 	// 全局上下文
-	globalCtx model.ValueContext
+	globalCtx global.ValueContext
 	// sdk加载的插件
 	sdkPlugins string
 	// 插件工厂
@@ -94,7 +95,7 @@ type PrometheusReporter struct {
 
 	cancel context.CancelFunc
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型.

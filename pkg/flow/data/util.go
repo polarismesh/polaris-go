@@ -23,7 +23,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
@@ -202,7 +202,7 @@ type SingleInvoke func(request interface{}) (interface{}, error)
 
 // RetrySyncCall 通用的带重试的同步调用逻辑
 func RetrySyncCall(name string, svcKey *model.ServiceKey,
-	request interface{}, call SingleInvoke, param *model.ControlParam, logCtx *ctx.ContextLogger) (interface{}, model.SDKError) {
+	request interface{}, call SingleInvoke, param *model.ControlParam, logCtx *log.ContextLogger) (interface{}, model.SDKError) {
 	retryTimes := -1
 	var resp interface{}
 	var err error

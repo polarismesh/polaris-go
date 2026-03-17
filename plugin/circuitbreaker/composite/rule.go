@@ -27,6 +27,7 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
@@ -45,7 +46,7 @@ type RuleContainer struct {
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow
-	engineFlow model.Engine
+	engineFlow global.Engine
 	// log
 	log log.Logger
 	//

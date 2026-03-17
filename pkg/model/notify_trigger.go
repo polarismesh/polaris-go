@@ -15,32 +15,24 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package location
+package model
 
-import (
-	"github.com/polarismesh/polaris-go/pkg/global"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
-)
-
-type Proxy struct {
-	Provider
-	engine global.Engine
+// NotifyTrigger 通知开关，标识本次需要获取哪些资源
+type NotifyTrigger struct {
+	EnableDstInstances bool
+	EnableDstRoute     bool
+	EnableNearbyRoute  bool
+	EnableSrcRoute     bool
+	EnableDstRateLimit bool
+	EnableServices     bool
 }
 
-// SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
-	p.Provider = plug.(Provider)
-	p.engine = engine
-}
-
-// GetLocation 获取实例地理位置信息
-func (p *Proxy) GetLocation() (*model.Location, error) {
-	return p.Provider.GetLocation()
-}
-
-// init 注册proxy
-func init() {
-	plugin.RegisterPluginProxy(common.TypeLocationProvider, &Proxy{})
+// Clear 清理缓存信息
+func (n *NotifyTrigger) Clear() {
+	n.EnableDstInstances = false
+	n.EnableDstRoute = false
+	n.EnableNearbyRoute = false
+	n.EnableSrcRoute = false
+	n.EnableDstRateLimit = false
+	n.EnableServices = false
 }

@@ -18,7 +18,7 @@
 package events
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -26,11 +26,11 @@ import (
 // Proxy the proxy of plugin
 type Proxy struct {
 	EventReporter
-	engine model.Engine
+	engine global.Engine
 }
 
 // SetRealPlugin set plugin
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
 	p.EventReporter = plug.(EventReporter)
 	p.engine = engine
 }

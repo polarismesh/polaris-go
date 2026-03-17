@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -83,7 +84,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 		router := &zeroprotect.ZeroProtectFilter{}
 		router.Init(&plugin.InitContext{
 			Config:       defaultConf,
-			ValueCtx:     model.NewValueContext(),
+			ValueCtx:     global.NewValueContext(),
 			PluginIndex:  1,
 			SDKContextID: uuid.NewString(),
 		})
@@ -132,7 +133,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 		router := &zeroprotect.ZeroProtectFilter{}
 		router.Init(&plugin.InitContext{
 			Config:       defaultConf,
-			ValueCtx:     model.NewValueContext(),
+			ValueCtx:     global.NewValueContext(),
 			PluginIndex:  1,
 			SDKContextID: uuid.NewString(),
 		})

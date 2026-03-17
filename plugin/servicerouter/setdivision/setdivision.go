@@ -22,7 +22,8 @@ import (
 	"strings"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -32,10 +33,10 @@ import (
 // SetEnableFilter 基于路由规则的服务实例过滤器
 type SetEnableFilter struct {
 	*plugin.PluginBase
-	valueCtx    model.ValueContext
+	valueCtx    global.ValueContext
 	nearbyIndex int32
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型，接口实现必须

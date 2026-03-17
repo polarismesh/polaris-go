@@ -31,7 +31,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 )
@@ -54,7 +54,7 @@ type CachePersistHandler struct {
 	retryInterval time.Duration
 	marshaler     *jsonpb.Marshaler
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // CacheFileInfo 文件信息
@@ -65,7 +65,7 @@ type CacheFileInfo struct {
 
 // NewCachePersistHandler create persistence handler
 func NewCachePersistHandler(persistEnable bool, persistDir string, maxWriteRetry int,
-	maxReadRetry int, retryInterval time.Duration, logCtx *ctx.ContextLogger) (*CachePersistHandler, error) {
+	maxReadRetry int, retryInterval time.Duration, logCtx *log.ContextLogger) (*CachePersistHandler, error) {
 	handler := &CachePersistHandler{}
 	handler.logCtx = logCtx
 	handler.persistEnable = persistEnable

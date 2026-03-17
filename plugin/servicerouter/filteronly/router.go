@@ -19,6 +19,7 @@ package filteronly
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -29,7 +30,7 @@ import (
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              model.ValueContext
+	valueCtx              global.ValueContext
 	recoverAll            bool
 }
 
@@ -70,7 +71,7 @@ func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters mo
 }
 
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
-func GetFilteredInstances(ctx model.ValueContext, routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters,
+func GetFilteredInstances(ctx global.ValueContext, routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters,
 	percentOfMinInstances float64, withinCluster *model.Cluster, recoverAll bool) (*servicerouter.RouteResult, error) {
 	outCluster := model.NewCluster(clusters, withinCluster)
 	clsValue := outCluster.GetClusterValue()

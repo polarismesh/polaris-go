@@ -35,8 +35,8 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 )
@@ -133,7 +133,7 @@ type StreamCounterSet struct {
 	createTimeMilli int64
 	// 时间差
 	timeDiff int64
-	logCtx   *ctx.ContextLogger
+	logCtx   *log.ContextLogger
 }
 
 // NewStreamCounterSet 新建流管理器
@@ -582,7 +582,7 @@ type asyncRateLimitConnector struct {
 	// 销毁标识
 	destroyed bool
 	// 全局上下文信息
-	valueCtx model.ValueContext
+	valueCtx global.ValueContext
 	// 获取自身IP的互斥锁
 	clientHostMutex *sync.Mutex
 	// 自身IP信息
@@ -601,11 +601,11 @@ type asyncRateLimitConnector struct {
 	reconnectInterval time.Duration
 	// 协议
 	protocol string
-	logCtx   *ctx.ContextLogger
+	logCtx   *log.ContextLogger
 }
 
 // NewAsyncRateLimitConnector .
-func NewAsyncRateLimitConnector(valueCtx model.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
+func NewAsyncRateLimitConnector(valueCtx global.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
 	connTimeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
 	msgTimeout := cfg.GetGlobal().GetServerConnector().GetMessageTimeout()
 	protocol := cfg.GetGlobal().GetServerConnector().GetProtocol()

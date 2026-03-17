@@ -26,8 +26,8 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -51,8 +51,8 @@ type ConfigFileRepo struct {
 	connector          configconnector.ConfigConnector
 	chain              configfilter.Chain
 	conf               config.Configuration
-	logCtx             *ctx.ContextLogger
-	globalCtx          model.ValueContext
+	logCtx             *log.ContextLogger
+	globalCtx          global.ValueContext
 	configFileMetadata model.ConfigFileMetadata
 	// 长轮询通知的版本号
 	notifiedVersion uint64
@@ -72,7 +72,7 @@ type ConfigFileRepo struct {
 type ConfigFileRepoChangeListener func(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error
 
 // newConfigFileRepo 创建远程配置文件
-func newConfigFileRepo(globalCtx model.ValueContext, metadata model.ConfigFileMetadata,
+func newConfigFileRepo(globalCtx global.ValueContext, metadata model.ConfigFileMetadata,
 	connector configconnector.ConfigConnector,
 	chain configfilter.Chain,
 	conf config.Configuration,

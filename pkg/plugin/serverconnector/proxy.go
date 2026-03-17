@@ -18,6 +18,7 @@
 package serverconnector
 
 import (
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -26,11 +27,11 @@ import (
 // Proxy is a plugin that proxy requests to a remote server.
 type Proxy struct {
 	ServerConnector
-	engine model.Engine
+	engine global.Engine
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
 	p.ServerConnector = plug.(ServerConnector)
 	p.engine = engine
 }

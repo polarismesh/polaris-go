@@ -23,6 +23,7 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -33,7 +34,7 @@ import (
 type CanaryRouterFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              model.ValueContext
+	valueCtx              global.ValueContext
 	recoverAll            bool
 }
 

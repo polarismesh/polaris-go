@@ -31,7 +31,8 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -70,7 +71,7 @@ type Engine struct {
 	// 限流处理协助辅助类
 	flowQuotaAssistant *quota.FlowQuotaAssistant
 	// 全局上下文，在reportclient
-	globalCtx model.ValueContext
+	globalCtx global.ValueContext
 	// 系统服务列表
 	serverServices config.ServerServices
 	// 插件仓库
@@ -89,7 +90,7 @@ type Engine struct {
 	watchEngine *WatchEngine
 	// 配置过滤链
 	configFilterChain configfilter.Chain
-	logCtx            *ctx.ContextLogger
+	logCtx            *log.ContextLogger
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -173,7 +174,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 	initContext.Plugins.RegisterEventSubscriber(common.OnServiceAdded, callbackHandler)
 	initContext.Plugins.RegisterEventSubscriber(common.OnServiceUpdated, callbackHandler)
-	globalCtx.SetValue(model.ContextKeyEngine, flowEngine)
+	globalCtx.SetValue(global.ContextKeyEngine, flowEngine)
 
 	// 初始化配置中心服务
 	if cfg.GetConfigFile().IsEnable() {
@@ -254,7 +255,7 @@ func (e *Engine) WatchService(req *model.WatchServiceRequest) (*model.WatchServi
 }
 
 // GetContext 获取上下文
-func (e *Engine) GetContext() model.ValueContext {
+func (e *Engine) GetContext() global.ValueContext {
 	return e.globalCtx
 }
 
@@ -415,7 +416,7 @@ type subscribeChannel struct {
 	registerServices []model.ServiceKey
 	eventChannelMap  map[model.ServiceKey]chan model.SubScribeEvent
 	lock             sync.RWMutex
-	logCtx           *ctx.ContextLogger
+	logCtx           *log.ContextLogger
 }
 
 var (

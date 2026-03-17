@@ -27,8 +27,8 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -45,13 +45,13 @@ type RuleBasedInstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
 	scalableRand          *rand.ScalableRand
-	valueCtx              model.ValueContext
+	valueCtx              global.ValueContext
 	recoverAll            bool
 	prioritySubsetPool    *sync.Pool
 	systemCfg             config.SystemConfig
 	routerConf            *RuleRouterConfig
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型

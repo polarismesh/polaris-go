@@ -18,7 +18,7 @@
 package local
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 )
@@ -32,10 +32,10 @@ type LocationProviderImpl struct {
 	ctx      *plugin.InitContext
 	locCache *model.Location
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
-func New(ctx *plugin.InitContext, logCtx *ctx.ContextLogger) (*LocationProviderImpl, error) {
+func New(ctx *plugin.InitContext, logCtx *log.ContextLogger) (*LocationProviderImpl, error) {
 	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }

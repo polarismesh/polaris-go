@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -105,7 +106,7 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 	chain := configfilter.Chain{}
 	conf := config.NewDefaultConfiguration([]string{"127.0.0.1:8091"})
 	eventReporterChain := []events.EventReporter{}
-	globalCtx := model.NewValueContext()
+	globalCtx := global.NewValueContext()
 
 	flow, err := NewConfigFileFlow(globalCtx, connector, chain, conf, eventReporterChain)
 	if err != nil {

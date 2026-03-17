@@ -20,6 +20,7 @@ package servicerouter
 import (
 	"sync"
 
+	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -28,7 +29,7 @@ import (
 // Proxy is a proxy for service router
 type Proxy struct {
 	ServiceRouter
-	engine model.Engine
+	engine global.Engine
 }
 
 // RouteGauge 路由调用统计数据
@@ -98,7 +99,7 @@ func (p *Proxy) reportRouteStat(routeInfo *RouteInfo, errCode model.ErrCode,
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
 	p.ServiceRouter = plug.(ServiceRouter)
 	p.engine = engine
 }

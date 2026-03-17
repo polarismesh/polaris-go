@@ -27,7 +27,7 @@ import (
 	"github.com/modern-go/reflect2"
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
@@ -35,7 +35,7 @@ import (
 )
 
 // NewRemoteAwareQpsBucket 创建QPS远程限流窗口
-func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *ctx.ContextLogger) *RemoteAwareQpsBucket {
+func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *log.ContextLogger) *RemoteAwareQpsBucket {
 	raqb := &RemoteAwareQpsBucket{
 		uniqueKey:      criteria.WindowKey,
 		identifierPool: &sync.Pool{},
@@ -59,7 +59,7 @@ type RemoteAwareQpsBucket struct {
 	tokenBucketMap map[int64]*TokenBucket
 	// 存放[]UpdateIdentifier数据
 	identifierPool *sync.Pool
-	logCtx         *ctx.ContextLogger
+	logCtx         *log.ContextLogger
 }
 
 const (
@@ -241,13 +241,13 @@ type TokenBucket struct {
 	sliceWindow *common.SlidingWindow
 	// 共享的规则数据
 	shareInfo *BucketShareInfo
-	logCtx    *ctx.ContextLogger
+	logCtx    *log.ContextLogger
 }
 
 // NewTokenBucket 创建令牌桶
 func NewTokenBucket(
 	windowKey string, validDuration time.Duration, tokenAmount uint32, shareInfo *BucketShareInfo,
-	logCtx *ctx.ContextLogger) *TokenBucket {
+	logCtx *log.ContextLogger) *TokenBucket {
 	bucket := &TokenBucket{}
 	bucket.windowKey = windowKey
 	bucket.mutex = &sync.RWMutex{}
@@ -511,7 +511,7 @@ func (tbs TokenBuckets) Swap(i, j int) {
 }
 
 // initTokenBuckets 初始化令牌桶
-func initTokenBuckets(rule *apitraffic.Rule, windowKey string, logCtx *ctx.ContextLogger) TokenBuckets {
+func initTokenBuckets(rule *apitraffic.Rule, windowKey string, logCtx *log.ContextLogger) TokenBuckets {
 	shareInfo := &BucketShareInfo{}
 	if rule.GetAmountMode() == apitraffic.Rule_SHARE_EQUALLY {
 		shareInfo.shareEqual = true

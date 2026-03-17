@@ -26,7 +26,7 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -39,7 +39,7 @@ type TaskRoutine interface {
 }
 
 // NewTaskRoutine 创建任务调度协程
-func NewTaskRoutine(periodicTask *model.PeriodicTask, logCtx *ctx.ContextLogger) TaskRoutine {
+func NewTaskRoutine(periodicTask *model.PeriodicTask, logCtx *log.ContextLogger) TaskRoutine {
 	return &taskRoutine{
 		periodicTask:        periodicTask,
 		mutableTaskValues:   make(map[interface{}]*TaskItem),
@@ -61,7 +61,7 @@ type taskRoutine struct {
 	mutableTaskValues   map[interface{}]*TaskItem
 	immutableTaskValues *atomic.Value
 	mutex               *sync.Mutex
-	logCtx              *ctx.ContextLogger
+	logCtx              *log.ContextLogger
 }
 
 // Schedule 进行任务调度
@@ -258,7 +258,7 @@ func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 }
 
 // StartTask 通过值来启动任务
-func StartTask(taskName string, taskValues model.TaskValues, values map[interface{}]model.TaskValue, logCtx *ctx.ContextLogger) {
+func StartTask(taskName string, taskValues model.TaskValues, values map[interface{}]model.TaskValue, logCtx *log.ContextLogger) {
 	for k, v := range values {
 		taskValues.AddValue(k, v)
 	}

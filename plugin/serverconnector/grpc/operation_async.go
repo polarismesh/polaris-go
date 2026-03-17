@@ -24,7 +24,8 @@ import (
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/global"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -48,12 +49,12 @@ type Connector struct {
 	cfg                   *networkConfig
 	connManager           network.ConnectionManager
 	connectionIdleTimeout time.Duration
-	valueCtx              model.ValueContext
+	valueCtx              global.ValueContext
 	discoverConnector     *connector.DiscoverConnector
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
 	token           string
-	logCtx          *ctx.ContextLogger
+	logCtx          *log.ContextLogger
 }
 
 // Type 插件类型

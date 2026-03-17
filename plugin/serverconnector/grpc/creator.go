@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 )
@@ -56,7 +56,7 @@ func (g *Connector) CreateConnection(
 type statHandler struct {
 	// 全局上下文
 	clientInfo *network.ClientInfo
-	logCtx     *ctx.ContextLogger
+	logCtx     *log.ContextLogger
 }
 
 // TagRPC can attach some information to the given context.

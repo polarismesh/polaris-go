@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -55,11 +55,11 @@ func (c ContextKey) String() string {
 type SingleNotifyContext struct {
 	name     *ContextKey
 	notifier *common.Notifier
-	logCtx   *ctx.ContextLogger
+	logCtx   *log.ContextLogger
 }
 
 // NewSingleNotifyContext 创建回调上下文
-func NewSingleNotifyContext(name *ContextKey, notifier *common.Notifier, logCtx *ctx.ContextLogger) *SingleNotifyContext {
+func NewSingleNotifyContext(name *ContextKey, notifier *common.Notifier, logCtx *log.ContextLogger) *SingleNotifyContext {
 	return &SingleNotifyContext{name: name, notifier: notifier, logCtx: logCtx}
 }
 
@@ -86,12 +86,12 @@ type CombineNotifyContext struct {
 	waitCount       int32
 	notifiers       []*SingleNotifyContext
 	doneContextKeys *model.SyncHashSet
-	logCtx          *ctx.ContextLogger
+	logCtx          *log.ContextLogger
 }
 
 // NewCombineNotifyContext 创建复合回调上下文
 func NewCombineNotifyContext(svcKey *model.ServiceKey, notifiers []*SingleNotifyContext,
-	logCtx *ctx.ContextLogger) *CombineNotifyContext {
+	logCtx *log.ContextLogger) *CombineNotifyContext {
 	maxWaitCount := len(notifiers)
 	combineCtx := &CombineNotifyContext{
 		svcKey:          svcKey,

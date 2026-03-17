@@ -20,7 +20,7 @@ package ringhash
 import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	mconfig "github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/log/ctx"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -34,7 +34,7 @@ type KetamaLoadBalancer struct {
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
 	// 上下文日志
-	logCtx *ctx.ContextLogger
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型

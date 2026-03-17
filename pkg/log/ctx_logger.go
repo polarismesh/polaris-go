@@ -16,31 +16,27 @@
  *
  */
 
-package ctx
-
-import (
-	"github.com/polarismesh/polaris-go/pkg/log"
-)
+package log
 
 // ContextLogger 上下文日志记录器，用于在多 SDK 实例场景下携带客户端标签信息，
 // 使得日志输出能够区分不同的 SDK 实例。不可序列化（yaml/json 标签为 "-"）。
 type ContextLogger struct {
-	BaseLogger       log.Logger `yaml:"-" json:"-"`
-	NetworkLogger    log.Logger `yaml:"-" json:"-"`
-	CacheLogger      log.Logger `yaml:"-" json:"-"`
-	StatLogger       log.Logger `yaml:"-" json:"-"`
-	StatReportLogger log.Logger `yaml:"-" json:"-"`
-	DetectLogger     log.Logger `yaml:"-" json:"-"`
+	BaseLogger       Logger `yaml:"-" json:"-"`
+	NetworkLogger    Logger `yaml:"-" json:"-"`
+	CacheLogger      Logger `yaml:"-" json:"-"`
+	StatLogger       Logger `yaml:"-" json:"-"`
+	StatReportLogger Logger `yaml:"-" json:"-"`
+	DetectLogger     Logger `yaml:"-" json:"-"`
 }
 
 // Init 获取基础日志记录器.
 func (c *ContextLogger) Init() {
-	c.BaseLogger = log.GetBaseLogger()
-	c.NetworkLogger = log.GetNetworkLogger()
-	c.CacheLogger = log.GetCacheLogger()
-	c.StatLogger = log.GetStatLogger()
-	c.StatReportLogger = log.GetStatReportLogger()
-	c.DetectLogger = log.GetDetectLogger()
+	c.BaseLogger = GetBaseLogger()
+	c.NetworkLogger = GetNetworkLogger()
+	c.CacheLogger = GetCacheLogger()
+	c.StatLogger = GetStatLogger()
+	c.StatReportLogger = GetStatReportLogger()
+	c.DetectLogger = GetDetectLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -54,58 +50,58 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	for k, v := range labels {
 		kvs = append(kvs, k, v)
 	}
-	c.BaseLogger = log.LoggerWithFields(c.BaseLogger, kvs...)
-	c.NetworkLogger = log.LoggerWithFields(c.NetworkLogger, kvs...)
-	c.CacheLogger = log.LoggerWithFields(c.CacheLogger, kvs...)
-	c.StatLogger = log.LoggerWithFields(c.StatLogger, kvs...)
-	c.StatReportLogger = log.LoggerWithFields(c.StatReportLogger, kvs...)
-	c.DetectLogger = log.LoggerWithFields(c.DetectLogger, kvs...)
+	c.BaseLogger = LoggerWithFields(c.BaseLogger, kvs...)
+	c.NetworkLogger = LoggerWithFields(c.NetworkLogger, kvs...)
+	c.CacheLogger = LoggerWithFields(c.CacheLogger, kvs...)
+	c.StatLogger = LoggerWithFields(c.StatLogger, kvs...)
+	c.StatReportLogger = LoggerWithFields(c.StatReportLogger, kvs...)
+	c.DetectLogger = LoggerWithFields(c.DetectLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
-func (c *ContextLogger) GetBaseLogger() log.Logger {
+func (c *ContextLogger) GetBaseLogger() Logger {
 	if c == nil {
-		return log.GetBaseLogger()
+		return GetBaseLogger()
 	}
 	return c.BaseLogger
 }
 
 // GetNetworkLogger 获取网络日志记录器.
-func (c *ContextLogger) GetNetworkLogger() log.Logger {
+func (c *ContextLogger) GetNetworkLogger() Logger {
 	if c == nil {
-		return log.GetNetworkLogger()
+		return GetNetworkLogger()
 	}
 	return c.NetworkLogger
 }
 
 // GetCacheLogger 获取缓存日志记录器.
-func (c *ContextLogger) GetCacheLogger() log.Logger {
+func (c *ContextLogger) GetCacheLogger() Logger {
 	if c == nil {
-		return log.GetCacheLogger()
+		return GetCacheLogger()
 	}
 	return c.CacheLogger
 }
 
 // GetStatLogger 获取统计日志记录器.
-func (c *ContextLogger) GetStatLogger() log.Logger {
+func (c *ContextLogger) GetStatLogger() Logger {
 	if c == nil {
-		return log.GetStatLogger()
+		return GetStatLogger()
 	}
 	return c.StatLogger
 }
 
 // GetStatReportLogger 获取统计上报日志记录器.
-func (c *ContextLogger) GetStatReportLogger() log.Logger {
+func (c *ContextLogger) GetStatReportLogger() Logger {
 	if c == nil {
-		return log.GetStatReportLogger()
+		return GetStatReportLogger()
 	}
 	return c.StatReportLogger
 }
 
 // GetDetectLogger 获取探测日志记录器.
-func (c *ContextLogger) GetDetectLogger() log.Logger {
+func (c *ContextLogger) GetDetectLogger() Logger {
 	if c == nil {
-		return log.GetDetectLogger()
+		return GetDetectLogger()
 	}
 	return c.DetectLogger
 }
