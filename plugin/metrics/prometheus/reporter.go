@@ -35,6 +35,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/admin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
@@ -48,6 +49,7 @@ const (
 	_metricsPush        = "push"
 	_defaultJobName     = "polaris-client"
 	_defaultJobInstance = "instance"
+	_adminBindPort      = "28080"
 )
 
 var _ statreporter.StatReporter = (*PrometheusReporter)(nil)
@@ -135,6 +137,18 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	}
 	if err := s.initSampleMapping(statcommon.CircuitBreakerStrategy, statcommon.CircuitBreakerLabelOrder); err != nil {
 		return err
+	}
+	log.GetBaseLogger().Infof("[metrics]init action, cfg:%v", model.JsonString(s.cfg))
+	if s.cfg.Type == _metricsPull {
+		// 如果拉模式，且端口和admin端口一致，则注册metrics路径到admin的http插件
+		if s.cfg.PortStr == "" || s.cfg.PortStr == _adminBindPort {
+			log.GetBaseLogger().Infof("[metrics]init action, pull port is same as admin port, register metrics path")
+			handler := promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})
+			s.initCtx.Config.GetGlobal().GetAdmin().RegisterPath(model.AdminHandler{
+				Path:        "/metrics",
+				HandlerFunc: handler.ServeHTTP,
+			})
+		}
 	}
 	return nil
 }
@@ -329,11 +343,29 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 	}
 }
 
+// registerToAdmin 将 metrics handler 注册到 admin 服务
+func (pa *PullAction) serveOnAdmin() {
+	adminType := pa.initCtx.Config.GetGlobal().GetAdmin().GetType()
+	targetPlugin, err := pa.initCtx.Plugins.GetPlugin(common.TypeAdmin, adminType)
+	if err != nil {
+		log.GetBaseLogger().Errorf("[metrics][pull] get admin plugin fail: %v", err)
+		return
+	}
+	adminPlugin := targetPlugin.(admin.Admin)
+	adminPlugin.Run()
+	log.GetBaseLogger().Infof("[metrics][pull] registered metrics handler to admin on port %d", pa.bindPort.Load())
+}
+
 func (pa *PullAction) Run(ctx context.Context) {
 	if pa.bindPort.Load() < 0 {
 		return
 	}
 	go pa.doAggregation(ctx)
+	// 当 bindPort 等于 admin的端口 时，注册到 admin
+	if int(pa.bindPort.Load()) == pa.initCtx.Config.GetGlobal().GetAdmin().GetPort() {
+		pa.serveOnAdmin()
+		return
+	}
 	go func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err != nil {

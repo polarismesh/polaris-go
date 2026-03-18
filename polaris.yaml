@@ -151,6 +151,19 @@ global:
      - type: remoteService
        options:
          target: grpc://127.0.0.1
+  # 事件上报插件，用于上报SDK内部的各种事件
+  eventReporter:
+    # 是否开启事件上报
+    enable: false
+    # 事件上报插件链
+    chain:
+      - pushgateway
+  # 描述：Admin相关的配置
+  admin:
+    # 描述：Admin的监听的IP
+    host: 0.0.0.0
+    # 描述：Admin监听的端口
+    port: 28080
 #描述:主调端配置
 consumer:
   #描述:本地缓存相关配置
@@ -297,6 +310,37 @@ consumer:
     #默认值：composite 适配服务/接口/实例 熔断插件
     chain:
       - composite
+  # 描述: 权重调整相关配置
+  weightAdjust:
+    # 描述: 是否启用权重调整功能
+    enable: false
+    # 描述: 权重调整插件链
+    chain:
+      - warmup
+    # 描述: 权重调整插件配置
+    plugin:
+      warmup:
+        # 描述: 权重调整插件的权重调整周期
+        interval: 120s
+        # 描述: 是否开启过载保护
+        enableOverloadProtection: true
+        # 描述: 过载保护阈值, 单位为%
+        overloadProtectionThreshold: 50
+# 被调方配置
+provider:
+  # 无损上下线配置
+  lossless:
+    # 是否启用无损上下线
+    enable: false
+    # 无损上线延迟注册策略
+    # 类型:string
+    # 范围:时长延迟(DELAY_BY_TIME), 探测延迟(DELAY_BY_HEALTH_CHECK)
+    # 默认值:DELAY_BY_TIME
+    strategy: DELAY_BY_TIME
+    # 时长延迟注册的等待时间, 兜底延迟多久会进行上线
+    delayRegisterInterval: 10s
+    # 探测延迟注册的探测周期, 默认5s
+    healthCheckInterval: 5s
 # 配置中心默认配置
 config:
   # 类型转化缓存的key数量

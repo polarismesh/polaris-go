@@ -70,6 +70,14 @@ func (c *RegisterStateManager) Destroy() {
 	}
 }
 
+func (c *RegisterStateManager) IsRegistered(instance *model.InstanceRegisterRequest) bool {
+	key := buildRegisterStateKey(instance.Namespace, instance.Service, instance.Host, instance.Port)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.states[key]
+	return ok
+}
+
 func (c *RegisterStateManager) PutRegister(instance *model.InstanceRegisterRequest, regis registerFunc, beat heartbeatFunc) (*registerState, bool) {
 	key := buildRegisterStateKey(instance.Namespace, instance.Service, instance.Host, instance.Port)
 	c.mu.Lock()
@@ -142,11 +150,11 @@ func (c *RegisterStateManager) runHeartbeat(ctx context.Context, state *register
 					state.lastRegisterTime = time.Now()
 					_, err = regis(instance, CreateRegisterV2Header())
 					if err == nil {
-						c.logCtx.GetBaseLogger().Infof("[Provider][Heartbeat] re-register instatnce success {%s, %s, %s:%d}",
-							instance.Namespace, instance.Service, instance.Host, instance.Port)
+						c.logCtx.GetBaseLogger().Infof("[Provider][Heartbeat] re-register instatnce success {%s, %s, "+
+							"%s:%d}", instance.Namespace, instance.Service, instance.Host, instance.Port)
 					} else {
-						c.logCtx.GetBaseLogger().Warnf("[Provider][Heartbeat] re-register instatnce failed {%s, %s, %s:%d}",
-							instance.Namespace, instance.Service, instance.Host, instance.Port, err)
+						c.logCtx.GetBaseLogger().Warnf("[Provider][Heartbeat] re-register instatnce failed {%s, %s, "+
+							"%s:%d}", instance.Namespace, instance.Service, instance.Host, instance.Port, err)
 					}
 				}
 				break

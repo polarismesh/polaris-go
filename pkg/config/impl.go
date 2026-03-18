@@ -66,6 +66,7 @@ type GlobalConfigImpl struct {
 	EventReporter   *EventReporterConfigImpl   `yaml:"eventReporter" json:"eventReporter"`
 	Location        *LocationConfigImpl        `yaml:"location" json:"location"`
 	Client          *ClientConfigImpl          `yaml:"client" json:"client"`
+	Admin           *AdminConfigImpl           `yaml:"admin" json:"admin"`
 }
 
 // GetSystem 获取系统配置.
@@ -103,6 +104,11 @@ func (g *GlobalConfigImpl) GetClient() ClientConfig {
 	return g.Client
 }
 
+// GetAdmin global.admin前缀开头的所有配置项.
+func (g *GlobalConfigImpl) GetAdmin() AdminConfig {
+	return g.Admin
+}
+
 // ConsumerConfigImpl 消费者配置.
 type ConsumerConfigImpl struct {
 	LocalCache       *LocalCacheConfigImpl     `yaml:"localCache" json:"localCache"`
@@ -110,6 +116,7 @@ type ConsumerConfigImpl struct {
 	Loadbalancer     *LoadBalancerConfigImpl   `yaml:"loadbalancer" json:"loadbalancer"`
 	CircuitBreaker   *CircuitBreakerConfigImpl `yaml:"circuitBreaker" json:"circuitBreaker"`
 	HealthCheck      *HealthCheckConfigImpl    `yaml:"healthCheck" json:"healthCheck"`
+	WeightAdjust     *WeightAdjustConfigImpl   `yaml:"weightAdjust" json:"weightAdjust"`
 	ServicesSpecific []*ServiceSpecific        `yaml:"servicesSpecific" json:"servicesSpecific"`
 }
 
@@ -136,6 +143,11 @@ func (c *ConsumerConfigImpl) GetCircuitBreaker() CircuitBreakerConfig {
 // GetHealthCheck get health check config.
 func (c *ConsumerConfigImpl) GetHealthCheck() HealthCheckConfig {
 	return c.HealthCheck
+}
+
+// GetWeightAdjust consumer.weightAdjust前缀开头的所有配置.
+func (c *ConsumerConfigImpl) GetWeightAdjust() WeightAdjustConfig {
+	return c.WeightAdjust
 }
 
 // GetServiceSpecific 服务独立配置.

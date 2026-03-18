@@ -47,6 +47,26 @@ type CacheValueQuery interface {
 	SetServices(mc model.Services)
 }
 
+// RegisterState 注册状态管理器接口，用于避免循环导入
+type RegisterState interface {
+	// IsRegistered 检查实例是否已注册
+	IsRegistered(instance *model.InstanceRegisterRequest) bool
+}
+
+// Admin 管理接口，用于避免循环导入
+type Admin interface {
+	// RegisterHandler 注册处理器
+	RegisterHandler(handler *model.AdminHandler)
+	// Run 启动服务
+	Run()
+}
+
+// EventReporter 事件上报接口，用于避免循环导入
+type EventReporter interface {
+	// ReportEvent 上报事件
+	ReportEvent(e interface{}) error
+}
+
 // Engine 编排调度引擎，API相关逻辑在这里执行
 type Engine interface {
 	// Destroy 销毁流程引擎
@@ -115,4 +135,7 @@ type Engine interface {
 	MakeFunctionDecorator(model.CustomerFunction, *model.RequestContext) model.DecoratorFunction
 	// MakeInvokeHandler
 	MakeInvokeHandler(*model.RequestContext) model.InvokeHandler
+	GetEventReportChain() interface{}
+	GetAdmin() Admin
+	GetRegisterState() RegisterState
 }

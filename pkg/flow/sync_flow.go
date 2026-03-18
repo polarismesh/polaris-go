@@ -26,6 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
@@ -106,6 +107,38 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 
 func (e *Engine) doLoadBalanceToOneInstance(
 	startTime time.Time, commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
+	// 动态权重调整
+	dynamicWeightMap := make(map[string]*model.InstanceWeight)
+	for _, adjuster := range e.weightAdjuster {
+		dynamicWeights, err := adjuster.TimingAdjustDynamicWeight(commonRequest.DstInstances)
+		if err != nil {
+			log.GetBaseLogger().Errorf("adjust dynamic weight failed, err is %v", err)
+			return nil, err
+		}
+		// 将动态权重结果存入map
+		for _, weight := range dynamicWeights {
+			dynamicWeightMap[weight.InstanceID] = weight
+		}
+	}
+	// 设置动态权重到Criteria中
+	commonRequest.Criteria.DynamicWeight = dynamicWeightMap
+	// 如果有动态权重，重新计算总权重并重建DstInstances
+	if len(dynamicWeightMap) > 0 {
+		totalWeight := 0
+		for _, weight := range dynamicWeightMap {
+			totalWeight += int(weight.DynamicWeight)
+		}
+		// 用新的总权重重建DstInstances
+		commonRequest.DstInstances = model.NewDefaultServiceInstancesWithRegistryValue(
+			model.ServiceInfo{
+				Service:   commonRequest.DstInstances.GetService(),
+				Namespace: commonRequest.DstInstances.GetNamespace(),
+				Metadata:  commonRequest.DstInstances.GetMetadata(),
+			},
+			commonRequest.DstInstances,
+			commonRequest.DstInstances.GetInstances(),
+		)
+	}
 	balancer, err := e.getLoadBalancer(commonRequest.DstInstances, commonRequest.LbPolicy)
 	if err != nil {
 		return nil, err
@@ -409,8 +442,20 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		apiCallResult.SetSuccess(consumeTime)
+		e.reportEvent(event.GetInstanceEvent(event.InstanceThreadEnd, instance))
+		log.GetBaseLogger().Infof("SyncDeregister success----->")
 	}
 	return err
+}
+
+func (e *Engine) reportEvent(eventInfo event.BaseEventImpl) {
+	for _, chain := range e.eventChain {
+		if err := chain.ReportEvent(&eventInfo); err != nil {
+			log.GetBaseLogger().Errorf("[LosslessController] report event(%s) err: %+v", model.JsonString(eventInfo),
+				err)
+			continue
+		}
+	}
 }
 
 // SyncHeartbeat 同步进行心跳上报

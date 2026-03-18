@@ -18,6 +18,7 @@
 package register
 
 import (
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/admin"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -26,11 +27,13 @@ import (
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/location"
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/lossless"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
+	_ "github.com/polarismesh/polaris-go/plugin/admin/httpServer"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite"
 	_ "github.com/polarismesh/polaris-go/plugin/configconnector/polaris"
 	_ "github.com/polarismesh/polaris-go/plugin/configfilter/crypto"
@@ -46,6 +49,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/localregistry/inmemory"
 	_ "github.com/polarismesh/polaris-go/plugin/location"
 	_ "github.com/polarismesh/polaris-go/plugin/logger/zaplog"
+	_ "github.com/polarismesh/polaris-go/plugin/lossless/losslessController"
 	_ "github.com/polarismesh/polaris-go/plugin/metrics/prometheus"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/reject"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/unirate"
@@ -57,5 +61,5 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/rulebase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/setdivision"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/zeroprotect"
-	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/ratedelay"
+	_ "github.com/polarismesh/polaris-go/plugin/weightadjuster/warmup"
 )

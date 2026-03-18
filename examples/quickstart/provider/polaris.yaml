@@ -3,3 +3,4 @@ global:
     addresses:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
+    connectTimeout: 1000ms

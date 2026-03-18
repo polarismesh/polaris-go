@@ -39,6 +39,7 @@ type InstanceRegisterRequest struct {
 // ProviderAPI CL5服务端API的主接口
 type ProviderAPI interface {
 	SDKOwner
+	LosslessRegister(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
 	// RegisterInstance
 	// minimum supported version of polaris-server is v1.10.0
 	RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)

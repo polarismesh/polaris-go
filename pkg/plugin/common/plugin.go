@@ -58,6 +58,10 @@ const (
 	TypeConfigFilter Type = 0x1015
 	// TypeEventReporter event reporter plugin
 	TypeEventReporter Type = 0x1016
+	// TypeLossless 无损上下线策略扩展点
+	TypeLossless Type = 0x1017
+	// TypeAdmin 管理接口扩展点
+	TypeAdmin Type = 0x1018
 )
 
 var typeToPresent = map[Type]string{
@@ -75,6 +79,8 @@ var typeToPresent = map[Type]string{
 	TypeConfigConnector:  "configConnector",
 	TypeConfigFilter:     "configFilter",
 	TypeEventReporter:    "eventReporter",
+	TypeLossless:         "lossless",
+	TypeAdmin:            "admin",
 }
 
 // ToString方法
@@ -228,4 +234,6 @@ var LoadedPluginTypes = []Type{
 	TypeLocationProvider,
 	TypeConfigConnector,
 	TypeConfigFilter,
+	TypeLossless,
+	TypeAdmin,
 }

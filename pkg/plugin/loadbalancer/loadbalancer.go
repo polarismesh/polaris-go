@@ -35,6 +35,8 @@ type Criteria struct {
 	Cluster *model.Cluster
 	// 可选，对于有状态的负载均衡方式，这里给出备份节点的返回数据
 	ReplicateInfo ReplicateInfo
+	// 可选，动态权重映射，key为实例ID，value为动态权重信息
+	DynamicWeight map[string]*model.InstanceWeight
 }
 
 // ReplicateInfo 备份节点信息

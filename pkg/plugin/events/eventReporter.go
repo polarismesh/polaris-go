@@ -18,7 +18,7 @@
 package events
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 )
@@ -26,7 +26,7 @@ import (
 type EventReporter interface {
 	plugin.Plugin
 
-	ReportEvent(e model.BaseEvent) error
+	ReportEvent(e event.BaseEvent) error
 }
 
 func init() {

@@ -28,6 +28,8 @@ type ContextLogger struct {
 	statLogger       Logger
 	statReportLogger Logger
 	detectLogger     Logger
+	eventLogger      Logger
+	losslessLogger   Logger
 }
 
 // Init 获取基础日志记录器.
@@ -38,6 +40,8 @@ func (c *ContextLogger) Init() {
 	c.statLogger = GetStatLogger()
 	c.statReportLogger = GetStatReportLogger()
 	c.detectLogger = GetDetectLogger()
+	c.eventLogger = GetEventLogger()
+	c.losslessLogger = GetLosslessLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -57,6 +61,8 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	c.statLogger = LoggerWithFields(c.statLogger, kvs...)
 	c.statReportLogger = LoggerWithFields(c.statReportLogger, kvs...)
 	c.detectLogger = LoggerWithFields(c.detectLogger, kvs...)
+	c.eventLogger = LoggerWithFields(c.eventLogger, kvs...)
+	c.losslessLogger = LoggerWithFields(c.losslessLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -105,4 +111,20 @@ func (c *ContextLogger) GetDetectLogger() Logger {
 		return GetDetectLogger()
 	}
 	return c.detectLogger
+}
+
+// GetEventLogger 获取事件日志记录器.
+func (c *ContextLogger) GetEventLogger() Logger {
+	if c == nil {
+		return GetEventLogger()
+	}
+	return c.eventLogger
+}
+
+// GetLosslessLogger 获取无损日志记录器.
+func (c *ContextLogger) GetLosslessLogger() Logger {
+	if c == nil {
+		return GetLosslessLogger()
+	}
+	return c.losslessLogger
 }

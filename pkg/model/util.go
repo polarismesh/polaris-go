@@ -18,6 +18,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc64"
@@ -113,7 +114,7 @@ func (s *SyncHashSet) Copy() HashSet {
 	return s.values.Copy()
 }
 
-// IsDir file path is dir
+// IsDir file Path is dir
 func IsDir(path string) bool {
 	s, err := os.Stat(path)
 	if err != nil {
@@ -122,7 +123,7 @@ func IsDir(path string) bool {
 	return s.IsDir()
 }
 
-// IsFile file path is dir
+// IsFile file Path is dir
 func IsFile(path string) bool {
 	s, err := os.Stat(path)
 	if err != nil {
@@ -243,7 +244,7 @@ func EnsureAndVerifyDir(dir string) error {
 	}
 	pathInfo, _ := os.Stat(dir)
 	if !pathInfo.IsDir() {
-		return NewSDKError(ErrCodeDiskError, nil, "path %s is a file path", dir)
+		return NewSDKError(ErrCodeDiskError, nil, "Path %s is a file Path", dir)
 	}
 	return nil
 }
@@ -328,4 +329,15 @@ func CheckConfigFileMetadata(configFileMetadata ConfigFileMetadata) error {
 	}
 
 	return nil
+}
+
+func JsonString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
