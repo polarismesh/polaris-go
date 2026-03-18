@@ -24,12 +24,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // syncInstancesReportAndFinalize 结果上报及归还请求实例请求对象
@@ -132,7 +132,7 @@ func (e *Engine) doLoadBalanceToOneInstance(
 }
 
 // SyncGetResources 同步加载资源
-func (e *Engine) SyncGetResources(req global.CacheValueQuery) error {
+func (e *Engine) SyncGetResources(req sdk.CacheValueQuery) error {
 	var err error
 	var retryTimes = -1
 	var combineContext *CombineNotifyContext

@@ -33,7 +33,6 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -41,6 +40,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 )
 
@@ -57,7 +57,7 @@ type Connector struct {
 	cfg                   *networkConfig
 	connManager           network.ConnectionManager
 	connectionIdleTimeout time.Duration
-	valueCtx              global.ValueContext
+	valueCtx              sdk.ValueContext
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
 	token           string

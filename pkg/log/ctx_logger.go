@@ -20,23 +20,24 @@ package log
 
 // ContextLogger 上下文日志记录器，用于在多 SDK 实例场景下携带客户端标签信息，
 // 使得日志输出能够区分不同的 SDK 实例。不可序列化（yaml/json 标签为 "-"）。
+// 所有 logger 字段均为私有，仅通过 getter 方法暴露，以保证 label 注入的一致性。
 type ContextLogger struct {
-	BaseLogger       Logger `yaml:"-" json:"-"`
-	NetworkLogger    Logger `yaml:"-" json:"-"`
-	CacheLogger      Logger `yaml:"-" json:"-"`
-	StatLogger       Logger `yaml:"-" json:"-"`
-	StatReportLogger Logger `yaml:"-" json:"-"`
-	DetectLogger     Logger `yaml:"-" json:"-"`
+	baseLogger       Logger
+	networkLogger    Logger
+	cacheLogger      Logger
+	statLogger       Logger
+	statReportLogger Logger
+	detectLogger     Logger
 }
 
 // Init 获取基础日志记录器.
 func (c *ContextLogger) Init() {
-	c.BaseLogger = GetBaseLogger()
-	c.NetworkLogger = GetNetworkLogger()
-	c.CacheLogger = GetCacheLogger()
-	c.StatLogger = GetStatLogger()
-	c.StatReportLogger = GetStatReportLogger()
-	c.DetectLogger = GetDetectLogger()
+	c.baseLogger = GetBaseLogger()
+	c.networkLogger = GetNetworkLogger()
+	c.cacheLogger = GetCacheLogger()
+	c.statLogger = GetStatLogger()
+	c.statReportLogger = GetStatReportLogger()
+	c.detectLogger = GetDetectLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -50,12 +51,12 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	for k, v := range labels {
 		kvs = append(kvs, k, v)
 	}
-	c.BaseLogger = LoggerWithFields(c.BaseLogger, kvs...)
-	c.NetworkLogger = LoggerWithFields(c.NetworkLogger, kvs...)
-	c.CacheLogger = LoggerWithFields(c.CacheLogger, kvs...)
-	c.StatLogger = LoggerWithFields(c.StatLogger, kvs...)
-	c.StatReportLogger = LoggerWithFields(c.StatReportLogger, kvs...)
-	c.DetectLogger = LoggerWithFields(c.DetectLogger, kvs...)
+	c.baseLogger = LoggerWithFields(c.baseLogger, kvs...)
+	c.networkLogger = LoggerWithFields(c.networkLogger, kvs...)
+	c.cacheLogger = LoggerWithFields(c.cacheLogger, kvs...)
+	c.statLogger = LoggerWithFields(c.statLogger, kvs...)
+	c.statReportLogger = LoggerWithFields(c.statReportLogger, kvs...)
+	c.detectLogger = LoggerWithFields(c.detectLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -63,7 +64,7 @@ func (c *ContextLogger) GetBaseLogger() Logger {
 	if c == nil {
 		return GetBaseLogger()
 	}
-	return c.BaseLogger
+	return c.baseLogger
 }
 
 // GetNetworkLogger 获取网络日志记录器.
@@ -71,7 +72,7 @@ func (c *ContextLogger) GetNetworkLogger() Logger {
 	if c == nil {
 		return GetNetworkLogger()
 	}
-	return c.NetworkLogger
+	return c.networkLogger
 }
 
 // GetCacheLogger 获取缓存日志记录器.
@@ -79,7 +80,7 @@ func (c *ContextLogger) GetCacheLogger() Logger {
 	if c == nil {
 		return GetCacheLogger()
 	}
-	return c.CacheLogger
+	return c.cacheLogger
 }
 
 // GetStatLogger 获取统计日志记录器.
@@ -87,7 +88,7 @@ func (c *ContextLogger) GetStatLogger() Logger {
 	if c == nil {
 		return GetStatLogger()
 	}
-	return c.StatLogger
+	return c.statLogger
 }
 
 // GetStatReportLogger 获取统计上报日志记录器.
@@ -95,7 +96,7 @@ func (c *ContextLogger) GetStatReportLogger() Logger {
 	if c == nil {
 		return GetStatReportLogger()
 	}
-	return c.StatReportLogger
+	return c.statReportLogger
 }
 
 // GetDetectLogger 获取探测日志记录器.
@@ -103,5 +104,5 @@ func (c *ContextLogger) GetDetectLogger() Logger {
 	if c == nil {
 		return GetDetectLogger()
 	}
-	return c.DetectLogger
+	return c.detectLogger
 }

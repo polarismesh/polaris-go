@@ -20,20 +20,20 @@ package localregistry
 import (
 	"github.com/golang/protobuf/proto"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // Proxy of LocalRegistry
 type Proxy struct {
 	LocalRegistry
-	engine global.Engine
+	engine sdk.Engine
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine sdk.Engine) {
 	p.LocalRegistry = plug.(LocalRegistry)
 	p.engine = engine
 }

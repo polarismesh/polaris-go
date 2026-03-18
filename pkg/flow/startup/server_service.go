@@ -22,17 +22,17 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // NewServerServiceCallBack 创建系统服务拉取回调
 func NewServerServiceCallBack(
-	cfg config.Configuration, supplier plugin.Supplier, engine global.Engine) (*ServerServiceCallBack, error) {
+	cfg config.Configuration, supplier plugin.Supplier, engine sdk.Engine) (*ServerServiceCallBack, error) {
 	var err error
 	var callback = &ServerServiceCallBack{}
 	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
@@ -47,7 +47,7 @@ func NewServerServiceCallBack(
 
 // ServerServiceCallBack 初始化系统服务的回调函数
 type ServerServiceCallBack struct {
-	engine    global.Engine
+	engine    sdk.Engine
 	connector serverconnector.ServerConnector
 	cfg       config.Configuration
 	interval  time.Duration

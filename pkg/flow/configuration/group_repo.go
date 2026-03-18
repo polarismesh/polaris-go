@@ -26,10 +26,10 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // ConfigGroupRepo 服务端配置文件代理类，从服务端拉取配置并同步数据
@@ -53,7 +53,7 @@ type ConfigGroupRepo struct {
 	pullCount       uint64
 }
 
-func newConfigGroupRepo(globalCtx global.ValueContext, namespace, group string, mode model.GetConfigFileRequestMode,
+func newConfigGroupRepo(globalCtx sdk.ValueContext, namespace, group string, mode model.GetConfigFileRequestMode,
 	connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigGroupRepo, error) {
 	repo := &ConfigGroupRepo{

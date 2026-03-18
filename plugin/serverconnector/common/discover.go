@@ -32,7 +32,6 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/clock"
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -40,6 +39,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -81,7 +81,7 @@ type DiscoverConnector struct {
 	updateTaskSet *sync.Map
 	// 连接管理器
 	connManager network.ConnectionManager
-	valueCtx    global.ValueContext
+	valueCtx    sdk.ValueContext
 	// 通过本地缓存加载成功的系统服务
 	cachedServerServices []model.ServiceEventKey
 	// discover服务的命名空间和服务名

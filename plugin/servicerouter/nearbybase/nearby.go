@@ -27,19 +27,19 @@ import (
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // NearbyBasedInstancesFilter RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type NearbyBasedInstancesFilter struct {
 	*plugin.PluginBase
 	wholeCfg              config.Configuration
-	valueCtx              global.ValueContext
+	valueCtx              sdk.ValueContext
 	percentOfMinInstances float64
 	cfg                   *nearbyConfig
 	recoverAll            bool
@@ -380,12 +380,12 @@ func (g *NearbyBasedInstancesFilter) misMatchError(location *model.Location, out
 // 等待地域信息就绪
 func (g *NearbyBasedInstancesFilter) waitLocationInfo(event *common.PluginEvent) error {
 	if !g.cfg.StrictNearby {
-		g.valueCtx.WaitLocationInfo(context.TODO(), global.LocationInit)
+		g.valueCtx.WaitLocationInfo(context.TODO(), sdk.LocationInit)
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), g.locationReadyTimeout)
 	defer cancel()
-	ready := g.valueCtx.WaitLocationInfo(ctx, global.LocationReady)
+	ready := g.valueCtx.WaitLocationInfo(ctx, sdk.LocationReady)
 	if !ready {
 		return fmt.Errorf("fail to get location ready, timeout is %v, location err: %v",
 			g.locationReadyTimeout, g.valueCtx.GetCurrentLocation().GetLastError())

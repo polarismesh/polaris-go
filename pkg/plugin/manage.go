@@ -25,11 +25,11 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 var (
@@ -83,7 +83,7 @@ type Supplier interface {
 type Manager interface {
 	Supplier
 	// InitPlugins 初始化插件列表
-	InitPlugins(initContext InitContext, types []common.Type, engine global.Engine, delegate func() error) (err error)
+	InitPlugins(initContext InitContext, types []common.Type, engine sdk.Engine, delegate func() error) (err error)
 	// DestroyPlugins 销毁已初始化的插件列表
 	DestroyPlugins() (err error)
 	// StartPlugins 执行已经初始化完毕的插件
@@ -190,7 +190,7 @@ func createPluginProxy(typ common.Type) PluginProxy {
 
 // InitPlugins 初始化所有已注册插件
 func (m *manager) InitPlugins(
-	ctx InitContext, types []common.Type, engine global.Engine, delegateInit func() error) (err error) {
+	ctx InitContext, types []common.Type, engine sdk.Engine, delegateInit func() error) (err error) {
 	m.logCtx = ctx.ValueCtx.GetContextLogger()
 	if atomic.LoadUint32(&m.initialized) > 0 {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil, "manager has been initialized")
@@ -408,7 +408,7 @@ func (m *manager) GetEventSubscribers(event common.PluginEventType) []common.Plu
 type InitContext struct {
 	Config       config.Configuration
 	Plugins      Supplier
-	ValueCtx     global.ValueContext
+	ValueCtx     sdk.ValueContext
 	ConnManager  network.ConnectionManager
 	PluginIndex  int32
 	SDKContextID string
@@ -495,7 +495,7 @@ func NewPluginBase(ctx *InitContext) *PluginBase {
 // PluginProxy Plugin的代理
 type PluginProxy interface {
 	Plugin
-	SetRealPlugin(plugin Plugin, engine global.Engine)
+	SetRealPlugin(plugin Plugin, engine sdk.Engine)
 }
 
 // IsEnable is enable

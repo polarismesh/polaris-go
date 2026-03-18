@@ -27,10 +27,10 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite/trigger"
 )
 
@@ -58,7 +58,7 @@ type ResourceCounters struct {
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow
-	engineFlow global.Engine
+	engineFlow sdk.Engine
 	// logStat
 	logStat log.Logger
 	// isInsRes

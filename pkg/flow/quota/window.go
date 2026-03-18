@@ -30,13 +30,13 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // RateLimitWindowSet 限流分配窗口的缓存
@@ -514,7 +514,7 @@ func (r *RateLimitWindow) buildInitTargetStr() string {
 }
 
 // Engine 获取SDK引擎
-func (r *RateLimitWindow) Engine() global.Engine {
+func (r *RateLimitWindow) Engine() sdk.Engine {
 	return r.WindowSet.flowAssistant.engine
 }
 

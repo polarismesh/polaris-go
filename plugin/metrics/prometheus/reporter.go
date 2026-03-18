@@ -32,12 +32,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/zap"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	statcommon "github.com/polarismesh/polaris-go/plugin/metrics/common"
 )
 
@@ -71,7 +71,7 @@ type PrometheusReporter struct {
 	// 本插件的配置
 	cfg *Config
 	// 全局上下文
-	globalCtx global.ValueContext
+	globalCtx sdk.ValueContext
 	// sdk加载的插件
 	sdkPlugins string
 	// 插件工厂

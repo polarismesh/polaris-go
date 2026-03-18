@@ -27,13 +27,13 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -56,7 +56,7 @@ type CompositeCircuitBreaker struct {
 	// containers model.Resource -> *RuleContainer
 	containers *sync.Map
 	// engineFlow
-	engineFlow global.Engine
+	engineFlow sdk.Engine
 	// regexpCache regexp -> *regexp.Regexp
 	rlock sync.RWMutex
 	// regexpCache
@@ -106,7 +106,7 @@ func (c *CompositeCircuitBreaker) Start() error {
 	c.serviceHealthCheckCache = &sync.Map{}
 	c.containers = &sync.Map{}
 	c.regexpCache = make(map[string]*regexp.Regexp)
-	c.executor = newTaskExecutor(8)
+	c.executor = newTaskExecutor(8, c.logCtx)
 	c.checkPeriod = c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetCheckPeriod()
 	if c.checkPeriod == 0 {
 		c.checkPeriod = defaultCheckPeriod

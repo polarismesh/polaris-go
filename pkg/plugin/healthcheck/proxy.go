@@ -20,20 +20,20 @@ package healthcheck
 import (
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // Proxy .proxy of HealthChecker
 type Proxy struct {
 	HealthChecker
-	engine global.Engine
+	engine sdk.Engine
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine sdk.Engine) {
 	p.HealthChecker = plug.(HealthChecker)
 	p.engine = engine
 }

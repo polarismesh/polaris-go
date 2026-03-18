@@ -22,18 +22,18 @@ import (
 	"strings"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // SetEnableFilter 基于路由规则的服务实例过滤器
 type SetEnableFilter struct {
 	*plugin.PluginBase
-	valueCtx    global.ValueContext
+	valueCtx    sdk.ValueContext
 	nearbyIndex int32
 	// 上下文日志
 	logCtx *log.ContextLogger

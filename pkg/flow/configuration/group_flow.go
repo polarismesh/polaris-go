@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 type ConfigGroupFlow struct {
@@ -39,10 +39,10 @@ type ConfigGroupFlow struct {
 	connector     configconnector.ConfigConnector
 	configuration config.Configuration
 	logCtx        *log.ContextLogger
-	globalCtx     global.ValueContext
+	globalCtx     sdk.ValueContext
 }
 
-func newConfigGroupFlow(globalCtx global.ValueContext, connector configconnector.ConfigConnector,
+func newConfigGroupFlow(globalCtx sdk.ValueContext, connector configconnector.ConfigConnector,
 	configuration config.Configuration) (*ConfigGroupFlow, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 

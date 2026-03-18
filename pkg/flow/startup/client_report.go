@@ -25,19 +25,19 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
 // NewReportClientCallBack  创建上报回调
 func NewReportClientCallBack(
-	cfg config.Configuration, supplier plugin.Supplier, globalCtx global.ValueContext) (*ReportClientCallBack, error) {
+	cfg config.Configuration, supplier plugin.Supplier, globalCtx sdk.ValueContext) (*ReportClientCallBack, error) {
 	var err error
 	var callback = &ReportClientCallBack{}
 	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
@@ -62,7 +62,7 @@ type ReportClientCallBack struct {
 	connector     serverconnector.ServerConnector
 	registry      localregistry.InstancesRegistry
 	configuration config.Configuration
-	globalCtx     global.ValueContext
+	globalCtx     sdk.ValueContext
 	interval      time.Duration
 	reporterChain []statreporter.StatReporter
 	logCtx        *log.ContextLogger

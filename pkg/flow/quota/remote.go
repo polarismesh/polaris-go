@@ -35,10 +35,10 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // ResponseCallBack 应答回调函数
@@ -582,7 +582,7 @@ type asyncRateLimitConnector struct {
 	// 销毁标识
 	destroyed bool
 	// 全局上下文信息
-	valueCtx global.ValueContext
+	valueCtx sdk.ValueContext
 	// 获取自身IP的互斥锁
 	clientHostMutex *sync.Mutex
 	// 自身IP信息
@@ -605,7 +605,7 @@ type asyncRateLimitConnector struct {
 }
 
 // NewAsyncRateLimitConnector .
-func NewAsyncRateLimitConnector(valueCtx global.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
+func NewAsyncRateLimitConnector(valueCtx sdk.ValueContext, cfg config.Configuration) AsyncRateLimitConnector {
 	connTimeout := cfg.GetGlobal().GetServerConnector().GetConnectTimeout()
 	msgTimeout := cfg.GetGlobal().GetServerConnector().GetMessageTimeout()
 	protocol := cfg.GetGlobal().GetServerConnector().GetProtocol()

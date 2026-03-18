@@ -21,19 +21,19 @@ import (
 	"fmt"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // InstancesFilter 基于目标服务元数据的服务路由插件
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              global.ValueContext
+	valueCtx              sdk.ValueContext
 	recoverAll            bool
 	// 上下文日志
 	logCtx *log.ContextLogger

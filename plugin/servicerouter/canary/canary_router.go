@@ -23,18 +23,18 @@ import (
 	"github.com/modern-go/reflect2"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // CanaryRouterFilter 金丝雀过滤器
 type CanaryRouterFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              global.ValueContext
+	valueCtx              sdk.ValueContext
 	recoverAll            bool
 }
 

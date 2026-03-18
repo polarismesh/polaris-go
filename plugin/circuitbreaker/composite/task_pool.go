@@ -19,22 +19,24 @@ package composite
 
 import (
 	"context"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"hash/fnv"
 	"math/rand"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/log"
 )
 
-func newTaskExecutor(size int) *TaskExecutor {
+func newTaskExecutor(size int, logCtx *log.ContextLogger) *TaskExecutor {
 	workers := make([]*worker, 0, size)
 	for i := 0; i < size; i++ {
 		workers = append(workers, &worker{
 			close:      0,
 			queue:      make(chan func(), 128),
 			delayQueue: sync.Map{},
+			logCtx:     logCtx,
 		})
 	}
 
@@ -102,13 +104,14 @@ type worker struct {
 	queue      chan func()
 	id         int64
 	delayQueue sync.Map
+	logCtx     *log.ContextLogger
 }
 
-func recovery() {
+func recovery(logCtx *log.ContextLogger) {
 	if r := recover(); r != nil {
 		buf := make([]byte, 1<<18)
 		n := runtime.Stack(buf, false)
-		log.GetBaseLogger().Errorf("[CircuitBreaker] panic recovered: %v\nruntime stack: %s", r, buf[0:n])
+		logCtx.GetBaseLogger().Errorf("[CircuitBreaker] panic recovered: %v\nruntime stack: %s", r, buf[0:n])
 	}
 }
 
@@ -121,7 +124,7 @@ func (w *worker) add(f func()) {
 	}
 
 	w.queue <- func() {
-		defer recovery()
+		defer recovery(w.logCtx)
 		f()
 	}
 }
@@ -135,7 +138,7 @@ func (w *worker) addDelay(delay time.Duration, f func(), isInterval bool) {
 	}
 
 	wf := func() {
-		defer recovery()
+		defer recovery(w.logCtx)
 		f()
 	}
 

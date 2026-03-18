@@ -29,12 +29,12 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -51,7 +51,7 @@ type FlowQuotaAssistant struct {
 	// 是否启用限流，如果不启用，默认都会放通
 	enable bool
 	// 流程执行引擎
-	engine global.Engine
+	engine sdk.Engine
 	// 插件工厂
 	supplier plugin.Supplier
 	// 并发锁，控制windowSet的加入
@@ -111,7 +111,7 @@ func (f *FlowQuotaAssistant) TaskValues() model.TaskValues {
 }
 
 // Init 初始化限额辅助
-func (f *FlowQuotaAssistant) Init(engine global.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
+func (f *FlowQuotaAssistant) Init(engine sdk.Engine, cfg config.Configuration, supplier plugin.Supplier) error {
 	f.engine = engine
 	f.supplier = supplier
 	f.logCtx = engine.GetContext().GetContextLogger()

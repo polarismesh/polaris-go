@@ -24,13 +24,13 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // MockConnector 模拟配置连接器
@@ -106,7 +106,7 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 	chain := configfilter.Chain{}
 	conf := config.NewDefaultConfiguration([]string{"127.0.0.1:8091"})
 	eventReporterChain := []events.EventReporter{}
-	globalCtx := global.NewValueContext()
+	globalCtx := sdk.NewValueContext()
 
 	flow, err := NewConfigFileFlow(globalCtx, connector, chain, conf, eventReporterChain)
 	if err != nil {

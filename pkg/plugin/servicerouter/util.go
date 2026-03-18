@@ -20,11 +20,11 @@ package servicerouter
 import (
 	"sync"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // 存放路由结果对象的全局池
@@ -36,7 +36,7 @@ func GetRouteResultPool() *sync.Pool {
 }
 
 // GetFilterInstances 根据服务路由链，过滤服务节点，返回对应的服务列表
-func GetFilterInstances(ctx global.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func GetFilterInstances(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	serviceInstances model.ServiceInstances) ([]model.Instance, *model.Cluster, *model.ServiceInfo, error) {
 	if len(routers) == 0 {
 		return serviceInstances.GetInstances(), nil, nil, nil
@@ -57,7 +57,7 @@ func GetFilterInstances(ctx global.ValueContext, routers []ServiceRouter, routeI
 }
 
 // processServiceRouters 执行路由链
-func processServiceRouters(ctx global.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
@@ -135,7 +135,7 @@ func processServiceRouters(ctx global.ValueContext, routers []ServiceRouter, rou
 }
 
 // GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
-func GetFilterCluster(ctx global.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
 	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
@@ -143,7 +143,7 @@ func GetFilterCluster(ctx global.ValueContext, routers []ServiceRouter, routeInf
 	var result *RouteResult
 	var err model.SDKError
 	routerCount := len(routers)
-	pluginsIf, _ := ctx.GetValue(global.ContextKeyPlugins)
+	pluginsIf, _ := ctx.GetValue(sdk.ContextKeyPlugins)
 	plugins := pluginsIf.(plugin.Supplier)
 	cluster := model.NewCluster(svcClusters, nil)
 	if routerCount > 0 {
@@ -184,7 +184,7 @@ func GetFilterCluster(ctx global.ValueContext, routers []ServiceRouter, routeInf
 }
 
 // PoolGetRouteResult 通过池子获取路由结果
-func PoolGetRouteResult(ctx global.ValueContext) *RouteResult {
+func PoolGetRouteResult(ctx sdk.ValueContext) *RouteResult {
 	value := GetRouteResultPool().Get()
 	if nil == value {
 		return &RouteResult{}

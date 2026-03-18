@@ -27,11 +27,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -44,7 +44,7 @@ const (
 type PushgatewayReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
-	valueCtx global.ValueContext
+	valueCtx sdk.ValueContext
 
 	cfg      *Config
 	clientIP string

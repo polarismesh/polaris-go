@@ -18,19 +18,19 @@
 package ratelimiter
 
 import (
-	"github.com/polarismesh/polaris-go/pkg/global"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // Proxy is a proxy plugin for rate-limiter
 type Proxy struct {
 	ServiceRateLimiter
-	engine global.Engine
+	engine sdk.Engine
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine global.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine sdk.Engine) {
 	p.ServiceRateLimiter = plug.(ServiceRateLimiter)
 	p.engine = engine
 }
