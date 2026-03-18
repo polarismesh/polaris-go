@@ -23,7 +23,6 @@ import (
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	slimiter "github.com/polarismesh/specification/source/go/api/v1/traffic_manage/ratelimiter"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
@@ -35,7 +34,7 @@ func (r *RateLimitWindow) DoAsyncRemoteInit() error {
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to call RateLimitService.GetMessageSender, service %s, error is %s",
+		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf("fail to call RateLimitService.GetMessageSender, service %s, error is %s",
 			r.remoteCluster, err)
 		return err
 	}
@@ -54,7 +53,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
 	if err != nil {
-		log.GetBaseLogger().Errorf(
+		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf(
 			"fail to call RateLimitService.GetMessageSender, service %s, error is %s",
 			r.remoteCluster, err)
 		return err
@@ -70,7 +69,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	request := r.acquireRequest()
 	err = sender.SendReportRequest(request)
 	if err != nil {
-		log.GetBaseLogger().Errorf(
+		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf(
 			"fail to call RateLimitService.Acquire, service %s, labels %s, error is %s",
 			r.SvcKey, r.Labels, err)
 		return err
@@ -81,7 +80,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 // OnInitResponse 应答回调函数
 func (r *RateLimitWindow) OnInitResponse(counter *slimiter.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
 	r.SetStatus(Initialized)
-	log.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
+	r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
 	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
 		Left:            counter.GetLeft(),
 		ClientCount:     counter.GetClientCount(),

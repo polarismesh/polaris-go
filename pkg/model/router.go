@@ -17,7 +17,9 @@
 
 package model
 
-import "time"
+import (
+	"time"
+)
 
 // ProcessRoutersRequest the input request parameters for RouterAPI.ProcessRouters
 type ProcessRoutersRequest struct {

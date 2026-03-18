@@ -53,7 +53,7 @@ type ServerConnectorConfigImpl struct {
 	Token string `yaml:"token" json:"token"`
 }
 
-// GetAddresses global.serverConnector.addresses
+// GetAddresses model.serverConnector.addresses
 // 远端cl5 server地址，格式为<host>:<port>.
 func (s *ServerConnectorConfigImpl) GetAddresses() []string {
 	return s.Addresses
@@ -64,7 +64,7 @@ func (s *ServerConnectorConfigImpl) SetAddresses(addresses []string) {
 	s.Addresses = addresses
 }
 
-// GetProtocol global.serverConnector.protocol
+// GetProtocol model.serverConnector.protocol
 // 与cl5 server对接的协议.
 func (s *ServerConnectorConfigImpl) GetProtocol() string {
 	return s.Protocol
@@ -75,7 +75,7 @@ func (s *ServerConnectorConfigImpl) SetProtocol(protocol string) {
 	s.Protocol = protocol
 }
 
-// GetConnectTimeout global.serverConnector.connectTimeout
+// GetConnectTimeout model.serverConnector.connectTimeout
 // 与server的连接超时时间.
 func (s *ServerConnectorConfigImpl) GetConnectTimeout() time.Duration {
 	return *s.ConnectTimeout
@@ -86,7 +86,7 @@ func (s *ServerConnectorConfigImpl) SetConnectTimeout(timeout time.Duration) {
 	s.ConnectTimeout = &timeout
 }
 
-// GetMessageTimeout global.serverConnector.messageTimeout
+// GetMessageTimeout model.serverConnector.messageTimeout
 // 远程请求超时时间.
 func (s *ServerConnectorConfigImpl) GetMessageTimeout() time.Duration {
 	return *s.MessageTimeout
@@ -97,7 +97,7 @@ func (s *ServerConnectorConfigImpl) SetMessageTimeout(timeout time.Duration) {
 	s.MessageTimeout = &timeout
 }
 
-// GetConnectionIdleTimeout global.serverConnector.connectionIdleTimeout
+// GetConnectionIdleTimeout model.serverConnector.connectionIdleTimeout
 // 连接空闲后超时时间.
 func (s *ServerConnectorConfigImpl) GetConnectionIdleTimeout() time.Duration {
 	return *s.ConnectionIdleTimeout
@@ -108,7 +108,7 @@ func (s *ServerConnectorConfigImpl) SetConnectionIdleTimeout(timeout time.Durati
 	s.ConnectionIdleTimeout = &timeout
 }
 
-// GetRequestQueueSize global.serverConnector.requestQueueSize
+// GetRequestQueueSize model.serverConnector.requestQueueSize
 // 新请求的队列BUFFER容量.
 func (s *ServerConnectorConfigImpl) GetRequestQueueSize() int32 {
 	return *s.RequestQueueSize
@@ -119,7 +119,7 @@ func (s *ServerConnectorConfigImpl) SetRequestQueueSize(queueSize int32) {
 	s.RequestQueueSize = &queueSize
 }
 
-// GetServerSwitchInterval global.serverConnector.serverSwitchInterval
+// GetServerSwitchInterval model.serverConnector.serverSwitchInterval
 // server的切换时延.
 func (s *ServerConnectorConfigImpl) GetServerSwitchInterval() time.Duration {
 	return *s.ServerSwitchInterval
@@ -140,7 +140,7 @@ func (s *ServerConnectorConfigImpl) SetReconnectInterval(interval time.Duration)
 	s.ReconnectInterval = &interval
 }
 
-// GetPluginConfig global.serverConnector.plugin.
+// GetPluginConfig model.serverConnector.plugin.
 func (s *ServerConnectorConfigImpl) GetPluginConfig(pluginName string) BaseConfig {
 	cfgValue, ok := s.Plugin[pluginName]
 	if !ok {
@@ -154,7 +154,7 @@ func (s *ServerConnectorConfigImpl) SetPluginConfig(pluginName string, value Bas
 	return s.Plugin.SetPluginConfig(common.TypeServerConnector, pluginName, value)
 }
 
-// GetProtocol global.serverConnector.protocol
+// GetProtocol model.serverConnector.protocol
 // 与cl5 server对接的协议.
 func (s *ServerConnectorConfigImpl) GetToken() string {
 	return s.Token
@@ -165,7 +165,6 @@ func (s *ServerConnectorConfigImpl) SetToken(t string) {
 	s.Token = t
 }
 
-
 // Verify 检验ServerConnector配置.
 func (s *ServerConnectorConfigImpl) Verify() error {
 	if nil == s {
@@ -173,22 +172,22 @@ func (s *ServerConnectorConfigImpl) Verify() error {
 	}
 	var errs error
 	if len(s.Addresses) == 0 {
-		errs = multierror.Append(errs, fmt.Errorf("global.serverConnector.addresses is empty"))
+		errs = multierror.Append(errs, fmt.Errorf("model.serverConnector.addresses is empty"))
 	}
 	if nil != s.RequestQueueSize && *s.RequestQueueSize < 0 {
 		errs = multierror.Append(errs,
-			fmt.Errorf("global.serverConnector.requestQueueSize %v is invalid", s.RequestQueueSize))
+			fmt.Errorf("model.serverConnector.requestQueueSize %v is invalid", s.RequestQueueSize))
 	}
 	if *s.ConnectionIdleTimeout < DefaultMinTimingInterval {
 		errs = multierror.Append(errs,
-			fmt.Errorf("global.serverConnector.connectionIdleTimeout %v"+
+			fmt.Errorf("model.serverConnector.connectionIdleTimeout %v"+
 				" is less than  minimal timing interval %v",
 				*s.ConnectionIdleTimeout, DefaultMinTimingInterval))
 	}
 	if *s.ServerSwitchInterval <= *s.ConnectionIdleTimeout {
 		errs = multierror.Append(errs,
-			fmt.Errorf("global.serverConnector.serverSwitchInterval %v"+
-				" is less than or equal to global.serverConnector.connectionIdleTimeout %v",
+			fmt.Errorf("model.serverConnector.serverSwitchInterval %v"+
+				" is less than or equal to model.serverConnector.connectionIdleTimeout %v",
 				*s.ServerSwitchInterval, *s.ConnectionIdleTimeout))
 	}
 	return errs

@@ -21,12 +21,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // Proxy .proxy of InstanceCircuitBreaker
 type Proxy struct {
 	CircuitBreaker
-	engine model.Engine
+	engine sdk.Engine
 }
 
 // Stat proxy InstanceCircuitBreaker stat
@@ -40,7 +41,7 @@ func (p *Proxy) Report(stat *model.ResourceStat) error {
 }
 
 // SetRealPlugin 设置
-func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine model.Engine) {
+func (p *Proxy) SetRealPlugin(plug plugin.Plugin, engine sdk.Engine) {
 	p.CircuitBreaker = plug.(CircuitBreaker)
 	p.engine = engine
 }

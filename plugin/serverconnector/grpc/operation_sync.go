@@ -66,9 +66,9 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 	}
 	reqProto := registerRequestToProto(req)
 	// 打印请求报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := namingClient.RegisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
@@ -78,9 +78,9 @@ func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header 
 				"reason is fail to send request, reqID %s, server %s", *req, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbResp)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态，对于已存在状态则不认为失败
@@ -131,9 +131,9 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 	}
 	reqProto := deregisterRequestToProto(req)
 	// 打印请求报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := namingClient.DeregisterInstance(ctx, reqProto)
 	endTime := clock.GetClock().Now()
@@ -143,9 +143,9 @@ func (g *Connector) DeregisterInstance(req *model.InstanceDeRegisterRequest) err
 				"reason is fail to send request, reqID %s, server %s", *req, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbResp)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态，对于不存在状态则不认为失败
@@ -194,9 +194,9 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 	}
 	reqProto := heartbeatRequestToProto(req)
 	// 打印请求报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := namingClient.Heartbeat(ctx, reqProto)
 	endTime := clock.GetClock().Now()
@@ -206,9 +206,9 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 				*req, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbResp)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态
@@ -216,7 +216,7 @@ func (g *Connector) Heartbeat(req *model.InstanceHeartbeatRequest) error {
 		errMsg := fmt.Sprintf(
 			"fail to heartbeat, request %s, server error code is %d, error is %s, server %s",
 			*req, pbResp.GetCode().GetValue(), pbResp.GetInfo().GetValue(), conn.ConnID)
-		log.GetBaseLogger().Errorf(errMsg)
+		g.logCtx.GetBaseLogger().Errorf(errMsg)
 		if serverCodeType == model.ErrCodeServerError {
 			// 当server发生内部错误时，上报调用服务失败
 			g.connManager.ReportFail(conn.ConnID, int32(model.ErrCodeServerError), endTime.Sub(startTime))
@@ -245,7 +245,7 @@ func (g *Connector) waitDiscoverReady() error {
 			if g.connManager.IsReady() {
 				if atomic.CompareAndSwapUint32(&g.hasPrintedReady, 0, 1) {
 					// 准备就绪
-					log.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
+					g.logCtx.GetBaseLogger().Infof("%s, waitDiscover: discover service is ready", g.GetSDKContextID())
 				}
 				return nil
 			}
@@ -288,9 +288,9 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	}
 	reqProto := reportClientRequestToProto(req)
 	// 打印请求报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(reqProto)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := namingClient.ReportClient(ctx, reqProto)
 	endTime := g.valueCtx.Now()
@@ -299,9 +299,9 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 			fmt.Sprintf("fail to send request, opKey %s, reqID %s, connID %s", opKey, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbResp)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		g.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(pbResp.GetCode().GetValue())
 	// 判断不同状态
@@ -320,7 +320,7 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 	// 持久化本地信息
 	if nil != req.PersistHandler {
 		if err = req.PersistHandler(pbResp); err != nil {
-			log.GetBaseLogger().Errorf("fail to persist client report response, err is %v", err)
+			g.logCtx.GetBaseLogger().Errorf("fail to persist client report response, err is %v", err)
 		}
 	}
 	rsp := &model.ReportClientResponse{

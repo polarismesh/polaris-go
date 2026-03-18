@@ -214,19 +214,19 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 	ruleMatchType int, ruleCache model.RuleCache) (success bool, matched *apitraffic.Source,
 	notMatched []*apitraffic.Source, invalidRegexInfos *invalidRegexInfo) {
 	if len(sources) == 0 {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: sources is empty, return matched")
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: sources is empty, return matched")
 		}
 		return true, nil, nil, nil
 	}
 	sourceService := routeInfo.SourceService
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		sourceServiceInfo := model.ToStringService(sourceService, false)
 		var sourceMetadata map[string]string
 		if sourceService != nil {
 			sourceMetadata = sourceService.GetMetadata()
 		}
-		log.GetBaseLogger().Debugf(
+		g.logCtx.GetBaseLogger().Debugf(
 			"[RuleBasedRouter] matchSource start, sourcesCount: %d, sourceService: %s, sourceMetadata: %v, "+
 				"ruleMatchType: %d", len(sources), sourceServiceInfo, sourceMetadata, ruleMatchType)
 	}
@@ -236,8 +236,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 	// matched = true
 	// invalidRegexes = false
 	for i, source := range sources {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf(
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf(
 				"[RuleBasedRouter] matchSource: checking source[%d], ns=%s, svc=%s, metadataCount=%d, metadata=%v", i,
 				source.Namespace.GetValue(), source.Service.GetValue(), len(source.Metadata), source.Metadata)
 		}
@@ -246,8 +246,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 			if reflect2.IsNil(sourceService) {
 				// 如果没有source服务信息, 判断rule是否支持全匹配
 				if source.Namespace.GetValue() != matchAll || source.Service.GetValue() != matchAll {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, "+
 							"sourceService is nil and rule not matchAll", i)
 					}
 					success = false
@@ -259,8 +259,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 				// 如果命名空间|服务不为"*"且不等于原服务, 则匹配失败
 				if source.Namespace.GetValue() != matchAll &&
 					source.Namespace.GetValue() != sourceService.GetNamespace() {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] namespace not matched, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] namespace not matched, "+
 							"rule=%s, actual=%s", i, source.Namespace.GetValue(), sourceService.GetNamespace())
 					}
 					success = false
@@ -269,8 +269,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 				}
 				if source.Service.GetValue() != matchAll &&
 					source.Service.GetValue() != sourceService.GetService() {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] service not matched, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] service not matched, "+
 							"rule=%s, actual=%s", i, source.Service.GetValue(), sourceService.GetService())
 					}
 					success = false
@@ -282,8 +282,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 
 		// 如果rule中metadata为空, 匹配成功, 结束
 		if len(source.Metadata) == 0 {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched, metadata is empty", i)
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched, metadata is empty", i)
 			}
 			success = true
 			matched = source
@@ -292,8 +292,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 
 		// 如果没有源服务信息, 本次匹配失败
 		if reflect2.IsNil(sourceService) {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, sourceService is "+
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] not matched, sourceService is "+
 					"nil but metadata required", i)
 			}
 			success = false
@@ -302,13 +302,13 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 		}
 
 		success, invalidRegex, invalidRegexError = g.matchSourceMetadata(source.Metadata, routeInfo, ruleCache)
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] metadata match result: success=%v, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] metadata match result: success=%v, "+
 				"invalidRegex=%s", i, success, invalidRegex)
 		}
 		if success {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched successfully", i)
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource: source[%d] matched successfully", i)
 			}
 			matched = source
 			break
@@ -329,8 +329,8 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 		}
 	}
 
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource finished, success=%v, notMatchedCount=%d", success,
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matchSource finished, success=%v, notMatchedCount=%d", success,
 			len(notMatched))
 	}
 	return success, matched, notMatched, invalidRegexInfos
@@ -338,7 +338,7 @@ func (g *RuleBasedInstancesFilter) matchSource(sources []*apitraffic.Source, rou
 
 // 校验输入的元数据是否符合规则
 func validateInMetadata(ruleMetaKey string, ruleMetaValue *apimodel.MatchString, ruleMetaValueStr string,
-	metadata map[string]map[string]string, matcher *regexp.Regexp) bool {
+	metadata map[string]map[string]string, matcher *regexp.Regexp, baseLogger log.Logger) bool {
 	if len(metadata) == 0 {
 		return true
 	}
@@ -353,7 +353,7 @@ func validateInMetadata(ruleMetaKey string, ruleMetaValue *apimodel.MatchString,
 		for value := range values {
 			m, err := matcher.FindStringMatch(value)
 			if err != nil {
-				log.GetBaseLogger().Errorf("regex match metadata error. ruleMetaKey: %s, value: %s, errors: %s",
+				baseLogger.Errorf("regex match metadata error. ruleMetaKey: %s, value: %s, errors: %s",
 					ruleMetaKey, value, err)
 				return false
 			}
@@ -403,14 +403,14 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 				return nil, false, ruleMetaValueStr, err
 			}
 			// 校验从上一个路由插件继承下来的规则是否符合该目标规则
-			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, regexObj) {
+			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, regexObj, g.logCtx.GetBaseLogger()) {
 				return nil, false, "", nil
 			}
 			var hasMatchedValue bool
 			for value, composedValue := range metaValues {
 				m, err := regexObj.FindStringMatch(value)
 				if err != nil {
-					log.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, "+
+					g.logCtx.GetBaseLogger().Errorf("regex match dst metadata error. ruleMetaValueStr: %s, value: %s, "+
 						"errors: %s", ruleMetaValueStr, value, err)
 					continue
 				}
@@ -440,7 +440,7 @@ func (g *RuleBasedInstancesFilter) matchDstMetadata(routeInfo *servicerouter.Rou
 		// parameter、variable、text 的 exact 最终都是要精确匹配，只是匹配的值来源不同
 		default:
 			// 校验从上一个路由插件继承下来的规则是否符合该目标规则
-			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, nil) {
+			if !validateInMetadata(ruleMetaKey, ruleMetaValue, ruleMetaValueStr, inCluster.Metadata, nil, g.logCtx.GetBaseLogger()) {
 				return nil, false, "", nil
 			}
 			if composedValue, ok := metaValues[ruleMetaValueStr]; ok {
@@ -514,16 +514,16 @@ func (g *RuleBasedInstancesFilter) getRuleMetaValueStr(routeInfo *servicerouter.
 func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerouter.RouteInfo,
 	svcCache model.ServiceClusters, ruleCache model.RuleCache, dst *apitraffic.Destination,
 	subsetsMap map[uint32]*prioritySubsets, inCluster *model.Cluster) (matched bool, invalidRegexInfos *invalidRegexInfo) {
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 开始填充目标子集, dstMetadata: %v, "+
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 开始填充目标子集, dstMetadata: %v, "+
 			"priority: %d, weight: %d", dst.Metadata, dst.Priority.GetValue(), dst.Weight.GetValue())
 	}
 	// 获取subset：根据目标metadata匹配实例集群
 	cluster, ok, invalidRegex, invalidRegexError := g.matchDstMetadata(routeInfo, dst.Metadata, ruleCache, svcCache,
 		inCluster)
 	if !ok || cluster == nil {
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 目标metadata匹配失败, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 目标metadata匹配失败, "+
 				"invalidRegex: %s, error: %v", invalidRegex, invalidRegexError)
 		}
 		var invalidInfo *invalidRegexInfo
@@ -549,8 +549,8 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 		pSubSet.singleSubset.cluster = cluster
 		pSubSet.totalWeight = weight
 		subsetsMap[priority] = pSubSet
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 创建新优先级子集, priority: %d, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 创建新优先级子集, priority: %d, "+
 				"weight: %d, clusterInstances: %d", priority, weight, cluster.GetClusterValue().Count())
 		}
 	} else {
@@ -564,8 +564,8 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 			cluster: cluster,
 			weight:  weightedSubsets.totalWeight,
 		})
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 追加子集到已有优先级, priority: %d, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] populateSubsetsFromDst 追加子集到已有优先级, priority: %d, "+
 				"weight: %d, totalWeight: %d, subsetsCount: %d", priority, weight, weightedSubsets.totalWeight,
 				len(weightedSubsets.subsets))
 		}
@@ -576,8 +576,8 @@ func (g *RuleBasedInstancesFilter) populateSubsetsFromDst(routeInfo *servicerout
 // selectCluster 从subset中选取实例
 // 选择逻辑：1.按优先级排序(数值越小优先级越高) 2.取最高优先级的子集组 3.按权重随机选择一个cluster
 func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*prioritySubsets) *model.Cluster {
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 开始从%d个优先级组中选择cluster", len(subsetsMap))
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 开始从%d个优先级组中选择cluster", len(subsetsMap))
 	}
 	// 步骤1: 提取所有优先级值
 	prioritySet := make([]uint32, 0, len(subsetsMap))
@@ -594,8 +594,8 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 	// 步骤3: 取优先级最高的子集组
 	priorityFirst := prioritySet[0]
 	weightedSubsets := subsetsMap[priorityFirst]
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 选中最高优先级: %d, 该优先级下子集数: %d, 总权重: %d",
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 选中最高优先级: %d, 该优先级下子集数: %d, 总权重: %d",
 			priorityFirst, len(weightedSubsets.subsets), weightedSubsets.totalWeight)
 	}
 	var retCluster *model.Cluster
@@ -603,16 +603,16 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 	if len(weightedSubsets.subsets) == 0 {
 		// 单一子集模式：直接返回该cluster
 		retCluster = weightedSubsets.singleSubset.cluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 单一子集模式, 直接选中cluster, 实例数: %d",
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 单一子集模式, 直接选中cluster, 实例数: %d",
 				retCluster.GetClusterValue().Count())
 		}
 	} else {
 		// 多子集模式：按权重随机选择
 		index := rand.SelectWeightedRandItem(g.scalableRand, weightedSubsets)
 		retCluster = weightedSubsets.subsets[index].cluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 多子集模式, 按权重随机选中index: %d, 实例数: %d",
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 多子集模式, 按权重随机选中index: %d, 实例数: %d",
 				index, retCluster.GetClusterValue().Count())
 		}
 	}
@@ -631,8 +631,8 @@ func (g *RuleBasedInstancesFilter) selectCluster(subsetsMap map[uint32]*priority
 		}
 		g.poolReturnPrioritySubsets(prioritySubset)
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 完成, 最终选中cluster实例数: %d",
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] selectCluster 完成, 最终选中cluster实例数: %d",
 			retCluster.GetClusterValue().Count())
 	}
 	return retCluster
@@ -705,21 +705,21 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 	} else {
 		ruleCache = routeInfo.SourceRouteRule.GetRuleCache()
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances start, ruleMatchType: %d, "+
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances start, ruleMatchType: %d, "+
 			"routesCount: %d, destService: %s/%s", ruleMatchType, len(routes), routeInfo.DestService.GetNamespace(),
 			routeInfo.DestService.GetService())
 	}
 	for i, route := range routes {
 		// 匹配source规则
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] matching route[%d], sourcesCount: %d, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] matching route[%d], sourcesCount: %d, "+
 				"destinationsCount: %d, route: %s", i, len(route.Sources), len(route.Destinations), route.String())
 		}
 		sourceMatched, matchSource, notMatches, invalidRegex := g.matchSource(route.Sources, routeInfo, ruleMatchType,
 			ruleCache)
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source match result: matched=%v, "+
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source match result: matched=%v, "+
 				"notMatchedCount=%d", i, sourceMatched, len(notMatches))
 		}
 
@@ -741,8 +741,8 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 
 		// 如果source匹配成功, 继续匹配destination规则
 		// 然后将结果写进map(key: 权重, value: 带权重的实例分组)
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source匹配成功, 开始匹配%d个destination规则", i,
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] source匹配成功, 开始匹配%d个destination规则", i,
 				len(route.Destinations))
 		}
 		subsetsMap := make(map[uint32]*prioritySubsets)
@@ -751,8 +751,8 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 			if ruleMatchType == sourceRouteRuleMatch {
 				if dst.Namespace.GetValue() != matchAll &&
 					dst.Namespace.GetValue() != routeInfo.DestService.GetNamespace() {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] namespace不匹配: rule=%s, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] namespace不匹配: rule=%s, "+
 							"actual=%s", i, dstIdx, dst.Namespace.GetValue(), routeInfo.DestService.GetNamespace())
 					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
@@ -761,8 +761,8 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 
 				if dst.Service.GetValue() != matchAll &&
 					dst.Service.GetValue() != routeInfo.DestService.GetService() {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] service不匹配: rule=%s, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] service不匹配: rule=%s, "+
 							"actual=%s", i, dstIdx, dst.Service.GetValue(), routeInfo.DestService.GetService())
 					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
@@ -770,8 +770,8 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 				}
 			}
 			if dst.Weight.GetValue() == 0 {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 权重为0, 跳过", i, dstIdx)
+				if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 权重为0, 跳过", i, dstIdx)
 				}
 				summary.weightZeroDestinations = append(summary.weightZeroDestinations, dst)
 				continue
@@ -780,44 +780,44 @@ func (g *RuleBasedInstancesFilter) getRuleFilteredInstances(ruleMatchType int, r
 			// 判断实例的metadata信息，看是否符合
 			if !destMatched {
 				if invalidRegex != nil {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败(正则错误): %v",
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败(正则错误): %v",
 							i, dstIdx, invalidRegex.invalidRegexErrors)
 					}
 					// summary.invalidRegexDestinations = append(summary.invalidRegexDestinations, dst)
 					summary.appendErrorRegexes(invalidRegex)
 				} else {
-					if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-						log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败, "+
+					if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+						g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] metadata匹配失败, "+
 							"dstMetadata: %v", i, dstIdx, dst.Metadata)
 					}
 					summary.notMatchedDestinations = append(summary.notMatchedDestinations, dst)
 				}
 			} else {
-				if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-					log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 匹配成功, priority: %d, weight: %d",
+				if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+					g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] dst[%d] 匹配成功, priority: %d, weight: %d",
 						i, dstIdx, dst.Priority.GetValue(), dst.Weight.GetValue())
 				}
 			}
 		}
 		// 如果未匹配到分组, 继续匹配
 		if len(subsetsMap) == 0 {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] no matched subsets, continue to next route", i)
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] no matched subsets, continue to next route", i)
 			}
 			continue
 		}
 		// 匹配到分组, 返回
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-			log.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] matched %d priority subsets, selecting cluster",
+		if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] route[%d] matched %d priority subsets, selecting cluster",
 				i, len(subsetsMap))
 		}
 		return g.selectCluster(subsetsMap), nil
 	}
 
 	// 全部匹配完成, 未匹配到任何分组, 返回空
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances finished, no matched cluster found")
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("[RuleBasedRouter] getRuleFilteredInstances finished, no matched cluster found")
 	}
 	return nil, nil
 }

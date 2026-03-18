@@ -22,14 +22,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/polarismesh/polaris-go/pkg/log"
-	"github.com/polarismesh/polaris-go/pkg/model"
-	"github.com/polarismesh/polaris-go/pkg/plugin"
-	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"io"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -42,7 +44,7 @@ const (
 type PushgatewayReporter struct {
 	*plugin.PluginBase
 	*common.RunContext
-	valueCtx model.ValueContext
+	valueCtx sdk.ValueContext
 
 	cfg      *Config
 	clientIP string
@@ -54,6 +56,8 @@ type PushgatewayReporter struct {
 
 	httpClient *http.Client
 	targetUrl  string
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 func init() {
@@ -93,6 +97,7 @@ func (p *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 	p.valueCtx = ctx.ValueCtx
 	p.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	p.clientID = ctx.Config.GetGlobal().GetClient().GetId()
+	p.logCtx = ctx.ValueCtx.GetContextLogger()
 
 	cfgValue := ctx.Config.GetGlobal().GetEventReporter().GetPluginConfig(PluginName)
 	if cfgValue != nil {
@@ -141,9 +146,11 @@ func (p *PushgatewayReporter) prepare() {
 				case <-ticker.C:
 					p.Flush(false)
 				case <-ctx.Done():
-					log.GetBaseLogger().Infof("[EventReporter][Pushgateway] receive destroy signal, flush events")
+					p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] receive destroy signal, flush " +
+						"events")
 					p.Flush(true) // 退出之前同步flush数据
-					log.GetBaseLogger().Infof("[EventReporter][Pushgateway] pushgateway reporter is stopping")
+					p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] pushgateway reporter is " +
+						"stopping")
 					return
 				}
 			}
@@ -183,7 +190,8 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 		// 刷新之前，填充SDK的公共数据
 		entry.GetConfigEvent().SetClientIp(p.clientIP)
 		entry.GetConfigEvent().SetClientId(p.clientID)
-		log.GetBaseLogger().Infof("[EventReporter][Pushgateway] new config event: %+v", entry.GetConfigEvent())
+		p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] new config event: %+v",
+			entry.GetConfigEvent())
 
 		batchEvents.Batch = append(batchEvents.Batch, entry.GetConfigEvent())
 
@@ -194,19 +202,21 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 	flushHandler := func(batch BatchEvents) {
 		data, err := json.Marshal(batch)
 		if err != nil {
-			log.GetBaseLogger().Errorf("[EventReporter][Pushgateway] marshal data(%+v) err: %+v", batchEvents, err)
+			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] marshal data(%+v) err: %+v",
+				batchEvents, err)
 			return
 		}
 
 		dataBuffer := bytes2.NewBuffer(data)
 		targetUrl, err := p.getTargetUrl()
 		if err != nil {
-			log.GetBaseLogger().Warnf("[EventReporter][Pushgateway] not found target event server addr, ignore it. %s", err.Error())
+			p.logCtx.GetStatReportLogger().Warnf("[EventReporter][Pushgateway] not found target event server addr, "+
+				"ignore it. %s", err.Error())
 			return
 		}
 		req, err := http.NewRequest(http.MethodPost, targetUrl, dataBuffer)
 		if err != nil {
-			log.GetBaseLogger().Errorf("[EventReporter][Pushgateway] new request err: %+v", err)
+			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] new request err: %+v", err)
 			return
 		}
 
@@ -221,7 +231,8 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 			}
 		}
 		if respErr != nil {
-			log.GetBaseLogger().Errorf("[EventReporter][Pushgateway] do request err: %+v, code: %d, resp: %s", respErr, respCode, respBuffer.String())
+			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] do request err: %+v, code: %d, "+
+				"resp: %s", respErr, respCode, respBuffer.String())
 			return
 		}
 	}

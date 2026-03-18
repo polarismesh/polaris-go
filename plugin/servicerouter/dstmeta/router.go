@@ -26,14 +26,17 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // InstancesFilter 基于目标服务元数据的服务路由插件
 type InstancesFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              model.ValueContext
+	valueCtx              sdk.ValueContext
 	recoverAll            bool
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -53,6 +56,7 @@ func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.valueCtx = ctx.ValueCtx
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 
@@ -168,7 +172,7 @@ func (g *InstancesFilter) metaNotMatchError(routeInfo *servicerouter.RouteInfo) 
 		"dstmeta not match, dstService %s(namespace %s), metadata is %v",
 		routeInfo.DestService.GetService(), routeInfo.DestService.GetNamespace(),
 		routeInfo.DestService.GetMetadata())
-	log.GetBaseLogger().Errorf(errorText)
+	g.logCtx.GetBaseLogger().Errorf(errorText)
 	return model.NewSDKError(model.ErrCodeDstMetaMismatch, nil, errorText)
 }
 

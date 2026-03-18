@@ -30,10 +30,10 @@ import (
 
 // LaneWrapper 泳道规则包装器，用于将泳道组数组包装成 proto.Message
 type LaneWrapper struct {
-	Namespace *wrapperspb.StringValue
-	Service   *wrapperspb.StringValue
+	Namespace  *wrapperspb.StringValue
+	Service    *wrapperspb.StringValue
 	LaneGroups []*apitraffic.LaneGroup
-	Revision  *wrapperspb.StringValue
+	Revision   *wrapperspb.StringValue
 }
 
 // Reset 实现 proto.Message 接口
@@ -50,7 +50,7 @@ type LaneAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (l *LaneAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (l *LaneAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -63,12 +63,12 @@ func (l *LaneAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto
 	// 返回 Lanes (LaneGroup) 数组
 	lanes := resp.Lanes
 	if len(lanes) == 0 {
-		log.GetBaseLogger().Debugf("LaneAssistant.ParseRuleValue: service=%s, no lane rule found, using service revision=%s",
+		baseLogger.Debugf("LaneAssistant.ParseRuleValue: service=%s, no lane rule found, using service revision=%s",
 			serviceKey, revision)
 		return nil, revision
 	}
 
-	log.GetBaseLogger().Debugf("LaneAssistant.ParseRuleValue: service=%s, revision=%s, lanes count=%d",
+	baseLogger.Debugf("LaneAssistant.ParseRuleValue: service=%s, revision=%s, lanes count=%d",
 		serviceKey, revision, len(lanes))
 
 	// 将泳道组数组包装到结构体中并返回

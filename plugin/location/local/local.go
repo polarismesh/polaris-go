@@ -31,10 +31,12 @@ const (
 type LocationProviderImpl struct {
 	ctx      *plugin.InitContext
 	locCache *model.Location
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
-func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
-	impl := &LocationProviderImpl{}
+func New(ctx *plugin.InitContext, logCtx *log.ContextLogger) (*LocationProviderImpl, error) {
+	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }
 
@@ -55,7 +57,7 @@ func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 		return p.locCache, nil
 	}
 
-	log.GetBaseLogger().Infof("start use env location provider")
+	p.logCtx.GetBaseLogger().Infof("start use env location provider")
 
 	provider := p.ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderLocal)
 	options := provider.GetOptions()

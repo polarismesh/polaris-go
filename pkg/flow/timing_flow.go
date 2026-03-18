@@ -34,7 +34,7 @@ const (
 
 // ScheduleTask 调度任务
 func (e *Engine) ScheduleTask(task *model.PeriodicTask) (chan<- *model.PriorityTask, model.TaskValues) {
-	routine := schedule.NewTaskRoutine(task)
+	routine := schedule.NewTaskRoutine(task, e.logCtx)
 	e.taskRoutines = append(e.taskRoutines, routine)
 	return routine.Schedule()
 }
@@ -57,7 +57,7 @@ func (e *Engine) addClientReportTask() (model.TaskValues, error) {
 
 // addSDKConfigReportTask 添加定期上报sdk配置任务
 func (e *Engine) addSDKConfigReportTask() model.TaskValues {
-	callback := startup.NewConfigReportCallBack(e, e.globalCtx)
+	callback := startup.NewConfigReportCallBack(e, e.globalCtx, e.logCtx)
 	_, taskValues := e.ScheduleTask(&model.PeriodicTask{
 		Name:         taskConfigReport,
 		CallBack:     callback,

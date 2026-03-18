@@ -40,6 +40,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 )
 
@@ -56,10 +57,12 @@ type Connector struct {
 	cfg                   *networkConfig
 	connManager           network.ConnectionManager
 	connectionIdleTimeout time.Duration
-	valueCtx              model.ValueContext
+	valueCtx              sdk.ValueContext
 	// 有没有打印过connManager ready的信息，用于避免重复打印
 	hasPrintedReady uint32
 	token           string
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型.
@@ -76,6 +79,7 @@ func (c *Connector) Name() string {
 func (c *Connector) Init(ctx *plugin.InitContext) error {
 	c.RunContext = common.NewRunContext()
 	c.PluginBase = plugin.NewPluginBase(ctx)
+	c.logCtx = ctx.ValueCtx.GetContextLogger()
 	cfgValue := ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetPluginConfig(c.Name())
 	if cfgValue != nil {
 		c.cfg = cfgValue.(*networkConfig)
@@ -90,7 +94,7 @@ func (c *Connector) Init(ctx *plugin.InitContext) error {
 	c.valueCtx = ctx.ValueCtx
 	protocol := ctx.Config.GetConfigFile().GetConfigConnectorConfig().GetProtocol()
 	if protocol == c.Name() {
-		log.GetBaseLogger().Infof("set %s plugin as connectionCreator", c.Name())
+		c.logCtx.GetBaseLogger().Infof("set %s plugin as connectionCreator", c.Name())
 		c.connManager.SetConnCreator(c)
 	}
 	return nil
@@ -146,9 +150,9 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 
 	// 打印请求报文
 	info := transferToClientConfigFileInfo(configFile)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(info)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 
 	// gRPC调用
@@ -164,7 +168,7 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 	totalDuration := clock.GetClock().Now().Sub(totalStart)
 
 	// 打印详细耗时日志
-	log.GetBaseLogger().Infof("[Config][Connector] GetConfigFile耗时统计 - file=%s/%s/%s, 总耗时=%dms, 等待就绪=%dms, 获取连接=%dms, 创建客户端=%dms, gRPC调用=%dms, 处理响应=%dms, connID=%s",
+	c.logCtx.GetBaseLogger().Infof("[Config][Connector] GetConfigFile耗时统计 - file=%s/%s/%s, 总耗时=%dms, 等待就绪=%dms, 获取连接=%dms, 创建客户端=%dms, gRPC调用=%dms, 处理响应=%dms, connID=%s",
 		configFile.Namespace, configFile.FileGroup, configFile.FileName,
 		totalDuration.Milliseconds(), waitDuration.Milliseconds(), connDuration.Milliseconds(),
 		grpcClientDuration.Milliseconds(), grpcCallDuration.Milliseconds(), handleDuration.Milliseconds(), conn.ConnID)
@@ -202,9 +206,9 @@ func (c *Connector) WatchConfigFiles(configFileList []*configconnector.ConfigFil
 	}
 	request := &config_manage.ClientWatchConfigFileRequest{WatchFiles: configFileInfoList}
 	// 打印请求报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(request)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := configClient.WatchConfigFiles(ctx, request)
 	return c.handleResponse(request.String(), reqID, opKey, pbResp, err, conn, startTime)
@@ -235,9 +239,9 @@ func (c *Connector) CreateConfigFile(configFile *configconnector.ConfigFile) (*c
 	}
 	// 打印请求报文
 	pbConfigFile := transferToConfigFile(configFile)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbConfigFile)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := configClient.CreateConfigFile(ctx, pbConfigFile)
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
@@ -268,9 +272,9 @@ func (c *Connector) UpdateConfigFile(configFile *configconnector.ConfigFile) (*c
 	}
 	// 打印请求报文
 	pbConfigFile := transferToConfigFile(configFile)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbConfigFile)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := configClient.UpdateConfigFile(ctx, pbConfigFile)
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
@@ -301,9 +305,9 @@ func (c *Connector) PublishConfigFile(configFile *configconnector.ConfigFile) (*
 	}
 	// 打印请求报文
 	pbConfigFileRelease := transferToConfigFileRelease(configFile)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbConfigFileRelease)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := configClient.PublishConfigFile(ctx, pbConfigFileRelease)
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
@@ -334,9 +338,9 @@ func (c *Connector) UpsertAndPublishConfigFile(configFile *configconnector.Confi
 	}
 	// 打印请求报文
 	pbConfigFileRelease := transferToConfigFilePublishInfo(configFile)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		reqJson, _ := (&jsonpb.Marshaler{}).MarshalToString(pbConfigFileRelease)
-		log.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("request to send is %s, opKey %s, connID %s", reqJson, opKey, conn.ConnID)
 	}
 	pbResp, err := configClient.UpsertAndPublishConfigFile(ctx, pbConfigFileRelease)
 	return c.handleResponse(pbResp.String(), reqID, opKey, pbResp, err, conn, startTime)
@@ -375,9 +379,9 @@ func (c *Connector) GetConfigGroup(req *configconnector.ConfigGroup) (*configcon
 				"reason is fail to send request, reqID %s, server %s", opKey, request, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(response)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(response.GetCode().GetValue())
 	code := apimodel.Code(response.GetCode().GetValue())
@@ -419,7 +423,7 @@ func (c *Connector) waitDiscoverReady() error {
 			if c.connManager.IsReady() {
 				// 准备就绪，仅首次打印日志
 				if atomic.CompareAndSwapUint32(&c.hasPrintedReady, 0, 1) {
-					log.GetBaseLogger().Infof("%s, waitDiscover: config service is ready", c.GetSDKContextID())
+					c.logCtx.GetBaseLogger().Infof("%s, waitDiscover: config service is ready", c.GetSDKContextID())
 				}
 				return nil
 			}
@@ -438,9 +442,9 @@ func (c *Connector) handleResponse(request string, reqID string, opKey string, r
 				"reason is fail to send request, reqID %s, server %s", opKey, request, reqID, conn.ConnID))
 	}
 	// 打印应答报文
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		respJson, _ := (&jsonpb.Marshaler{}).MarshalToString(response)
-		log.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
+		c.logCtx.GetBaseLogger().Debugf("response recv is %s, opKey %s, connID %s", respJson, opKey, conn.ConnID)
 	}
 	serverCodeType := pb.ConvertServerErrorToRpcError(response.GetCode().GetValue())
 	code := apimodel.Code(response.GetCode().GetValue())

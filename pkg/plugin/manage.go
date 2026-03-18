@@ -29,6 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 var (
@@ -82,7 +83,7 @@ type Supplier interface {
 type Manager interface {
 	Supplier
 	// InitPlugins 初始化插件列表
-	InitPlugins(initContext InitContext, types []common.Type, engine model.Engine, delegate func() error) (err error)
+	InitPlugins(initContext InitContext, types []common.Type, engine sdk.Engine, delegate func() error) (err error)
 	// DestroyPlugins 销毁已初始化的插件列表
 	DestroyPlugins() (err error)
 	// StartPlugins 执行已经初始化完毕的插件
@@ -113,6 +114,7 @@ type manager struct {
 	eventSubscriber map[common.PluginEventType][]common.PluginEventHandler
 	// 是否已经初始化，初始化后不允许修改任何数据结构
 	initialized uint32
+	logCtx      *log.ContextLogger
 }
 
 // instanceOf 判断是否实现了对应的接口
@@ -188,7 +190,8 @@ func createPluginProxy(typ common.Type) PluginProxy {
 
 // InitPlugins 初始化所有已注册插件
 func (m *manager) InitPlugins(
-	ctx InitContext, types []common.Type, engine model.Engine, delegateInit func() error) (err error) {
+	ctx InitContext, types []common.Type, engine sdk.Engine, delegateInit func() error) (err error) {
+	m.logCtx = ctx.ValueCtx.GetContextLogger()
 	if atomic.LoadUint32(&m.initialized) > 0 {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil, "manager has been initialized")
 	}
@@ -233,9 +236,8 @@ func (m *manager) InitPlugins(
 				"InitPlugins: fail to init plugin name %v:%s", plug.instance.Type(), plug.instance.Name()))
 		}
 		m.idToPlugins[plug.id] = plug.instance
-		log.GetBaseLogger().Infof(
-			"Initialized plugin type %v, name %s, id %d",
-			plug.instance.Type(), plug.instance.Name(), ctx.PluginIndex)
+		m.logCtx.GetBaseLogger().Infof("Initialized plugin type %v, name %s, id %d", plug.instance.Type(),
+			plug.instance.Name(), ctx.PluginIndex)
 	}
 	if err = delegateInit(); err != nil {
 		return m.cleanupWhenError(model.NewSDKError(model.ErrCodePluginError, err,
@@ -255,7 +257,7 @@ func (m *manager) StartPlugins() error {
 	for id, plug := range m.idToPlugins {
 		startedPlugins.Add(id)
 		if err = plug.Start(); err != nil {
-			log.GetBaseLogger().Errorf("fail to start plugin %s, err is %v", plug.Name(), err)
+			m.logCtx.GetBaseLogger().Errorf("fail to start plugin %s, err is %v", plug.Name(), err)
 			break
 		}
 	}
@@ -282,7 +284,7 @@ func (m *manager) cleanupWhenError(sdkErr model.SDKError) error {
 		}
 		for name, plugInst := range plugInstances {
 			if err := plugInst.instance.Destroy(); err != nil {
-				log.GetBaseLogger().Errorf("fail to destroy plugin %v:%s, err %v", typ, name, err)
+				m.logCtx.GetBaseLogger().Errorf("fail to destroy plugin %v:%s, err %v", typ, name, err)
 			}
 		}
 	}
@@ -406,7 +408,7 @@ func (m *manager) GetEventSubscribers(event common.PluginEventType) []common.Plu
 type InitContext struct {
 	Config       config.Configuration
 	Plugins      Supplier
-	ValueCtx     model.ValueContext
+	ValueCtx     sdk.ValueContext
 	ConnManager  network.ConnectionManager
 	PluginIndex  int32
 	SDKContextID string
@@ -493,7 +495,7 @@ func NewPluginBase(ctx *InitContext) *PluginBase {
 // PluginProxy Plugin的代理
 type PluginProxy interface {
 	Plugin
-	SetRealPlugin(plugin Plugin, engine model.Engine)
+	SetRealPlugin(plugin Plugin, engine sdk.Engine)
 }
 
 // IsEnable is enable

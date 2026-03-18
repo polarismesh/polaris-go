@@ -50,7 +50,7 @@ type LosslessAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -63,12 +63,12 @@ func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (p
 	// 返回 LosslessRules 数组
 	losslessRules := resp.LosslessRules
 	if len(losslessRules) == 0 {
-		log.GetBaseLogger().Debugf("LosslessAssistant.ParseRuleValue: service=%s, no lossless rules found, using service revision=%s",
+		baseLogger.Debugf("LosslessAssistant.ParseRuleValue: service=%s, no lossless rules found, using service revision=%s",
 			serviceKey, revision)
 		return nil, revision
 	}
 
-	log.GetBaseLogger().Debugf("LosslessAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
+	baseLogger.Debugf("LosslessAssistant.ParseRuleValue: service=%s, revision=%s, rules count=%d",
 		serviceKey, revision, len(losslessRules))
 
 	// 将规则数组包装到结构体中并返回

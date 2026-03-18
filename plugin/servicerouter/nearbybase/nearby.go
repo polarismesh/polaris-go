@@ -32,13 +32,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // NearbyBasedInstancesFilter RuleBasedInstancesFilter 基于路由规则的服务实例过滤器
 type NearbyBasedInstancesFilter struct {
 	*plugin.PluginBase
 	wholeCfg              config.Configuration
-	valueCtx              model.ValueContext
+	valueCtx              sdk.ValueContext
 	percentOfMinInstances float64
 	cfg                   *nearbyConfig
 	recoverAll            bool
@@ -46,6 +47,8 @@ type NearbyBasedInstancesFilter struct {
 	maxMatchLevel         int
 	unHealthyRatio        float64
 	locationReadyTimeout  time.Duration
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -63,6 +66,7 @@ func (g *NearbyBasedInstancesFilter) Init(ctx *plugin.InitContext) error {
 	// 获取最小返回实例比例
 	g.percentOfMinInstances = ctx.Config.GetConsumer().GetServiceRouter().GetPercentOfMinInstances()
 	g.PluginBase = plugin.NewPluginBase(ctx)
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.valueCtx = ctx.ValueCtx
 	g.wholeCfg = ctx.Config
@@ -102,8 +106,8 @@ func (g *NearbyBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, 
 	hasNearbyRouteRules := g.enableNearByRouteRules(routeInfo)
 	enabled := hasLocation && (isNearbyEnabled || hasNearbyRouteRules)
 
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("NearbyRouter.Enable: service=%s, enabled=%v (location=%v, nearbyEnabled=%v, rules=%v)",
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("NearbyRouter.Enable: service=%s, enabled=%v (location=%v, nearbyEnabled=%v, rules=%v)",
 			clusters.GetServiceKey(), enabled, hasLocation, isNearbyEnabled, hasNearbyRouteRules)
 	}
 
@@ -133,8 +137,8 @@ func (g *NearbyBasedInstancesFilter) enableNearByRouteRules(routeInfo *servicero
 	}
 
 	hasEnabledRules := enabledRuleCount > 0
-	if hasEnabledRules && log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("NearbyRouter: found %d enabled nearby rules (total %d)",
+	if hasEnabledRules && g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: found %d enabled nearby rules (total %d)",
 			enabledRuleCount, len(rt.Rules))
 	}
 
@@ -252,7 +256,7 @@ func (g *NearbyBasedInstancesFilter) GetLevel(clusters model.ServiceClusters) (i
 				if maxMatchLevelTmp <= matchLevel {
 					maxMatchLevel = maxMatchLevelTmp
 				} else {
-					log.GetBaseLogger().Warnf("%s %s nearbyConfig maxMatchLevel > matchLevel", namespace, service)
+					g.logCtx.GetBaseLogger().Warnf("%s %s nearbyConfig maxMatchLevel > matchLevel", namespace, service)
 				}
 			}
 		}
@@ -277,8 +281,8 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 		// 假如是全量服务，则尝试直接获取缓存
 		nearCluster, finalLevel = clusters.GetNearbyCluster(*location)
 		if nil != nearCluster {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("NearbyRouter: using cached cluster, level=%d", finalLevel)
+			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetBaseLogger().Debugf("NearbyRouter: using cached cluster, level=%d", finalLevel)
 			}
 			outCluster = nearCluster
 			setNearbyCluster = false
@@ -303,7 +307,7 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 
 	// 如果priorityLevelAll级别的实例数量为0，说明没有实例，直接报错
 	if allLevelsCount[priorityLevelAll].allCount == 0 {
-		log.GetBaseLogger().Warnf("NearbyRouter: no instances found")
+		g.logCtx.GetBaseLogger().Warnf("NearbyRouter: no instances found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
@@ -326,15 +330,15 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 	}
 	// 额外的安全检查：如果finalLevel仍然小于priorityLevelAll（即为-1），说明所有级别都没有实例
 	if finalLevel < priorityLevelAll {
-		log.GetBaseLogger().Warnf("NearbyRouter: no valid level found")
+		g.logCtx.GetBaseLogger().Warnf("NearbyRouter: no valid level found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
 	}
 
 	// 如果进行降级，修改outcluster的地域信息以对齐最终匹配级别，否则直接使用已经匹配到的实例
-	if matchLevel != finalLevel && log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("NearbyRouter: degrade from level %d to %d", matchLevel, finalLevel)
+	if matchLevel != finalLevel && g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: degrade from level %d to %d", matchLevel, finalLevel)
 	}
 	g.modifyOutClusterLevel(outCluster, finalLevel)
 
@@ -350,8 +354,8 @@ finally:
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = outCluster
 	result.Status = checkNearbyStatus(matchLevel, finalLevel)
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		log.GetBaseLogger().Debugf("NearbyRouter: matched level=%d, instances=%d, status=%v",
+	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: matched level=%d, instances=%d, status=%v",
 			finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	}
 	return result, nil
@@ -376,12 +380,12 @@ func (g *NearbyBasedInstancesFilter) misMatchError(location *model.Location, out
 // 等待地域信息就绪
 func (g *NearbyBasedInstancesFilter) waitLocationInfo(event *common.PluginEvent) error {
 	if !g.cfg.StrictNearby {
-		g.valueCtx.WaitLocationInfo(context.TODO(), model.LocationInit)
+		g.valueCtx.WaitLocationInfo(context.TODO(), sdk.LocationInit)
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), g.locationReadyTimeout)
 	defer cancel()
-	ready := g.valueCtx.WaitLocationInfo(ctx, model.LocationReady)
+	ready := g.valueCtx.WaitLocationInfo(ctx, sdk.LocationReady)
 	if !ready {
 		return fmt.Errorf("fail to get location ready, timeout is %v, location err: %v",
 			g.locationReadyTimeout, g.valueCtx.GetCurrentLocation().GetLastError())

@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package model
+package sdk
 
 import (
 	"context"
@@ -26,7 +26,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/polarismesh/polaris-go/pkg/clock"
+	"github.com/polarismesh/polaris-go/pkg/log"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
@@ -75,9 +78,9 @@ func (sdkToken *SDKToken) InitUID() {
 // LocationInfo 地域信息
 type LocationInfo interface {
 	// GetLocation 获取地域明细
-	GetLocation() *Location
+	GetLocation() *model.Location
 	// GetLastError 在地域信息获取过程中的错误信息
-	GetLastError() SDKError
+	GetLastError() model.SDKError
 	// GetStatus 获取地域信息状态
 	GetStatus() uint32
 	// IsLocationInitialized 查看地域信息是否已初始化状态
@@ -102,11 +105,13 @@ type ValueContext interface {
 	WaitLocationInfo(ctx context.Context, locationStatus uint32) bool
 	// SetCurrentLocation 设置当前节点地域信息
 	// 返回是否由非ready转换为ready
-	SetCurrentLocation(*Location, SDKError) bool
+	SetCurrentLocation(*model.Location, model.SDKError) bool
 	// Now 获取当前时间戳
 	Now() time.Time
 	// Since 计算时间间隔
 	Since(time.Time) time.Duration
+	// GetContextLogger 获取日志配置
+	GetContextLogger() *log.ContextLogger
 }
 
 // NewValueContext 创建kv上下文对象
@@ -120,6 +125,8 @@ func NewValueContext() ValueContext {
 	})
 	ctx.locationInitializedNotify.Context, ctx.locationInitializedNotify.cancel = context.WithCancel(context.Background())
 	ctx.locationReadyNotify.Context, ctx.locationReadyNotify.cancel = context.WithCancel(context.Background())
+	ctx.contextLogger = &log.ContextLogger{}
+	ctx.contextLogger.Init()
 	return ctx
 }
 
@@ -137,20 +144,20 @@ const (
 // locationInfo 地域信息包装类型，含控制及状态信息
 type locationInfo struct {
 	// 地域详情
-	location *Location
+	location *model.Location
 	// 上一次获取失败
-	lastErr SDKError
+	lastErr model.SDKError
 	// 地域信息状态
 	locationStatus uint32
 }
 
 // GetLocation 获取地域明细
-func (l *locationInfo) GetLocation() *Location {
+func (l *locationInfo) GetLocation() *model.Location {
 	return l.location
 }
 
 // GetLastError 在地域信息获取过程中的错误信息
-func (l *locationInfo) GetLastError() SDKError {
+func (l *locationInfo) GetLastError() model.SDKError {
 	return l.lastErr
 }
 
@@ -197,6 +204,8 @@ type valueContext struct {
 	clock clock.Clock
 	// 使用线程安全的map进行值的存储
 	coreMap *sync.Map
+	// 上下文日志
+	contextLogger *log.ContextLogger
 }
 
 // WaitLocationInfo 等待地域信息状态
@@ -238,7 +247,7 @@ func (v *valueContext) GetCurrentLocation() LocationInfo {
 }
 
 // SetCurrentLocation 设置当前节点地域信息
-func (v *valueContext) SetCurrentLocation(location *Location, lastErr SDKError) bool {
+func (v *valueContext) SetCurrentLocation(location *model.Location, lastErr model.SDKError) bool {
 	locInfo := &locationInfo{
 		location: location,
 		lastErr:  lastErr,
@@ -303,4 +312,8 @@ func (v *valueContext) GetEngine() Engine {
 		return nil
 	}
 	return value.(Engine)
+}
+
+func (c *valueContext) GetContextLogger() *log.ContextLogger {
+	return c.contextLogger
 }

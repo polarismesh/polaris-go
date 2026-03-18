@@ -31,12 +31,13 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
 // NewReportClientCallBack  创建上报回调
 func NewReportClientCallBack(
-	cfg config.Configuration, supplier plugin.Supplier, globalCtx model.ValueContext) (*ReportClientCallBack, error) {
+	cfg config.Configuration, supplier plugin.Supplier, globalCtx sdk.ValueContext) (*ReportClientCallBack, error) {
 	var err error
 	var callback = &ReportClientCallBack{}
 	if callback.connector, err = data.GetServerConnector(cfg, supplier); err != nil {
@@ -51,6 +52,7 @@ func NewReportClientCallBack(
 	callback.configuration = cfg
 	callback.globalCtx = globalCtx
 	callback.interval = cfg.GetGlobal().GetAPI().GetReportInterval()
+	callback.logCtx = globalCtx.GetContextLogger()
 	callback.loadLocalClientReportResult()
 	return callback, nil
 }
@@ -60,9 +62,12 @@ type ReportClientCallBack struct {
 	connector     serverconnector.ServerConnector
 	registry      localregistry.InstancesRegistry
 	configuration config.Configuration
-	globalCtx     model.ValueContext
+	globalCtx     sdk.ValueContext
 	interval      time.Duration
 	reporterChain []statreporter.StatReporter
+	logCtx        *log.ContextLogger
+	// lastLocation 记录上次成功持久化的地域信息，用于对比判断是否需要重新写入 client_info.json
+	lastLocation *model.Location
 }
 
 const (
@@ -72,19 +77,23 @@ const (
 
 // loadLocalClientReportResult 从本地缓存加载上报结果信息
 func (r *ReportClientCallBack) loadLocalClientReportResult() {
+	logBase := r.logCtx.GetBaseLogger()
 	resp := &apiservice.Response{}
 	cachedFile := clientInfoPersistFile
 	err := r.registry.LoadPersistedMessage(cachedFile, resp)
 	if err != nil {
-		log.GetBaseLogger().Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
+		logBase.Warnf("fail to load local region info from %s, err is %v", cachedFile, err)
 		return
 	}
 	location := resp.GetClient().GetLocation()
-	r.updateLocation(&model.Location{
+	loc := &model.Location{
 		Region: location.GetRegion().GetValue(),
 		Zone:   location.GetZone().GetValue(),
 		Campus: location.GetCampus().GetValue(),
-	}, nil)
+	}
+	// 初始化 lastLocation，避免首次上报时与缓存相同的 location 也触发重复写入
+	r.lastLocation = loc
+	r.updateLocation(loc, nil)
 }
 
 // reportClientRequest 客户端上报的请求
@@ -92,11 +101,9 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	apiConfig := r.configuration.GetGlobal().GetAPI()
 	clientHost := apiConfig.GetBindIP()
 	reportClientReq := &model.ReportClientRequest{
-		Version: version.Version,
-		Timeout: r.configuration.GetGlobal().GetAPI().GetTimeout(),
-		PersistHandler: func(message proto.Message) error {
-			return r.registry.PersistMessage(clientInfoPersistFile, message)
-		},
+		Version:        version.Version,
+		Timeout:        r.configuration.GetGlobal().GetAPI().GetTimeout(),
+		PersistHandler: r.persistHandlerWithLocationCheck,
 	}
 	if len(clientHost) > 0 {
 		reportClientReq.Host = clientHost
@@ -118,6 +125,34 @@ func (r *ReportClientCallBack) reportClientRequest() *model.ReportClientRequest 
 	return reportClientReq
 }
 
+// persistHandlerWithLocationCheck 带地域信息变更检查的持久化处理函数
+// 只有当服务端返回的地域信息与上次持久化的不同时，才执行写入操作，避免不必要的磁盘 I/O
+func (r *ReportClientCallBack) persistHandlerWithLocationCheck(message proto.Message) error {
+	resp, ok := message.(*apiservice.Response)
+	if !ok {
+		// 类型不匹配时直接持久化
+		return r.registry.PersistMessage(clientInfoPersistFile, message)
+	}
+	loc := resp.GetClient().GetLocation()
+	newLocation := &model.Location{
+		Region: loc.GetRegion().GetValue(),
+		Zone:   loc.GetZone().GetValue(),
+		Campus: loc.GetCampus().GetValue(),
+	}
+	// 对比新旧地域信息，相同则跳过写入
+	if r.lastLocation != nil && *r.lastLocation == *newLocation {
+		return nil
+	}
+	// 地域信息发生变化或首次写入，执行持久化
+	if err := r.registry.PersistMessage(clientInfoPersistFile, message); err != nil {
+		return err
+	}
+	r.lastLocation = newLocation
+	r.logCtx.GetBaseLogger().Infof("client_info.json updated, location changed to {Region:%s, Zone:%s, Campus:%s}",
+		newLocation.Region, newLocation.Zone, newLocation.Campus)
+	return nil
+}
+
 // Process 执行任务
 func (r *ReportClientCallBack) Process(
 	taskKey interface{}, taskValue interface{}, lastProcessTime time.Time) model.TaskResult {
@@ -126,13 +161,13 @@ func (r *ReportClientCallBack) Process(
 	}
 	reportClientReq := r.reportClientRequest()
 	if err := reportClientReq.Validate(); err != nil {
-		log.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
+		r.logCtx.GetBaseLogger().Errorf("report client request fatal validate error:%v", err)
 		return model.TERMINATE
 	}
 
 	reportClientResp, err := r.connector.ReportClient(reportClientReq)
 	if err != nil {
-		log.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
+		r.logCtx.GetBaseLogger().Errorf("report client info:%+v, error:%v", reportClientReq, err)
 		r.updateLocation(nil, err.(model.SDKError))
 		// 发生错误也要重试，直到获取到地域信息为止
 		return model.CONTINUE
@@ -159,11 +194,13 @@ func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr 
 	}
 
 	if nil != location {
-		// 已获取到客户端的地域信息，更新到全局上下文
-		log.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
-			location.Region, location.Zone, location.Campus)
+		// 只在地域信息首次获取或发生变化时打印日志，避免重复输出相同内容
+		if r.lastLocation == nil || *r.lastLocation != *location {
+			r.logCtx.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
+				location.Region, location.Zone, location.Campus)
+		}
 	}
 	if r.globalCtx.SetCurrentLocation(location, lastErr) {
-		log.GetBaseLogger().Infof("client area info is ready")
+		r.logCtx.GetBaseLogger().Infof("client area info is ready")
 	}
 }

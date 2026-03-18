@@ -33,6 +33,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/healthcheck"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -55,7 +56,7 @@ type CompositeCircuitBreaker struct {
 	// containers model.Resource -> *RuleContainer
 	containers *sync.Map
 	// engineFlow
-	engineFlow model.Engine
+	engineFlow sdk.Engine
 	// regexpCache regexp -> *regexp.Regexp
 	rlock sync.RWMutex
 	// regexpCache
@@ -68,8 +69,8 @@ type CompositeCircuitBreaker struct {
 	defaultInstanceCircuitBreakerConfig defaultInstanceCircuitBreakerConfig
 	// localCache
 	localCache localregistry.LocalRegistry
-	// log .
-	log log.Logger
+	// 上下文日志
+	logCtx *log.ContextLogger
 	// start
 	start int32
 	// destroy .
@@ -105,7 +106,7 @@ func (c *CompositeCircuitBreaker) Start() error {
 	c.serviceHealthCheckCache = &sync.Map{}
 	c.containers = &sync.Map{}
 	c.regexpCache = make(map[string]*regexp.Regexp)
-	c.executor = newTaskExecutor(8)
+	c.executor = newTaskExecutor(8, c.logCtx)
 	c.checkPeriod = c.pluginCtx.Config.GetConsumer().GetCircuitBreaker().GetCheckPeriod()
 	if c.checkPeriod == 0 {
 		c.checkPeriod = defaultCheckPeriod
@@ -143,7 +144,7 @@ func (c *CompositeCircuitBreaker) Start() error {
 		return err
 	}
 	c.localCache = registryPlugin.(localregistry.LocalRegistry)
-	c.log = log.GetBaseLogger()
+	c.logCtx = c.pluginCtx.ValueCtx.GetContextLogger()
 	return nil
 }
 
@@ -181,38 +182,39 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
 	// 第一层：检查 stat 是否为 nil
 	if stat == nil {
-		c.log.Errorf("[CircuitBreaker] doReport failed: stat is nil")
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: stat is nil")
 		return nil
 	}
 	// 第二层：检查 stat.Resource 接口是否为 nil
 	if stat.Resource == nil {
-		c.log.Errorf("[CircuitBreaker] doReport failed: stat.Resource is nil, stat=%+v", stat)
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: stat.Resource is nil, stat=%+v", stat)
 		return nil
 	}
 	resource := stat.Resource
 	// 第三层：使用反射检查接口底层值是否为 nil（避免 Go 接口陷阱）
 	rv := reflect.ValueOf(resource)
 	if !rv.IsValid() {
-		c.log.Errorf("[CircuitBreaker] doReport failed: resource reflect value is invalid, resource type=%T", resource)
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: resource reflect value is invalid, "+
+			"resource type=%T", resource)
 		return nil
 	}
 	if rv.IsNil() {
-		c.log.Errorf("[CircuitBreaker] doReport failed: resource underlying value is nil (Go interface trap), "+
-			"resource type=%T", resource)
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: resource underlying value is nil (Go "+
+			"interface trap), resource type=%T", resource)
 		return nil
 	}
 	// 第四层：检查 Service 是否为 nil
 	service := resource.GetService()
 	if service == nil {
-		c.log.Errorf("[CircuitBreaker] doReport failed: resource.GetService() returns nil, resource=%s, level=%v",
-			resource.String(), resource.GetLevel())
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: resource.GetService() returns nil, "+
+			"resource=%s, level=%v", resource.String(), resource.GetLevel())
 		return nil
 	}
 	// 第五层：检查 Level 是否有效
 	level := resource.GetLevel()
 	if level == fault_tolerance.Level_UNKNOWN {
-		c.log.Errorf("[CircuitBreaker] doReport failed: resource level is UNKNOWN, resource=%s, service=%s",
-			resource.String(), service.String())
+		c.logCtx.GetBaseLogger().Errorf("[CircuitBreaker] doReport failed: resource level is UNKNOWN, resource=%s, "+
+			"service=%s", resource.String(), service.String())
 		return nil
 	}
 
@@ -280,7 +282,8 @@ func (c *CompositeCircuitBreaker) Name() string {
 
 func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 	if c.isDestroyed() || c.start == 0 {
-		c.log.Debugf("[CircuitBreaker] OnEvent ignored, destroyed: %v, started: %v", c.isDestroyed(), c.start)
+		c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] OnEvent ignored, destroyed: %v, started: %v", c.isDestroyed(),
+			c.start)
 		return nil
 	}
 
@@ -289,37 +292,39 @@ func (c *CompositeCircuitBreaker) OnEvent(event *common.PluginEvent) error {
 		ok          bool
 	)
 	if eventObject, ok = event.EventObject.(*common.ServiceEventObject); !ok {
-		c.log.Debugf("[CircuitBreaker] OnEvent ignored, event object is not ServiceEventObject")
+		c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] OnEvent ignored, event object is not ServiceEventObject")
 		return nil
 	}
-	if eventObject.SvcEventKey.Type != model.EventCircuitBreaker && eventObject.SvcEventKey.Type != model.EventFaultDetect {
-		c.log.Debugf("[CircuitBreaker] OnEvent ignored, event type: %v", eventObject.SvcEventKey.Type)
+	if eventObject.SvcEventKey.Type != model.EventCircuitBreaker && eventObject.SvcEventKey.Type !=
+		model.EventFaultDetect {
+		c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] OnEvent ignored, event type: %v",
+			eventObject.SvcEventKey.Type)
 		return nil
 	}
-	c.log.Infof("[CircuitBreaker] OnEvent processing, namespace: %s, service: %s, eventType: %v",
+	c.logCtx.GetBaseLogger().Infof("[CircuitBreaker] OnEvent processing, namespace: %s, service: %s, eventType: %v",
 		eventObject.SvcEventKey.Namespace, eventObject.SvcEventKey.Service, eventObject.SvcEventKey.Type)
 	c.doSchedule(eventObject.SvcEventKey)
 	return nil
 }
 
 func (c *CompositeCircuitBreaker) doSchedule(expectKey model.ServiceEventKey) {
-	c.log.Debugf("[CircuitBreaker] doSchedule started, namespace: %s, service: %s, eventType: %v",
+	c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] doSchedule started, namespace: %s, service: %s, eventType: %v",
 		expectKey.Namespace, expectKey.Service, expectKey.Type)
 	c.containers.Range(func(key, value interface{}) bool {
 		ruleC := value.(*RuleContainer)
 		resource := ruleC.res
 		actualKey := resource.GetService()
 		if actualKey.Namespace == expectKey.Namespace && actualKey.Service == expectKey.Service {
-			c.log.Debugf("[CircuitBreaker] doSchedule matched resource: %s, eventType: %v",
+			c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] doSchedule matched resource: %s, eventType: %v",
 				resource.String(), expectKey.Type)
 			switch expectKey.Type {
 			case model.EventCircuitBreaker:
-				c.log.Debugf("[CircuitBreaker] doSchedule triggering scheduleCircuitBreaker for resource: %s",
-					resource.String())
+				c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] doSchedule triggering scheduleCircuitBreaker for "+
+					"resource: %s", resource.String())
 				ruleC.scheduleCircuitBreaker()
 			case model.EventFaultDetect:
-				c.log.Debugf("[CircuitBreaker] doSchedule triggering scheduleHealthCheck for resource: %s",
-					resource.String())
+				c.logCtx.GetBaseLogger().Debugf("[CircuitBreaker] doSchedule triggering scheduleHealthCheck for "+
+					"resource: %s", resource.String())
 				ruleC.scheduleHealthCheck()
 			}
 		}

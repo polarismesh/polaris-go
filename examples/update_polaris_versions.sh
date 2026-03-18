@@ -6,7 +6,7 @@
 set -e
 
 # 配置参数
-POLARIS_GO_VERSION="${1:-v1.6.1}"
+POLARIS_GO_VERSION="${1:-v1.7.0}"
 GO_VERSION="${2:-1.24}"
 
 echo "开始统一polaris-go版本为: $POLARIS_GO_VERSION"

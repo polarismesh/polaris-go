@@ -28,9 +28,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// NewRoutingRuleInProto 兼容接口, trpc-go依赖项
+// NewRoutingRuleInProto 兼容接口, trpc-go依赖项。
+// Deprecated: 请使用 NewServiceRuleInProto(resp, logger) 替代，以支持上下文日志。
 func NewRoutingRuleInProto(resp *apiservice.DiscoverResponse) model.ServiceRule {
-	return NewServiceRuleInProto(resp)
+	return NewServiceRuleInProto(resp, log.GetBaseLogger())
 }
 
 // RoutingAssistant 路由规则解析助手
@@ -38,7 +39,7 @@ type RoutingAssistant struct {
 }
 
 // ParseRuleValue 解析出具体的规则值
-func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string) {
+func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string) {
 	var revision string
 	serviceKey := ""
 	if resp.Service != nil {
@@ -51,13 +52,13 @@ func (r *RoutingAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse) (pr
 		inboundCount := len(routingValue.GetInbounds())
 		outboundCount := len(routingValue.GetOutbounds())
 
-		log.GetBaseLogger().Debugf("RoutingAssistant.ParseRuleValue: service=%s, routing rule found, revision=%s, inbounds=%d, outbounds=%d",
+		baseLogger.Debugf("RoutingAssistant.ParseRuleValue: service=%s, routing rule found, revision=%s, inbounds=%d, outbounds=%d",
 			serviceKey, revision, inboundCount, outboundCount)
 
 		return routingValue, revision
 	}
 
-	log.GetBaseLogger().Debugf("RoutingAssistant.ParseRuleValue: service=%s, no routing rule found", serviceKey)
+	baseLogger.Debugf("RoutingAssistant.ParseRuleValue: service=%s, no routing rule found", serviceKey)
 	return routingValue, revision
 }
 

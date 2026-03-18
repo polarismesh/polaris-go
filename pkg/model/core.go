@@ -19,6 +19,8 @@ package model
 
 import (
 	"fmt"
+	"time"
+
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 )
 
@@ -164,4 +166,11 @@ type InstanceKey struct {
 // String ToString方法
 func (i InstanceKey) String() string {
 	return fmt.Sprintf("{service: %s, host: %s, port: %v}", i.ServiceKey, i.Host, i.Port)
+}
+
+// ControlParam 单次查询的控制参数
+type ControlParam struct {
+	Timeout       time.Duration
+	MaxRetry      int
+	RetryInterval time.Duration
 }

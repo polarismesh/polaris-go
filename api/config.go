@@ -39,6 +39,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/register"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/pkg/version"
 )
 
@@ -77,11 +78,11 @@ type SDKContext interface {
 
 	// GetEngine
 	// @brief 获取执行引擎
-	GetEngine() model.Engine
+	GetEngine() sdk.Engine
 
 	// GetValueContext
 	// @brief 获取值上下文
-	GetValueContext() model.ValueContext
+	GetValueContext() sdk.ValueContext
 }
 
 // SDKOwner 获取SDK上下文接口
@@ -111,8 +112,8 @@ func checkAvailable(owner SDKOwner) error {
 type sdkContext struct {
 	config       config.Configuration
 	plugins      plugin.Manager
-	engine       model.Engine
-	valueContext model.ValueContext
+	engine       sdk.Engine
+	valueContext sdk.ValueContext
 	// 标识是否已经销毁，0未销毁，1已销毁
 	destroyed uint32
 }
@@ -123,11 +124,11 @@ func (s *sdkContext) Destroy() {
 	atomic.StoreUint32(&s.destroyed, 1)
 	err = s.engine.Destroy()
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
+		s.valueContext.GetContextLogger().GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
 	}
 	err = s.plugins.DestroyPlugins()
 	if err != nil {
-		log.GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
+		s.valueContext.GetContextLogger().GetBaseLogger().Errorf("fail to destroy plugins, error %+v", err)
 	}
 }
 
@@ -147,12 +148,12 @@ func (s *sdkContext) GetPlugins() plugin.Manager {
 }
 
 // GetEngine 获取执行引擎
-func (s *sdkContext) GetEngine() model.Engine {
+func (s *sdkContext) GetEngine() sdk.Engine {
 	return s.engine
 }
 
 // GetValueContext 获取值上下文
-func (s *sdkContext) GetValueContext() model.ValueContext {
+func (s *sdkContext) GetValueContext() sdk.ValueContext {
 	return s.valueContext
 }
 
@@ -243,25 +244,27 @@ func getHostName() string {
 // InitContextByConfig InitContextByStream 通过配置对象新建上下文
 func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	startTime := time.Now()
-	globalCtx := model.NewValueContext()
-	globalCtx.SetValue(model.ContextKeyTakeEffectTime, startTime)
+	globalCtx := sdk.NewValueContext()
+	// 初始化logCtx的labels
+	globalCtx.GetContextLogger().AddFields(cfg.GetGlobal().GetClient().GetLabels())
+	globalCtx.SetValue(sdk.ContextKeyTakeEffectTime, startTime)
 	if logErr := checkLoggersDir(); nil != logErr {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, logErr, "logger init error")
 	}
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	logCtx := globalCtx.GetContextLogger()
+	if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		text, err := yaml.Marshal(cfg)
 		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to marshal input config")
 		}
-		log.GetBaseLogger().Debugf("Input config:\n%s", string(text))
+		logCtx.GetBaseLogger().Debugf("Input config:\n%s", string(text))
 	}
-
 	cfg.SetDefault()
 	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
 	initSelfIP(cfg)
-	token := &model.SDKToken{
+	token := &sdk.SDKToken{
 		IP:       cfg.GetGlobal().GetAPI().GetBindIP(),
 		PID:      int32(os.Getpid()),
 		Client:   version.ClientType,
@@ -271,12 +274,13 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	}
 	token.InitUID()
 	initSelfLabels(cfg, token)
-	log.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, CONTAINER: "+"%s, HOSTNAME:%s-------",
-		version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
+	logCtx.GetBaseLogger().Infof("\n-------Start to init SDKContext of version %s, IP: %s, PID: %d, UID: %s, "+
+		"CONTAINER: "+"%s, "+
+		"HOSTNAME:%s-------", version.Version, token.IP, token.PID, token.UID, token.PodName, token.HostName)
 
-	globalCtx.SetValue(model.ContextKeyToken, *token)
+	globalCtx.SetValue(sdk.ContextKeyToken, *token)
 	plugManager := plugin.NewPluginManager()
-	globalCtx.SetValue(model.ContextKeyPlugins, plugManager)
+	globalCtx.SetValue(sdk.ContextKeyPlugins, plugManager)
 	connManager, err := network.NewConnectionManager(cfg, globalCtx)
 	if err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to create connectionManager")
@@ -298,11 +302,11 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		finalErrs = multierror.Append(finalErrs, model.NewSDKError(model.ErrCodeAPIInvalidConfig, terr,
 			"fail to marshal input config"))
 	}
-	log.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
+	logCtx.GetBaseLogger().Infof("\n%s, -------Configuration with default value-------\n%s", token.UID, string(text))
 	if finalErrs != nil {
 		return nil, finalErrs
 	}
-	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
+	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
 	// 启动所有插件
 	if err = plugManager.StartPlugins(); err != nil {
 		return nil, err
@@ -310,14 +314,14 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if err = engine.Start(); err != nil {
 		return nil, err
 	}
-	log.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
+	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
 	ctx := &sdkContext{config: cfg, plugins: plugManager, engine: engine, valueContext: globalCtx}
 	if err = onContextInitialized(ctx); err != nil {
 		ctx.Destroy()
 		return nil, err
 	}
-	globalCtx.SetValue(model.ContextKeyFinishInitTime, time.Now())
-	log.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
+	globalCtx.SetValue(sdk.ContextKeyFinishInitTime, time.Now())
+	logCtx.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
 }
 
@@ -347,7 +351,7 @@ func initSelfIP(cfg config.Configuration) {
 	}
 }
 
-func initSelfLabels(cfg config.Configuration, sdkToken *model.SDKToken) {
+func initSelfLabels(cfg config.Configuration, sdkToken *sdk.SDKToken) {
 	clientCfg := cfg.GetGlobal().GetClient().(*config.ClientConfigImpl)
 	if clientCfg.GetId() == "" {
 		clientCfg.SetId(sdkToken.UID)

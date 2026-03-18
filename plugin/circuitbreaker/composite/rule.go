@@ -29,6 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -45,7 +46,7 @@ type RuleContainer struct {
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow
-	engineFlow model.Engine
+	engineFlow sdk.Engine
 	// log
 	log log.Logger
 	//
@@ -60,7 +61,7 @@ func newRuleContainer(ctx context.Context, res model.Resource, breaker *Composit
 			return breaker.loadOrStoreCompiledRegex(s)
 		},
 		engineFlow: breaker.engineFlow,
-		log:        breaker.log,
+		log:        breaker.logCtx.GetStatLogger(),
 		executor:   breaker.executor,
 	}
 	c.scheduleCircuitBreaker()
@@ -173,7 +174,7 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 }
 
 func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse,
-	regexFunc func(string) *regexp.Regexp) *fault_tolerance.CircuitBreakerRule {
+	regexFunc func(string) *regexp.Regexp, baseLogger log.Logger) *fault_tolerance.CircuitBreakerRule {
 	if object == nil || object.Value == nil {
 		return nil
 	}
@@ -189,33 +190,33 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 	for i := range sortedRules {
 		cbRule := sortedRules[i]
 		if !cbRule.Enable {
-			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
+			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
 			continue
 		}
 		if cbRule.Level != res.GetLevel() {
-			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
+			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
 				"level: %v, resource: %s)", cbRule.Name, cbRule.Level, res.GetLevel(), res.String())
 			continue
 		}
 		ruleMatcher := cbRule.RuleMatcher
 		destination := ruleMatcher.Destination
 		if !match.MatchService(res.GetService(), destination.Namespace, destination.Service) {
-			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
+			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
 				"resource: %s)",
 				cbRule.Name, destination.Namespace, destination.Service, res.GetService().String())
 			continue
 		}
 		source := ruleMatcher.Source
 		if !match.MatchService(res.GetCallerService(), source.Namespace, source.Service) {
-			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
+			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
 				"resource caller: %s)", cbRule.Name, source.Namespace, source.Service, res.GetCallerService().String())
 			continue
 		}
 		if ok := matchMethod(res, destination.GetMethod(), regexFunc); !ok {
-			log.GetBaseLogger().Debugf("[CircuitBreaker] rule %s skipped: method mismatch", cbRule.Name)
+			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: method mismatch", cbRule.Name)
 			continue
 		}
-		log.GetBaseLogger().Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
+		baseLogger.Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
 		return cbRule
 	}
 	return nil

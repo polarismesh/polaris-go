@@ -27,13 +27,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // CanaryRouterFilter 金丝雀过滤器
 type CanaryRouterFilter struct {
 	*plugin.PluginBase
 	percentOfMinInstances float64
-	valueCtx              model.ValueContext
+	valueCtx              sdk.ValueContext
 	recoverAll            bool
 }
 

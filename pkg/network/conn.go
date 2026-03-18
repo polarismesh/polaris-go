@@ -64,6 +64,8 @@ type Connection struct {
 	lazyDestroy uint32
 	// to apply for the lock
 	mutex sync.Mutex
+	// 带有客户端标识的日志
+	logNetwork log.Logger
 }
 
 // IsAvailableConnection whether the connection is available
@@ -85,7 +87,7 @@ func (c *Connection) acquire(opKey string) bool {
 		return false
 	}
 	curRef := atomic.AddInt32(&c.ref, 1)
-	log.GetNetworkLogger().Tracef("connection %v: acquired, curRef is %d", c.ConnID, curRef)
+	c.logNetwork.Tracef("connection %v: acquired, curRef is %d", c.ConnID, curRef)
 	return true
 }
 
@@ -97,7 +99,7 @@ func (c *Connection) closeConnection(force bool) bool {
 	if (force || curRef <= 0) && !c.closed {
 		c.closed = true
 		_ = c.Conn.Close()
-		log.GetNetworkLogger().Infof("connection %v: close, curRef is %d", c.ConnID, curRef)
+		c.logNetwork.Infof("connection %v: close, curRef is %d", c.ConnID, curRef)
 	}
 	return c.closed
 }
@@ -111,7 +113,7 @@ func (c *Connection) ForceClose() bool {
 func (c *Connection) lazyClose(force bool) {
 	atomic.StoreUint32(&c.lazyDestroy, 1)
 	curRef := atomic.LoadInt32(&c.ref)
-	log.GetNetworkLogger().Tracef("connection %v: lazyClose, curRef is %d", c.ConnID, curRef)
+	c.logNetwork.Tracef("connection %v: lazyClose, curRef is %d", c.ConnID, curRef)
 	if force || curRef <= 0 {
 		// Set the status to disallow the connection to be allocated
 		c.closeConnection(force)
@@ -122,7 +124,7 @@ func (c *Connection) lazyClose(force bool) {
 // Release the connection release
 func (c *Connection) Release(opKey string) {
 	nextValue := atomic.AddInt32(&c.ref, -1)
-	log.GetNetworkLogger().Tracef(
+	c.logNetwork.Tracef(
 		"connection %s: pending to release for op %s, curRef is %d", c.ConnID, opKey, nextValue)
 	var closed bool
 	if nextValue <= 0 && atomic.LoadUint32(&c.lazyDestroy) == 1 {

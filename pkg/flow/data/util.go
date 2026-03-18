@@ -202,7 +202,7 @@ type SingleInvoke func(request interface{}) (interface{}, error)
 
 // RetrySyncCall 通用的带重试的同步调用逻辑
 func RetrySyncCall(name string, svcKey *model.ServiceKey,
-	request interface{}, call SingleInvoke, param *model.ControlParam) (interface{}, model.SDKError) {
+	request interface{}, call SingleInvoke, param *model.ControlParam, logCtx *log.ContextLogger) (interface{}, model.SDKError) {
 	retryTimes := -1
 	var resp interface{}
 	var err error
@@ -223,7 +223,7 @@ func RetrySyncCall(name string, svcKey *model.ServiceKey,
 			break
 		}
 		time.Sleep(retryInterval)
-		log.GetBaseLogger().Warnf("retry %s for timeout, consume time %v,"+
+		logCtx.GetBaseLogger().Warnf("retry %s for timeout, consume time %v,"+
 			" Namespace: %s, Service: %s, retry times: %d",
 			name, consumeTime, svcKey.Namespace, svcKey.Service, retryTimes)
 	}

@@ -31,7 +31,7 @@ import (
 // ServiceRuleAssistant 助手接口.
 type ServiceRuleAssistant interface {
 	// ParseRuleValue 解析出具体的规则值
-	ParseRuleValue(resp *apiservice.DiscoverResponse) (proto.Message, string)
+	ParseRuleValue(resp *apiservice.DiscoverResponse, baseLogger log.Logger) (proto.Message, string)
 	// SetDefault 设置默认值
 	SetDefault(message proto.Message)
 	// Validate 规则校验
@@ -66,8 +66,8 @@ type ServiceRuleInProto struct {
 }
 
 // NewServiceRuleInProto 创建路由规则配置对象.
-func NewServiceRuleInProto(resp *apiservice.DiscoverResponse) *ServiceRuleInProto {
-	value := NewServiceRuleInProtoWithInitializeStatus(resp, true)
+func NewServiceRuleInProto(resp *apiservice.DiscoverResponse, baseLogger log.Logger) *ServiceRuleInProto {
+	value := NewServiceRuleInProtoWithInitializeStatus(resp, true, baseLogger)
 	if nil == resp {
 		value.initialized = false
 	}
@@ -75,7 +75,8 @@ func NewServiceRuleInProto(resp *apiservice.DiscoverResponse) *ServiceRuleInProt
 }
 
 // NewServiceRuleInProtoWithInitializeStatus 创建路由规则配置对象.
-func NewServiceRuleInProtoWithInitializeStatus(resp *apiservice.DiscoverResponse, initialized bool) *ServiceRuleInProto {
+func NewServiceRuleInProtoWithInitializeStatus(resp *apiservice.DiscoverResponse, initialized bool,
+	baseLogger log.Logger) *ServiceRuleInProto {
 	value := &ServiceRuleInProto{}
 	if nil == resp {
 		value.initialized = initialized
@@ -91,12 +92,12 @@ func NewServiceRuleInProtoWithInitializeStatus(resp *apiservice.DiscoverResponse
 	}
 	value.eventType = GetEventType(resp.GetType())
 	value.assistant = eventTypeToAssistant[value.eventType]
-	value.ruleValue, value.revision = value.assistant.ParseRuleValue(resp)
+	value.ruleValue, value.revision = value.assistant.ParseRuleValue(resp, baseLogger)
 	if len(value.revision) > 0 {
 		var err error
 		value.hashValue, err = model.GetCrc64Hash(value.revision)
 		if err != nil {
-			log.GetBaseLogger().Errorf("fail to calc crc64 hash for rule %s, type %v: %v",
+			baseLogger.Errorf("fail to calc crc64 hash for rule %s, type %v: %v",
 				value.ServiceKey, value.eventType, err)
 		}
 	}

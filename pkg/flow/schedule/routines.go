@@ -39,12 +39,14 @@ type TaskRoutine interface {
 }
 
 // NewTaskRoutine 创建任务调度协程
-func NewTaskRoutine(periodicTask *model.PeriodicTask) TaskRoutine {
+func NewTaskRoutine(periodicTask *model.PeriodicTask, logCtx *log.ContextLogger) TaskRoutine {
 	return &taskRoutine{
 		periodicTask:        periodicTask,
 		mutableTaskValues:   make(map[interface{}]*TaskItem),
 		immutableTaskValues: &atomic.Value{},
-		mutex:               &sync.Mutex{}}
+		mutex:               &sync.Mutex{},
+		logCtx:              logCtx,
+	}
 }
 
 // taskRoutine 任务调度协程
@@ -59,6 +61,7 @@ type taskRoutine struct {
 	mutableTaskValues   map[interface{}]*TaskItem
 	immutableTaskValues *atomic.Value
 	mutex               *sync.Mutex
+	logCtx              *log.ContextLogger
 }
 
 // Schedule 进行任务调度
@@ -82,7 +85,7 @@ func GetDefaultInterval(interval time.Duration) time.Duration {
 func (t *taskRoutine) Destroy() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	log.GetBaseLogger().Infof("task %s has been destroy", t.periodicTask.Name)
+	t.logCtx.GetBaseLogger().Infof("task %s has been destroy", t.periodicTask.Name)
 	t.destroyed = true
 	t.stop()
 }
@@ -102,10 +105,10 @@ func (t *taskRoutine) start() {
 	t.periodicTask.CallBack.OnTaskEvent(model.EventStart)
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	if t.periodicTask.TakePriority {
-		log.GetBaseLogger().Infof("task %s started priority", t.periodicTask.Name)
+		t.logCtx.GetBaseLogger().Infof("task %s started priority", t.periodicTask.Name)
 		go t.runTakePriority()
 	} else {
-		log.GetBaseLogger().Infof("task %s started period %v", t.periodicTask.Name, t.periodicTask.Period)
+		t.logCtx.GetBaseLogger().Infof("task %s started period %v", t.periodicTask.Name, t.periodicTask.Period)
 		go t.runPeriod()
 	}
 }
@@ -132,10 +135,10 @@ func (t *taskRoutine) runTakePriority() {
 	for {
 		select {
 		case <-t.ctx.Done():
-			log.GetBaseLogger().Infof("task %s has done", t.periodicTask.Name)
+			t.logCtx.GetBaseLogger().Infof("task %s has done", t.periodicTask.Name)
 			return
 		case task := <-t.priorityChan:
-			log.GetBaseLogger().Debugf("start to process priority task %s", task.Name)
+			t.logCtx.GetBaseLogger().Debugf("start to process priority task %s", task.Name)
 			task.CallBack.Process()
 		case <-ticker.C:
 			t.iteratePeriodTaskItems(true)
@@ -150,7 +153,7 @@ func (t *taskRoutine) processPeriodicTask(key interface{}, item *TaskItem) {
 	case model.CONTINUE:
 		item.lastProcessTime = clock.GetClock().Now()
 	case model.TERMINATE:
-		log.GetBaseLogger().Infof("item %s in task %s has terminated", key, t.periodicTask.Name)
+		t.logCtx.GetBaseLogger().Infof("item %s in task %s has terminated", key, t.periodicTask.Name)
 		item.lastProcessTime = clock.GetClock().Now()
 		t.DeleteValue(key, item.value)
 	}
@@ -178,7 +181,7 @@ func (t *taskRoutine) runPeriod() {
 	for {
 		select {
 		case <-t.ctx.Done():
-			log.GetBaseLogger().Infof("task %s has done", t.periodicTask.Name)
+			t.logCtx.GetBaseLogger().Infof("task %s has done", t.periodicTask.Name)
 			return
 		case <-ticker.C:
 			t.iteratePeriodTaskItems(false)
@@ -211,7 +214,7 @@ func (t *taskRoutine) AddValue(key interface{}, value model.TaskValue) {
 		taskItem.lastProcessTime = clock.GetClock().Now()
 	}
 	t.mutableTaskValues[key] = taskItem
-	log.GetBaseLogger().Infof("item %s in task %s has added", key, t.periodicTask.Name)
+	t.logCtx.GetBaseLogger().Infof("item %s in task %s has added", key, t.periodicTask.Name)
 	if valueChanged {
 		t.rebuildImmutableValues()
 	}
@@ -243,7 +246,7 @@ func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 		// 二次校验不通过，不予删除
 		return
 	}
-	log.GetBaseLogger().Infof("item %s in task %s has deleted", key, t.periodicTask.Name)
+	t.logCtx.GetBaseLogger().Infof("item %s in task %s has deleted", key, t.periodicTask.Name)
 	delete(t.mutableTaskValues, key)
 	t.rebuildImmutableValues()
 	if t.periodicTask.LongRun || t.periodicTask.TakePriority {
@@ -255,9 +258,9 @@ func (t *taskRoutine) DeleteValue(key interface{}, value model.TaskValue) {
 }
 
 // StartTask 通过值来启动任务
-func StartTask(taskName string, taskValues model.TaskValues, values map[interface{}]model.TaskValue) {
+func StartTask(taskName string, taskValues model.TaskValues, values map[interface{}]model.TaskValue, logCtx *log.ContextLogger) {
 	for k, v := range values {
 		taskValues.AddValue(k, v)
 	}
-	log.GetBaseLogger().Infof("task %s has been started", taskName)
+	logCtx.GetBaseLogger().Infof("task %s has been started", taskName)
 }

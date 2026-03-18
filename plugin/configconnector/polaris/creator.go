@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/network"
 )
@@ -40,9 +39,9 @@ func (c *Connector) CreateConnection(
 	opts = append(opts, grpc.WithBlock())
 	localIPValue := clientInfo.GetIPString()
 	if len(localIPValue) == 0 {
-		opts = append(opts, grpc.WithStatsHandler(&statHandler{clientInfo: clientInfo}))
+		opts = append(opts, grpc.WithStatsHandler(&statHandler{clientInfo: clientInfo, connector: c}))
 	}
-	log.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", c.cfg.MaxCallRecvMsgSize)
+	c.logCtx.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", c.cfg.MaxCallRecvMsgSize)
 	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(c.cfg.MaxCallRecvMsgSize)))
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -57,6 +56,8 @@ func (c *Connector) CreateConnection(
 type statHandler struct {
 	// 全局上下文
 	clientInfo *network.ClientInfo
+	// 所属Connector
+	connector *Connector
 }
 
 // TagRPC can attach some information to the given context.
@@ -81,7 +82,7 @@ func (s *statHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) cont
 	localAddr := info.LocalAddr.String()
 	localIP := strings.Split(localAddr, ":")[0]
 	hashValue, _ := model.HashStr(localIP)
-	log.GetBaseLogger().Infof(
+	s.connector.logCtx.GetBaseLogger().Infof(
 		"localAddress from connection is %s, IP is %s, hashValue is %d", localAddr, localIP, hashValue)
 	s.clientInfo.IP.Store(localIP)
 	s.clientInfo.HashKey.Store([]byte(localAddr))

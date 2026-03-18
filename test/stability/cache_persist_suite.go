@@ -36,6 +36,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	plog "github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/local"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
@@ -283,7 +284,7 @@ func (t *CacheTestingSuite) checkPersist(origInsts []model.Instance, c *check.C)
 	backupJson.Close()
 	svcInsts := pb.NewServiceInstancesInProto(svcResp, func(string) local.InstanceLocalValue {
 		return local.NewInstanceLocalValue()
-	}, nil, nil)
+	}, nil, nil, plog.GetBaseLogger())
 	svcInsts.CacheLoaded = 1
 	insts := svcInsts.GetInstances()
 	util.SameInstances(origInsts, insts)

@@ -24,6 +24,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // 存放路由结果对象的全局池
@@ -35,7 +36,7 @@ func GetRouteResultPool() *sync.Pool {
 }
 
 // GetFilterInstances 根据服务路由链，过滤服务节点，返回对应的服务列表
-func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func GetFilterInstances(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	serviceInstances model.ServiceInstances) ([]model.Instance, *model.Cluster, *model.ServiceInfo, error) {
 	if len(routers) == 0 {
 		return serviceInstances.GetInstances(), nil, nil, nil
@@ -56,15 +57,16 @@ func GetFilterInstances(ctx model.ValueContext, routers []ServiceRouter, routeIn
 }
 
 // processServiceRouters 执行路由链
-func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
-	if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+	logCtx := ctx.GetContextLogger()
+	if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 		sourceStr := model.ToStringService(routeInfo.SourceService, true)
 		destStr := model.ToStringService(routeInfo.DestService, true)
 		instancesCount := cluster.GetClusterValue().GetInstancesSet(false, false).Count()
-		log.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%v",
+		logCtx.GetBaseLogger().Debugf("processServiceRouters: start, source=%s, dest=%s, routers=%d, instances=%v",
 			sourceStr, destStr, len(routers), instancesCount)
 	}
 
@@ -74,8 +76,8 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 		isEnabled := router.Enable(routeInfo, svcClusters)
 
 		if !isRouterEnabled || !isEnabled {
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				log.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
+			if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				logCtx.GetBaseLogger().Debugf("processServiceRouters: router=%v skipped (routerEnabled=%v, enabled=%v)",
 					routerName, isRouterEnabled, isEnabled)
 			}
 			continue
@@ -91,21 +93,21 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil || result == nil {
-			log.GetBaseLogger().Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
+			logCtx.GetBaseLogger().Errorf("processServiceRouters: router=%v failed, error=%v", routerName, err)
 			return nil, err.(model.SDKError)
 		}
 		if nil != result.RedirectDestService {
 			// 转发规则
-			if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+			if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 				redirectStr := model.ToStringService(result.RedirectDestService, true)
-				log.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s", routerName, redirectStr)
+				logCtx.GetBaseLogger().Debugf("processServiceRouters: router=%v redirect to %s", routerName, redirectStr)
 			}
 			return result, nil
 		}
 		cluster = result.OutputCluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
-			log.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,
+			logCtx.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,
 				instances, result.Status.String())
 		}
 	}
@@ -120,20 +122,20 @@ func processServiceRouters(ctx model.ValueContext, routers []ServiceRouter, rout
 			cluster.PoolPut()
 		}
 		if err != nil || result == nil {
-			log.GetBaseLogger().Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
+			logCtx.GetBaseLogger().Errorf("processServiceRouters: FilterOnlyRouter failed, error=%v", err)
 			return nil, err.(model.SDKError)
 		}
 		cluster = result.OutputCluster
-		if log.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
-			log.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%s", instances)
+			logCtx.GetBaseLogger().Debugf("processServiceRouters: FilterOnlyRouter done, instances=%s", instances)
 		}
 	}
 	return result, nil
 }
 
 // GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
-func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
 	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
@@ -141,7 +143,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 	var result *RouteResult
 	var err model.SDKError
 	routerCount := len(routers)
-	pluginsIf, _ := ctx.GetValue(model.ContextKeyPlugins)
+	pluginsIf, _ := ctx.GetValue(sdk.ContextKeyPlugins)
 	plugins := pluginsIf.(plugin.Supplier)
 	cluster := model.NewCluster(svcClusters, nil)
 	if routerCount > 0 {
@@ -182,7 +184,7 @@ func GetFilterCluster(ctx model.ValueContext, routers []ServiceRouter, routeInfo
 }
 
 // PoolGetRouteResult 通过池子获取路由结果
-func PoolGetRouteResult(ctx model.ValueContext) *RouteResult {
+func PoolGetRouteResult(ctx sdk.ValueContext) *RouteResult {
 	value := GetRouteResultPool().Get()
 	if nil == value {
 		return &RouteResult{}

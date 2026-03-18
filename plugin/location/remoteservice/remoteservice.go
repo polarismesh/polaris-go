@@ -32,8 +32,8 @@ const (
 	locationProviderName string = "remoteService"
 )
 
-func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
-	impl := &LocationProviderImpl{}
+func New(ctx *plugin.InitContext, logCtx *log.ContextLogger) (*LocationProviderImpl, error) {
+	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }
 
@@ -41,11 +41,13 @@ func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
 type LocationProviderImpl struct {
 	address  string
 	clientIp string
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Init 初始化插件
 func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
-	log.GetBaseLogger().Infof("start remoteService location provider")
+	p.logCtx.GetBaseLogger().Infof("start remoteService location provider")
 
 	p.clientIp = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderName)
@@ -62,7 +64,7 @@ func (p *LocationProviderImpl) Name() string {
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	coon, err := grpc.Dial(p.address)
 	if err != nil {
-		log.GetBaseLogger().Errorf("grpc connect error %+v", err)
+		p.logCtx.GetBaseLogger().Errorf("grpc connect error %+v", err)
 		return nil, err
 	}
 	c := proto.NewLocationClient(coon)
@@ -70,7 +72,7 @@ func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	req := &proto.LocationRequest{ClientIp: p.clientIp}
 	rsp, err := c.GetLocation(context.Background(), req)
 	if err != nil {
-		log.GetBaseLogger().Errorf("Get Location Error %+v", err)
+		p.logCtx.GetBaseLogger().Errorf("Get Location Error %+v", err)
 		return nil, err
 	}
 

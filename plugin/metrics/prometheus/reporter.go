@@ -37,6 +37,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	statcommon "github.com/polarismesh/polaris-go/plugin/metrics/common"
 )
 
@@ -70,7 +71,7 @@ type PrometheusReporter struct {
 	// 本插件的配置
 	cfg *Config
 	// 全局上下文
-	globalCtx model.ValueContext
+	globalCtx sdk.ValueContext
 	// sdk加载的插件
 	sdkPlugins string
 	// 插件工厂
@@ -93,6 +94,8 @@ type PrometheusReporter struct {
 	circuitBreakerCollector *statcommon.StatInfoStatefulCollector
 
 	cancel context.CancelFunc
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型.
@@ -112,6 +115,7 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	s.globalCtx = ctx.ValueCtx
 	s.plugins = ctx.Plugins
 	s.PluginBase = plugin.NewPluginBase(ctx)
+	s.logCtx = ctx.ValueCtx.GetContextLogger()
 	s.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	s.bindIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
@@ -289,14 +293,15 @@ func (pa *PullAction) Close() {
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
+	lastRevisionLogTime := time.Time{}
 
 	action := func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.GetBaseLogger().Errorf("[metrics][pull] stat metrics prometheus panic", zap.Any("error", err))
+				pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] stat metrics prometheus panic", zap.Any("error", err))
 			}
 		}()
-		log.GetBaseLogger().Infof("[metrics][pull] start aggregation stat metrics prometheus")
+		pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][pull] start aggregation stat metrics prometheus")
 
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 			pa.reporter.insCollector.GetCurrentRevision())
@@ -304,8 +309,13 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 		statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.rateLimitCollector,
 			pa.reporter.rateLimitCollector.GetCurrentRevision())
 
-		log.GetBaseLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
-		log.GetBaseLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
+		insRevision := pa.reporter.insCollector.IncRevision()
+		rateLimitRevision := pa.reporter.rateLimitCollector.IncRevision()
+		if time.Since(lastRevisionLogTime) >= 30*time.Minute {
+			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] revision collector inc current revision to %d", insRevision)
+			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] collector inc current revision to %d", rateLimitRevision)
+			lastRevisionLogTime = time.Now()
+		}
 	}
 
 	for {
@@ -314,6 +324,7 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 			action()
 		case <-ctx.Done():
 			ticker.Stop()
+			return
 		}
 	}
 }
@@ -326,7 +337,7 @@ func (pa *PullAction) Run(ctx context.Context) {
 	go func() {
 		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err != nil {
-			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail: %v", err)
+			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] start metrics http-server fail: %v", err)
 			pa.bindPort.Store(-1)
 			return
 		}
@@ -336,9 +347,9 @@ func (pa *PullAction) Run(ctx context.Context) {
 			handler: promhttp.HandlerFor(pa.reporter.registry, promhttp.HandlerOpts{}),
 		}
 
-		log.GetBaseLogger().Infof("[metrics][push] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
+		pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] start metrics http-server address : %s", fmt.Sprintf("%s:%d", pa.bindIP, pa.bindPort.Load()))
 		if err := http.Serve(ln, &handler); err != nil {
-			log.GetBaseLogger().Errorf("[metrics][push] start metrics http-server fail : %s", err)
+			pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][pull] start metrics http-server fail : %s", err)
 			return
 		}
 	}()
@@ -386,15 +397,16 @@ func (pa *PushAction) Close() {
 func (pa *PushAction) Run(ctx context.Context) {
 	go func() {
 		pushTicker := time.NewTicker(pa.cfg.Interval)
+		lastRevisionLogTime := time.Time{}
 
 		action := func() {
 			defer func() {
 				if err := recover(); err != nil {
-					log.GetBaseLogger().Errorf("[metrics][push] stat metrics to pushgateway panic", zap.Any("error", err))
+					pa.reporter.logCtx.GetStatReportLogger().Errorf("[metrics][push] stat metrics to pushgateway panic", zap.Any("error", err))
 				}
 			}()
 
-			log.GetBaseLogger().Infof("[metrics][push] start push stat metrics to pushgateway")
+			pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] start push stat metrics to pushgateway")
 
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
 				pa.reporter.insCollector.GetCurrentRevision())
@@ -404,12 +416,17 @@ func (pa *PushAction) Run(ctx context.Context) {
 
 			if err := pa.pusher.
 				Push(); err != nil {
-				log.GetBaseLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
+				pa.reporter.logCtx.GetStatReportLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
 				return
 			}
 
-			log.GetBaseLogger().Debugf("[metrics][push] revision collector inc current revision to %d", pa.reporter.insCollector.IncRevision())
-			log.GetBaseLogger().Debugf("[metrics][push] collector inc current revision to %d", pa.reporter.rateLimitCollector.IncRevision())
+			insRevision := pa.reporter.insCollector.IncRevision()
+			rateLimitRevision := pa.reporter.rateLimitCollector.IncRevision()
+			if time.Since(lastRevisionLogTime) >= 30*time.Minute {
+				pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] revision collector inc current revision to %d", insRevision)
+				pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][push] collector inc current revision to %d", rateLimitRevision)
+				lastRevisionLogTime = time.Now()
+			}
 		}
 
 		for {

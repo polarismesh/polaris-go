@@ -29,6 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // syncInstancesReportAndFinalize 结果上报及归还请求实例请求对象
@@ -131,7 +132,7 @@ func (e *Engine) doLoadBalanceToOneInstance(
 }
 
 // SyncGetResources 同步加载资源
-func (e *Engine) SyncGetResources(req model.CacheValueQuery) error {
+func (e *Engine) SyncGetResources(req sdk.CacheValueQuery) error {
 	var err error
 	var retryTimes = -1
 	var combineContext *CombineNotifyContext
@@ -142,7 +143,7 @@ outLoop:
 	for retryTimes < param.MaxRetry {
 		startTime := e.globalCtx.Now()
 		// 尝试获取本地缓存的值
-		combineContext, err = getAndLoadCacheValues(e.registry, req, retryTimes < param.MaxRetry)
+		combineContext, err = getAndLoadCacheValues(e.registry, req, retryTimes < param.MaxRetry, e.logCtx)
 		if err != nil {
 			break outLoop
 		}
@@ -170,26 +171,26 @@ outLoop:
 			continue
 		}
 		// 没有发生远程错误，直接走下一轮获取本地缓存
-		log.GetBaseLogger().Debugf("requests for instances and rules finished,"+
+		e.logCtx.GetBaseLogger().Debugf("requests for instances and rules finished,"+
 			" serviceKey: %s, time consume is %v, retryTimes: %v", *dstService, consumedTime, retryTimes)
 		continue
 	}
 	// 超时过后，尝试使用从缓存中获取的信息
-	success, err2 := tryGetServiceValuesFromCache(e.registry, req)
+	success, err2 := tryGetServiceValuesFromCache(e.registry, req, e.logCtx)
 	if success {
-		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
+		e.logCtx.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache",
 			retryTimes, param.MaxRetry, *dstService)
 		return nil
 	}
 	if err2 != nil {
-		log.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache fail %v",
+		e.logCtx.GetBaseLogger().Warnf("retryTimes %d equals maxRetryTimes %d, get %s from cache fail %v",
 			retryTimes, param.MaxRetry, *dstService, err)
 	}
-	log.GetBaseLogger().Errorf("fail to get resource of %s for timeout, retryTimes: %d, total consumed time: %v,"+
+	e.logCtx.GetBaseLogger().Errorf("fail to get resource of %s for timeout, retryTimes: %d, total consumed time: %v,"+
 		" total sleep time: %v", *dstService, retryTimes, totalConsumedTime, totalSleepTime)
 	errMsg := fmt.Sprintf("retry times exceed %d in SyncGetResources, serviceKey: %s, timeout is %v",
 		retryTimes, *dstService, param.Timeout)
-	log.GetBaseLogger().Errorf(errMsg)
+	e.logCtx.GetBaseLogger().Errorf(errMsg)
 	return model.NewSDKError(model.ErrCodeAPITimeoutError, err, errMsg)
 }
 
@@ -251,7 +252,7 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 				continue
 			}
 		}
-		req.Criteria.Cluster = verifyCluster(req.DstInstances, cluster)
+		req.Criteria.Cluster = verifyCluster(req.DstInstances, cluster, e.logCtx)
 		return nil
 	}
 	return model.NewSDKError(model.ErrCodeInvalidRule, nil,
@@ -260,13 +261,13 @@ func (e *Engine) syncGetWrapInstances(req *data.CommonInstancesRequest) error {
 }
 
 // verifyCluster 缓存对账，确保cluster的根与当前查询出来的服务实例一致
-func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster) *model.Cluster {
+func verifyCluster(svcInstances model.ServiceInstances, cluster *model.Cluster, logCtx *log.ContextLogger) *model.Cluster {
 	clsServices := cluster.GetClusters().GetServiceInstances()
 	if clsServices.GetRevision() == svcInstances.GetRevision() {
 		return cluster
 	}
 	// 对账失败，需要重建cluster
-	log.GetBaseLogger().Warnf("cluster invalid, namespace: %s, service:%s cluster revision %s,   "+
+	logCtx.GetBaseLogger().Warnf("cluster invalid, namespace: %s, service:%s cluster revision %s,   "+
 		"namespace: %s, service:%s services revision %s, rebuild cluster",
 		clsServices.GetService(), clsServices.GetNamespace(), clsServices.GetRevision(),
 		svcInstances.GetNamespace(), svcInstances.GetService(), svcInstances.GetRevision())
@@ -371,7 +372,7 @@ func (e *Engine) doSyncRegister(instance *model.InstanceRegisterRequest, header 
 
 	resp, err := data.RetrySyncCall("register", &svcKey, instance, func(request interface{}) (interface{}, error) {
 		return e.connector.RegisterInstance(request.(*model.InstanceRegisterRequest), header)
-	}, param)
+	}, param, e.logCtx)
 	consumeTime := e.globalCtx.Since(startTime)
 	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
@@ -402,7 +403,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
 	_, err := data.RetrySyncCall("deregister", &svcKey, instance, func(request interface{}) (interface{}, error) {
 		return nil, e.connector.DeregisterInstance(request.(*model.InstanceDeRegisterRequest))
-	}, param)
+	}, param, e.logCtx)
 	consumeTime := e.globalCtx.Since(startTime)
 	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
@@ -432,7 +433,7 @@ func (e *Engine) SyncHeartbeat(instance *model.InstanceHeartbeatRequest) error {
 	svcKey := model.ServiceKey{Namespace: instance.Namespace, Service: instance.Service}
 	_, err := data.RetrySyncCall("heartbeat", &svcKey, instance, func(request interface{}) (interface{}, error) {
 		return nil, e.connector.Heartbeat(request.(*model.InstanceHeartbeatRequest))
-	}, param)
+	}, param, e.logCtx)
 	consumeTime := e.globalCtx.Since(startTime)
 	if err != nil {
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
@@ -479,7 +480,7 @@ func (e *Engine) SyncGetServices(eventType model.EventType,
 }
 
 func (e *Engine) doSyncGetServices(commonRequest *data.ServicesRequest) (*model.ServicesResponse, error) {
-	log.GetBaseLogger().Debugf("doSyncGetServices----->")
+	e.logCtx.GetBaseLogger().Debugf("doSyncGetServices----->")
 	err := e.SyncGetResources(commonRequest)
 	if err != nil {
 		return nil, err
@@ -520,7 +521,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 				model.GetErrorCodeFromError(err), e.globalCtx.Since(apiStartTime))
 			return nil, err
 		}
-		singleCtx := NewSingleNotifyContext(svcRuleKey, notifier)
+		singleCtx := NewSingleNotifyContext(svcRuleKey, notifier, e.logCtx)
 		retryTimes++
 		exceedTimeout := singleCtx.Wait(commonRequest.ControlParam.Timeout)
 		// 计算请求耗时
@@ -528,14 +529,14 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 		if exceedTimeout {
 			// 只有网络错误才可以重试
 			time.Sleep(commonRequest.ControlParam.RetryInterval)
-			log.GetBaseLogger().Warnf("retry GetRoutes for timeout, consume time %v,"+
+			e.logCtx.GetBaseLogger().Warnf("retry GetRoutes for timeout, consume time %v,"+
 				" Namespace: %s, Service: %s, retry times: %d",
 				consumedTime, commonRequest.DstService.Namespace, commonRequest.DstService.Service, retryTimes)
 			continue
 		}
 		sdkErr := singleCtx.Err()
 		if nil != sdkErr {
-			log.GetBaseLogger().Errorf("error occur while processing %s request,"+
+			e.logCtx.GetBaseLogger().Errorf("error occur while processing %s request,"+
 				" Namespace: %s, Service: %s, time consume is %v, error is %s",
 				svcRuleKey.Operation, commonRequest.DstService.Namespace, commonRequest.DstService.Service,
 				consumedTime, sdkErr)
@@ -544,7 +545,7 @@ func (e *Engine) doSyncGetServiceRule(commonRequest *data.CommonRuleRequest) (*m
 			return nil, sdkErr
 		}
 	}
-	log.GetBaseLogger().Warnf("retry GetRoutes from cache loaded from cache files because of timeout, "+
+	e.logCtx.GetBaseLogger().Warnf("retry GetRoutes from cache loaded from cache files because of timeout, "+
 		" Namespace: %s, Service: %s, type: %s",
 		commonRequest.DstService.Namespace, commonRequest.DstService.Service, commonRequest.DstService.String())
 	// 上面的尝试超时之后，向尝试获取从缓存文件加载的信息

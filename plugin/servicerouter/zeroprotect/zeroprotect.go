@@ -28,6 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -37,7 +38,9 @@ const (
 // ZeroProtectFilter 基于路由规则的服务实例过滤器
 type ZeroProtectFilter struct {
 	*plugin.PluginBase
-	valueCtx model.ValueContext
+	valueCtx sdk.ValueContext
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -54,6 +57,7 @@ func (g *ZeroProtectFilter) Name() string {
 func (g *ZeroProtectFilter) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.valueCtx = ctx.ValueCtx
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 
@@ -123,7 +127,7 @@ func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster, withinClust
 	if len(zeroProtectIns) != 0 {
 		svcName := curCluster.GetClusters().GetServiceInstances().GetService()
 		nsName := curCluster.GetClusters().GetServiceInstances().GetNamespace()
-		log.GetBaseLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
+		g.logCtx.GetBaseLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
 			zap.Any("total", len(zeroProtectIns)), zap.Any("instances", zeroProtectIns))
 	}
 

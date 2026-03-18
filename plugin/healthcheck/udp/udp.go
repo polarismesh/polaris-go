@@ -41,6 +41,8 @@ type Detector struct {
 	SendPackageBytes    []byte
 	ReceivePackageBytes [][]byte
 	timeout             time.Duration
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Destroy 销毁插件，可用于释放资源
@@ -66,6 +68,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 		g.cfg = cfgValue.(*Config)
 	}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 
@@ -94,7 +97,7 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 	// 建立连接
 	conn, err := net.DialTimeout("udp", address, timeout)
 	if err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to check %s, err is %v", address, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to check %s, err is %v", address, err)
 		return false
 	}
 	defer func() {
@@ -108,12 +111,12 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 		return true
 	}
 	if _, err = conn.Write([]byte(udpCfg.Send)); err != nil {
-		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to write send body %s, err is %v", address, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to write send body %s, err is %v", address, err)
 		return false
 	}
 	recvData, err := ioutil.ReadAll(conn)
 	if err != nil && err != io.EOF {
-		log.GetDetectLogger().Errorf("[HealthCheck][udp] fail to read receive data %s, err is %v", address, err)
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to read receive data %s, err is %v", address, err)
 		return false
 	}
 	actualData := string(recvData)

@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // MockConnector 模拟配置连接器
@@ -105,8 +106,9 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 	chain := configfilter.Chain{}
 	conf := config.NewDefaultConfiguration([]string{"127.0.0.1:8091"})
 	eventReporterChain := []events.EventReporter{}
+	globalCtx := sdk.NewValueContext()
 
-	flow, err := NewConfigFileFlow(connector, chain, conf, eventReporterChain)
+	flow, err := NewConfigFileFlow(globalCtx, connector, chain, conf, eventReporterChain)
 	if err != nil {
 		t.Fatalf("Failed to create config file flow: %v", err)
 	}
@@ -126,7 +128,7 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			
+
 			for {
 				select {
 				case <-stop:
@@ -140,7 +142,7 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 						FileName:  fmt.Sprintf("config-file-%d.properties", fileIndex),
 						Subscribe: true,
 					}
-					
+
 					_, err := flow.GetConfigFile(req)
 					if err != nil {
 						errors <- err
@@ -177,8 +179,8 @@ func TestConfigFileCacheConcurrency(t *testing.T) {
 func TestSyncMapUsage(t *testing.T) {
 	flow := &ConfigFileFlow{
 		configFileCache: sync.Map{},
-		shardLockCount: 16,
-		shardLocks:     make([]sync.RWMutex, 16),
+		shardLockCount:  16,
+		shardLocks:      make([]sync.RWMutex, 16),
 	}
 
 	// 测试基本的Load和Store操作
@@ -201,17 +203,17 @@ func TestSyncMapUsage(t *testing.T) {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			
+
 			// 并发读取
 			if _, ok := flow.configFileCache.Load(key); !ok {
 				t.Errorf("Concurrent load failed for goroutine %d", index)
 			}
-			
+
 			// 并发写入
 			newKey := fmt.Sprintf("key-%d", index)
 			newValue := fmt.Sprintf("value-%d", index)
 			flow.configFileCache.Store(newKey, newValue)
-			
+
 			// 验证写入
 			if loaded, ok := flow.configFileCache.Load(newKey); !ok || loaded != newValue {
 				t.Errorf("Concurrent store/load failed for goroutine %d", index)

@@ -34,6 +34,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/plugin/servicerouter/zeroprotect"
 )
 
@@ -83,7 +84,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 		router := &zeroprotect.ZeroProtectFilter{}
 		router.Init(&plugin.InitContext{
 			Config:       defaultConf,
-			ValueCtx:     model.NewValueContext(),
+			ValueCtx:     sdk.NewValueContext(),
 			PluginIndex:  1,
 			SDKContextID: uuid.NewString(),
 		})
@@ -132,7 +133,7 @@ func Test_ZeroProtectRouter(t *testing.T) {
 		router := &zeroprotect.ZeroProtectFilter{}
 		router.Init(&plugin.InitContext{
 			Config:       defaultConf,
-			ValueCtx:     model.NewValueContext(),
+			ValueCtx:     sdk.NewValueContext(),
 			PluginIndex:  1,
 			SDKContextID: uuid.NewString(),
 		})

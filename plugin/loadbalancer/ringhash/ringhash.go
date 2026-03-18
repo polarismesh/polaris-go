@@ -20,6 +20,7 @@ package ringhash
 import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	mconfig "github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -32,6 +33,8 @@ type KetamaLoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -47,6 +50,7 @@ func (k *KetamaLoadBalancer) Name() string {
 // Init 初始化插件
 func (k *KetamaLoadBalancer) Init(ctx *plugin.InitContext) error {
 	k.PluginBase = plugin.NewPluginBase(ctx)
+	k.logCtx = ctx.ValueCtx.GetContextLogger()
 	k.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(k.Name()).(*Config)
 	var err error
 	k.hashFunc, err = hash.GetHashFunc(k.cfg.HashFunction)
@@ -70,7 +74,7 @@ func (k *KetamaLoadBalancer) getOrBuildHashRing(instSet *model.InstanceSet) (mod
 	if nil != selector {
 		return selector, nil
 	}
-	continuum, err := NewContinuum(instSet, k.cfg.VnodeCount, k.hashFunc, k.ID())
+	continuum, err := NewContinuum(instSet, k.cfg.VnodeCount, k.hashFunc, k.ID(), k.logCtx.GetBaseLogger())
 	instSet.SetSelector(continuum)
 	return continuum, err
 }

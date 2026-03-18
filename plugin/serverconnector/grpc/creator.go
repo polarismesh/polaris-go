@@ -39,9 +39,9 @@ func (g *Connector) CreateConnection(
 	opts = append(opts, grpc.WithBlock())
 	localIPValue := clientInfo.GetIPString()
 	if len(localIPValue) == 0 {
-		opts = append(opts, grpc.WithStatsHandler(&statHandler{clientInfo: clientInfo}))
+		opts = append(opts, grpc.WithStatsHandler(&statHandler{clientInfo: clientInfo, logCtx: g.logCtx}))
 	}
-	log.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", g.cfg.MaxCallRecvMsgSize)
+	g.logCtx.GetBaseLogger().Debugf("create connection with maxCallRecvSize %d", g.cfg.MaxCallRecvMsgSize)
 	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(g.cfg.MaxCallRecvMsgSize)))
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -56,6 +56,7 @@ func (g *Connector) CreateConnection(
 type statHandler struct {
 	// 全局上下文
 	clientInfo *network.ClientInfo
+	logCtx     *log.ContextLogger
 }
 
 // TagRPC can attach some information to the given context.
@@ -81,7 +82,7 @@ func (s *statHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) cont
 	localAddr := info.LocalAddr.String()
 	localIP := strings.Split(localAddr, ":")[0]
 	hashValue, _ := model.HashStr(localIP)
-	log.GetBaseLogger().Infof(
+	s.logCtx.GetBaseLogger().Infof(
 		"localAddress from connection is %s, IP is %s, hashValue is %d", localAddr, localIP, hashValue)
 	s.clientInfo.IP.Store(localIP)
 	s.clientInfo.HashKey.Store([]byte(localAddr))

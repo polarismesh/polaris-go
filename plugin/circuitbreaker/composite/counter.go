@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite/trigger"
 )
 
@@ -57,9 +58,9 @@ type ResourceCounters struct {
 	// regexFunction
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow
-	engineFlow model.Engine
-	// log
-	log log.Logger
+	engineFlow sdk.Engine
+	// logStat
+	logStat log.Logger
 	// isInsRes
 	isInsRes bool
 	//
@@ -81,7 +82,7 @@ func newResourceCounters(res model.Resource, activeRule *fault_tolerance.Circuit
 		circuitBreaker: circuitBreaker,
 		statusRef:      atomic.Value{},
 		fallbackInfo:   buildFallbackInfo(activeRule),
-		log:            log.GetCircuitBreakerEventLogger(),
+		logStat:        circuitBreaker.logCtx.GetStatLogger(),
 		isInsRes:       isInsRes,
 		executor:       circuitBreaker.executor,
 	}
@@ -104,7 +105,7 @@ func (rc *ResourceCounters) init() error {
 			Condition:     condition,
 			StatusHandler: rc,
 			DelayExecutor: rc.executor.DelayExecute,
-			Log:           rc.log,
+			Log:           rc.logStat,
 		}
 
 		switch condition.GetTriggerType() {
@@ -155,7 +156,7 @@ func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name strin
 		})
 	rc.updateCircuitBreakerStatus(newStatus)
 	rc.reportCircuitStatus(newStatus)
-	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
+	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
 	delay := time.Duration(sleepWindow) * time.Second
@@ -173,7 +174,7 @@ func (rc *ResourceCounters) OpenToHalfOpen() {
 	}
 	consecutiveSuccess := rc.activeRule.GetRecoverCondition().ConsecutiveSuccess
 	halfOpenStatus := model.NewHalfOpenStatus(status.GetCircuitBreaker(), time.Now(), int(consecutiveSuccess))
-	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
+	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
 		halfOpenStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
 	rc.updateCircuitBreakerStatus(halfOpenStatus)
 	rc.reportCircuitStatus(halfOpenStatus)
@@ -189,7 +190,7 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	}
 	newStatus := model.NewCircuitBreakerStatus(status.GetCircuitBreaker(), model.Close, time.Now())
 	rc.updateCircuitBreakerStatus(newStatus)
-	rc.log.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
+	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
 		newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
 	rc.reportCircuitStatus(newStatus)
 
@@ -226,7 +227,7 @@ func (rc *ResourceCounters) Report(stat *model.ResourceStat) {
 			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToOpen)
 		}
 	} else {
-		rc.log.Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
+		rc.logStat.Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
 		for _, counter := range rc.counters {
 			counter.Report(isSuccess)
 		}
@@ -278,8 +279,8 @@ func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerSt
 	}
 	// 调用 localCache
 	if err := rc.circuitBreaker.localCache.UpdateInstances(updateRequest); err != nil {
-		log.GetBaseLogger().Errorf("update instance circuitbreaker status fail, resource %s, rule %s, err %s",
-			insRes.String(), rc.activeRule.Id, err.Error())
+		rc.circuitBreaker.logCtx.GetBaseLogger().Errorf("update instance circuitbreaker status fail, resource %s, "+
+			"rule %s, err %s", insRes.String(), rc.activeRule.Id, err.Error())
 	}
 }
 

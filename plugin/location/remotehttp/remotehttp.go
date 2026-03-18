@@ -30,19 +30,21 @@ const (
 	locationProviderName string = "remoteHttp"
 )
 
-func New(ctx *plugin.InitContext) (*LocationProviderImpl, error) {
-	impl := &LocationProviderImpl{}
+func New(ctx *plugin.InitContext, logCtx *log.ContextLogger) (*LocationProviderImpl, error) {
+	impl := &LocationProviderImpl{logCtx: logCtx}
 	return impl, impl.Init(ctx)
 }
 
 // LocationProviderImpl 通过http服务获取地理位置信息
 type LocationProviderImpl struct {
 	address *model.Location
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Init 初始化插件
 func (p *LocationProviderImpl) Init(ctx *plugin.InitContext) error {
-	log.GetBaseLogger().Infof("start remoteHttp location provider")
+	p.logCtx.GetBaseLogger().Infof("start remoteHttp location provider")
 
 	provider := ctx.Config.GetGlobal().GetLocation().GetProvider(locationProviderName)
 	options := provider.GetOptions()
@@ -67,15 +69,16 @@ func (p *LocationProviderImpl) Name() string {
 
 // GetLocation 获取地理位置信息
 func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
-	region := getResponse(p.address.Region, "region")
-	zone := getResponse(p.address.Zone, "zone")
-	campus := getResponse(p.address.Campus, "campus")
+	baseLogger := p.logCtx.GetBaseLogger()
+	region := getResponse(p.address.Region, "region", baseLogger)
+	zone := getResponse(p.address.Zone, "zone", baseLogger)
+	campus := getResponse(p.address.Campus, "campus", baseLogger)
 
 	if region == "" && campus == "" && zone == "" {
-		log.GetBaseLogger().Errorf("get location from remote http error: %v", "all location is empty")
+		baseLogger.Errorf("get location from remote http error: %v", "all location is empty")
 	}
 
-	log.GetBaseLogger().Infof("get location from remote http: region=%s, campus=%s, zone=%s", region, campus, zone)
+	baseLogger.Infof("get location from remote http: region=%s, campus=%s, zone=%s", region, campus, zone)
 	loc := &model.Location{
 		Region: region,
 		Campus: campus,
@@ -85,10 +88,10 @@ func (p *LocationProviderImpl) GetLocation() (*model.Location, error) {
 	return loc, nil
 }
 
-func getResponse(url, label string) string {
+func getResponse(url, label string, baseLogger log.Logger) string {
 	res, err := http.Get(url)
 	if err != nil {
-		log.GetBaseLogger().Errorf("get %s from remote http error: %v", label, err)
+		baseLogger.Errorf("get %s from remote http error: %v", label, err)
 		return ""
 	}
 	defer func() {
@@ -96,7 +99,7 @@ func getResponse(url, label string) string {
 	}()
 	resBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.GetBaseLogger().Errorf("read %s from remote http error: %v", label, err)
+		baseLogger.Errorf("read %s from remote http error: %v", label, err)
 		return ""
 	}
 

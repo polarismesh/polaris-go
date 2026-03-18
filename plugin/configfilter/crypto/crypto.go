@@ -47,6 +47,8 @@ type CryptoFilter struct {
 	*plugin.PluginBase
 	cfg     *Config
 	cryptos map[string]Crypto
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type plugin type
@@ -62,6 +64,7 @@ func (c *CryptoFilter) Name() string {
 // Init plugin
 func (c *CryptoFilter) Init(ctx *plugin.InitContext) error {
 	c.PluginBase = plugin.NewPluginBase(ctx)
+	c.logCtx = ctx.ValueCtx.GetContextLogger()
 	c.cryptos = make(map[string]Crypto)
 
 	cfgValue := ctx.Config.GetConfigFile().GetConfigFilterConfig().GetPluginConfig(c.Name())
@@ -72,12 +75,12 @@ func (c *CryptoFilter) Init(ctx *plugin.InitContext) error {
 		entry := c.cfg.Entries[i]
 		item, exist := cryptorSet[entry.Name]
 		if !exist {
-			log.GetBaseLogger().Errorf("plugin Crypto not found target: %s", entry.Name)
+			c.logCtx.GetBaseLogger().Errorf("plugin Crypto not found target: %s", entry.Name)
 			continue
 		}
 		crypto, ok := item.(Crypto)
 		if !ok {
-			log.GetBaseLogger().Errorf("plugin target: %s not Crypto", entry.Name)
+			c.logCtx.GetBaseLogger().Errorf("plugin target: %s not Crypto", entry.Name)
 			continue
 		}
 		c.cryptos[entry.Name] = crypto
@@ -133,7 +136,7 @@ func (c *CryptoFilter) DoFilter(configFile *configconnector.ConfigFile, next con
 			}
 			dataKey, err := rsa.DecryptFromBase64(cipherDataKey, privateKey.PrivateKey)
 			if err != nil {
-				log.GetBaseLogger().Errorf("cipher datakey use rsa decrypt fail: %s", err)
+				c.logCtx.GetBaseLogger().Errorf("cipher datakey use rsa decrypt fail: %s", err)
 				// 可能就没有走 RSA 加密, 直接用数据里面的 dataKey 进行获取
 				dataKey, _ = base64.StdEncoding.DecodeString(cipherDataKey)
 			}
@@ -161,7 +164,7 @@ func (c *CryptoFilter) DoFilter(configFile *configconnector.ConfigFile, next con
 func (c *CryptoFilter) GetCrypto(algo string) (Crypto, error) {
 	crypto, ok := c.cryptos[algo]
 	if !ok {
-		log.GetBaseLogger().Errorf("plugin Crypto not found target: %s", algo)
+		c.logCtx.GetBaseLogger().Errorf("plugin Crypto not found target: %s", algo)
 		return nil, fmt.Errorf("plugin Crypto not found target: %s", algo)
 	}
 	return crypto, nil

@@ -27,13 +27,16 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // SetEnableFilter 基于路由规则的服务实例过滤器
 type SetEnableFilter struct {
 	*plugin.PluginBase
-	valueCtx    model.ValueContext
+	valueCtx    sdk.ValueContext
 	nearbyIndex int32
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型，接口实现必须
@@ -50,6 +53,7 @@ func (g *SetEnableFilter) Name() string {
 func (g *SetEnableFilter) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.valueCtx = ctx.ValueCtx
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	nearbyIndex, _ := plugin.GetPluginId(common.TypeServiceRouter, config.DefaultServiceRouterNearbyBased)
 	g.nearbyIndex = nearbyIndex
 	return nil
@@ -173,7 +177,7 @@ func (g *SetEnableFilter) sourceSet(routeInfo *servicerouter.RouteInfo, setName 
 	}
 	errorText := fmt.Sprintf("route set division with set group rule  not match, "+
 		"source set name is %s, not instances found in this set group,please check", setName)
-	log.GetBaseLogger().Errorf(errorText)
+	g.logCtx.GetBaseLogger().Errorf(errorText)
 	return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil, errorText)
 }
 
