@@ -259,9 +259,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 		}
 		logCtx.GetBaseLogger().Debugf("Input config:\n%s", string(text))
 	}
-	// SetDefault内部会用context带有的客户端信息去初始化logger
 	cfg.SetDefault()
-	// 此时logCtx里面已经包含了context的client label
 	if err := cfg.Verify(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to verify input config")
 	}
