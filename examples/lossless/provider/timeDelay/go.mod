@@ -2,7 +2,7 @@ module github.com/polarismesh/polaris-go/examples/lossless/provider/timeDelay
 
 go 1.24
 
-require github.com/polarismesh/polaris-go v1.6.1
+require github.com/polarismesh/polaris-go v1.7.0
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect

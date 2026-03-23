@@ -280,6 +280,24 @@ func (e *Engine) GetRegisterState() sdk.RegisterState {
 	return e.registerStates
 }
 
+// GetEventReportChain 获取事件上报插件链
+func (e *Engine) GetEventReportChain() interface{} {
+	return e.eventChain
+}
+
+// GetAdmin 获取管理接口
+func (e *Engine) GetAdmin() sdk.Admin {
+	adminType := e.configuration.GetGlobal().GetAdmin().GetType()
+	targetPlugin, err := e.plugins.GetPlugin(common.TypeAdmin, adminType)
+	if err != nil {
+		return nil
+	}
+	if adminPlugin, ok := targetPlugin.(sdk.Admin); ok {
+		return adminPlugin
+	}
+	return nil
+}
+
 // ServiceEventCallback serviceUpdate消息订阅回调
 func (e *Engine) ServiceEventCallback(event *common.PluginEvent) error {
 	if e.subscribe != nil {

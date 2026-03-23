@@ -81,6 +81,8 @@ type Engine interface {
 	SyncGetAllInstances(req *model.GetAllInstancesRequest) (*model.InstancesResponse, error)
 	// SyncRegister 同步进行服务注册
 	SyncRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
+	// SyncLosslessRegister 同步进行无损上下线服务注册
+	SyncLosslessRegister(instance *model.InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
 	// SyncDeregister 同步进行服务反注册
 	SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 	// SyncHeartbeat 同步进行心跳上报

@@ -29,7 +29,9 @@ type WeightAdjuster interface {
 	// RealTimeAdjustDynamicWeight 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
 	RealTimeAdjustDynamicWeight(model.InstanceGauge) (bool, error)
 	// TimingAdjustDynamicWeight 进行动态权重调整，返回调整后的动态权重
-	TimingAdjustDynamicWeight(service model.ServiceInstances) ([]*model.InstanceWeight, error)
+	// dynamicWeight 为前序 adjuster 计算得到的动态权重，用于多 adjuster 串联时的权重透传
+	TimingAdjustDynamicWeight(dynamicWeight map[string]*model.InstanceWeight,
+		service model.ServiceInstances) ([]*model.InstanceWeight, error)
 }
 
 // init 初始化

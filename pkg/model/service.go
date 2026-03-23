@@ -141,6 +141,14 @@ type InstanceWeight struct {
 	InstanceID string
 	// 实例动态权重值
 	DynamicWeight uint32
+	// 基础权重（用于判断是否正在预热中）
+	BaseWeight uint32
+}
+
+// IsDynamicWeightValid 判断动态权重是否有效（正在预热中）
+// 对齐 Java: dynamicWeight != baseWeight
+func (w *InstanceWeight) IsDynamicWeightValid() bool {
+	return w.DynamicWeight != w.BaseWeight
 }
 
 // FailOverHandler 元数据路由兜底策略

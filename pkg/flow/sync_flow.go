@@ -107,15 +107,15 @@ func (e *Engine) doSyncGetOneInstance(commonRequest *data.CommonInstancesRequest
 
 func (e *Engine) doLoadBalanceToOneInstance(
 	startTime time.Time, commonRequest *data.CommonInstancesRequest) (*model.OneInstanceResponse, error) {
-	// 动态权重调整
+	// 动态权重调整，透传给每个 adjuster，对齐 Java 的串联行为
 	dynamicWeightMap := make(map[string]*model.InstanceWeight)
 	for _, adjuster := range e.weightAdjuster {
-		dynamicWeights, err := adjuster.TimingAdjustDynamicWeight(commonRequest.DstInstances)
+		dynamicWeights, err := adjuster.TimingAdjustDynamicWeight(dynamicWeightMap, commonRequest.DstInstances)
 		if err != nil {
 			log.GetBaseLogger().Errorf("adjust dynamic weight failed, err is %v", err)
 			return nil, err
 		}
-		// 将动态权重结果存入map
+		// 将动态权重结果存入map，后续 adjuster 可获取到前序 adjuster 的结果
 		for _, weight := range dynamicWeights {
 			dynamicWeightMap[weight.InstanceID] = weight
 		}
