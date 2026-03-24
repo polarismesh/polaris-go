@@ -169,13 +169,13 @@ func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.Lossl
 	}
 	// 通过Engine获取lossless规则
 	if g.pluginCtx.ValueCtx == nil {
-		g.debugf("[WarmupWeightAdjuster] getLosslessRules ValueCtx is nil for service %s/%s",
+		g.log.Warnf("[WarmupWeightAdjuster] getLosslessRules ValueCtx is nil for service %s/%s",
 			svcKey.Namespace, svcKey.Service)
 		return nil
 	}
 	engine := g.pluginCtx.ValueCtx.GetEngine()
 	if engine == nil {
-		g.debugf("[WarmupWeightAdjuster] getLosslessRules engine is nil for service %s/%s",
+		g.log.Warnf("[WarmupWeightAdjuster] getLosslessRules engine is nil for service %s/%s",
 			svcKey.Namespace, svcKey.Service)
 		return nil
 	}
@@ -198,14 +198,14 @@ func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.Lossl
 	}
 	wrapper, ok := ruleResp.GetValue().(*pb.LosslessRuleWrapper)
 	if !ok || wrapper == nil {
-		g.debugf("[WarmupWeightAdjuster] getLosslessRules wrapper is nil or type mismatch for service %s/%s",
+		g.log.Warnf("[WarmupWeightAdjuster] getLosslessRules wrapper is nil or type mismatch for service %s/%s",
 			svcKey.Namespace, svcKey.Service)
 		return nil
 	}
 	rules := wrapper.Rules
 	// 缓存规则
 	g.losslessRuleCache.Store(svcKey, rules)
-	g.debugf("[WarmupWeightAdjuster] getLosslessRules fetched and cached for service %s/%s, rules count: %d",
+	g.log.Infof("[WarmupWeightAdjuster] getLosslessRules fetched and cached for service %s/%s, rules count: %d",
 		svcKey.Namespace, svcKey.Service, len(rules))
 
 	return rules
@@ -272,7 +272,7 @@ func (g *Adjuster) doTimingAdjustDynamicWeight(dynamicWeight map[string]*model.I
 
 	if len(metadataRules) == 0 {
 		// 没有元数据匹配规则，使用第一条规则
-		g.debugf("[WarmupWeightAdjuster] no metadata rules, using first lossless rule, rule: %s",
+		g.log.Infof("[WarmupWeightAdjuster] no metadata rules, using first lossless rule, rule: %s",
 			model.JsonString(losslessRules[0]))
 		return g.getInstanceWeightFromLosslessRule(dynamicWeight, service, losslessRules[0])
 	}
@@ -337,7 +337,7 @@ func (g *Adjuster) getInstanceWeightFromMetadataRule(dynamicWeight map[string]*m
 		}
 	}
 
-	g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromMetadataRule warmup instance count: %d, result: %v",
+	g.log.Infof("[WarmupWeightAdjuster] getInstanceWeightFromMetadataRule warmup instance count: %d, result: %v",
 		warmupInstanceCount, result)
 
 	if warmupInstanceCount == 0 {
@@ -364,7 +364,7 @@ func (g *Adjuster) getInstanceWeightFromLosslessRule(dynamicWeight map[string]*m
 	instances := service.GetInstances()
 	currentTime := time.Now()
 
-	g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup config: interval=%ds, curvature=%d, "+
+	g.log.Infof("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup config: interval=%ds, curvature=%d, "+
 		"overloadProtection=%v, threshold=%d",
 		warmup.GetIntervalSecond(), warmup.GetCurvature(),
 		warmup.GetEnableOverloadProtection(), warmup.GetOverloadProtectionThreshold())
@@ -373,7 +373,7 @@ func (g *Adjuster) getInstanceWeightFromLosslessRule(dynamicWeight map[string]*m
 		needWarmupCount := g.countNeedWarmupInstances(instances, warmup, currentTime)
 		threshold := warmup.GetOverloadProtectionThreshold()
 		percentage := needWarmupCount * 100 / len(instances)
-		g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule overload check: "+
+		g.log.Infof("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule overload check: "+
 			"needWarmupCount=%d, totalCount=%d, percentage=%d%%, threshold=%d",
 			needWarmupCount, len(instances), percentage, threshold)
 		if int32(percentage) >= threshold {
@@ -511,7 +511,7 @@ func (g *Adjuster) getInstanceCreateTime(instance model.Instance) int64 {
 			if ts, err := strconv.ParseInt(ctime.GetValue(), 10, 64); err == nil {
 				return ts
 			}
-			g.debugf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime parse failed: %s",
+			g.log.Errorf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime parse failed: %s",
 				instance.GetId(), ctime.GetValue())
 		}
 	}
