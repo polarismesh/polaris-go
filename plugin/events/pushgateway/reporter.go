@@ -261,7 +261,7 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 
 			// 请求成功，直接返回
 			if respErr == nil && respCode >= 200 && respCode < 300 {
-				p.logCtx.GetEventLogger().Debugf("[EventReporter][Pushgateway] request success, code: %d", respCode)
+				p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] request success, code: %d", respCode)
 				return
 			}
 

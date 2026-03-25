@@ -45,7 +45,8 @@ var (
 	calleeService   string
 	port            int
 	token           string
-	configPath      string
+	lbPolicy        string
+	hashKey         string
 	debug           bool
 )
 
@@ -57,7 +58,8 @@ func initArgs() {
 	flag.StringVar(&calleeService, "calleeService", "LosslessTimeDelayServer", "calleeService")
 	flag.IntVar(&port, "port", 18080, "port")
 	flag.StringVar(&token, "token", "", "token")
-	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
+	flag.StringVar(&lbPolicy, "lbPolicy", "weightedRandom", "loadBalancer plugin")
+	flag.StringVar(&hashKey, "hashKey", "", "hashKey")
 	flag.BoolVar(&debug, "debug", false, "debug")
 }
 
@@ -96,6 +98,10 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = calleeNamespace
 	getOneRequest.Service = calleeService
+	getOneRequest.LbPolicy = lbPolicy
+	if hashKey != "" {
+		getOneRequest.HashKey = []byte(hashKey)
+	}
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance, err is %v", err)
@@ -106,8 +112,7 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 		log.Printf("[error] fail to getOneInstance, instance is nil")
 		return nil, fmt.Errorf("Consumer.GetOneInstance empty")
 	}
-	log.Printf("getOneInstance is %s:%d, ishealthy:%v", instance.GetHost(),
-		instance.GetPort(), instance.IsHealthy())
+	log.Printf("getOneInstance is %s:%d, ishealthy:%v", instance.GetHost(), instance.GetPort(), instance.IsHealthy())
 	return instance, nil
 }
 
@@ -126,11 +131,10 @@ func (svr *PolarisClient) runWebServer() {
 		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 
 		if err != nil {
-			log.Printf("[error] send request to %s:%d fail : %s",
-				instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
-				instance.GetHost(), instance.GetPort(), err)))
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s", instance.GetHost(),
+				instance.GetPort(), err)))
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 			// 上报服务调用结果
 			delay := time.Since(start)

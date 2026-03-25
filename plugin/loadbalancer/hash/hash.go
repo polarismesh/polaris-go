@@ -65,6 +65,9 @@ func (g *LoadBalancer) Destroy() error {
 // ChooseInstance 获取单个服务实例
 func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	inputInstances model.ServiceInstances) (model.Instance, error) {
+	if len(criteria.DynamicWeight) > 0 {
+		return g.chooseInstanceWithDynamicWeight(criteria, inputInstances)
+	}
 	targetInstances, err := lbcommon.SelectAvailableInstanceSetFromCriteria(criteria, inputInstances)
 	if err != nil {
 		return nil, err
@@ -82,6 +85,57 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	instance := inputInstances.GetServiceClusters().GetServiceInstances().GetInstances()[instanceIndex.Index]
 
 	return instance, nil
+}
+
+// TODO: 更新逻辑
+// chooseInstanceWithDynamicWeight 使用动态权重进行基于hash的权重选择
+func (g *LoadBalancer) chooseInstanceWithDynamicWeight(criteria *loadbalancer.Criteria,
+	inputInstances model.ServiceInstances) (model.Instance, error) {
+	instances := inputInstances.GetInstances()
+	if len(instances) == 0 {
+		return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil,
+			"no instance found for %s:%s", inputInstances.GetNamespace(), inputInstances.GetService())
+	}
+
+	dynamicWeights := criteria.DynamicWeight
+	hashValue, err := lbcommon.CalcHashValue(criteria, g.hashFunc)
+	if err != nil {
+		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to cal hash value")
+	}
+
+	// 计算总权重
+	totalWeight := 0
+	for _, instance := range instances {
+		totalWeight += getWeight(dynamicWeights, instance)
+	}
+	if totalWeight == 0 {
+		return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil,
+			"all instances weight 0 for %s:%s", inputInstances.GetNamespace(), inputInstances.GetService())
+	}
+
+	// 按hash值映射到权重区间
+	targetValue := hashValue % uint64(totalWeight)
+	accumulate := uint64(0)
+	for _, instance := range instances {
+		accumulate += uint64(getWeight(dynamicWeights, instance))
+		if targetValue < accumulate {
+			return instance, nil
+		}
+	}
+
+	// 兜底
+	return instances[0], nil
+}
+
+// getWeight 获取实例权重，优先使用动态权重
+func getWeight(dynamicWeights map[string]*model.InstanceWeight, instance model.Instance) int {
+	if len(dynamicWeights) == 0 {
+		return instance.GetWeight()
+	}
+	if w, ok := dynamicWeights[instance.GetId()]; ok {
+		return int(w.DynamicWeight)
+	}
+	return instance.GetWeight()
 }
 
 // init 注册插件

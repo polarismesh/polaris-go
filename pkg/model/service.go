@@ -146,7 +146,6 @@ type InstanceWeight struct {
 }
 
 // IsDynamicWeightValid 判断动态权重是否有效（正在预热中）
-// 对齐 Java: dynamicWeight != baseWeight
 func (w *InstanceWeight) IsDynamicWeightValid() bool {
 	return w.DynamicWeight != w.BaseWeight
 }
