@@ -18,7 +18,7 @@ global:
       - prometheus
     plugin:
       prometheus:
-        type: pull
+        type: push
 # 被调方配置
 provider:
   # 无损上下线配置

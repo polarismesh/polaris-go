@@ -295,5 +295,5 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 }
 
 type BatchEvents struct {
-	Batch []event.BaseEvent
+	Batch []event.BaseEvent `json:"batch"`
 }

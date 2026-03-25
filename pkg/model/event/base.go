@@ -22,9 +22,6 @@ type BaseEvent interface {
 	SetClientId(id string)
 	GetEventType() string
 	GetEventName() EventName
-	GetInstanceEvent() InstanceEvent
-	GetConfigEvent() ConfigEvent
-	GetLosslessEvent() LosslessEvent
 }
 
 type BaseEventType int
@@ -68,16 +65,40 @@ const (
 	InstanceThreadEnd EventName = "InstanceThreadEnd"
 )
 
+// BaseEventImpl 扁平化事件结构，与服务端 ClientEventRequest 格式对齐
 type BaseEventImpl struct {
-	BaseType      BaseEventType `json:"base_type"`
-	EventType     string        `json:"event_type"`
-	ClientId      string        `json:"client_id"`
-	ClientIp      string        `json:"client_ip"`
-	EventTime     string        `json:"event_time"`
-	EventName     EventName     `json:"event_name"`
-	InstanceEvent InstanceEvent `json:"instance_event,omitempty"`
-	ConfigEvent   ConfigEvent   `json:"config_event,omitempty"`
-	LosslessEvent LosslessEvent `json:"lossless_event,omitempty"`
+	// 公共字段
+	EventType string    `json:"event_type"`
+	EventName EventName `json:"event_name"`
+	EventTime string    `json:"event_time"`
+	ClientId  string    `json:"client_id"`
+	ClientIp  string    `json:"client_ip"`
+
+	// 实例/无损上下线相关字段
+	Namespace  string `json:"namespace,omitempty"`
+	Service    string `json:"service,omitempty"`
+	Host       string `json:"host,omitempty"`
+	Port       string `json:"port,omitempty"`
+	InstanceId string `json:"instance_id,omitempty"`
+
+	// API 相关字段
+	APIProtocol string `json:"api_protocol,omitempty"`
+	APIPath     string `json:"api_path,omitempty"`
+	APIMethod   string `json:"api_method,omitempty"`
+
+	// 来源服务相关字段
+	SourceNamespace string `json:"source_namespace,omitempty"`
+	SourceService   string `json:"source_service,omitempty"`
+
+	// 配置相关字段
+	ClientType        string `json:"client_type,omitempty"`
+	ConfigGroup       string `json:"config_group,omitempty"`
+	ConfigFileName    string `json:"config_file_name,omitempty"`
+	ConfigFileVersion string `json:"config_file_version,omitempty"`
+
+	// 其他字段
+	Labels string `json:"labels,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 func (c *BaseEventImpl) SetClientIp(ip string) {
@@ -94,16 +115,4 @@ func (c *BaseEventImpl) GetEventType() string {
 
 func (c *BaseEventImpl) GetEventName() EventName {
 	return c.EventName
-}
-
-func (c *BaseEventImpl) GetInstanceEvent() InstanceEvent {
-	return c.InstanceEvent
-}
-
-func (c *BaseEventImpl) GetConfigEvent() ConfigEvent {
-	return c.ConfigEvent
-}
-
-func (c *BaseEventImpl) GetLosslessEvent() LosslessEvent {
-	return c.LosslessEvent
 }

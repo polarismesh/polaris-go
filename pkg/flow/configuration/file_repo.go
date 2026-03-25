@@ -370,17 +370,14 @@ func (r *ConfigFileRepo) removeCacheConfigFile(file *configconnector.ConfigFile)
 
 func (r *ConfigFileRepo) handleEventReporterChain(f *configconnector.ConfigFile) {
 	e := &event.BaseEventImpl{
-		BaseType:  event.ConfigEventType,
-		EventType: event.ConfigEventType.EventTypeString(),
-		EventName: event.ConfigUpdated,
-		EventTime: time.Now().Format("2006-01-02 15:04:05"),
-		ConfigEvent: &event.ConfigEventImpl{
-			Namespace:         r.configFileMetadata.GetNamespace(),
-			ConfigGroup:       r.configFileMetadata.GetFileGroup(),
-			ConfigFileName:    r.configFileMetadata.GetFileName(),
-			ConfigFileVersion: f.GetVersionName(),
-			ClientType:        model.ConfigFileRequestMode2Str[r.configFileMetadata.GetFileMode()],
-		},
+		EventType:         event.ConfigEventType.EventTypeString(),
+		EventName:         event.ConfigUpdated,
+		EventTime:         time.Now().Format("2006-01-02 15:04:05"),
+		Namespace:         r.configFileMetadata.GetNamespace(),
+		ConfigGroup:       r.configFileMetadata.GetFileGroup(),
+		ConfigFileName:    r.configFileMetadata.GetFileName(),
+		ConfigFileVersion: f.GetVersionName(),
+		ClientType:        model.ConfigFileRequestMode2Str[r.configFileMetadata.GetFileMode()],
 	}
 	for _, chain := range r.eventReporterChain {
 		if err := chain.ReportEvent(e); err != nil {

@@ -18,34 +18,21 @@
 package event
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-type LosslessEvent interface {
-	InstanceEvent
-}
-
-type LosslessEventImpl struct {
-	InstanceEventImpl
-	LosslessInfo model.LosslessInfo `json:"lossless_info,omitempty"`
-}
-
+// GetLosslessEvent 创建无损上下线事件
 func GetLosslessEvent(eventName EventName, losslessInfo model.LosslessInfo) BaseEventImpl {
 	return BaseEventImpl{
-		BaseType:  LosslessEventType,
 		EventType: LosslessEventType.EventTypeString(),
 		EventName: eventName,
 		EventTime: time.Now().Format("2006-01-02 15:04:05"),
-		LosslessEvent: &LosslessEventImpl{
-			InstanceEventImpl: InstanceEventImpl{
-				Namespace: losslessInfo.Instance.Namespace,
-				Service:   losslessInfo.Instance.Service,
-				Host:      losslessInfo.Instance.Host,
-				Port:      losslessInfo.Instance.Port,
-			},
-			LosslessInfo: losslessInfo,
-		},
+		Namespace: losslessInfo.Instance.Namespace,
+		Service:   losslessInfo.Instance.Service,
+		Host:      losslessInfo.Instance.Host,
+		Port:      fmt.Sprintf("%d", losslessInfo.Instance.Port),
 	}
 }

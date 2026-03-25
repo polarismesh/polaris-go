@@ -18,69 +18,21 @@
 package event
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-type InstanceEvent interface {
-	GetNamespace() string
-	SetNamespace(string)
-	GetService() string
-	SetService(string)
-	GetHost() string
-	SetHost(string)
-	GetPort() int
-	SetPort(int)
-}
-
-type InstanceEventImpl struct {
-	Namespace string `json:"namespace"`
-	Service   string `json:"service"`
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-}
-
-func (e *InstanceEventImpl) GetNamespace() string {
-	return e.Namespace
-}
-
-func (e *InstanceEventImpl) SetNamespace(namespace string) {
-	e.Namespace = namespace
-}
-
-func (e *InstanceEventImpl) GetService() string {
-	return e.Service
-}
-
-func (e *InstanceEventImpl) SetService(service string) {
-	e.Service = service
-}
-
-func (e *InstanceEventImpl) GetHost() string {
-	return e.Host
-}
-
-func (e *InstanceEventImpl) SetHost(host string) {
-	e.Host = host
-}
-
-func (e *InstanceEventImpl) GetPort() int {
-	return e.Port
-}
-
-func (e *InstanceEventImpl) SetPort(port int) {
-	e.Port = port
-}
-
+// GetInstanceEvent 创建实例事件
 func GetInstanceEvent(eventName EventName, instance *model.InstanceDeRegisterRequest) BaseEventImpl {
 	return BaseEventImpl{
-		BaseType:  InstanceEventType,
 		EventType: InstanceEventType.EventTypeString(),
 		EventName: eventName,
-		InstanceEvent: &InstanceEventImpl{
-			Namespace: instance.Namespace,
-			Service:   instance.Service,
-			Host:      instance.Host,
-			Port:      instance.Port,
-		},
+		EventTime: time.Now().Format("2006-01-02 15:04:05"),
+		Namespace: instance.Namespace,
+		Service:   instance.Service,
+		Host:      instance.Host,
+		Port:      fmt.Sprintf("%d", instance.Port),
 	}
 }
