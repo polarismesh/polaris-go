@@ -62,7 +62,7 @@ func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, ba
 
 	// 返回 LosslessRules 数组
 	losslessRules := resp.LosslessRuleList
-	if len(resp.LosslessRuleList) == 0 { //旧版本服务端LosslessRuleList字段为空，回退使用存量字段
+	if len(resp.LosslessRuleList) == 0 { // 旧版本服务端LosslessRuleList字段为空，回退使用存量字段
 		losslessRules = resp.LosslessRules
 	}
 	if len(losslessRules) == 0 {
