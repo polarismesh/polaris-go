@@ -1,18 +1,23 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
-consumer:
-  #描述:负载均衡相关配置
-  loadbalancer:
-    #描述:负载均衡类型
-    #范围:已注册的负载均衡插件名["weightedRandom", "ringHash", "maglev", "l5cst", "hash"]
-    #默认值：权重随机负载均衡
-    type: weightedRandom
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+  connectTimeout: 5000ms
+  api:
+    timeout: 5s
+    maxRetryTimes: 2
+    retryInterval: 1s
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
     plugin:
-      #描述:虚拟节点的数量
-      #类型:int
-      #默认值:500
-      ringHash:
-        vnodeCount: 500
+      prometheus:
+        address: ${POLARIS_SERVER}:9091
+        type: push
 

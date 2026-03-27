@@ -28,26 +28,33 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
 )
 
 var (
-	selfNamespace   string
-	selfService     string
-	selfRegister    bool
-	calleeNamespace string
-	calleeService   string
-	port            int
-	token           string
-	lbPolicy        string
-	hashKey         string
-	debug           bool
+	selfNamespace       string
+	selfService         string
+	selfRegister        bool
+	calleeNamespace     string
+	calleeService       string
+	port                int
+	token               string
+	lbPolicy            string
+	hashKey             string
+	debug               bool
+	defaultLoopCount    int
+	defaultLoopInterval int // 毫秒
 )
 
 func initArgs() {
@@ -61,15 +68,18 @@ func initArgs() {
 	flag.StringVar(&lbPolicy, "lbPolicy", "weightedRandom", "loadBalancer plugin")
 	flag.StringVar(&hashKey, "hashKey", "", "hashKey")
 	flag.BoolVar(&debug, "debug", false, "debug")
+	flag.IntVar(&defaultLoopCount, "loopCount", 100, "echo-loop 默认请求次数")
+	flag.IntVar(&defaultLoopInterval, "loopInterval", 500, "echo-loop 默认请求间隔(毫秒)")
 }
 
 // PolarisClient is a consumer of the circuit breaker calleeService.
 type PolarisClient struct {
-	provider   polaris.ProviderAPI
-	host       string
-	isShutdown bool
-	consumer   polaris.ConsumerAPI
-	webSvr     *http.Server
+	provider    polaris.ProviderAPI
+	host        string
+	isShutdown  bool
+	consumer    polaris.ConsumerAPI
+	rawConsumer api.ConsumerAPI // 底层ConsumerAPI，用于获取lossless规则等高级接口
+	webSvr      *http.Server
 }
 
 // reportServiceCallResult 上报服务调用结果的辅助方法
@@ -117,6 +127,113 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 }
 
 func (svr *PolarisClient) runWebServer() {
+	// /lossless-rule 接口：返回被调服务的无损上线规则（包含延迟注册、预热等配置）
+	http.HandleFunc("/lossless-rule", func(rw http.ResponseWriter, r *http.Request) {
+		ruleReq := &api.GetServiceRuleRequest{
+			GetServiceRuleRequest: model.GetServiceRuleRequest{
+				Namespace: calleeNamespace,
+				Service:   calleeService,
+			},
+		}
+		ruleResp, err := svr.rawConsumer.GetLosslessRule(ruleReq)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf(`{"error":"%v"}`, err)))
+			return
+		}
+
+		// 解析规则中的延迟注册和预热配置
+		type delayRegisterInfo struct {
+			Enable          bool   `json:"enable"`
+			Strategy        string `json:"strategy"`
+			IntervalSeconds int64  `json:"intervalSeconds"`
+		}
+		type warmupInfo struct {
+			Enable                      bool  `json:"enable"`
+			IntervalSeconds             int64 `json:"intervalSeconds"`
+			EnableOverloadProtection    bool  `json:"enableOverloadProtection"`
+			OverloadProtectionThreshold int32 `json:"overloadProtectionThreshold"`
+		}
+		type ruleInfo struct {
+			DelayRegister *delayRegisterInfo `json:"delayRegister,omitempty"`
+			Warmup        *warmupInfo        `json:"warmup,omitempty"`
+		}
+		type losslessRuleResponse struct {
+			Namespace string     `json:"namespace"`
+			Service   string     `json:"service"`
+			Rules     []ruleInfo `json:"rules"`
+		}
+
+		result := losslessRuleResponse{
+			Namespace: calleeNamespace,
+			Service:   calleeService,
+		}
+
+		if ruleResp != nil && ruleResp.GetValue() != nil {
+			if wrapper, ok := ruleResp.GetValue().(*pb.LosslessRuleWrapper); ok && wrapper != nil {
+				for _, rule := range wrapper.Rules {
+					info := ruleInfo{}
+					if online := rule.GetLosslessOnline(); online != nil {
+						if dr := online.GetDelayRegister(); dr != nil {
+							info.DelayRegister = &delayRegisterInfo{
+								Enable:          dr.GetEnable(),
+								Strategy:        dr.GetStrategy().String(),
+								IntervalSeconds: int64(dr.GetIntervalSecond()),
+							}
+						}
+						if w := online.GetWarmup(); w != nil {
+							info.Warmup = &warmupInfo{
+								Enable:                      w.GetEnable(),
+								IntervalSeconds:             int64(w.GetIntervalSecond()),
+								EnableOverloadProtection:    w.GetEnableOverloadProtection(),
+								OverloadProtectionThreshold: w.GetOverloadProtectionThreshold(),
+							}
+						}
+					}
+					result.Rules = append(result.Rules, info)
+				}
+			}
+		}
+
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(rw).Encode(result)
+	})
+
+	// /instances 接口：返回当前从北极星获取到的所有实例列表（JSON 格式）
+	http.HandleFunc("/instances", func(rw http.ResponseWriter, r *http.Request) {
+		req := &polaris.GetInstancesRequest{
+			GetInstancesRequest: model.GetInstancesRequest{
+				Service:   calleeService,
+				Namespace: calleeNamespace,
+			},
+		}
+		instancesResp, err := svr.consumer.GetInstances(req)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf(`{"error":"%v"}`, err)))
+			return
+		}
+		type instanceInfo struct {
+			Host    string `json:"host"`
+			Port    int    `json:"port"`
+			Healthy bool   `json:"healthy"`
+			Weight  int    `json:"weight"`
+		}
+		var instances []instanceInfo
+		for _, ins := range instancesResp.GetInstances() {
+			instances = append(instances, instanceInfo{
+				Host:    ins.GetHost(),
+				Port:    int(ins.GetPort()),
+				Healthy: ins.IsHealthy(),
+				Weight:  ins.GetWeight(),
+			})
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(rw).Encode(instances)
+	})
+
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("start to invoke getOneInstance operation")
 		instance, err := svr.discoverInstance()
@@ -167,6 +284,186 @@ func (svr *PolarisClient) runWebServer() {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write(data)
 	})
+
+	// /echo-loop 接口：收到一次请求后持续请求下游，支持指定请求次数和请求间隔
+	// 参数:
+	//   count    - 请求次数（默认使用 --loopCount 启动参数值）
+	//   interval - 请求间隔毫秒（默认使用 --loopInterval 启动参数值）
+	// 每10秒在日志中输出下游被调的统计比例
+	http.HandleFunc("/echo-loop", func(rw http.ResponseWriter, r *http.Request) {
+		// 解析请求参数
+		loopCount := defaultLoopCount
+		loopIntervalMs := defaultLoopInterval
+		if v := r.URL.Query().Get("count"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				loopCount = n
+			}
+		}
+		if v := r.URL.Query().Get("interval"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				loopIntervalMs = n
+			}
+		}
+
+		log.Printf("[echo-loop] 开始持续请求: count=%d, interval=%dms", loopCount, loopIntervalMs)
+
+		// 使用 SSE (Server-Sent Events) 实时推送统计结果
+		rw.Header().Set("Content-Type", "text/event-stream")
+		rw.Header().Set("Cache-Control", "no-cache")
+		rw.Header().Set("Connection", "keep-alive")
+		rw.WriteHeader(http.StatusOK)
+
+		flusher, canFlush := rw.(http.Flusher)
+
+		// 统计数据：key=host:port, value=请求计数
+		var statMu sync.Mutex
+		instanceStats := make(map[string]int)
+		var totalCount int64
+		var failCount int64
+
+		// 上一次输出统计的时间
+		lastStatTime := time.Now()
+		// 区间统计（每10秒重置）
+		intervalStats := make(map[string]int)
+		var intervalTotal int64
+
+		// 输出统计的辅助函数
+		printStats := func(tag string) {
+			statMu.Lock()
+			defer statMu.Unlock()
+
+			total := atomic.LoadInt64(&totalCount)
+			fails := atomic.LoadInt64(&failCount)
+			iTotal := atomic.LoadInt64(&intervalTotal)
+
+			// 按端口排序输出
+			type portStat struct {
+				Addr         string
+				Count        int
+				Ratio        float64
+				IntervalCnt  int
+				IntervalRate float64
+			}
+			var stats []portStat
+			for addr, cnt := range instanceStats {
+				ratio := 0.0
+				if total > 0 {
+					ratio = float64(cnt) * 100.0 / float64(total)
+				}
+				iCnt := intervalStats[addr]
+				iRate := 0.0
+				if iTotal > 0 {
+					iRate = float64(iCnt) * 100.0 / float64(iTotal)
+				}
+				stats = append(stats, portStat{
+					Addr: addr, Count: cnt, Ratio: ratio,
+					IntervalCnt: iCnt, IntervalRate: iRate,
+				})
+			}
+			sort.Slice(stats, func(i, j int) bool {
+				return stats[i].Addr < stats[j].Addr
+			})
+
+			// 构建日志和SSE输出
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("[echo-loop] [%s] 总请求=%d, 失败=%d | ", tag, total, fails))
+			for _, s := range stats {
+				sb.WriteString(fmt.Sprintf("%s: %d(%.1f%%) 区间:%d(%.1f%%) | ",
+					s.Addr, s.Count, s.Ratio, s.IntervalCnt, s.IntervalRate))
+			}
+			log.Print(sb.String())
+
+			// 构建 JSON 统计数据通过 SSE 推送
+			type instanceStatJSON struct {
+				Addr         string  `json:"addr"`
+				Count        int     `json:"count"`
+				Ratio        float64 `json:"ratio"`
+				IntervalCnt  int     `json:"intervalCount"`
+				IntervalRate float64 `json:"intervalRate"`
+			}
+			type statEvent struct {
+				Tag       string             `json:"tag"`
+				Total     int64              `json:"total"`
+				Fail      int64              `json:"fail"`
+				Instances []instanceStatJSON `json:"instances"`
+			}
+			evt := statEvent{Tag: tag, Total: total, Fail: fails}
+			for _, s := range stats {
+				evt.Instances = append(evt.Instances, instanceStatJSON{
+					Addr: s.Addr, Count: s.Count, Ratio: s.Ratio,
+					IntervalCnt: s.IntervalCnt, IntervalRate: s.IntervalRate,
+				})
+			}
+			evtJSON, _ := json.Marshal(evt)
+			fmt.Fprintf(rw, "data: %s\n\n", evtJSON)
+			if canFlush {
+				flusher.Flush()
+			}
+
+			// 重置区间统计
+			for k := range intervalStats {
+				delete(intervalStats, k)
+			}
+			atomic.StoreInt64(&intervalTotal, 0)
+		}
+
+		for i := 0; i < loopCount; i++ {
+			instance, err := svr.discoverInstance()
+			if err != nil || instance == nil {
+				atomic.AddInt64(&failCount, 1)
+				atomic.AddInt64(&totalCount, 1)
+				atomic.AddInt64(&intervalTotal, 1)
+				log.Printf("[echo-loop] request #%d: discover instance fail: %v", i+1, err)
+				time.Sleep(time.Duration(loopIntervalMs) * time.Millisecond)
+				continue
+			}
+
+			addr := fmt.Sprintf("%s:%d", instance.GetHost(), instance.GetPort())
+			start := time.Now()
+			resp, err := http.Get(fmt.Sprintf("http://%s/echo", addr))
+
+			atomic.AddInt64(&totalCount, 1)
+			atomic.AddInt64(&intervalTotal, 1)
+
+			if err != nil {
+				atomic.AddInt64(&failCount, 1)
+				delay := time.Since(start)
+				svr.reportServiceCallResult(instance, model.RetFail, http.StatusInternalServerError, delay)
+				log.Printf("[echo-loop] request #%d to %s fail: %v", i+1, addr, err)
+			} else {
+				delay := time.Since(start)
+				retStatus := model.RetSuccess
+				if resp.StatusCode == http.StatusTooManyRequests {
+					retStatus = model.RetFlowControl
+				} else if resp.StatusCode != http.StatusOK {
+					retStatus = model.RetFail
+				}
+				svr.reportServiceCallResult(instance, retStatus, resp.StatusCode, delay)
+				_, _ = io.ReadAll(resp.Body)
+				resp.Body.Close()
+
+				statMu.Lock()
+				instanceStats[addr]++
+				intervalStats[addr]++
+				statMu.Unlock()
+			}
+
+			// 每10秒输出一次统计
+			if time.Since(lastStatTime) >= 10*time.Second {
+				elapsed := time.Since(lastStatTime).Truncate(time.Second)
+				printStats(fmt.Sprintf("%v elapsed", elapsed))
+				lastStatTime = time.Now()
+			}
+
+			time.Sleep(time.Duration(loopIntervalMs) * time.Millisecond)
+		}
+
+		// 最终统计
+		printStats("final")
+		log.Printf("[echo-loop] 持续请求完成: count=%d", loopCount)
+	})
+
+	// /echo-loop-stop 接口：预留用于未来支持中途停止（当前版本不需要）
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
@@ -260,6 +557,7 @@ func (svr *PolarisClient) deregisterService() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(calleeNamespace) == 0 || len(calleeService) == 0 {
@@ -288,10 +586,14 @@ func main() {
 	}
 	defer consumer.Destroy()
 
+	// 创建底层ConsumerAPI，用于获取lossless规则等高级接口
+	rawConsumer := api.NewConsumerAPIByContext(consumer.SDKContext())
+
 	svr := &PolarisClient{
-		provider: provider,
-		consumer: consumer,
-		webSvr:   &http.Server{},
+		provider:    provider,
+		consumer:    consumer,
+		rawConsumer: rawConsumer,
+		webSvr:      &http.Server{},
 	}
 	if selfRegister {
 		svr.registerService()

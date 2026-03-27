@@ -18,10 +18,11 @@ global:
       - prometheus
     plugin:
       prometheus:
+        address: ${POLARIS_SERVER}:9091
         type: push
-# 被调方配置
-provider:
-  # 无损上下线配置
-  lossless:
-    # 是否启用无损上下线
+# 主调方配置
+consumer:
+  weightAdjust:
     enable: true
+    chain:
+      - warmup    # 使用 warmup 插件做预热权重调整

@@ -27,7 +27,6 @@ import (
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
@@ -850,33 +849,4 @@ func TestIsDynamicWeightValid(t *testing.T) {
 	if w2.IsDynamicWeightValid() {
 		t.Error("DynamicWeight=100 == BaseWeight=100, 期望 IsDynamicWeightValid=false")
 	}
-}
-
-// ==================== debugf 测试 ====================
-
-func TestDebugf_日志级别不满足不输出(t *testing.T) {
-	// 使用一个不启用 debug 的 logger
-	disabledLogger := &levelDisabledLogger{}
-	adj := &Adjuster{
-		log: disabledLogger,
-	}
-	// 应该不 panic
-	adj.debugf("test %s", "message")
-	if disabledLogger.debugCalled {
-		t.Error("日志级别未启用时不应调用 Debugf")
-	}
-}
-
-// levelDisabledLogger 模拟 debug 级别未启用的 logger
-type levelDisabledLogger struct {
-	noopLogger
-	debugCalled bool
-}
-
-func (l *levelDisabledLogger) IsLevelEnabled(level int) bool {
-	return level > log.DebugLog
-}
-
-func (l *levelDisabledLogger) Debugf(format string, args ...interface{}) {
-	l.debugCalled = true
 }

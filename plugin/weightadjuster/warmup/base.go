@@ -51,8 +51,6 @@ type instanceWeightCacheEntry struct {
 type Adjuster struct {
 	*plugin.PluginBase
 	pluginCtx *plugin.InitContext
-	// 缓存每个服务的lossless规则
-	losslessRuleCache sync.Map // map[model.ServiceKey][]*apitraffic.LosslessRule
 	// 缓存每个服务的实例权重计算结果
 	instanceWeightCache sync.Map // map[model.ServiceKey]*instanceWeightCacheEntry
 	// 每个服务的锁
@@ -84,13 +82,6 @@ func (g *Adjuster) Destroy() error {
 	return nil
 }
 
-// debugf 在打印 debug 日志前先判断日志级别，避免不必要的参数序列化开销
-func (g *Adjuster) debugf(format string, args ...interface{}) {
-	if g.log.IsLevelEnabled(log.DebugLog) {
-		g.log.Debugf(format, args...)
-	}
-}
-
 // RealTimeAdjustDynamicWeight 实时上报健康状态，并判断是否需要立刻进行动态权重调整，用于流量削峰
 func (g *Adjuster) RealTimeAdjustDynamicWeight(model.InstanceGauge) (bool, error) {
 	return false, nil
@@ -108,31 +99,22 @@ func (g *Adjuster) TimingAdjustDynamicWeight(dynamicWeight map[string]*model.Ins
 		Namespace: service.GetNamespace(),
 		Service:   service.GetService(),
 	}
-	// 获取lossless规则
-	losslessRules := g.getLosslessRules(svcKey)
-	if len(losslessRules) == 0 {
-		return nil, nil
-	}
-
-	g.debugf("[WarmupWeightAdjuster] TimingAdjustDynamicWeight called for service %s/%s, instance count: %d",
+	g.log.Debugf("[WarmupWeightAdjuster] TimingAdjustDynamicWeight called for service %s/%s, instance count: %d",
 		svcKey.Namespace, svcKey.Service, len(service.GetInstances()))
-
 	// 先检查缓存
 	if cached, ok := g.instanceWeightCache.Load(svcKey); ok {
 		entry := cached.(*instanceWeightCacheEntry)
 		if time.Now().Before(entry.expireAt) && entry.instanceSize == len(service.GetInstances()) {
-			g.debugf("[WarmupWeightAdjuster] cache hit for service %s/%s, cached weights count: %d",
+			g.log.Debugf("[WarmupWeightAdjuster] cache hit for service %s/%s, cached weights count: %d",
 				svcKey.Namespace, svcKey.Service, len(entry.weights))
 			return entry.weights, nil
 		}
 	}
-
 	// 获取服务锁
 	lockVal, _ := g.lockMap.LoadOrStore(svcKey, &sync.Mutex{})
 	lock := lockVal.(*sync.Mutex)
 	lock.Lock()
 	defer lock.Unlock()
-
 	// double check 缓存
 	if cached, ok := g.instanceWeightCache.Load(svcKey); ok {
 		entry := cached.(*instanceWeightCacheEntry)
@@ -140,33 +122,30 @@ func (g *Adjuster) TimingAdjustDynamicWeight(dynamicWeight map[string]*model.Ins
 			return entry.weights, nil
 		}
 	}
-
-	g.debugf("[WarmupWeightAdjuster] cache miss for service %s/%s, recalculating weights, lossless rules count: %d",
+	// 获取lossless规则
+	losslessRules := g.getLosslessRules(svcKey)
+	if len(losslessRules) == 0 {
+		return nil, nil
+	}
+	g.log.Debugf("[WarmupWeightAdjuster] cache miss for service %s/%s, recalculating weights, lossless rules count: %d",
 		svcKey.Namespace, svcKey.Service, len(losslessRules))
-
 	result, err := g.doTimingAdjustDynamicWeight(dynamicWeight, service, losslessRules)
 	if err != nil {
 		return nil, err
 	}
-
 	// 缓存计算结果
 	g.instanceWeightCache.Store(svcKey, &instanceWeightCacheEntry{
 		weights:      result,
 		instanceSize: len(service.GetInstances()),
 		expireAt:     time.Now().Add(_instanceWeightCacheExpire),
 	})
-
 	return result, nil
 }
 
 // getLosslessRules 获取lossless规则
+// 每次都从 SDK 底层缓存获取最新规则，确保服务端规则变更时能及时感知
+// SyncGetServiceRule 在规则已加载的情况下只是从本地 inmemory 缓存读取，性能开销很小
 func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.LosslessRule {
-	// 先从缓存获取
-	if cached, ok := g.losslessRuleCache.Load(svcKey); ok {
-		g.debugf("[WarmupWeightAdjuster] getLosslessRules cache hit for service %s/%s, rules count: %d",
-			svcKey.Namespace, svcKey.Service, len(cached.([]*apitraffic.LosslessRule)))
-		return cached.([]*apitraffic.LosslessRule)
-	}
 	// 通过Engine获取lossless规则
 	if g.pluginCtx.ValueCtx == nil {
 		g.log.Warnf("[WarmupWeightAdjuster] getLosslessRules ValueCtx is nil for service %s/%s",
@@ -192,7 +171,7 @@ func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.Lossl
 		return nil
 	}
 	if ruleResp == nil || ruleResp.GetValue() == nil {
-		g.debugf("[WarmupWeightAdjuster] getLosslessRules response is nil for service %s/%s",
+		g.log.Debugf("[WarmupWeightAdjuster] getLosslessRules response is nil for service %s/%s",
 			svcKey.Namespace, svcKey.Service)
 		return nil
 	}
@@ -203,9 +182,7 @@ func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.Lossl
 		return nil
 	}
 	rules := wrapper.Rules
-	// 缓存规则
-	g.losslessRuleCache.Store(svcKey, rules)
-	g.log.Infof("[WarmupWeightAdjuster] getLosslessRules fetched and cached for service %s/%s, rules count: %d",
+	g.log.Debugf("[WarmupWeightAdjuster] getLosslessRules fetched for service %s/%s, rules count: %d",
 		svcKey.Namespace, svcKey.Service, len(rules))
 
 	return rules
@@ -220,7 +197,7 @@ func (g *Adjuster) parseMetadataLosslessRules(
 	for _, rule := range losslessRules {
 		metadata := rule.GetMetadata()
 		if len(metadata) == 0 {
-			g.debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules rule has no metadata, skip")
+			g.log.Debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules rule has no metadata, skip")
 			continue
 		}
 		for key, value := range metadata {
@@ -228,11 +205,11 @@ func (g *Adjuster) parseMetadataLosslessRules(
 				metadataRules[key] = make(map[string]*apitraffic.LosslessRule)
 			}
 			metadataRules[key][value] = rule
-			g.debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules added rule: metaKey=%s, metaValue=%s",
+			g.log.Debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules added rule: metaKey=%s, metaValue=%s",
 				key, value)
 		}
 	}
-	g.debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules total metadata keys: %d", len(metadataRules))
+	g.log.Debugf("[WarmupWeightAdjuster] parseMetadataLosslessRules total metadata keys: %d", len(metadataRules))
 	return metadataRules
 }
 
@@ -242,20 +219,20 @@ func (g *Adjuster) getMatchMetadataLosslessRule(instance model.Instance,
 
 	instanceMeta := instance.GetMetadata()
 	if len(instanceMeta) == 0 {
-		g.debugf("[WarmupWeightAdjuster] instance %s has no metadata, skip metadata rule matching", instance.GetId())
+		g.log.Debugf("[WarmupWeightAdjuster] instance %s has no metadata, skip metadata rule matching", instance.GetId())
 		return nil
 	}
 	for metaKey, valueRuleMap := range metadataRules {
 		instanceValue, exists := instanceMeta[metaKey]
 		if !exists {
-			g.debugf("[WarmupWeightAdjuster] instance %s metadata key %s not found, skip", instance.GetId(), metaKey)
+			g.log.Debugf("[WarmupWeightAdjuster] instance %s metadata key %s not found, skip", instance.GetId(), metaKey)
 			continue
 		}
 		if rule, ok := valueRuleMap[instanceValue]; ok {
-			g.debugf("[WarmupWeightAdjuster] instance %s matched metadata rule: key=%s, value=%s", instance.GetId(), metaKey, instanceValue)
+			g.log.Debugf("[WarmupWeightAdjuster] instance %s matched metadata rule: key=%s, value=%s", instance.GetId(), metaKey, instanceValue)
 			return rule
 		}
-		g.debugf("[WarmupWeightAdjuster] instance %s metadata key=%s, value=%s not matched any rule", instance.GetId(), metaKey, instanceValue)
+		g.log.Debugf("[WarmupWeightAdjuster] instance %s metadata key=%s, value=%s not matched any rule", instance.GetId(), metaKey, instanceValue)
 	}
 	return nil
 }
@@ -272,12 +249,12 @@ func (g *Adjuster) doTimingAdjustDynamicWeight(dynamicWeight map[string]*model.I
 
 	if len(metadataRules) == 0 {
 		// 没有元数据匹配规则，使用第一条规则
-		g.log.Infof("[WarmupWeightAdjuster] no metadata rules, using first lossless rule, rule: %s",
+		g.log.Debugf("[WarmupWeightAdjuster] no metadata rules, using first lossless rule, rule: %s",
 			model.JsonString(losslessRules[0]))
 		return g.getInstanceWeightFromLosslessRule(dynamicWeight, service, losslessRules[0])
 	}
 	// 有元数据匹配规则，按实例元数据匹配不同的规则
-	g.debugf("[WarmupWeightAdjuster] using metadata rules, metadata rule keys count: %d", len(metadataRules))
+	g.log.Debugf("[WarmupWeightAdjuster] using metadata rules, metadata rule keys count: %d", len(metadataRules))
 	return g.getInstanceWeightFromMetadataRule(dynamicWeight, service, metadataRules)
 }
 
@@ -298,15 +275,15 @@ func (g *Adjuster) getInstanceWeightFromMetadataRule(dynamicWeight map[string]*m
 	for _, instance := range instances {
 		losslessRule := g.getMatchMetadataLosslessRule(instance, metadataRules)
 		if losslessRule == nil {
-			g.debugf("[WarmupWeightAdjuster] instance %s no matching metadata lossless rule, skip", instance.GetId())
+			g.log.Debugf("[WarmupWeightAdjuster] instance %s no matching metadata lossless rule, skip", instance.GetId())
 			continue
 		}
 		warmup := losslessRule.GetLosslessOnline().GetWarmup()
 		if warmup == nil || !warmup.GetEnable() {
-			g.debugf("[WarmupWeightAdjuster] instance %s matched rule but warmup not enabled, skip", instance.GetId())
+			g.log.Debugf("[WarmupWeightAdjuster] instance %s matched rule but warmup not enabled, skip", instance.GetId())
 			continue
 		}
-		g.debugf("[WarmupWeightAdjuster] instance %s matched rule, warmup config: interval=%ds, curvature=%d, "+
+		g.log.Debugf("[WarmupWeightAdjuster] instance %s matched rule, warmup config: interval=%ds, curvature=%d, "+
 			"overloadProtection=%v, threshold=%d",
 			instance.GetId(), warmup.GetIntervalSecond(), warmup.GetCurvature(),
 			warmup.GetEnableOverloadProtection(), warmup.GetOverloadProtectionThreshold())
@@ -321,7 +298,7 @@ func (g *Adjuster) getInstanceWeightFromMetadataRule(dynamicWeight map[string]*m
 		weight := g.getInstanceWeight(dynamicWeight, instance, warmup, currentTime)
 		if weight.IsDynamicWeightValid() {
 			warmupInstanceCount++
-			g.debugf("[WarmupWeightAdjuster] instance %s is warming up, baseWeight=%d, dynamicWeight=%d",
+			g.log.Debugf("[WarmupWeightAdjuster] instance %s is warming up, baseWeight=%d, dynamicWeight=%d",
 				instance.GetId(), weight.BaseWeight, weight.DynamicWeight)
 		}
 		result = append(result, weight)
@@ -351,20 +328,20 @@ func (g *Adjuster) getInstanceWeightFromMetadataRule(dynamicWeight map[string]*m
 func (g *Adjuster) getInstanceWeightFromLosslessRule(dynamicWeight map[string]*model.InstanceWeight,
 	service model.ServiceInstances, losslessRule *apitraffic.LosslessRule) ([]*model.InstanceWeight, error) {
 	if losslessRule == nil || losslessRule.GetLosslessOnline() == nil {
-		g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule losslessRule or losslessOnline is nil, skip")
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule losslessRule or losslessOnline is nil, skip")
 		return nil, nil
 	}
 
 	warmup := losslessRule.GetLosslessOnline().GetWarmup()
 	if warmup == nil || !warmup.GetEnable() {
-		g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup is nil or not enabled, skip")
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup is nil or not enabled, skip")
 		return nil, nil
 	}
 
 	instances := service.GetInstances()
 	currentTime := time.Now()
 
-	g.log.Infof("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup config: interval=%ds, curvature=%d, "+
+	g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup config: interval=%ds, curvature=%d, "+
 		"overloadProtection=%v, threshold=%d",
 		warmup.GetIntervalSecond(), warmup.GetCurvature(),
 		warmup.GetEnableOverloadProtection(), warmup.GetOverloadProtectionThreshold())
@@ -373,13 +350,14 @@ func (g *Adjuster) getInstanceWeightFromLosslessRule(dynamicWeight map[string]*m
 		needWarmupCount := g.countNeedWarmupInstances(instances, warmup, currentTime)
 		threshold := warmup.GetOverloadProtectionThreshold()
 		percentage := needWarmupCount * 100 / len(instances)
-		g.log.Infof("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule overload check: "+
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule overload check: "+
 			"needWarmupCount=%d, totalCount=%d, percentage=%d%%, threshold=%d",
 			needWarmupCount, len(instances), percentage, threshold)
 		if int32(percentage) >= threshold {
-			g.log.Infof("[WarmupWeightAdjuster] overload protection triggered, "+
-				"needWarmupCount: %d, totalCount: %d, threshold: %d",
-				needWarmupCount, len(instances), threshold)
+			g.log.Infof("[WarmupWeightAdjuster] overload protection triggered, needWarmupCount: %d, totalCount: %d, "+
+				"percentage=%d%%, warmup config: interval=%ds, curvature=%d, overloadProtection=%v, threshold=%d%%",
+				needWarmupCount, len(instances), percentage, warmup.GetIntervalSecond(), warmup.GetCurvature(),
+				warmup.GetEnableOverloadProtection(), warmup.GetOverloadProtectionThreshold())
 			return nil, nil
 		}
 	}
@@ -391,21 +369,23 @@ func (g *Adjuster) getInstanceWeightFromLosslessRule(dynamicWeight map[string]*m
 		weight := g.getInstanceWeight(dynamicWeight, instance, warmup, currentTime)
 		if weight.IsDynamicWeightValid() {
 			warmupInstanceCount++
-			g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule instance %s is warming up, "+
+			g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule instance %s is warming up, "+
 				"baseWeight=%d, dynamicWeight=%d", instance.GetId(), weight.BaseWeight, weight.DynamicWeight)
 		}
 		result = append(result, weight)
 	}
 
-	g.debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup instance count: %d, result: %v",
+	g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeightFromLosslessRule warmup instance count: %d, result: %v",
 		warmupInstanceCount, result)
 
 	if warmupInstanceCount == 0 {
 		return nil, nil
 	}
 
-	g.log.Infof("[WarmupWeightAdjuster] warmup instance count: %d, result: %v",
-		warmupInstanceCount, result)
+	g.log.Infof("[WarmupWeightAdjuster] warmup instance count: %d, total:%d, result: %v, warmup config: interval=%ds, "+
+		"curvature=%d, overloadProtection=%v, threshold=%d", warmupInstanceCount, len(result), result,
+		warmup.GetIntervalSecond(), warmup.GetCurvature(), warmup.GetEnableOverloadProtection(),
+		warmup.GetOverloadProtectionThreshold())
 
 	return result, nil
 }
@@ -419,24 +399,27 @@ func (g *Adjuster) countNeedWarmupInstances(instances []model.Instance, warmup *
 	for _, instance := range instances {
 		createTime := g.getInstanceCreateTime(instance)
 		if createTime == 0 {
-			g.debugf("[WarmupWeightAdjuster] countNeedWarmupInstances instance %s createTime is 0, skip",
+			g.log.Debugf("[WarmupWeightAdjuster] countNeedWarmupInstances instance %s createTime is 0, skip",
 				instance.GetId())
 			continue
 		}
 
 		uptime := currentTime.Unix() - createTime
 		if uptime < 0 {
-			uptime = -uptime
+			g.log.Debugf("[WarmupWeightAdjuster] countNeedWarmupInstances instance %s has negative uptime=%ds, "+
+				"createTime=%d, currentTime=%d, possible timezone issue, skip",
+				instance.GetId(), uptime, createTime, currentTime.Unix())
+			continue
 		}
 
 		if uptime < int64(intervalSecond) {
 			count++
-			g.debugf("[WarmupWeightAdjuster] countNeedWarmupInstances instance %s needs warmup, "+
+			g.log.Debugf("[WarmupWeightAdjuster] countNeedWarmupInstances instance %s needs warmup, "+
 				"uptime=%ds, intervalSecond=%d", instance.GetId(), uptime, intervalSecond)
 		}
 	}
 
-	g.debugf("[WarmupWeightAdjuster] countNeedWarmupInstances total need warmup: %d / %d",
+	g.log.Debugf("[WarmupWeightAdjuster] countNeedWarmupInstances total need warmup: %d / %d",
 		count, len(instances))
 	return count
 }
@@ -450,7 +433,7 @@ func (g *Adjuster) getInstanceWeight(dynamicWeight map[string]*model.InstanceWei
 	baseWeight := uint32(instance.GetWeight())
 	if dynamicWeight != nil {
 		if prev, ok := dynamicWeight[instance.GetId()]; ok {
-			g.debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s using previous dynamic weight %d as base",
+			g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s using previous dynamic weight %d as base",
 				instance.GetId(), prev.DynamicWeight)
 			baseWeight = prev.DynamicWeight
 		}
@@ -464,19 +447,22 @@ func (g *Adjuster) getInstanceWeight(dynamicWeight map[string]*model.InstanceWei
 
 	createTime := g.getInstanceCreateTime(instance)
 	if createTime == 0 {
-		g.debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s createTime is 0, return baseWeight=%d",
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s createTime is 0, return baseWeight=%d",
 			instance.GetId(), baseWeight)
 		return weight
 	}
 
 	uptime := currentTime.Unix() - createTime
 	if uptime < 0 {
-		uptime = -uptime
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s has negative uptime=%ds, "+
+			"createTime=%d, currentTime=%d, possible timezone issue, treat as just started",
+			instance.GetId(), uptime, createTime, currentTime.Unix())
+		uptime = 0
 	}
 
 	intervalSecond := int64(warmup.GetIntervalSecond())
 	if uptime > intervalSecond {
-		g.debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s warmup completed, "+
+		g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s warmup completed, "+
 			"uptime=%ds > interval=%ds, return baseWeight=%d",
 			instance.GetId(), uptime, intervalSecond, baseWeight)
 		return weight
@@ -493,12 +479,25 @@ func (g *Adjuster) getInstanceWeight(dynamicWeight map[string]*model.InstanceWei
 		calcWeight = float64(baseWeight)
 	}
 
-	g.debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s warming up: "+
+	g.log.Debugf("[WarmupWeightAdjuster] getInstanceWeight instance %s warming up: "+
 		"uptime=%ds, interval=%ds, ratio=%.4f, curvature=%d, baseWeight=%d, calcWeight=%d",
 		instance.GetId(), uptime, intervalSecond, ratio, curvature, baseWeight, uint32(calcWeight))
 
 	weight.DynamicWeight = uint32(calcWeight)
 	return weight
+}
+
+// 不带时区信息的 ctime 日期时间格式，需要使用 time.ParseInLocation 以本地时区解析
+var _ctimeLocalLayouts = []string{
+	"2006-01-02 15:04:05",
+}
+
+// 带时区信息的 ctime 日期时间格式，使用 time.Parse 即可正确解析
+var _ctimeTimezoneLayouts = []string{
+	"2006-01-02T15:04:05Z",
+	"2006-01-02T15:04:05+08:00",
+	"2006-01-02T15:04:05.000Z",
+	time.RFC3339,
 }
 
 // getInstanceCreateTime 获取实例的创建时间（秒级时间戳）
@@ -507,12 +506,32 @@ func (g *Adjuster) getInstanceCreateTime(instance model.Instance) int64 {
 	if protoInst, ok := instance.(*pb.InstanceInProto); ok {
 		ctime := protoInst.GetCtime()
 		if ctime != nil && ctime.GetValue() != "" {
-			// Ctime 是字符串格式的时间戳
-			if ts, err := strconv.ParseInt(ctime.GetValue(), 10, 64); err == nil {
+			ctimeStr := ctime.GetValue()
+			// 优先尝试不带时区的格式，使用本地时区解析（服务端通常返回本地时间字符串）
+			for _, layout := range _ctimeLocalLayouts {
+				if t, err := time.ParseInLocation(layout, ctimeStr, time.Local); err == nil {
+					g.log.Debugf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime=%s parsed with local timezone, unix=%d",
+						instance.GetId(), ctimeStr, t.Unix())
+					return t.Unix()
+				}
+			}
+			// 尝试带时区信息的格式
+			for _, layout := range _ctimeTimezoneLayouts {
+				if t, err := time.Parse(layout, ctimeStr); err == nil {
+					g.log.Debugf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime=%s parsed with timezone layout, unix=%d",
+						instance.GetId(), ctimeStr, t.Unix())
+					return t.Unix()
+				}
+			}
+			// 回退：尝试解析为纯数字时间戳（秒级）
+			if ts, err := strconv.ParseInt(ctimeStr, 10, 64); err == nil {
+				g.log.Debugf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime=%s parsed as unix timestamp=%d",
+					instance.GetId(), ctimeStr, ts)
 				return ts
 			}
+			// 所有格式都无法解析
 			g.log.Errorf("[WarmupWeightAdjuster] getInstanceCreateTime instance %s ctime parse failed: %s",
-				instance.GetId(), ctime.GetValue())
+				instance.GetId(), ctimeStr)
 		}
 	}
 	return 0

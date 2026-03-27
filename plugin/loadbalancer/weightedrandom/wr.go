@@ -64,11 +64,11 @@ func (g *WRLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	svcInstances model.ServiceInstances) (model.Instance, error) {
 	// 当存在动态权重时，使用动态权重进行权重随机选择
 	if len(criteria.DynamicWeight) > 0 {
-		g.debugf("[WRLoadBalancer] ChooseInstance using dynamic weight path, dynamicWeight entries: %d",
+		g.log.GetBaseLogger().Debugf("[WRLoadBalancer] ChooseInstance using dynamic weight path, dynamicWeight entries: %d",
 			len(criteria.DynamicWeight))
 		return g.chooseInstanceWithDynamicWeight(criteria, svcInstances)
 	}
-	g.debugf("[WRLoadBalancer] ChooseInstance using static weight path")
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] ChooseInstance using static weight path")
 	return g.clusterBasedChooseInstance(criteria.IgnoreHalfOpen, criteria.Cluster, svcInstances.GetServiceClusters())
 }
 
@@ -85,7 +85,7 @@ func (g *WRLoadBalancer) clusterBasedChooseInstance(ignoreHalfOpen bool,
 			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance, includeHalfOpen: %v",
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count(), cluster.IncludeHalfOpen)
 	}
-	g.debugf("[WRLoadBalancer] clusterBasedChooseInstance service %s, "+
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] clusterBasedChooseInstance service %s, "+
 		"available instances: %d, totalWeight: %d",
 		svcClusters.GetServiceKey(), targetInstances.Count(), targetInstances.TotalWeight())
 	// 优化进行随机半开节点的分配

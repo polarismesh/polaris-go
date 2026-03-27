@@ -19,7 +19,6 @@ package weightedrandom
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
-	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	lbcommon "github.com/polarismesh/polaris-go/plugin/loadbalancer/common"
@@ -47,14 +46,6 @@ func (d *dynamicWeightSlice) TotalWeight() int {
 	return d.total
 }
 
-// debugf 在打印 debug 日志前先判断日志级别，避免不必要的参数序列化开销
-func (g *WRLoadBalancer) debugf(format string, args ...interface{}) {
-	logger := g.log.GetBaseLogger()
-	if logger.IsLevelEnabled(log.DebugLog) {
-		logger.Debugf(format, args...)
-	}
-}
-
 // buildDynamicWeightSlice 构建基于动态权重的累积权重数组
 func (g *WRLoadBalancer) buildDynamicWeightSlice(dynamicWeights map[string]*model.InstanceWeight,
 	instances []model.Instance) *dynamicWeightSlice {
@@ -67,11 +58,11 @@ func (g *WRLoadBalancer) buildDynamicWeightSlice(dynamicWeights map[string]*mode
 		w := g.getWeight(dynamicWeights, instance)
 		accumulate += uint64(w)
 		slice.accumulateWeight[i] = accumulate
-		g.debugf("[WRLoadBalancer] buildDynamicWeightSlice instance %s: weight=%d, accumulate=%d", instance.GetId(), w,
+		g.log.GetBaseLogger().Debugf("[WRLoadBalancer] buildDynamicWeightSlice instance %s: weight=%d, accumulate=%d", instance.GetId(), w,
 			accumulate)
 	}
 	slice.total = int(accumulate)
-	g.debugf("[WRLoadBalancer] buildDynamicWeightSlice completed: instanceCount=%d, totalWeight=%d", len(instances),
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] buildDynamicWeightSlice completed: instanceCount=%d, totalWeight=%d", len(instances),
 		slice.total)
 	return slice
 }
@@ -91,7 +82,7 @@ func (g *WRLoadBalancer) chooseInstanceWithDynamicWeight(criteria *loadbalancer.
 			svcClusters.GetServiceKey(), *cluster)
 	}
 
-	g.debugf("[WRLoadBalancer] chooseInstanceWithDynamicWeight called for service %s, available instances: %d, "+
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] chooseInstanceWithDynamicWeight called for service %s, available instances: %d, "+
 		"dynamicWeight entries: %d", svcClusters.GetServiceKey(), len(instances), len(criteria.DynamicWeight))
 
 	dynamicWeights := criteria.DynamicWeight
@@ -106,7 +97,7 @@ func (g *WRLoadBalancer) chooseInstanceWithDynamicWeight(criteria *loadbalancer.
 	index := rand.SelectWeightedRandItem(g.scalableRand, weightSlice)
 	if index >= 0 && index < len(instances) {
 		selected := instances[index]
-		g.debugf("[WRLoadBalancer] chooseInstanceWithDynamicWeight selected instance %s (index=%d), host=%s, "+
+		g.log.GetBaseLogger().Debugf("[WRLoadBalancer] chooseInstanceWithDynamicWeight selected instance %s (index=%d), host=%s, "+
 			"port=%d, totalWeight=%d", selected.GetId(), index, selected.GetHost(), selected.GetPort(),
 			weightSlice.TotalWeight())
 		return selected, nil
@@ -124,11 +115,11 @@ func (g *WRLoadBalancer) getWeight(dynamicWeights map[string]*model.InstanceWeig
 		return instance.GetWeight()
 	}
 	if w, ok := dynamicWeights[instance.GetId()]; ok {
-		g.debugf("[WRLoadBalancer] getWeight instance %s using dynamic weight: %d (base: %d)", instance.GetId(),
+		g.log.GetBaseLogger().Debugf("[WRLoadBalancer] getWeight instance %s using dynamic weight: %d (base: %d)", instance.GetId(),
 			w.DynamicWeight, w.BaseWeight)
 		return int(w.DynamicWeight)
 	}
-	g.debugf("[WRLoadBalancer] getWeight instance %s using static weight: %d (no dynamic weight found)",
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] getWeight instance %s using static weight: %d (no dynamic weight found)",
 		instance.GetId(), instance.GetWeight())
 	return instance.GetWeight()
 }

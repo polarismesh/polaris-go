@@ -41,7 +41,7 @@ var (
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "LoadBalanceEchoServer", "service")
-	flag.Int64Var(&port, "port", 18080, "port")
+	flag.Int64Var(&port, "port", 17080, "port")
 	flag.StringVar(&token, "token", "", "token")
 	flag.StringVar(&lbPolicy, "lbPolicy", "weightedRandom", "loadBalancer plugin")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
