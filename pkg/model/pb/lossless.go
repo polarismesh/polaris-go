@@ -61,7 +61,10 @@ func (l *LosslessAssistant) ParseRuleValue(resp *apiservice.DiscoverResponse, ba
 	revision = resp.GetService().GetRevision().GetValue()
 
 	// 返回 LosslessRules 数组
-	losslessRules := resp.LosslessRules
+	losslessRules := resp.LosslessRuleList
+	if len(resp.LosslessRuleList) == 0 { // 旧版本服务端LosslessRuleList字段为空，回退使用存量字段
+		losslessRules = resp.LosslessRules
+	}
 	if len(losslessRules) == 0 {
 		baseLogger.Debugf("LosslessAssistant.ParseRuleValue: service=%s, no lossless rules found, using service revision=%s",
 			serviceKey, revision)
