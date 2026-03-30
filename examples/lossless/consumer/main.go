@@ -50,8 +50,6 @@ var (
 	calleeService       string
 	port                int
 	token               string
-	lbPolicy            string
-	hashKey             string
 	debug               bool
 	defaultLoopCount    int
 	defaultLoopInterval int // 毫秒
@@ -65,8 +63,6 @@ func initArgs() {
 	flag.StringVar(&calleeService, "calleeService", "LosslessTimeDelayServer", "calleeService")
 	flag.IntVar(&port, "port", 18080, "port")
 	flag.StringVar(&token, "token", "", "token")
-	flag.StringVar(&lbPolicy, "lbPolicy", "weightedRandom", "loadBalancer plugin")
-	flag.StringVar(&hashKey, "hashKey", "", "hashKey")
 	flag.BoolVar(&debug, "debug", false, "debug")
 	flag.IntVar(&defaultLoopCount, "loopCount", 100, "echo-loop 默认请求次数")
 	flag.IntVar(&defaultLoopInterval, "loopInterval", 500, "echo-loop 默认请求间隔(毫秒)")
@@ -108,10 +104,6 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = calleeNamespace
 	getOneRequest.Service = calleeService
-	getOneRequest.LbPolicy = lbPolicy
-	if hashKey != "" {
-		getOneRequest.HashKey = []byte(hashKey)
-	}
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance, err is %v", err)
