@@ -134,6 +134,7 @@ PROVIDER2_PID=""
 # ======================== 清理函数 ========================
 cleanup() {
     log_info "正在清理进程..."
+    # 第一步：通过 PID 变量清理已知进程
     for pid_var in CONSUMER_PID PROVIDER1_PID PROVIDER2_PID; do
         local pid="${!pid_var}"
         if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
@@ -142,6 +143,24 @@ cleanup() {
             wait "$pid" 2>/dev/null || true
         fi
     done
+    # 第二步：兜底清理 - 通过进程路径查找可能遗漏的孤儿进程
+    # 当子 shell 退出后，实际二进制进程可能变成孤儿进程（PPID=1），PID 变量已失效
+    local orphan_pids
+    orphan_pids=$(ps -ef | grep -E "${BUILD_DIR}/(provider|consumer)\b" | grep -v grep | awk '{print $2}' 2>/dev/null || true)
+    if [[ -n "$orphan_pids" ]]; then
+        log_info "发现残留孤儿进程，正在清理: $orphan_pids"
+        for opid in $orphan_pids; do
+            kill "$opid" 2>/dev/null || true
+        done
+        sleep 1
+        # 对仍然存活的进程发送 SIGKILL
+        for opid in $orphan_pids; do
+            if kill -0 "$opid" 2>/dev/null; then
+                log_warn "进程 $opid 未响应 SIGTERM，发送 SIGKILL"
+                kill -9 "$opid" 2>/dev/null || true
+            fi
+        done
+    fi
     log_info "清理完成"
 }
 
@@ -312,6 +331,24 @@ main() {
     log_step "1/7 环境准备"
 
     mkdir -p "$BUILD_DIR" "$LOG_DIR"
+
+    # 预清理：杀掉上一轮可能残留的 provider/consumer 进程，避免端口冲突
+    local stale_pids
+    stale_pids=$(ps -ef | grep -E "${BUILD_DIR}/(provider|consumer)\b" | grep -v grep | awk '{print $2}' 2>/dev/null || true)
+    if [[ -n "$stale_pids" ]]; then
+        log_warn "发现上一轮残留进程，正在预清理: $stale_pids"
+        for spid in $stale_pids; do
+            kill "$spid" 2>/dev/null || true
+        done
+        sleep 1
+        for spid in $stale_pids; do
+            if kill -0 "$spid" 2>/dev/null; then
+                log_warn "进程 $spid 未响应 SIGTERM，发送 SIGKILL"
+                kill -9 "$spid" 2>/dev/null || true
+            fi
+        done
+        log_info "预清理完成"
+    fi
 
     if ! command -v go &> /dev/null; then
         log_error "Go 未安装，请先安装 Go"
