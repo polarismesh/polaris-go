@@ -4,7 +4,21 @@ English | [中文](./README-zh.md)
 
 ## Using Load Balancing Feature
 
-Experience the load balancing capability of Polaris quickly.
+Experience the load balancing capability of Polaris quickly. This example provides a separate consumer directory for each load balancing algorithm.
+
+## Directory Structure
+
+```
+loadbalancer/
+├── provider/          # Common Provider
+├── hash/              # Hash load balancing (hash)
+├── l5cst/             # L5 consistent hash load balancing (l5cst)
+├── maglev/            # Maglev hash load balancing (maglev)
+├── ringhash/          # Ring hash load balancing (ringHash)
+├── weightedRandom/    # Weighted random load balancing (weightedRandom)
+├── verify_weight.sh   # Weight verification script
+└── cleanup.sh         # Cleanup script
+```
 
 ## How to use
 
@@ -12,90 +26,95 @@ Experience the load balancing capability of Polaris quickly.
 
 Build provider
 
-```
-# linux/mac
+```bash
 cd ./provider
 go build -o provider
-
-# windows
-cd ./provider
-go build -o provider.exe
 ```
 
-Build consumer
+Build a consumer for a specific algorithm (e.g., weightedRandom)
 
-```
-# linux/mac
-cd ./consumer
+```bash
+cd ./weightedRandom
 go build -o consumer
-
-# windows
-cd ./consumer
-go build -o consumer.exe
 ```
 
 ### Accessing the Console
 
-Create a corresponding service through the Arctic Star Console, if you are installed by a local one-click installation package, open the console directly on the browser through 127.0.0.1:8080
+Create a corresponding service through the Polaris Console. If installed via the local one-click installation package, open the console directly in the browser at 127.0.0.1:8080
 
 ### Modifying Configuration
 
-Specify the Polaris server address by editing the polaris.yaml file and filling in the server address.
+Specify the Polaris server address by editing the polaris.yaml file in each directory.
 
-Specify the load balancing strategy configuration:
+Each algorithm directory's polaris.yaml is pre-configured with the corresponding load balancing strategy, e.g., `hash/polaris.yaml`:
 
-```
-global:
-  serverConnector:
-    addresses:
-    - 127.0.0.1:8091
+```yaml
 consumer:
   loadbalancer:
-    type: weightedRandom
+    type: hash
 ```
 
 ### Execute program
 
 Run the built **provider** executable
 
-Run multiple providers on different nodes or specify different ports using the --port parameter. Run multiple providers on the same node.
+Run multiple providers on different nodes or specify different ports using the `--port` parameter.
 
-```
-# linux/mac
-./provider
-
-# windows
-./provider.exe
+```bash
+./provider/provider
 ```
 
-Run the built **consumer** executable
+Run the built **consumer** executable (e.g., weightedRandom)
 
-```
-# linux/mac
-./consumer
-
-# windows
-./consumer.exe
+```bash
+./weightedRandom/consumer
 ```
 
+Each algorithm directory's consumer uses the corresponding load balancing strategy by default. You can also override it via command-line arguments:
+
+```bash
+# Hash-based algorithms require a hashKey
+./hash/consumer --lbPolicy hash --hashKey "my-key"
+
+# Weighted random algorithm
+./weightedRandom/consumer --lbPolicy weightedRandom
+```
+
+### Supported Load Balancing Algorithms
+
+| Directory | Algorithm | Description | Requires hashKey |
+|-----------|-----------|-------------|-----------------|
+| `hash/` | hash | Hash | ✅ Yes |
+| `l5cst/` | l5cst | L5 Consistent Hash | ✅ Yes |
+| `maglev/` | maglev | Maglev Hash | ✅ Yes |
+| `ringhash/` | ringHash | Ring Hash | ✅ Yes |
+| `weightedRandom/` | weightedRandom | Weighted Random | ❌ No |
+
+### Using the Verification Script
+
+Use `verify_weight.sh` to automatically verify load balancing behavior:
+
+```bash
+# Verify weightedRandom algorithm (default)
+./verify_weight.sh
+
+# Verify a specific algorithm
+./verify_weight.sh --lb-policy hash
+./verify_weight.sh --lb-policy ringHash
+./verify_weight.sh --lb-policy maglev
+```
 
 ### Verify
 
 Requests will be load balanced to different providers.
 
 ```
-curl http://127.0.0.1:18080/echo
+curl http://127.0.0.1:17080/echo
 Hello, I'm LoadBalanceEchoServer Provider, My host : 10.10.0.10:32451
 
-curl http://127.0.0.1:18080/echo
+curl http://127.0.0.1:17080/echo
 Hello, I'm LoadBalanceEchoServer Provider, My host : 10.10.0.11:31102
 
-curl http://127.0.0.1:18080/echo
+curl http://127.0.0.1:17080/echo
 Hello, I'm LoadBalanceEchoServer Provider, My host : 10.10.0.10:32451
-
-curl http://127.0.0.1:18080/echo
-Hello, I'm LoadBalanceEchoServer Provider, My host : 10.10.0.10:32451
-
-curl http://127.0.0.1:18080/echo
-Hello, I'm LoadBalanceEchoServer Provider, My host : 10.10.0.11:31102
 ```

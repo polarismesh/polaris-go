@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 负载均衡权重验证脚本
+# 负载均衡验证脚本（支持所有负载均衡算法）
 #
 # 使用方法:
 #   chmod +x verify_weight.sh
@@ -8,6 +8,14 @@
 #                      [--service <服务名>] [--namespace <命名空间>]
 #                      [--observe-seconds <观察秒数>]
 #                      [--request-interval <请求间隔秒数>]
+#                      [--lb-policy <策略>] [--hash-key <哈希键>]
+#
+# 支持的负载均衡算法:
+#   - weightedRandom : 权重随机（默认），验证流量按权重均匀分布
+#   - hash           : 普通哈希，验证相同hashKey始终命中同一实例
+#   - ringHash       : 一致性哈希环(Ketama)，验证相同hashKey始终命中同一实例
+#   - maglev         : Maglev哈希，验证相同hashKey始终命中同一实例
+#   - l5cst          : L5一致性哈希，验证相同hashKey始终命中同一实例
 #
 # 前置条件:
 #   1. 北极星服务端(Polaris Server)已启动
@@ -20,7 +28,10 @@
 #   4. 启动 Provider1 和 Provider2
 #   5. 等待实例注册到北极星
 #   6. 持续发起请求，统计流量在两个实例间的分布
-#   7. 验证流量分布是否符合权重配置的预期
+#   7. 根据算法类型验证结果:
+#      - 权重类算法: 验证流量是否按权重均匀分布
+#      - 哈希类算法: 验证相同hashKey是否始终命中同一实例（一致性验证）
+#   8. 同时验证 /echo（ProcessLoadBalance）和 /call（GetOneInstance）两种负载均衡方式
 # =============================================================================
 
 set -euo pipefail
@@ -36,6 +47,7 @@ PROVIDER2_PORT="${PROVIDER2_PORT:-0}"    # 0 表示自动分配
 OBSERVE_SECONDS="${OBSERVE_SECONDS:-60}"
 REQUEST_INTERVAL="${REQUEST_INTERVAL:-1}"
 LB_POLICY="${LB_POLICY:-weightedRandom}"
+HASH_KEY="${HASH_KEY:-example-hash-key}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -68,6 +80,8 @@ while [[ $# -gt 0 ]]; do
             REQUEST_INTERVAL="$2"; shift 2 ;;
         --lb-policy)
             LB_POLICY="$2"; shift 2 ;;
+        --hash-key)
+            HASH_KEY="$2"; shift 2 ;;
         --help|-h)
             echo "用法: $0 [选项]"
             echo ""
@@ -82,6 +96,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --observe-seconds <秒>      观察时长 (默认: 60)"
             echo "  --request-interval <秒>     请求间隔 (默认: 1)"
             echo "  --lb-policy <策略>          负载均衡策略 (默认: weightedRandom)"
+            echo "                              可选: weightedRandom, hash, ringHash, maglev, l5cst"
+            echo "  --hash-key <哈希键>         哈希类算法的hashKey (默认: example-hash-key)"
             exit 0
             ;;
         *)
@@ -91,11 +107,25 @@ done
 
 # ======================== 全局变量 ========================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONSUMER_DIR="${SCRIPT_DIR}/consumer"
+# 根据负载均衡策略选择对应的 consumer 目录
+case "$LB_POLICY" in
+    hash)           CONSUMER_DIR="${SCRIPT_DIR}/hash" ;;
+    l5cst)          CONSUMER_DIR="${SCRIPT_DIR}/l5cst" ;;
+    maglev)         CONSUMER_DIR="${SCRIPT_DIR}/maglev" ;;
+    ringHash)       CONSUMER_DIR="${SCRIPT_DIR}/ringhash" ;;
+    weightedRandom) CONSUMER_DIR="${SCRIPT_DIR}/weightedRandom" ;;
+    *)              CONSUMER_DIR="${SCRIPT_DIR}/weightedRandom" ;;
+esac
 PROVIDER_DIR="${SCRIPT_DIR}/provider"
 BUILD_DIR="${SCRIPT_DIR}/.build"
 LOG_DIR="${SCRIPT_DIR}/.logs"
 RESULT_FILE="${LOG_DIR}/weight_result.csv"
+
+# 判断是否为哈希类算法
+IS_HASH_ALGO=false
+case "$LB_POLICY" in
+    hash|ringHash|maglev|l5cst) IS_HASH_ALGO=true ;;
+esac
 
 CONSUMER_PID=""
 PROVIDER1_PID=""
@@ -259,7 +289,7 @@ EOF
 main() {
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║        负载均衡权重验证脚本                      ║${NC}"
+    echo -e "${BLUE}║        负载均衡验证脚本                          ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "配置信息:"
@@ -268,6 +298,12 @@ main() {
     echo "  命名空间:         ${NAMESPACE}"
     echo "  Consumer端口:     ${CONSUMER_PORT}"
     echo "  负载均衡策略:     ${LB_POLICY}"
+    if [[ "$IS_HASH_ALGO" == "true" ]]; then
+        echo "  算法类型:         哈希类（验证一致性）"
+        echo "  HashKey:          ${HASH_KEY}"
+    else
+        echo "  算法类型:         权重类（验证均匀分布）"
+    fi
     echo "  观察时长:         ${OBSERVE_SECONDS}s"
     echo "  请求间隔:         ${REQUEST_INTERVAL}s"
     echo ""
@@ -325,12 +361,19 @@ main() {
     cp "${BUILD_DIR}/polaris_consumer.yaml" "${consumer_workdir}/polaris.yaml"
 
     local consumer_log="${LOG_DIR}/consumer.log"
-    (cd "$consumer_workdir" && "${BUILD_DIR}/consumer" \
-        --namespace "$NAMESPACE" \
-        --service "$SERVICE_NAME" \
-        --port "$CONSUMER_PORT" \
-        --lbPolicy "$LB_POLICY" \
-        --config "./polaris.yaml" \
+    local consumer_cmd=("${BUILD_DIR}/consumer"
+        --namespace "$NAMESPACE"
+        --service "$SERVICE_NAME"
+        --port "$CONSUMER_PORT"
+        --lbPolicy "$LB_POLICY"
+        --config "./polaris.yaml"
+    )
+    # 哈希类算法需要传递 hashKey 参数
+    if [[ "$IS_HASH_ALGO" == "true" ]]; then
+        consumer_cmd+=(--hashKey "$HASH_KEY")
+        log_info "哈希类算法，传递 hashKey: ${HASH_KEY}"
+    fi
+    (cd "$consumer_workdir" && "${consumer_cmd[@]}" \
         > "$consumer_log" 2>&1) &
     CONSUMER_PID=$!
     log_info "Consumer 已启动 (PID: $CONSUMER_PID)"
@@ -460,25 +503,36 @@ main() {
     log_info "Provider1 端口: ${p1_port}, Provider2 端口: ${p2_port}"
 
     # 初始化结果文件
-    echo "时间戳,已运行秒数,Provider1(${p1_port})计数,Provider2(${p2_port})计数,Provider1占比(%),Provider2占比(%)" > "$RESULT_FILE"
+    echo "时间戳,已运行秒数,路由,Provider1(${p1_port})计数,Provider2(${p2_port})计数,Provider1占比(%),Provider2占比(%)" > "$RESULT_FILE"
 
-    # 统计变量
+    # /echo 路由统计变量（ProcessLoadBalance 方式）
     local p1_count=0
     local p2_count=0
     local other_count=0
     local total_count=0
     local fail_count=0
 
-    # 区间统计（每5秒输出一次）
+    # /call 路由统计变量（GetOneInstance 方式）
+    local call_p1_count=0
+    local call_p2_count=0
+    local call_other_count=0
+    local call_total_count=0
+    local call_fail_count=0
+
+    # 区间统计（每10秒输出一次）
     local interval_p1=0
     local interval_p2=0
     local interval_total=0
+    local call_interval_p1=0
+    local call_interval_p2=0
+    local call_interval_total=0
 
     local start_ts
     start_ts=$(date +%s)
     local last_stat_ts=$start_ts
 
     echo ""
+    echo -e "${BLUE}[/echo 路由 - ProcessLoadBalance 方式]${NC}"
     printf "${BLUE}%-8s | %-14s | %-14s | %-12s | %-12s | %-18s | %-18s${NC}\n" \
         "已运行" "Provider1" "Provider2" "P1占比" "P2占比" "区间P1占比" "区间P2占比"
     printf "%-8s-+-%-14s-+-%-14s-+-%-12s-+-%-12s-+-%-18s-+-%-18s\n" \
@@ -498,7 +552,7 @@ main() {
         check_process_alive "$PROVIDER1_PID" "Provider1" || { log_error "Provider1 异常退出"; break; }
         check_process_alive "$PROVIDER2_PID" "Provider2" || { log_error "Provider2 异常退出"; break; }
 
-        # 发起请求
+        # ---- 发起 /echo 请求（ProcessLoadBalance 方式） ----
         local http_code resp
         http_code=$(curl -s -o /tmp/_weight_resp_$$.tmp -w '%{http_code}' --connect-timeout 5 \
             "http://127.0.0.1:${CONSUMER_PORT}/echo" 2>/dev/null || echo "000")
@@ -527,11 +581,39 @@ main() {
             fail_count=$((fail_count + 1))
         fi
 
+        # ---- 发起 /call 请求（GetOneInstance 方式） ----
+        local call_http_code call_resp
+        call_http_code=$(curl -s -o /tmp/_weight_call_resp_$$.tmp -w '%{http_code}' --connect-timeout 5 \
+            "http://127.0.0.1:${CONSUMER_PORT}/call" 2>/dev/null || echo "000")
+        call_resp=$(cat /tmp/_weight_call_resp_$$.tmp 2>/dev/null || echo "")
+        rm -f /tmp/_weight_call_resp_$$.tmp
+
+        call_total_count=$((call_total_count + 1))
+        call_interval_total=$((call_interval_total + 1))
+
+        if [[ "$call_http_code" == "200" ]]; then
+            local call_resp_port
+            call_resp_port=$(echo "$call_resp" | grep -o ':[0-9]*$' | sed 's/://' | tr -d '[:space:]')
+
+            if [[ "$call_resp_port" == "$p1_port" ]]; then
+                call_p1_count=$((call_p1_count + 1))
+                call_interval_p1=$((call_interval_p1 + 1))
+            elif [[ "$call_resp_port" == "$p2_port" ]]; then
+                call_p2_count=$((call_p2_count + 1))
+                call_interval_p2=$((call_interval_p2 + 1))
+            else
+                call_other_count=$((call_other_count + 1))
+            fi
+        else
+            call_fail_count=$((call_fail_count + 1))
+        fi
+
         # 每10秒输出一次统计
         now_ts=$(date +%s)
         if [[ $((now_ts - last_stat_ts)) -ge 10 ]]; then
             local elapsed=$((now_ts - start_ts))
 
+            # /echo 路由统计
             local p1_ratio="0.0" p2_ratio="0.0"
             if [[ $total_count -gt 0 ]]; then
                 p1_ratio=$(awk "BEGIN {printf \"%.1f\", $p1_count * 100.0 / $total_count}")
@@ -547,13 +629,33 @@ main() {
             printf "%-8s | %-14s | %-14s | %-12s | %-12s | %-18s | %-18s\n" \
                 "${elapsed}s" "$p1_count" "$p2_count" "${p1_ratio}%" "${p2_ratio}%" "${ip1_ratio}%" "${ip2_ratio}%"
 
+            # /call 路由统计
+            local cp1_ratio="0.0" cp2_ratio="0.0"
+            if [[ $call_total_count -gt 0 ]]; then
+                cp1_ratio=$(awk "BEGIN {printf \"%.1f\", $call_p1_count * 100.0 / $call_total_count}")
+                cp2_ratio=$(awk "BEGIN {printf \"%.1f\", $call_p2_count * 100.0 / $call_total_count}")
+            fi
+
+            local cip1_ratio="0.0" cip2_ratio="0.0"
+            if [[ $call_interval_total -gt 0 ]]; then
+                cip1_ratio=$(awk "BEGIN {printf \"%.1f\", $call_interval_p1 * 100.0 / $call_interval_total}")
+                cip2_ratio=$(awk "BEGIN {printf \"%.1f\", $call_interval_p2 * 100.0 / $call_interval_total}")
+            fi
+
+            printf "${CYAN}/call${NC}   | %-14s | %-14s | %-12s | %-12s | %-18s | %-18s\n" \
+                "$call_p1_count" "$call_p2_count" "${cp1_ratio}%" "${cp2_ratio}%" "${cip1_ratio}%" "${cip2_ratio}%"
+
             # 写入 CSV
-            echo "$(date '+%Y-%m-%d %H:%M:%S'),${elapsed},${p1_count},${p2_count},${p1_ratio},${p2_ratio}" >> "$RESULT_FILE"
+            echo "$(date '+%Y-%m-%d %H:%M:%S'),${elapsed},/echo,${p1_count},${p2_count},${p1_ratio},${p2_ratio}" >> "$RESULT_FILE"
+            echo "$(date '+%Y-%m-%d %H:%M:%S'),${elapsed},/call,${call_p1_count},${call_p2_count},${cp1_ratio},${cp2_ratio}" >> "$RESULT_FILE"
 
             # 重置区间统计
             interval_p1=0
             interval_p2=0
             interval_total=0
+            call_interval_p1=0
+            call_interval_p2=0
+            call_interval_total=0
             last_stat_ts=$now_ts
         fi
 
@@ -567,10 +669,18 @@ main() {
         final_p1_ratio=$(awk "BEGIN {printf \"%.1f\", $p1_count * 100.0 / $total_count}")
         final_p2_ratio=$(awk "BEGIN {printf \"%.1f\", $p2_count * 100.0 / $total_count}")
     fi
+    local final_call_p1_ratio="0.0" final_call_p2_ratio="0.0"
+    if [[ $call_total_count -gt 0 ]]; then
+        final_call_p1_ratio=$(awk "BEGIN {printf \"%.1f\", $call_p1_count * 100.0 / $call_total_count}")
+        final_call_p2_ratio=$(awk "BEGIN {printf \"%.1f\", $call_p2_count * 100.0 / $call_total_count}")
+    fi
 
     printf "%-8s | %-14s | %-14s | %-12s | %-12s | %-18s | %-18s\n" \
         "${final_elapsed}s" "$p1_count" "$p2_count" "${final_p1_ratio}%" "${final_p2_ratio}%" "---" "---"
-    echo "$(date '+%Y-%m-%d %H:%M:%S'),${final_elapsed},${p1_count},${p2_count},${final_p1_ratio},${final_p2_ratio}" >> "$RESULT_FILE"
+    printf "${CYAN}/call${NC}   | %-14s | %-14s | %-12s | %-12s | %-18s | %-18s\n" \
+        "$call_p1_count" "$call_p2_count" "${final_call_p1_ratio}%" "${final_call_p2_ratio}%" "---" "---"
+    echo "$(date '+%Y-%m-%d %H:%M:%S'),${final_elapsed},/echo,${p1_count},${p2_count},${final_p1_ratio},${final_p2_ratio}" >> "$RESULT_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S'),${final_elapsed},/call,${call_p1_count},${call_p2_count},${final_call_p1_ratio},${final_call_p2_ratio}" >> "$RESULT_FILE"
 
     # ==================== 步骤7: 验证结果汇总 ====================
     log_step "7/7 验证结果汇总"
@@ -581,11 +691,20 @@ main() {
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "  负载均衡策略:      ${LB_POLICY}"
+    echo ""
+    echo "  ── /echo 路由（ProcessLoadBalance 方式） ──"
     echo "  总请求数:          ${total_count}"
     echo "  请求失败:          ${fail_count}"
     echo "  Provider1 (端口${p1_port}): ${p1_count} 次 (${final_p1_ratio}%)"
     echo "  Provider2 (端口${p2_port}): ${p2_count} 次 (${final_p2_ratio}%)"
     echo "  其他/未匹配:       ${other_count} 次"
+    echo ""
+    echo "  ── /call 路由（GetOneInstance 方式） ──"
+    echo "  总请求数:          ${call_total_count}"
+    echo "  请求失败:          ${call_fail_count}"
+    echo "  Provider1 (端口${p1_port}): ${call_p1_count} 次 (${final_call_p1_ratio}%)"
+    echo "  Provider2 (端口${p2_port}): ${call_p2_count} 次 (${final_call_p2_ratio}%)"
+    echo "  其他/未匹配:       ${call_other_count} 次"
     echo ""
     echo "  流量分布详情 CSV:  ${RESULT_FILE}"
     echo "  Consumer 日志:     ${consumer_log}"
@@ -593,31 +712,157 @@ main() {
     echo "  Provider2 日志:    ${provider2_log}"
     echo ""
 
-    # ==================== 验证权重效果 ====================
+    # ==================== 验证效果（根据算法类型区分） ====================
     if [[ $total_count -eq 0 ]]; then
-        log_error "没有成功的请求，无法验证权重分布"
+        log_error "没有成功的请求，无法验证"
         echo -e "${RED}验证结论: ❌ 验证失败，没有成功的请求${NC}"
-    elif [[ $p1_count -eq 0 ]] || [[ $p2_count -eq 0 ]]; then
-        log_warn "有一个实例未收到任何请求"
-        log_warn "可能原因:"
-        log_warn "  1. 实例未成功注册到北极星"
-        log_warn "  2. 负载均衡策略配置问题"
-        log_warn "  3. 观察时间不足（当前: ${OBSERVE_SECONDS}s）"
+    elif [[ "$IS_HASH_ALGO" == "true" ]]; then
+        # ========== 哈希类算法验证：一致性 ==========
+        # --- /echo 路由验证（ProcessLoadBalance 方式） ---
+        echo -e "${BLUE}── /echo 路由 - 哈希一致性验证（ProcessLoadBalance，固定 HashKey: ${HASH_KEY}） ──${NC}"
         echo ""
-        echo -e "${YELLOW}验证结论: ⚠️ 流量分布不均匀，请检查配置${NC}"
-    else
-        # 检查是否大致均匀（默认权重相同时，两个实例应各约50%）
-        local diff
-        diff=$(awk "BEGIN {d = $final_p1_ratio - $final_p2_ratio; if (d < 0) d = -d; printf \"%.1f\", d}")
-        if awk "BEGIN {exit !($diff <= 20.0)}"; then
-            log_info "两个实例的流量差异为 ${diff}%，在合理范围内（<=20%）"
-            echo -e "${GREEN}验证结论: ✅ 负载均衡正常！流量在两个实例间合理分布${NC}"
+
+        local success_count=$((total_count - fail_count))
+        if [[ $success_count -eq 0 ]]; then
+            log_error "/echo 路由没有成功的请求，无法验证哈希一致性"
+            echo -e "${RED}/echo 验证结论: ❌ 验证失败${NC}"
         else
-            log_warn "两个实例的流量差异为 ${diff}%，偏差较大（>20%）"
-            log_warn "如果两个实例权重相同，这可能表示负载均衡存在问题"
-            log_warn "如果两个实例权重不同，请根据权重比例判断是否符合预期"
-            echo ""
-            echo -e "${YELLOW}验证结论: ⚠️ 流量分布偏差较大，请检查权重配置${NC}"
+            local max_count=$p1_count
+            local min_count=$p2_count
+            local max_label="Provider1(端口${p1_port})"
+            local min_label="Provider2(端口${p2_port})"
+            if [[ $p2_count -gt $p1_count ]]; then
+                max_count=$p2_count
+                min_count=$p1_count
+                max_label="Provider2(端口${p2_port})"
+                min_label="Provider1(端口${p1_port})"
+            fi
+
+            local consistency_ratio="0.0"
+            if [[ $success_count -gt 0 ]]; then
+                consistency_ratio=$(awk "BEGIN {printf \"%.1f\", $max_count * 100.0 / $success_count}")
+            fi
+
+            log_info "/echo 固定 HashKey 命中情况:"
+            log_info "  ${max_label}: ${max_count} 次 (${consistency_ratio}%)"
+            log_info "  ${min_label}: ${min_count} 次"
+
+            if [[ $min_count -eq 0 ]]; then
+                echo -e "${GREEN}/echo 验证结论: ✅ 哈希一致性验证通过！${NC}"
+                echo -e "${GREEN}  相同 HashKey(${HASH_KEY}) 的所有 ${success_count} 次请求${NC}"
+                echo -e "${GREEN}  始终命中同一实例 ${max_label}，一致性 100%${NC}"
+            elif awk "BEGIN {exit !($consistency_ratio >= 95.0)}"; then
+                echo -e "${GREEN}/echo 验证结论: ✅ 哈希一致性基本通过！${NC}"
+                echo -e "${GREEN}  一致性 ${consistency_ratio}%（>= 95%），少量偏差可能由实例变更引起${NC}"
+            else
+                echo -e "${RED}/echo 验证结论: ❌ 哈希一致性验证失败！${NC}"
+                echo -e "${RED}  一致性仅 ${consistency_ratio}%（< 95%），相同 HashKey 未能始终命中同一实例${NC}"
+                log_warn "可能原因:"
+                log_warn "  1. 哈希算法实现异常"
+                log_warn "  2. 实例列表在观察期间发生了变化"
+                log_warn "  3. HashKey 未正确传递"
+            fi
+        fi
+
+        # --- /call 路由验证（GetOneInstance 方式） ---
+        echo ""
+        echo -e "${BLUE}── /call 路由 - 哈希一致性验证（GetOneInstance，固定 HashKey: ${HASH_KEY}） ──${NC}"
+        echo ""
+
+        local call_success_count=$((call_total_count - call_fail_count))
+        if [[ $call_success_count -eq 0 ]]; then
+            log_error "/call 路由没有成功的请求，无法验证哈希一致性"
+            echo -e "${RED}/call 验证结论: ❌ 验证失败${NC}"
+        else
+            local call_max_count=$call_p1_count
+            local call_min_count=$call_p2_count
+            local call_max_label="Provider1(端口${p1_port})"
+            local call_min_label="Provider2(端口${p2_port})"
+            if [[ $call_p2_count -gt $call_p1_count ]]; then
+                call_max_count=$call_p2_count
+                call_min_count=$call_p1_count
+                call_max_label="Provider2(端口${p2_port})"
+                call_min_label="Provider1(端口${p1_port})"
+            fi
+
+            local call_consistency_ratio="0.0"
+            if [[ $call_success_count -gt 0 ]]; then
+                call_consistency_ratio=$(awk "BEGIN {printf \"%.1f\", $call_max_count * 100.0 / $call_success_count}")
+            fi
+
+            log_info "/call 固定 HashKey 命中情况:"
+            log_info "  ${call_max_label}: ${call_max_count} 次 (${call_consistency_ratio}%)"
+            log_info "  ${call_min_label}: ${call_min_count} 次"
+
+            if [[ $call_min_count -eq 0 ]]; then
+                echo -e "${GREEN}/call 验证结论: ✅ 哈希一致性验证通过！${NC}"
+                echo -e "${GREEN}  相同 HashKey(${HASH_KEY}) 的所有 ${call_success_count} 次请求${NC}"
+                echo -e "${GREEN}  始终命中同一实例 ${call_max_label}，一致性 100%${NC}"
+            elif awk "BEGIN {exit !($call_consistency_ratio >= 95.0)}"; then
+                echo -e "${GREEN}/call 验证结论: ✅ 哈希一致性基本通过！${NC}"
+                echo -e "${GREEN}  一致性 ${call_consistency_ratio}%（>= 95%），少量偏差可能由实例变更引起${NC}"
+            else
+                echo -e "${RED}/call 验证结论: ❌ 哈希一致性验证失败！${NC}"
+                echo -e "${RED}  一致性仅 ${call_consistency_ratio}%（< 95%），相同 HashKey 未能始终命中同一实例${NC}"
+                log_warn "可能原因:"
+                log_warn "  1. 哈希算法实现异常"
+                log_warn "  2. 实例列表在观察期间发生了变化"
+                log_warn "  3. HashKey 未正确传递"
+            fi
+        fi
+    else
+        # ========== 权重类算法验证：均匀分布 ==========
+        # --- /echo 路由验证（ProcessLoadBalance 方式） ---
+        echo -e "${BLUE}── /echo 路由 - 权重均匀分布验证（ProcessLoadBalance） ──${NC}"
+        echo ""
+
+        if [[ $p1_count -eq 0 ]] || [[ $p2_count -eq 0 ]]; then
+            log_warn "/echo 路由有一个实例未收到任何请求"
+            log_warn "可能原因:"
+            log_warn "  1. 实例未成功注册到北极星"
+            log_warn "  2. 负载均衡策略配置问题"
+            log_warn "  3. 观察时间不足（当前: ${OBSERVE_SECONDS}s）"
+            echo -e "${YELLOW}/echo 验证结论: ⚠️ 流量分布不均匀，请检查配置${NC}"
+        else
+            local diff
+            diff=$(awk "BEGIN {d = $final_p1_ratio - $final_p2_ratio; if (d < 0) d = -d; printf \"%.1f\", d}")
+            if awk "BEGIN {exit !($diff <= 20.0)}"; then
+                log_info "/echo 两个实例的流量差异为 ${diff}%，在合理范围内（<=20%）"
+                echo -e "${GREEN}/echo 验证结论: ✅ 负载均衡正常！流量在两个实例间合理分布${NC}"
+                echo -e "${GREEN}  Provider1: ${final_p1_ratio}%, Provider2: ${final_p2_ratio}%, 差异: ${diff}%${NC}"
+            else
+                log_warn "/echo 两个实例的流量差异为 ${diff}%，偏差较大（>20%）"
+                log_warn "如果两个实例权重相同，这可能表示负载均衡存在问题"
+                log_warn "如果两个实例权重不同，请根据权重比例判断是否符合预期"
+                echo -e "${YELLOW}/echo 验证结论: ⚠️ 流量分布偏差较大，请检查权重配置${NC}"
+            fi
+        fi
+
+        # --- /call 路由验证（GetOneInstance 方式） ---
+        echo ""
+        echo -e "${BLUE}── /call 路由 - 权重均匀分布验证（GetOneInstance） ──${NC}"
+        echo ""
+
+        if [[ $call_p1_count -eq 0 ]] || [[ $call_p2_count -eq 0 ]]; then
+            log_warn "/call 路由有一个实例未收到任何请求"
+            log_warn "可能原因:"
+            log_warn "  1. 实例未成功注册到北极星"
+            log_warn "  2. 负载均衡策略配置问题"
+            log_warn "  3. 观察时间不足（当前: ${OBSERVE_SECONDS}s）"
+            echo -e "${YELLOW}/call 验证结论: ⚠️ 流量分布不均匀，请检查配置${NC}"
+        else
+            local call_diff
+            call_diff=$(awk "BEGIN {d = $final_call_p1_ratio - $final_call_p2_ratio; if (d < 0) d = -d; printf \"%.1f\", d}")
+            if awk "BEGIN {exit !($call_diff <= 20.0)}"; then
+                log_info "/call 两个实例的流量差异为 ${call_diff}%，在合理范围内（<=20%）"
+                echo -e "${GREEN}/call 验证结论: ✅ 负载均衡正常！流量在两个实例间合理分布${NC}"
+                echo -e "${GREEN}  Provider1: ${final_call_p1_ratio}%, Provider2: ${final_call_p2_ratio}%, 差异: ${call_diff}%${NC}"
+            else
+                log_warn "/call 两个实例的流量差异为 ${call_diff}%，偏差较大（>20%）"
+                log_warn "如果两个实例权重相同，这可能表示负载均衡存在问题"
+                log_warn "如果两个实例权重不同，请根据权重比例判断是否符合预期"
+                echo -e "${YELLOW}/call 验证结论: ⚠️ 流量分布偏差较大，请检查权重配置${NC}"
+            fi
         fi
     fi
 
