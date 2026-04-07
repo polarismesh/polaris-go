@@ -293,16 +293,43 @@ func (m *manager) cleanupWhenError(sdkErr model.SDKError) error {
 
 // DestroyPlugins 销毁已初始化的插件列表
 func (m *manager) DestroyPlugins() (errs error) {
-	var err error
-	for typ, plugs := range m.plugins {
+	// 按照与 LoadedPluginTypes 相反的顺序销毁插件，确保依赖关系正确。
+	// 例如 EventReporter/StatReporter 在 Flush 时需要 LocalRegistry（本地缓存）仍然可用，
+	// 因此必须先销毁 EventReporter/StatReporter，再销毁 LocalRegistry。
+	destroyOrder := make([]common.Type, len(common.LoadedPluginTypes))
+	copy(destroyOrder, common.LoadedPluginTypes)
+	// 反转顺序
+	for i, j := 0, len(destroyOrder)-1; i < j; i, j = i+1, j-1 {
+		destroyOrder[i], destroyOrder[j] = destroyOrder[j], destroyOrder[i]
+	}
+
+	destroyed := map[common.Type]bool{}
+	for _, typ := range destroyOrder {
+		destroyed[typ] = true
+		plugs, ok := m.plugins[typ]
+		if !ok {
+			continue
+		}
 		for name, plug := range plugs {
-			err = plug.instance.Destroy()
-			if err != nil {
+			if err := plug.instance.Destroy(); err != nil {
 				errs = multierror.Append(errs, multierror.Prefix(err,
 					fmt.Sprintf("DestroyPlugins: plugin %v:%s error, ", typ, name)))
 			}
 		}
 	}
+	// 销毁不在 LoadedPluginTypes 中的其他插件（兜底）
+	for typ, plugs := range m.plugins {
+		if destroyed[typ] {
+			continue
+		}
+		for name, plug := range plugs {
+			if err := plug.instance.Destroy(); err != nil {
+				errs = multierror.Append(errs, multierror.Prefix(err,
+					fmt.Sprintf("DestroyPlugins: plugin %v:%s error, ", typ, name)))
+			}
+		}
+	}
+
 	if errs != nil {
 		return model.NewSDKError(model.ErrCodePluginError, errs, "DestroyPlugins: plugins destroy errors")
 	}

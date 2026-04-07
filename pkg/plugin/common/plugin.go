@@ -220,8 +220,12 @@ func (n *Notifier) Notify(sdkErr model.SDKError) {
 }
 
 // LoadedPluginTypes 要加载的插件类型
+// 注意：销毁顺序为该列表的反序。依赖关系要求 EventReporter/StatReporter 在 Flush 时
+// 需要 LocalRegistry（本地缓存）仍然可用，因此 LocalRegistry 必须排在它们之前，
+// 这样反序销毁时 EventReporter/StatReporter 会先于 LocalRegistry 被销毁。
 var LoadedPluginTypes = []Type{
 	TypeServerConnector,
+	TypeLocalRegistry,
 	TypeServiceRouter,
 	TypeLoadBalancer,
 	TypeHealthCheck,
@@ -229,7 +233,6 @@ var LoadedPluginTypes = []Type{
 	TypeWeightAdjuster,
 	TypeStatReporter,
 	TypeEventReporter,
-	TypeLocalRegistry,
 	TypeRateLimiter,
 	TypeLocationProvider,
 	TypeConfigConnector,
