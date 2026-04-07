@@ -49,7 +49,6 @@ const (
 	_metricsPush        = "push"
 	_defaultJobName     = "polaris-client"
 	_defaultJobInstance = "instance"
-	_adminBindPort      = "28080"
 )
 
 var _ statreporter.StatReporter = (*PrometheusReporter)(nil)
@@ -141,7 +140,8 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	log.GetBaseLogger().Infof("[metrics]init action, cfg:%v", model.JsonString(s.cfg))
 	if s.cfg.Type == _metricsPull {
 		// 如果拉模式，且端口和admin端口一致，则注册metrics路径到admin的http插件
-		if s.cfg.PortStr == "" || s.cfg.PortStr == _adminBindPort {
+		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
+		if s.cfg.port == adminPort {
 			log.GetBaseLogger().Infof("[metrics]init action, pull port is same as admin port, register metrics path")
 			handler := promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})
 			s.initCtx.Config.GetGlobal().GetAdmin().RegisterPath(model.AdminHandler{
@@ -180,7 +180,7 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 	case model.CircuitBreakStat:
 		val, ok := metricsVal.(*model.CircuitBreakGauge)
 		if ok {
-			if s.rateLimitCollector == nil || val == nil {
+			if s.circuitBreakerCollector == nil || val == nil {
 				return nil
 			}
 			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val)
@@ -303,6 +303,9 @@ func (pa *PullAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 }
 
 func (pa *PullAction) Close() {
+	if pa.ln != nil {
+		pa.ln.Close()
+	}
 }
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
