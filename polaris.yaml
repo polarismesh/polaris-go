@@ -323,58 +323,18 @@ provider:
   lossless:
     # 是否启用无损上下线, 默认为false
     enable: false
-    # 无损上下线插件类型
-    #类型:string
-    #默认值:losslessController
-    type: losslessController
-    # 无损上线延迟注册策略
-    #类型:string
-    #范围:时长延迟(DELAY_BY_TIME), 探测延迟(DELAY_BY_HEALTH_CHECK)
-    #默认值:DELAY_BY_TIME
+    # 描述: 无损上下线的策略
+    # 类型: string
+    # 范围: DELAY_BY_TIME, DELAY_BY_COUNT
     strategy: DELAY_BY_TIME
-    # 时长延迟注册的等待时间, 兜底延迟多久会进行上线
-    #类型:duration
-    #默认值:30s
+    # 描述: 时长延迟的延迟时间
+    # 类型: duration
+    # 默认值: 30s
     delayRegisterInterval: 30s
-    # 探测延迟注册的探测周期
-    #类型:duration
-    #默认值:5s
+    # 描述: 探测延迟的检查间隔
+    # 类型: duration
+    # 默认值: 5s
     healthCheckInterval: 5s
-    # 无损上下线插件配置
-    plugin:
-      losslessController:
-        # 探测延迟注册的探测协议
-        #类型:string
-        #默认值:HTTP
-        healthCheckProtocol: HTTP
-        # 探测延迟注册的探测方法
-        #类型:string
-        #默认值:GET
-        healthCheckMethod: GET
-        # 探测延迟注册的探测路径
-        #类型:string
-        #默认值:/health
-        healthCheckPath: /health
-        # 探测延迟注册的探测最大重试次数
-        #类型:int
-        #默认值:10
-        healthCheckMaxRetry: 10
-        # 无损下线preStop插件的接口开关
-        #类型:bool
-        #默认值:false
-        offlineProbeEnabled: false
-        # 无损下线preStop插件的请求路径
-        #类型:string
-        #默认值:/offline
-        offlinePath: /offline
-        # 无损上线就绪检查的接口开关
-        #类型:bool
-        #默认值:false
-        readinessProbeEnabled: false
-        # 无损上线就绪检查的请求路径
-        #类型:string
-        #默认值:/readiness
-        readinessPath: /readiness
 # 配置中心默认配置
 config:
   # 类型转化缓存的key数量

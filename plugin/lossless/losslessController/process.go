@@ -97,14 +97,9 @@ func (p *LosslessController) delayRegisterChecker() error {
 			"time:%v(second)", p.losslessInfo.DelayRegisterConfig.DelayRegisterInterval)
 		return nil
 	case model.LosslessDelayRegisterStrategyDelayByHealthCheck:
-		// 循环进行健康检查，直到成功
+		// 循环进行健康检查，每次检查间隔为健康检查间隔
 		times := 0
 		for {
-			if times > p.pluginCfg.HealthCheckMaxRetry {
-				p.log.Errorf("[LosslessController] DelayRegisterChecker, health check retry times "+
-					"exceeded: %v", times)
-				return fmt.Errorf("health check retry times exceeded")
-			}
 			times++
 			pass, err := p.doHealthCheck()
 			if err != nil {
@@ -112,18 +107,17 @@ func (p *LosslessController) delayRegisterChecker() error {
 				return err
 			}
 			if pass {
-				p.log.Infof("[LosslessController] DelayRegisterChecker, health check success, " +
-					"start to do register")
+				p.log.Infof("[LosslessController] DelayRegisterChecker, health check success, start to do register")
 				return nil
 			}
-			p.log.Infof("[LosslessController] DelayRegisterChecker, health check failed, " +
-				"wait for next check")
+			p.log.Infof("[LosslessController] DelayRegisterChecker, health check failed %d times, wait for next "+
+				"check", times)
 			// 健康检查失败，等待下一个检查间隔后重试
 			time.Sleep(p.losslessInfo.DelayRegisterConfig.HealthCheckConfig.HealthCheckInterval)
 		}
 	default:
-		p.log.Errorf("[LosslessController] DelayRegisterChecker, delay register strategy is not " +
-			"supported, skip delay register checker")
+		p.log.Errorf("[LosslessController] DelayRegisterChecker, delay register strategy is not supported, skip " +
+			"delay register checker")
 		return fmt.Errorf("delay register strategy is not supported")
 	}
 }
@@ -135,9 +129,7 @@ func (p *LosslessController) doHealthCheck() (bool, error) {
 	// 构建健康检查 URL
 	protocol := strings.ToLower(config.HealthCheckProtocol)
 	url := fmt.Sprintf("%s://localhost:%d%s", protocol, port, config.HealthCheckPath)
-
-	p.log.Debugf("[LosslessController] doHealthCheck, url: %s, method: %s",
-		url, config.HealthCheckMethod)
+	p.log.Debugf("[LosslessController] doHealthCheck, url: %s, method: %s", url, config.HealthCheckMethod)
 
 	// 创建 HTTP 请求
 	req, err := http.NewRequest(config.HealthCheckMethod, url, nil)
@@ -165,12 +157,10 @@ func (p *LosslessController) doHealthCheck() (bool, error) {
 
 	// 判断响应状态码，2xx 表示健康检查成功
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		p.log.Infof("[LosslessController] doHealthCheck, health check success, statusCode: %d",
-			resp.StatusCode)
+		p.log.Infof("[LosslessController] doHealthCheck, health check success, statusCode: %d", resp.StatusCode)
 		return true, nil
 	}
-	p.log.Errorf("[LosslessController] doHealthCheck, health check failed, statusCode: %d, need retry",
-		resp.StatusCode)
+	p.log.Errorf("[LosslessController] doHealthCheck, health check failed, statusCode: %d, need retry", resp.StatusCode)
 	return false, nil
 }
 

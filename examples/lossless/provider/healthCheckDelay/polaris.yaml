@@ -18,28 +18,5 @@ provider:
   lossless:
     # 是否启用无损上下线
     enable: true
-    # 使用本地配置时取消下列注释
-#    # 无损上下线插件类型
-#    type: losslessController
-#    # 无损上线延迟注册策略: 健康检查延迟注册
-#    strategy: DELAY_BY_HEALTH_CHECK
-#    # 探测延迟注册的探测周期: 默认为5s
-#    healthCheckInterval: 5s
-#    plugin:
-#      losslessController:
-#        # 探测延迟注册的探测协议
-#        healthCheckProtocol: HTTP
-#        # 探测延迟注册的探测方法
-#        healthCheckMethod: GET
-#        # 探测延迟注册的探测路径
-#        healthCheckPath: /health
-#        # 探测延迟注册的探测最大重试次数
-#        healthCheckMaxRetry: 10
-#        # 无损下线preStop插件的接口开关
-#        offlineProbeEnabled: true
-#        # 无损下线preStop插件的请求路径
-#        offlinePath: /offline
-#        # 无损上线就绪检查的接口开关
-#        readinessProbeEnabled: true
-#        # 无损上线就绪检查的请求路径
-#        readinessPath: /readiness
+    strategy: DELAY_BY_HEALTH_CHECK
+    healthCheckInterval: 5s

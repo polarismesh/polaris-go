@@ -27,9 +27,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
+const (
+	// PluginName 插件名称
+	PluginName = "losslessController"
+)
+
 // init 注册插件
 func init() {
-	plugin.RegisterConfigurablePlugin(&LosslessController{}, &Config{})
+	plugin.RegisterPlugin(&LosslessController{})
 }
 
 // LosslessController 无损上下线控制器
@@ -38,8 +43,6 @@ type LosslessController struct {
 	// pluginCtx
 	pluginCtx *plugin.InitContext
 	engine    sdk.Engine
-	// pluginCfg 配置
-	pluginCfg *Config
 	// losslessInfo 无损上下线信息
 	losslessInfo model.LosslessInfo
 	log          log.Logger
@@ -59,13 +62,9 @@ func (p *LosslessController) Name() string {
 func (p *LosslessController) Init(ctx *plugin.InitContext) error {
 	p.PluginBase = plugin.NewPluginBase(ctx)
 	p.pluginCtx = ctx
-	// 加载配置
-	if conf := ctx.Config.GetProvider().GetLossless().GetPluginConfig(p.Name()); conf != nil {
-		p.pluginCfg = conf.(*Config)
-	}
 	p.losslessInfo = model.LosslessInfo{}
 	p.log = ctx.ValueCtx.GetContextLogger().GetLosslessLogger()
-	p.log.Infof("[LosslessController] plugin initialized, plugin config: %+v", p.pluginCfg)
+	p.log.Infof("[LosslessController] plugin initialized")
 	return nil
 }
 

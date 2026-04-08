@@ -27,6 +27,14 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 )
 
+const (
+	DefaultReadinessPath       = "/readiness"
+	DefaultOfflinePath         = "/offline"
+	DefaultHealthCheckPath     = "/health"
+	DefaultHealthCheckProtocol = "HTTP"
+	DefaultHealthCheckMethod   = "GET"
+)
+
 func (p *LosslessController) PreProcess(instance *model.InstanceRegisterRequest,
 	rule *model.ServiceRuleResponse) {
 	defer func() {
@@ -34,27 +42,20 @@ func (p *LosslessController) PreProcess(instance *model.InstanceRegisterRequest,
 	}()
 	p.engine = p.pluginCtx.ValueCtx.GetEngine()
 	p.losslessInfo.Instance = instance
-	// 远程配置优先级更高,如果远程配置不存在,则使用本地配置
+	// 远程配置优先，部分配置项远程未开启时回退到本地配置
 	if rule == nil || rule.Value == nil {
-		p.log.Infof("[LosslessController] LosslessRule value is nil, fallback to parse local "+
-			"config, p.losslessInfo: %v", p.losslessInfo.GetJsonString())
-		p.parseLocalConfig()
+		p.log.Infof("[LosslessController] remote LosslessRule value is nil, skip PreProcess")
 		return
 	}
-	p.log.Infof("[LosslessController] LosslessRule value is not nil, parse remote config, rule: %s", model.JsonString(
-		rule.Value))
+	p.log.Infof("[LosslessController] remote LosslessRule value is not nil, parse remote config, rule: %s",
+		model.JsonString(rule.Value))
 	lossLessRuleWrapper, ok := rule.Value.(*pb.LosslessRuleWrapper)
 	if !ok {
-		p.log.Infof("[LosslessController] rule is not LosslessRuleWrapper, fallback to parse local "+
-			"config, p.losslessInfo: %v", p.losslessInfo)
-		// 解析远程规则失败,使用本地配置
-		p.parseLocalConfig()
+		p.log.Errorf("[LosslessController] remote rule is not LosslessRuleWrapper, skip PreProcess")
 		return
 	}
 	if len(lossLessRuleWrapper.Rules) == 0 {
-		p.log.Infof("[LosslessController] LosslessRuleWrapper.Rules is empty, fallback to parse local "+
-			"config, p.losslessInfo: %v", p.losslessInfo)
-		p.parseLocalConfig()
+		p.log.Infof("[LosslessController] remote LosslessRuleWrapper.Rules is empty, skip PreProcess")
 		return
 	}
 	// 取第一个规则进行解析
@@ -71,16 +72,13 @@ func (p *LosslessController) parseRemoteConfig(lossLessRule *traffic_manage.Loss
 
 func (p *LosslessController) parseRemoteDelayRegisterConfig(lossLessRule *traffic_manage.LosslessRule) {
 	if lossLessRule.GetLosslessOnline() == nil || lossLessRule.GetLosslessOnline().GetDelayRegister() == nil {
-		p.log.Infof("[LosslessController] parseRule, remote delayRegister is nil, fallback to parse local" +
-			" config")
-		// 如果远程配置不存在,则使用本地配置
+		p.log.Infof("[LosslessController] parseRule, remote delayRegister is nil, fallback to local config")
 		p.parseLocalDelayRegisterConfig()
 		return
 	}
 	if !lossLessRule.GetLosslessOnline().GetDelayRegister().GetEnable() {
-		p.log.Infof("[LosslessController] parseRule, remote delayRegister is not enable")
-		// 远程配置不开启延迟注册,则关闭延迟注册
-		p.losslessInfo.DelayRegisterConfig = nil
+		p.log.Infof("[LosslessController] parseRule, remote delayRegister is not enable, fallback to local config")
+		p.parseLocalDelayRegisterConfig()
 		return
 	}
 	remoteStrategy := lossLessRule.GetLosslessOnline().GetDelayRegister().GetStrategy().String()
@@ -92,7 +90,8 @@ func (p *LosslessController) parseRemoteDelayRegisterConfig(lossLessRule *traffi
 				GetIntervalSecond()) * time.Second,
 		}
 	case model.LosslessDelayRegisterStrategyDelayByHealthCheck:
-		healthCheckIntervalSec, err := strconv.ParseInt(lossLessRule.GetLosslessOnline().GetDelayRegister().
+		delayRegister := lossLessRule.GetLosslessOnline().GetDelayRegister()
+		healthCheckIntervalSec, err := strconv.ParseInt(delayRegister.
 			GetHealthCheckIntervalSecond(), 10, 64)
 		if err == nil {
 			p.losslessInfo.DelayRegisterConfig = &model.DelayRegisterConfig{
@@ -100,29 +99,27 @@ func (p *LosslessController) parseRemoteDelayRegisterConfig(lossLessRule *traffi
 			}
 			p.losslessInfo.DelayRegisterConfig.HealthCheckConfig = &model.LosslessHealthCheckConfig{
 				HealthCheckInterval: time.Duration(healthCheckIntervalSec) * time.Second,
-				HealthCheckPath:     p.pluginCfg.HealthCheckPath,
-				HealthCheckProtocol: p.pluginCfg.HealthCheckProtocol,
-				HealthCheckMethod:   p.pluginCfg.HealthCheckMethod,
+				HealthCheckPath:     delayRegister.GetHealthCheckPath(),
+				HealthCheckProtocol: delayRegister.GetHealthCheckProtocol(),
+				HealthCheckMethod:   delayRegister.GetHealthCheckMethod(),
 			}
 		} else {
 			p.log.Errorf("[LosslessController] parseRule, parse healthCheckIntervalSecond:%v failed, "+
-				"err: %v, fallback to parse local config", lossLessRule.GetLosslessOnline().GetDelayRegister().
+				"err: %v, skip delayRegister config", delayRegister.
 				GetHealthCheckIntervalSecond(), err)
-			p.parseLocalDelayRegisterConfig()
+			p.losslessInfo.DelayRegisterConfig = nil
 		}
 	default:
 		p.log.Errorf("[LosslessController] parseRule, remote delayRegister strategy is not supported, " +
-			"fall back to parse local config")
-		p.parseLocalDelayRegisterConfig()
+			"skip delayRegister config")
+		p.losslessInfo.DelayRegisterConfig = nil
 	}
 }
 
 func (p *LosslessController) parseRemoteReadinessConfig(lossLessRule *traffic_manage.LosslessRule) {
 	if lossLessRule.GetLosslessOnline() == nil || lossLessRule.GetLosslessOnline().GetReadiness() == nil {
-		p.log.Infof("[LosslessController] parseRule, remote readiness is nil, fallback to parse local " +
-			"config")
-		// 如果远程配置不存在,则使用本地配置
-		p.parseLocalReadinessConfig()
+		p.log.Infof("[LosslessController] parseRule, remote readiness is nil, skip readiness config")
+		p.losslessInfo.ReadinessProbe = ""
 		return
 	}
 	if !lossLessRule.GetLosslessOnline().GetReadiness().GetEnable() {
@@ -130,14 +127,13 @@ func (p *LosslessController) parseRemoteReadinessConfig(lossLessRule *traffic_ma
 		p.losslessInfo.ReadinessProbe = ""
 		return
 	}
-	p.losslessInfo.ReadinessProbe = p.pluginCfg.ReadinessPath
+	p.losslessInfo.ReadinessProbe = DefaultReadinessPath
 }
 
 func (p *LosslessController) parseRemoteOfflineConfig(lossLessRule *traffic_manage.LosslessRule) {
 	if lossLessRule.GetLosslessOffline() == nil {
-		p.log.Infof("[LosslessController] parseRule, remote offline is nil, fallback to parse local config")
-		// 如果远程配置不存在,则使用本地配置
-		p.parseLocalOfflineConfig()
+		p.log.Infof("[LosslessController] parseRule, remote offline is nil, skip offline config")
+		p.losslessInfo.OfflineProbe = ""
 		return
 	}
 	if !lossLessRule.GetLosslessOffline().GetEnable() {
@@ -145,13 +141,48 @@ func (p *LosslessController) parseRemoteOfflineConfig(lossLessRule *traffic_mana
 		p.losslessInfo.OfflineProbe = ""
 		return
 	}
-	p.losslessInfo.OfflineProbe = p.pluginCfg.OfflinePath
+	p.losslessInfo.OfflineProbe = DefaultOfflinePath
+}
+
+func (p *LosslessController) parseLocalDelayRegisterConfig() {
+	localLosslessConfig := p.pluginCtx.Config.GetProvider().GetLossless()
+	if !localLosslessConfig.IsEnable() || localLosslessConfig.GetStrategy() == "" {
+		p.losslessInfo.DelayRegisterConfig = nil
+		return
+	}
+	if _, exist := model.SupportedDelayRegisterStrategies[localLosslessConfig.GetStrategy()]; !exist {
+		p.log.Errorf("[LosslessController] parseLocalDelayRegisterConfig, local delayRegister strategy:%s "+
+			"is not supported, ignored delayRegisterConfig", localLosslessConfig.GetStrategy())
+		p.losslessInfo.DelayRegisterConfig = nil
+		return
+	}
+	switch localLosslessConfig.GetStrategy() {
+	case model.LosslessDelayRegisterStrategyDelayByTime:
+		p.losslessInfo.DelayRegisterConfig = &model.DelayRegisterConfig{
+			Strategy:              model.LosslessDelayRegisterStrategyDelayByTime,
+			DelayRegisterInterval: localLosslessConfig.GetDelayRegisterInterval(),
+		}
+	case model.LosslessDelayRegisterStrategyDelayByHealthCheck:
+		p.losslessInfo.DelayRegisterConfig = &model.DelayRegisterConfig{
+			Strategy: model.LosslessDelayRegisterStrategyDelayByHealthCheck,
+			HealthCheckConfig: &model.LosslessHealthCheckConfig{
+				HealthCheckInterval: localLosslessConfig.GetHealthCheckInterval(),
+				HealthCheckPath:     DefaultHealthCheckPath,
+				HealthCheckProtocol: DefaultHealthCheckProtocol,
+				HealthCheckMethod:   DefaultHealthCheckMethod,
+			},
+		}
+	default:
+		p.log.Errorf("[LosslessController] parseLocalDelayRegisterConfig, local delayRegister strategy:%s "+
+			"is not recognized, ignored delayRegisterConfig", localLosslessConfig.GetStrategy())
+		p.losslessInfo.DelayRegisterConfig = nil
+	}
 }
 
 func (p *LosslessController) parseRemoteWarmupConfig(lossLessRule *traffic_manage.LosslessRule) {
 	if lossLessRule.GetLosslessOnline() == nil || lossLessRule.GetLosslessOnline().GetWarmup() == nil ||
 		lossLessRule.GetLosslessOnline().GetWarmup().GetIntervalSecond() == 0 {
-		p.log.Infof("[LosslessController] parseRule, remote warmup is nil, fallback to parse local config")
+		p.log.Infof("[LosslessController] parseRule, remote warmup is nil, skip warmup config")
 		// 如果远程配置不存在, 直接返回
 		p.losslessInfo.WarmUpConfig = nil
 		return
@@ -163,59 +194,5 @@ func (p *LosslessController) parseRemoteWarmupConfig(lossLessRule *traffic_manag
 	}
 	p.losslessInfo.WarmUpConfig = &model.WarmUpConfig{
 		Interval: time.Duration(lossLessRule.GetLosslessOnline().GetWarmup().GetIntervalSecond()) * time.Second,
-	}
-}
-
-func (p *LosslessController) parseLocalConfig() {
-	p.parseLocalDelayRegisterConfig()
-	p.parseLocalReadinessConfig()
-	p.parseLocalOfflineConfig()
-}
-
-func (p *LosslessController) parseLocalDelayRegisterConfig() {
-	localLosslessConfig := p.pluginCtx.Config.GetProvider().GetLossless()
-	if !localLosslessConfig.IsEnable() || localLosslessConfig.GetStrategy() == "" {
-		p.losslessInfo.DelayRegisterConfig = nil
-		return
-	}
-	if _, exist := model.SupportedDelayRegisterStrategies[localLosslessConfig.GetStrategy()]; exist {
-		switch localLosslessConfig.GetStrategy() {
-		case model.LosslessDelayRegisterStrategyDelayByTime:
-			p.losslessInfo.DelayRegisterConfig = &model.DelayRegisterConfig{
-				Strategy:              localLosslessConfig.GetStrategy(),
-				DelayRegisterInterval: localLosslessConfig.GetDelayRegisterInterval(),
-			}
-		case model.LosslessDelayRegisterStrategyDelayByHealthCheck:
-			p.losslessInfo.DelayRegisterConfig = &model.DelayRegisterConfig{
-				Strategy: localLosslessConfig.GetStrategy(),
-				HealthCheckConfig: &model.LosslessHealthCheckConfig{
-					HealthCheckInterval: localLosslessConfig.GetHealthCheckInterval(),
-					HealthCheckPath:     p.pluginCfg.HealthCheckPath,
-					HealthCheckProtocol: p.pluginCfg.HealthCheckProtocol,
-					HealthCheckMethod:   p.pluginCfg.HealthCheckMethod,
-				},
-			}
-		default:
-			p.log.Errorf("[LosslessController] local delayRegister strategy:%s is not recognized, "+
-				"ignored delayRegisterConfig", localLosslessConfig.GetStrategy())
-			p.losslessInfo.DelayRegisterConfig = nil
-		}
-	} else {
-		p.log.Errorf("[LosslessController] parseRule failed, local delayRegister strategy is not " +
-			"supported, ignored delayRegisterConfig")
-		p.losslessInfo.DelayRegisterConfig = nil
-	}
-}
-
-func (p *LosslessController) parseLocalReadinessConfig() {
-	if p.pluginCfg.ReadinessProbeEnabled {
-		p.losslessInfo.ReadinessProbe = p.pluginCfg.ReadinessPath
-
-	}
-}
-
-func (p *LosslessController) parseLocalOfflineConfig() {
-	if p.pluginCfg.OfflineProbeEnabled {
-		p.losslessInfo.OfflineProbe = p.pluginCfg.OfflinePath
 	}
 }
