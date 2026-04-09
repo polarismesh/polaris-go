@@ -37,13 +37,15 @@ const (
 // Server httpServer插件，实现Admin接口
 type Server struct {
 	*plugin.PluginBase
-	pluginCtx  *plugin.InitContext
-	host       string
-	port       int
-	httpServer *http.Server
-	mux        *http.ServeMux
-	once       sync.Once
-	sErr       atomic.Value
+	pluginCtx       *plugin.InitContext
+	host            string
+	port            int
+	httpServer      *http.Server
+	mux             *http.ServeMux
+	once            sync.Once
+	sErr            atomic.Value
+	registeredPaths map[string]bool // 记录已注册到 mux 的路径，避免重复注册
+	mu              sync.Mutex      // 保护 registeredPaths 的并发访问
 }
 
 // SetError 原子设置服务器错误
@@ -80,6 +82,7 @@ func (s *Server) Init(ctx *plugin.InitContext) error {
 	s.host = ctx.Config.GetGlobal().GetAdmin().GetHost()
 	s.port = ctx.Config.GetGlobal().GetAdmin().GetPort()
 	s.mux = http.NewServeMux()
+	s.registeredPaths = make(map[string]bool)
 	return nil
 }
 
@@ -98,25 +101,35 @@ func (s *Server) Destroy() error {
 	return nil
 }
 
-// RegisterHandler 注册HTTP处理器路径
+// registerHandlers 注册HTTP处理器路径（跳过已注册的路径）
 func (s *Server) registerHandlers(adminHandlers []model.AdminHandler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, adminHandler := range adminHandlers {
 		path := adminHandler.Path
+		if s.registeredPaths[path] {
+			continue
+		}
 		handler := adminHandler.HandlerFunc
 		s.mux.HandleFunc(path, handler)
+		s.registeredPaths[path] = true
 		log.GetBaseLogger().Infof("[Admin][HttpServer] registered path: %s", path)
 	}
 }
 
 // Run 启动HTTP服务器
 func (s *Server) Run() {
+	// 每次调用 Run 时都注册新增的路径到 mux
+	paths := s.pluginCtx.Config.GetGlobal().GetAdmin().GetPaths()
+	if len(paths) > 0 {
+		s.registerHandlers(paths)
+	}
+	// 只启动一次 HTTP 服务器
 	s.once.Do(func() {
-		paths := s.pluginCtx.Config.GetGlobal().GetAdmin().GetPaths()
 		if len(paths) == 0 {
 			log.GetBaseLogger().Warnf("[Admin][HttpServer] no path registered, skip starting http server")
 			return
 		}
-		s.registerHandlers(paths)
 		addr := fmt.Sprintf("%s:%d", s.host, s.port)
 		s.httpServer = &http.Server{
 			Addr:    addr,
