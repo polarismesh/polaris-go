@@ -137,7 +137,7 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	if err := s.initSampleMapping(statcommon.CircuitBreakerStrategy, statcommon.CircuitBreakerLabelOrder); err != nil {
 		return err
 	}
-	log.GetBaseLogger().Infof("[metrics]init action, cfg:%v", model.JsonString(s.cfg))
+	log.GetBaseLogger().Infof("[metrics]init action, cfg:%v", model.JSONString(s.cfg))
 	if s.cfg.Type == _metricsPull {
 		// 如果拉模式，且端口和admin端口一致，则注册metrics路径到admin的http插件
 		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
@@ -304,7 +304,7 @@ func (pa *PullAction) Init(initCtx *plugin.InitContext, reporter *PrometheusRepo
 
 func (pa *PullAction) Close() {
 	if pa.ln != nil {
-		pa.ln.Close()
+		_ = pa.ln.Close()
 	}
 }
 

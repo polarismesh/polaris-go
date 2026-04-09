@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package config provides configuration definitions for polaris-go.
 package config
 
 import (

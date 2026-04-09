@@ -15,7 +15,8 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package httpServer
+// Package httpserver provides HTTP server implementation for the admin plugin in polaris-go.
+package httpserver
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"

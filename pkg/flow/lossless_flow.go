@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package flow provides core SDK flow implementations for polaris-go.
 package flow
 
 import (
@@ -40,7 +41,7 @@ func (e *Engine) SyncLosslessRegister(instance *model.InstanceRegisterRequest) (
 		return nil, err
 	}
 	log.GetBaseLogger().Infof("[Lossless Event] SyncLosslessRegister SyncGetServiceRule success: %v",
-		model.JsonString(losslessRule))
+		model.JSONString(losslessRule))
 	// 规则解析
 	e.lossless.PreProcess(instance, losslessRule)
 	// 无损上线

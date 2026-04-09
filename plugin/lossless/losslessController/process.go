@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package losslessController
+package losslesscontroller
 
 import (
 	"fmt"
@@ -153,7 +153,7 @@ func (p *LosslessController) doHealthCheck() (bool, error) {
 		p.log.Errorf("[LosslessController] doHealthCheck, request failed, err: %v", err)
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 判断响应状态码，2xx 表示健康检查成功
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

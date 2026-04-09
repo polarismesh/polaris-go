@@ -433,7 +433,7 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 func (e *Engine) reportEvent(eventInfo event.BaseEventImpl) {
 	for _, chain := range e.eventChain {
 		if err := chain.ReportEvent(&eventInfo); err != nil {
-			log.GetBaseLogger().Errorf("[LosslessController] report event(%s) err: %+v", model.JsonString(eventInfo),
+			log.GetBaseLogger().Errorf("[LosslessController] report event(%s) err: %+v", model.JSONString(eventInfo),
 				err)
 			continue
 		}

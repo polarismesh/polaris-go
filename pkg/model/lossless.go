@@ -57,11 +57,11 @@ func (l *LosslessInfo) IsWarmUpEnabled() bool {
 	return l != nil && l.WarmUpConfig != nil && l.WarmUpConfig.Interval > 0
 }
 
-func (l *LosslessInfo) GetJsonString() string {
+func (l *LosslessInfo) GetJSONString() string {
 	if l == nil {
 		return ""
 	}
-	return JsonString(l)
+	return JSONString(l)
 }
 
 type DelayRegisterConfig struct {

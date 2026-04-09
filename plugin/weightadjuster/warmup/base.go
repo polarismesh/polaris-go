@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package warmup provides warmup weight adjuster implementation for polaris-go.
 package warmup
 
 import (
@@ -192,7 +193,6 @@ func (g *Adjuster) getLosslessRules(svcKey model.ServiceKey) []*apitraffic.Lossl
 // 返回 map[metadataKey]map[metadataValue]*LosslessRule
 func (g *Adjuster) parseMetadataLosslessRules(
 	losslessRules []*apitraffic.LosslessRule) map[string]map[string]*apitraffic.LosslessRule {
-
 	metadataRules := make(map[string]map[string]*apitraffic.LosslessRule)
 	for _, rule := range losslessRules {
 		metadata := rule.GetMetadata()
@@ -216,7 +216,6 @@ func (g *Adjuster) parseMetadataLosslessRules(
 // getMatchMetadataLosslessRule 根据实例的元数据匹配对应的lossless规则
 func (g *Adjuster) getMatchMetadataLosslessRule(instance model.Instance,
 	metadataRules map[string]map[string]*apitraffic.LosslessRule) *apitraffic.LosslessRule {
-
 	instanceMeta := instance.GetMetadata()
 	if len(instanceMeta) == 0 {
 		g.log.Debugf("[WarmupWeightAdjuster] instance %s has no metadata, skip metadata rule matching", instance.GetId())
@@ -250,7 +249,7 @@ func (g *Adjuster) doTimingAdjustDynamicWeight(dynamicWeight map[string]*model.I
 	if len(metadataRules) == 0 {
 		// 没有元数据匹配规则，使用第一条规则
 		g.log.Debugf("[WarmupWeightAdjuster] no metadata rules, using first lossless rule, rule: %s",
-			model.JsonString(losslessRules[0]))
+			model.JSONString(losslessRules[0]))
 		return g.getInstanceWeightFromLosslessRule(dynamicWeight, service, losslessRules[0])
 	}
 	// 有元数据匹配规则，按实例元数据匹配不同的规则
@@ -262,7 +261,6 @@ func (g *Adjuster) doTimingAdjustDynamicWeight(dynamicWeight map[string]*model.I
 func (g *Adjuster) getInstanceWeightFromMetadataRule(dynamicWeight map[string]*model.InstanceWeight,
 	service model.ServiceInstances,
 	metadataRules map[string]map[string]*apitraffic.LosslessRule) ([]*model.InstanceWeight, error) {
-
 	instances := service.GetInstances()
 	currentTime := time.Now()
 
@@ -429,7 +427,6 @@ func (g *Adjuster) countNeedWarmupInstances(instances []model.Instance, warmup *
 func (g *Adjuster) getInstanceWeight(dynamicWeight map[string]*model.InstanceWeight,
 	instance model.Instance, warmup *apitraffic.Warmup,
 	currentTime time.Time) *model.InstanceWeight {
-
 	baseWeight := uint32(instance.GetWeight())
 	if dynamicWeight != nil {
 		if prev, ok := dynamicWeight[instance.GetId()]; ok {

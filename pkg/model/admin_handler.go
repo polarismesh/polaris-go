@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package model provides data model definitions for polaris-go.
 package model
 
 import (

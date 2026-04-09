@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package lossless provides the lossless plugin interface for polaris-go.
 package lossless
 
 import (

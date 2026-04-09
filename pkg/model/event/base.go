@@ -15,11 +15,12 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package event provides event model definitions for polaris-go.
 package event
 
 type BaseEvent interface {
-	SetClientIp(ip string)
-	SetClientId(id string)
+	SetClientIP(ip string)
+	SetClientID(id string)
 	GetEventType() string
 	GetEventName() EventName
 }
@@ -71,15 +72,15 @@ type BaseEventImpl struct {
 	EventType string    `json:"event_type"`
 	EventName EventName `json:"event_name"`
 	EventTime string    `json:"event_time"`
-	ClientId  string    `json:"client_id"`
-	ClientIp  string    `json:"client_ip"`
+	ClientID  string    `json:"client_id"`
+	ClientIP  string    `json:"client_ip"`
 
 	// 实例/无损上下线相关字段
 	Namespace  string `json:"namespace,omitempty"`
 	Service    string `json:"service,omitempty"`
 	Host       string `json:"host,omitempty"`
 	Port       string `json:"port,omitempty"`
-	InstanceId string `json:"instance_id,omitempty"`
+	InstanceID string `json:"instance_id,omitempty"`
 
 	// API 相关字段
 	APIProtocol string `json:"api_protocol,omitempty"`
@@ -101,12 +102,12 @@ type BaseEventImpl struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func (c *BaseEventImpl) SetClientIp(ip string) {
-	c.ClientIp = ip
+func (c *BaseEventImpl) SetClientIP(ip string) {
+	c.ClientIP = ip
 }
 
-func (c *BaseEventImpl) SetClientId(id string) {
-	c.ClientId = id
+func (c *BaseEventImpl) SetClientID(id string) {
+	c.ClientID = id
 }
 
 func (c *BaseEventImpl) GetEventType() string {

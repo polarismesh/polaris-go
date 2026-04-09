@@ -15,7 +15,8 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package losslessController
+// Package losslesscontroller provides lossless controller implementation for polaris-go.
+package losslesscontroller
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -81,7 +82,7 @@ func (p *LosslessController) reportEvent(eventInfo event.BaseEventImpl) {
 			return
 		}
 		if err = eventReporter.ReportEvent(&eventInfo); err != nil {
-			p.log.Errorf("[LosslessController] report event(%s) err: %+v", model.JsonString(eventInfo), err)
+			p.log.Errorf("[LosslessController] report event(%s) err: %+v", model.JSONString(eventInfo), err)
 			continue
 		}
 	}

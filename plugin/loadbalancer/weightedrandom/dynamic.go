@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package weightedrandom provides weighted random load balancer implementation for polaris-go.
 package weightedrandom
 
 import (

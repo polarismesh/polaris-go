@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package losslessController
+package losslesscontroller
 
 import (
 	"strconv"
@@ -38,7 +38,7 @@ const (
 func (p *LosslessController) PreProcess(instance *model.InstanceRegisterRequest,
 	rule *model.ServiceRuleResponse) {
 	defer func() {
-		p.log.Infof("[LosslessController] PreProcess result: %v", p.losslessInfo.GetJsonString())
+		p.log.Infof("[LosslessController] PreProcess result: %v", p.losslessInfo.GetJSONString())
 	}()
 	p.engine = p.pluginCtx.ValueCtx.GetEngine()
 	p.losslessInfo.Instance = instance
@@ -48,7 +48,7 @@ func (p *LosslessController) PreProcess(instance *model.InstanceRegisterRequest,
 		return
 	}
 	p.log.Infof("[LosslessController] remote LosslessRule value is not nil, parse remote config, rule: %s",
-		model.JsonString(rule.Value))
+		model.JSONString(rule.Value))
 	lossLessRuleWrapper, ok := rule.Value.(*pb.LosslessRuleWrapper)
 	if !ok {
 		p.log.Errorf("[LosslessController] remote rule is not LosslessRuleWrapper, skip PreProcess")

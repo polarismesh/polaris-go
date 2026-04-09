@@ -15,6 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package admin provides the admin plugin interface for polaris-go.
 package admin
 
 import (

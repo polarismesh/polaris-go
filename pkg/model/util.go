@@ -331,7 +331,7 @@ func CheckConfigFileMetadata(configFileMetadata ConfigFileMetadata) error {
 	return nil
 }
 
-func JsonString(v interface{}) string {
+func JSONString(v interface{}) string {
 	if v == nil {
 		return ""
 	}
