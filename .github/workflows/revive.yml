@@ -34,14 +34,14 @@ jobs:
   reviveci:
     strategy:
       matrix:
-        go-version: [1.19.x, 1.20.x, 1.21.x, 1.22.x]
+        go-version: [1.21.x, 1.22.x, 1.23.x, 1.24.x]
     name: Run Revive Action
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download dependencies
         run: |
           go mod download
