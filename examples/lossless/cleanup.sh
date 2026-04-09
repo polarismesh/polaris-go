@@ -102,7 +102,7 @@ while IFS= read -r line; do
     pid=$(echo "$line" | awk '{print $2}')
     PROVIDER_PIDS+=("$pid")
     PROVIDER_DESCS+=("$line")
-done < <(ps -ef | grep -E '\.build/(provider[0-9]*/)?provider\b|/provider\s+--namespace' | grep -v grep | grep -v fileproviderd)
+done < <(ps -ef | grep -E '\.build/(provider[0-9]*/)?provider(_hcd)?\b|/provider(_hcd)?\s+--namespace' | grep -v grep | grep -v fileproviderd)
 
 # 查找 consumer 进程（排除 grep 自身）
 while IFS= read -r line; do

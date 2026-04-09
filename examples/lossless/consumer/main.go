@@ -134,11 +134,15 @@ func (svr *PolarisClient) runWebServer() {
 			return
 		}
 
-		// 解析规则中的延迟注册和预热配置
+		// 解析规则中的延迟注册、预热、就绪检查和无损下线配置
 		type delayRegisterInfo struct {
-			Enable          bool   `json:"enable"`
-			Strategy        string `json:"strategy"`
-			IntervalSeconds int64  `json:"intervalSeconds"`
+			Enable                     bool   `json:"enable"`
+			Strategy                   string `json:"strategy"`
+			IntervalSeconds            int64  `json:"intervalSeconds"`
+			HealthCheckIntervalSeconds string `json:"healthCheckIntervalSeconds,omitempty"`
+			HealthCheckPath            string `json:"healthCheckPath,omitempty"`
+			HealthCheckProtocol        string `json:"healthCheckProtocol,omitempty"`
+			HealthCheckMethod          string `json:"healthCheckMethod,omitempty"`
 		}
 		type warmupInfo struct {
 			Enable                      bool  `json:"enable"`
@@ -146,9 +150,17 @@ func (svr *PolarisClient) runWebServer() {
 			EnableOverloadProtection    bool  `json:"enableOverloadProtection"`
 			OverloadProtectionThreshold int32 `json:"overloadProtectionThreshold"`
 		}
+		type readinessInfo struct {
+			Enable bool `json:"enable"`
+		}
+		type losslessOfflineInfo struct {
+			Enable bool `json:"enable"`
+		}
 		type ruleInfo struct {
-			DelayRegister *delayRegisterInfo `json:"delayRegister,omitempty"`
-			Warmup        *warmupInfo        `json:"warmup,omitempty"`
+			DelayRegister   *delayRegisterInfo   `json:"delayRegister,omitempty"`
+			Warmup          *warmupInfo          `json:"warmup,omitempty"`
+			Readiness       *readinessInfo       `json:"readiness,omitempty"`
+			LosslessOffline *losslessOfflineInfo `json:"losslessOffline,omitempty"`
 		}
 		type losslessRuleResponse struct {
 			Namespace string     `json:"namespace"`
@@ -167,11 +179,25 @@ func (svr *PolarisClient) runWebServer() {
 					info := ruleInfo{}
 					if online := rule.GetLosslessOnline(); online != nil {
 						if dr := online.GetDelayRegister(); dr != nil {
-							info.DelayRegister = &delayRegisterInfo{
+							drInfo := &delayRegisterInfo{
 								Enable:          dr.GetEnable(),
 								Strategy:        dr.GetStrategy().String(),
 								IntervalSeconds: int64(dr.GetIntervalSecond()),
 							}
+							// 补充健康检查相关字段（DELAY_BY_HEALTH_CHECK 策略使用）
+							if dr.GetHealthCheckIntervalSecond() != "" {
+								drInfo.HealthCheckIntervalSeconds = dr.GetHealthCheckIntervalSecond()
+							}
+							if dr.GetHealthCheckPath() != "" {
+								drInfo.HealthCheckPath = dr.GetHealthCheckPath()
+							}
+							if dr.GetHealthCheckProtocol() != "" {
+								drInfo.HealthCheckProtocol = dr.GetHealthCheckProtocol()
+							}
+							if dr.GetHealthCheckMethod() != "" {
+								drInfo.HealthCheckMethod = dr.GetHealthCheckMethod()
+							}
+							info.DelayRegister = drInfo
 						}
 						if w := online.GetWarmup(); w != nil {
 							info.Warmup = &warmupInfo{
@@ -180,6 +206,16 @@ func (svr *PolarisClient) runWebServer() {
 								EnableOverloadProtection:    w.GetEnableOverloadProtection(),
 								OverloadProtectionThreshold: w.GetOverloadProtectionThreshold(),
 							}
+						}
+						if rd := online.GetReadiness(); rd != nil {
+							info.Readiness = &readinessInfo{
+								Enable: rd.GetEnable(),
+							}
+						}
+					}
+					if offline := rule.GetLosslessOffline(); offline != nil {
+						info.LosslessOffline = &losslessOfflineInfo{
+							Enable: offline.GetEnable(),
 						}
 					}
 					result.Rules = append(result.Rules, info)
