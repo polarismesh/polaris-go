@@ -31,13 +31,11 @@ linters:
     - funlen # Tool for detection of long functions
     - goconst # Finds repeated strings that could be replaced by a constant
     - gocritic # Provides diagnostics that check for bugs, performance and style issues.
-    - gosimple # Linter for Go source code that specializes in simplifying code
     - govet # Vet examines Go source code and reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
     - misspell # Finds commonly misspelled English words in comments
     - nolintlint # Reports ill-formed or insufficient nolint directives
     - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
     - staticcheck # It's a set of rules from staticcheck. It's not the same thing as the staticcheck binary.
-    - typecheck # Like the front-end of a Go compiler, parses and type-checks Go code
     - usestdlibvars # A linter that detect the possibility to use variables/constants from the Go standard library.
     - whitespace # Tool for detection of leading and trailing whitespace
 
@@ -52,6 +50,7 @@ linters:
       - .*~
       - test
       - examples
+      - benchmark
 
     rules:
       # helpers in tests often (rightfully) pass a *testing.T as their first argument
@@ -211,27 +210,6 @@ linters:
         - elseif
         - badCall
 
-    # https://golangci-lint.run/usage/linters/#gosimple
-    gosimple:
-      # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
-      # Default: ["*"]
-      checks:
-        [
-          "all",
-          "-S1000",
-          "-S1001",
-          "-S1002",
-          "-S1008",
-          "-S1009",
-          "-S1016",
-          "-S1023",
-          "-S1025",
-          "-S1029",
-          "-S1034",
-          "-S1040",
-          "-S1019",
-        ]
-
     # https://golangci-lint.run/usage/linters/#govet
     govet:
       # Settings per analyzer.
@@ -308,6 +286,7 @@ linters:
     staticcheck:
       # SAxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
       # Default: ["*"]
+      # S1xxx (formerly gosimple) and SA (staticcheck) rules combined
       checks:
         [
           "all",
@@ -323,6 +302,18 @@ linters:
           "-SA6002",
           "-SA4017",
           "-SA4021",
+          "-S1000",
+          "-S1001",
+          "-S1002",
+          "-S1008",
+          "-S1009",
+          "-S1016",
+          "-S1019",
+          "-S1023",
+          "-S1025",
+          "-S1029",
+          "-S1034",
+          "-S1040",
         ]
 
     # https://golangci-lint.run/usage/linters/#whitespace
@@ -347,6 +338,7 @@ formatters:
       - .*~
       - test
       - examples
+      - benchmark
 
   settings:
     # https://golangci-lint.run/usage/linters/#gofmt
