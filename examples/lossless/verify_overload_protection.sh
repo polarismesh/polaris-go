@@ -42,7 +42,6 @@ PROVIDER1_PORT="${PROVIDER1_PORT:-0}"    # 0 表示自动分配
 PROVIDER2_PORT="${PROVIDER2_PORT:-0}"    # 0 表示自动分配
 OBSERVE_SECONDS="${OBSERVE_SECONDS:-60}"
 REQUEST_INTERVAL="${REQUEST_INTERVAL:-1}"
-LB_POLICY="${LB_POLICY:-weightedRandom}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -74,8 +73,6 @@ while [[ $# -gt 0 ]]; do
             OBSERVE_SECONDS="$2"; shift 2 ;;
         --request-interval)
             REQUEST_INTERVAL="$2"; shift 2 ;;
-        --lb-policy)
-            LB_POLICY="$2"; shift 2 ;;
         --debug)
             DEBUG_MODE="true"; shift ;;
         --help|-h)
@@ -91,7 +88,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --provider2-port <端口>     Provider2 端口 (默认: 自动分配)"
             echo "  --observe-seconds <秒>      观察时长 (默认: 60)"
             echo "  --request-interval <秒>     请求间隔 (默认: 1)"
-            echo "  --lb-policy <策略>          负载均衡策略 (默认: weightedRandom)"
             echo "  --debug                     启用 Consumer debug 日志 (默认: 关闭)"
             exit 0
             ;;
@@ -426,7 +422,6 @@ main() {
     echo "  服务名:           ${SERVICE_NAME}"
     echo "  命名空间:         ${NAMESPACE}"
     echo "  Consumer端口:     ${CONSUMER_PORT}"
-    echo "  负载均衡策略:     ${LB_POLICY}"
     echo "  Debug日志:        ${DEBUG_MODE}"
     echo "  观察时长:         ${OBSERVE_SECONDS}s"
     echo "  请求间隔:         ${REQUEST_INTERVAL}s"
@@ -510,7 +505,6 @@ main() {
             --calleeNamespace "$NAMESPACE" \
             --calleeService "$SERVICE_NAME" \
             --port "$CONSUMER_PORT" \
-            --lbPolicy "$LB_POLICY" \
             --selfRegister=false \
             --debug=$DEBUG_MODE \
             > "$consumer_log" 2>&1) &

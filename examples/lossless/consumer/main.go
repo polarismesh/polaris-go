@@ -147,6 +147,7 @@ func (svr *PolarisClient) runWebServer() {
 		type warmupInfo struct {
 			Enable                      bool  `json:"enable"`
 			IntervalSeconds             int64 `json:"intervalSeconds"`
+			Curvature                   int32 `json:"curvature"`
 			EnableOverloadProtection    bool  `json:"enableOverloadProtection"`
 			OverloadProtectionThreshold int32 `json:"overloadProtectionThreshold"`
 		}
@@ -200,9 +201,14 @@ func (svr *PolarisClient) runWebServer() {
 							info.DelayRegister = drInfo
 						}
 						if w := online.GetWarmup(); w != nil {
+							curvature := w.GetCurvature()
+							if curvature == 0 {
+								curvature = 2 // 默认曲线系数
+							}
 							info.Warmup = &warmupInfo{
 								Enable:                      w.GetEnable(),
 								IntervalSeconds:             int64(w.GetIntervalSecond()),
+								Curvature:                   curvature,
 								EnableOverloadProtection:    w.GetEnableOverloadProtection(),
 								OverloadProtectionThreshold: w.GetOverloadProtectionThreshold(),
 							}

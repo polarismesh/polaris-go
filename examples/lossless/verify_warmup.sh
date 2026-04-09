@@ -41,7 +41,6 @@ PROVIDER1_PORT="${PROVIDER1_PORT:-0}"    # 0 表示自动分配
 PROVIDER2_PORT="${PROVIDER2_PORT:-0}"    # 0 表示自动分配
 WARMUP_OBSERVE_SECONDS="${WARMUP_OBSERVE_SECONDS:-0}"  # 0 表示根据预热时长自动计算
 REQUEST_INTERVAL="${REQUEST_INTERVAL:-1}"
-LB_POLICY="${LB_POLICY:-weightedRandom}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -73,8 +72,6 @@ while [[ $# -gt 0 ]]; do
             WARMUP_OBSERVE_SECONDS="$2"; shift 2 ;;
         --request-interval)
             REQUEST_INTERVAL="$2"; shift 2 ;;
-        --lb-policy)
-            LB_POLICY="$2"; shift 2 ;;
         --debug)
             DEBUG_MODE="true"; shift ;;
         --help|-h)
@@ -90,7 +87,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --provider2-port <端口>     Provider2 端口 (默认: 自动分配)"
             echo "  --warmup-seconds <秒>       预热观察时长 (默认: 120)"
             echo "  --request-interval <秒>     请求间隔 (默认: 1)"
-            echo "  --lb-policy <策略>          负载均衡策略 (默认: weightedRandom)"
             echo "  --debug                     启用 Consumer debug 日志 (默认: 关闭)"
             exit 0
             ;;
@@ -110,6 +106,33 @@ RESULT_FILE="${LOG_DIR}/warmup_result.csv"
 CONSUMER_PID=""
 PROVIDER1_PID=""
 PROVIDER2_PID=""
+EXTRA_PROVIDER_PIDS=()
+
+# ======================== 清理函数 ========================
+cleanup() {
+    log_info "正在清理进程..."
+    for pid_var in CONSUMER_PID PROVIDER1_PID PROVIDER2_PID; do
+        local pid="${!pid_var}"
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            log_info "停止进程 $pid_var (PID: $pid)"
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    # 清理额外的老实例进程
+    if [[ ${#EXTRA_PROVIDER_PIDS[@]} -gt 0 ]]; then
+        for extra_pid in "${EXTRA_PROVIDER_PIDS[@]}"; do
+            if [[ -n "$extra_pid" ]] && kill -0 "$extra_pid" 2>/dev/null; then
+                log_info "停止额外老实例进程 (PID: $extra_pid)"
+                kill "$extra_pid" 2>/dev/null || true
+                wait "$extra_pid" 2>/dev/null || true
+            fi
+        done
+    fi
+    log_info "清理完成"
+}
+
+trap cleanup EXIT
 
 # ======================== 工具函数 ========================
 
@@ -281,6 +304,26 @@ get_overload_protection_threshold() {
     return 0
 }
 
+# 从 lossless 规则 JSON 中提取预热曲线系数（curvature）
+# 返回曲线系数数字，未配置或为0则返回默认值2
+get_warmup_curvature() {
+    local rule_json="$1"
+    local warmup_block
+    warmup_block=$(echo "$rule_json" | grep -o '"warmup":{[^}]*}' || echo "")
+    if [[ -z "$warmup_block" ]]; then
+        echo "2"
+        return 0
+    fi
+    local curvature
+    curvature=$(echo "$warmup_block" | grep -o '"curvature":[0-9]*' | sed 's/"curvature"://' || echo "0")
+    if [[ -z "$curvature" ]] || [[ "$curvature" == "0" ]]; then
+        echo "2"
+        return 0
+    fi
+    echo "$curvature"
+    return 0
+}
+
 # 等待至少有一个实例注册到北极星（通过 /instances 接口检测）
 wait_for_instance_registered() {
     local max_wait="${1:-60}"
@@ -434,7 +477,6 @@ main() {
     echo "  服务名:           ${SERVICE_NAME}"
     echo "  命名空间:         ${NAMESPACE}"
     echo "  Consumer端口:     ${CONSUMER_PORT}"
-    echo "  负载均衡策略:     ${LB_POLICY}"
     echo "  Debug日志:        ${DEBUG_MODE}"
     echo "  预热观察时长:     ${WARMUP_OBSERVE_SECONDS}s"
     echo "  请求间隔:         ${REQUEST_INTERVAL}s"
@@ -516,7 +558,6 @@ main() {
             --calleeNamespace "$NAMESPACE" \
             --calleeService "$SERVICE_NAME" \
             --port "$CONSUMER_PORT" \
-            --lbPolicy "$LB_POLICY" \
             --selfRegister=false \
             --debug=$DEBUG_MODE \
             > "$consumer_log" 2>&1) &
@@ -543,6 +584,7 @@ main() {
     local rule_warmup_seconds=0
     local overload_protection_enabled="false"
     local overload_protection_threshold=0
+    local warmup_curvature=2
 
     lossless_rule_json=$(get_lossless_rule 2>/dev/null || echo "")
     if [[ -n "$lossless_rule_json" ]]; then
@@ -552,9 +594,11 @@ main() {
         rule_warmup_seconds=$(get_warmup_seconds "$lossless_rule_json")
         overload_protection_enabled=$(get_overload_protection_enabled "$lossless_rule_json")
         overload_protection_threshold=$(get_overload_protection_threshold "$lossless_rule_json")
+        warmup_curvature=$(get_warmup_curvature "$lossless_rule_json")
 
         log_info "延迟注册配置: ${delay_register_seconds}s"
         log_info "预热时长配置: ${rule_warmup_seconds}s"
+        log_info "预热曲线系数: ${warmup_curvature}（权重公式: weight = ceil(ratio^${warmup_curvature} * baseWeight)）"
         if [[ "$overload_protection_enabled" == "true" ]]; then
             log_info "预热终止保护: 已启用（阈值: ${overload_protection_threshold}%）"
             log_info "  说明: 当预热中的实例占比 >= ${overload_protection_threshold}% 时，预热权重调整将被终止，所有实例按原始权重分配流量"
@@ -581,6 +625,7 @@ main() {
     local provider2_log="${LOG_DIR}/provider2.log"
     local baseline_file="${LOG_DIR}/baseline_instances.txt"
     local baseline_instances=""
+    local needed_old_count=1  # 场景B中需要的老实例数量（场景A中不使用）
 
     if [[ $existing_count -gt 0 ]]; then
         # ==================== 场景A: 被调已有可用实例 ====================
@@ -625,6 +670,19 @@ main() {
             exit 1
         fi
         log_info "基线请求通过 (${baseline_ok}/5 成功)，链路正常"
+
+        # 场景A: 过载保护预判
+        if [[ "$overload_protection_enabled" == "true" ]] && [[ $overload_protection_threshold -gt 0 ]]; then
+            local predicted_total=$((existing_count + 1))
+            local predicted_pct=$((1 * 100 / predicted_total))
+            if [[ $predicted_pct -ge $overload_protection_threshold ]]; then
+                log_warn "⚠️  过载保护预判: 启动新实例后，预热实例占比 = 1/${predicted_total} = ${predicted_pct}% >= 阈值 ${overload_protection_threshold}%"
+                log_warn "预热终止保护可能会被触发，导致预热效果不明显"
+                log_warn "建议增加更多老实例或调高过载保护阈值"
+            else
+                log_info "过载保护预判: 启动新实例后，预热实例占比 = 1/${predicted_total} = ${predicted_pct}% < 阈值 ${overload_protection_threshold}%，不会触发"
+            fi
+        fi
 
         # ==================== 步骤6A: 启动新 Provider ====================
         log_step "6/8 启动新 Provider（新实例，开始预热）"
@@ -704,11 +762,37 @@ main() {
     else
         # ==================== 场景B: 被调没有可用实例 ====================
         log_info "被调服务当前没有可用实例"
-        log_info "场景B: 需要先启动 Provider1（老实例），等待预热结束后再启动 Provider2（新实例）"
+        log_info "场景B: 需要先启动老实例，等待预热结束后再启动新实例（Provider2）"
 
-        # ==================== 步骤5B: 启动 Provider1（老实例） ====================
-        log_step "5/8 启动 Provider1（老实例）"
+        # ==================== 预判过载保护：计算需要的老实例数量 ====================
+        needed_old_count=1  # 默认至少1个老实例
+        if [[ "$overload_protection_enabled" == "true" ]] && [[ $overload_protection_threshold -gt 0 ]]; then
+            # 过载保护触发条件: 预热实例占比 >= 阈值
+            # 新实例数=1，需要老实例数 N 使得: 1/(N+1)*100 < 阈值
+            # 即 N+1 > 100/阈值，N > 100/阈值 - 1
+            # 使用 awk 计算 ceil(100/threshold)
+            local min_total
+            min_total=$(awk "BEGIN {t=$overload_protection_threshold; printf \"%d\", (100 % t == 0) ? 100/t + 1 : int(100/t) + 1}")
+            needed_old_count=$((min_total - 1))
+            if [[ $needed_old_count -lt 1 ]]; then
+                needed_old_count=1
+            fi
 
+            local predicted_pct=$((1 * 100 / (needed_old_count + 1)))
+            if [[ $needed_old_count -gt 1 ]]; then
+                log_warn "⚠️  预热终止保护预判："
+                log_warn "  过载保护阈值: ${overload_protection_threshold}%"
+                log_warn "  如果只启动1个老实例 + 1个新实例，预热实例占比 = 50% >= ${overload_protection_threshold}%，会触发过载保护！"
+                log_warn "  自动调整: 将启动 ${needed_old_count} 个老实例，使预热实例占比 = 1/${min_total} = ${predicted_pct}% < ${overload_protection_threshold}%"
+            else
+                log_info "过载保护预判: 1个老实例 + 1个新实例，预热实例占比 = 50%，阈值 = ${overload_protection_threshold}%，不会触发"
+            fi
+        fi
+
+        # ==================== 步骤5B: 启动老实例 ====================
+        log_step "5/8 启动老实例（共 ${needed_old_count} 个）"
+
+        # --- 启动 Provider1（第一个老实例） ---
         local provider1_workdir="${BUILD_DIR}/provider1"
         mkdir -p "$provider1_workdir"
         cp "${BUILD_DIR}/polaris_provider.yaml" "${provider1_workdir}/polaris.yaml"
@@ -721,7 +805,7 @@ main() {
             --port "$PROVIDER1_PORT" \
             > "$provider1_log" 2>&1) &
         PROVIDER1_PID=$!
-        log_info "Provider1 已启动 (PID: $PROVIDER1_PID)"
+        log_info "Provider1（老实例）已启动 (PID: $PROVIDER1_PID)"
 
         sleep 1
         check_process_alive "$PROVIDER1_PID" "Provider1" || {
@@ -745,24 +829,62 @@ main() {
 
         wait_for_http "http://127.0.0.1:${p1_port}/echo" 20 "Provider1" "$PROVIDER1_PID" || exit 1
 
-        # 等待 Provider1 注册到北极星
+        # --- 启动额外的老实例（如果需要） ---
+        if [[ $needed_old_count -gt 1 ]]; then
+            log_info "需要额外启动 $((needed_old_count - 1)) 个老实例以避免触发过载保护..."
+            for extra_idx in $(seq 2 $needed_old_count); do
+                local extra_workdir="${BUILD_DIR}/provider_extra_${extra_idx}"
+                mkdir -p "$extra_workdir"
+                cp "${BUILD_DIR}/polaris_provider.yaml" "${extra_workdir}/polaris.yaml"
+
+                local extra_log="${LOG_DIR}/provider_extra_${extra_idx}.log"
+                (cd "$extra_workdir" && "${BUILD_DIR}/provider" \
+                    --namespace "$NAMESPACE" \
+                    --service "$SERVICE_NAME" \
+                    --token "$POLARIS_TOKEN" \
+                    --port 0 \
+                    > "$extra_log" 2>&1) &
+                local extra_pid=$!
+                EXTRA_PROVIDER_PIDS+=("$extra_pid")
+                log_info "额外老实例 #${extra_idx} 已启动 (PID: $extra_pid)"
+
+                sleep 1
+                check_process_alive "$extra_pid" "额外老实例#${extra_idx}" || {
+                    log_error "额外老实例 #${extra_idx} 启动失败，请检查日志: $extra_log"
+                    cat "$extra_log" 2>/dev/null || true
+                    exit 1
+                }
+
+                local extra_port
+                extra_port=$(extract_port_from_log "$extra_log" 20) || {
+                    log_error "无法获取额外老实例 #${extra_idx} 端口，请检查日志: $extra_log"
+                    cat "$extra_log" 2>/dev/null || true
+                    exit 1
+                }
+                log_info "额外老实例 #${extra_idx} 实际监听端口: ${extra_port}"
+                wait_for_http "http://127.0.0.1:${extra_port}/echo" 20 "额外老实例#${extra_idx}" "$extra_pid" || exit 1
+            done
+            log_info "所有 ${needed_old_count} 个老实例已启动"
+        fi
+
+        # 等待所有老实例注册到北极星
         if [[ $delay_register_seconds -gt 0 ]]; then
-            log_warn "检测到延迟注册配置（${delay_register_seconds}s），Provider1 需要延迟注册"
+            log_warn "检测到延迟注册配置（${delay_register_seconds}s），老实例需要延迟注册"
             local total_wait=$((delay_register_seconds + 10))
-            log_info "等待 Provider1 完成延迟注册并同步到北极星（最长 ${total_wait}s）..."
+            log_info "等待老实例完成延迟注册并同步到北极星（最长 ${total_wait}s）..."
             local registered_instances
             registered_instances=$(wait_for_instance_registered "$total_wait") || {
-                log_error "Provider1 未能在 ${total_wait}s 内注册到北极星"
-                log_error "可能原因: 延迟注册时长(${delay_register_seconds}s)过长，或 Provider1 注册失败"
+                log_error "老实例未能在 ${total_wait}s 内注册到北极星"
+                log_error "可能原因: 延迟注册时长(${delay_register_seconds}s)过长，或老实例注册失败"
                 log_error "Provider1 日志: $provider1_log"
                 exit 1
             }
-            log_info "Provider1 已注册到北极星:"
+            log_info "老实例已注册到北极星:"
             while IFS= read -r inst; do
                 log_info "  - $inst"
             done <<< "$registered_instances"
         else
-            log_info "等待 Provider1 注册到北极星（2s）..."
+            log_info "等待老实例注册到北极星（2s）..."
             sleep 2
         fi
 
@@ -792,11 +914,11 @@ main() {
         fi
         log_info "基线请求通过 (${baseline_ok}/5 成功)，链路正常"
 
-        # 等待 Provider1 预热结束（确保 Provider1 成为"老实例"）
+        # 等待所有老实例预热结束（确保它们成为"老实例"）
         if [[ $rule_warmup_seconds -gt 0 ]]; then
             local warmup_wait=$((rule_warmup_seconds + 10))
-            log_step "5.5/8 等待 Provider1 预热结束（${warmup_wait}s），使其成为老实例"
-            log_info "Provider1 需要经过预热期（${rule_warmup_seconds}s）+ 缓冲（10s）才能成为老实例"
+            log_step "5.5/8 等待老实例预热结束（${warmup_wait}s），使其成为老实例"
+            log_info "老实例需要经过预热期（${rule_warmup_seconds}s）+ 缓冲（10s）才能成为老实例"
             log_info "等待中..."
 
             local warmup_waited=0
@@ -804,7 +926,7 @@ main() {
                 sleep 10
                 warmup_waited=$((warmup_waited + 10))
                 if [[ $warmup_waited -lt $warmup_wait ]]; then
-                    log_info "Provider1 预热等待中... ${warmup_waited}s / ${warmup_wait}s"
+                    log_info "老实例预热等待中... ${warmup_waited}s / ${warmup_wait}s"
                     # 定期检查进程存活
                     check_process_alive "$PROVIDER1_PID" "Provider1" || {
                         log_error "Provider1 在预热等待期间异常退出"
@@ -814,11 +936,19 @@ main() {
                         log_error "Consumer 在预热等待期间异常退出"
                         exit 1
                     }
+                    if [[ ${#EXTRA_PROVIDER_PIDS[@]} -gt 0 ]]; then
+                        for extra_pid in "${EXTRA_PROVIDER_PIDS[@]}"; do
+                            check_process_alive "$extra_pid" "额外老实例" || {
+                                log_error "额外老实例 (PID: $extra_pid) 在预热等待期间异常退出"
+                                exit 1
+                            }
+                        done
+                    fi
                 fi
             done
-            log_info "Provider1 预热等待完成（${warmup_wait}s），现在 Provider1 是老实例"
+            log_info "老实例预热等待完成（${warmup_wait}s），现在所有老实例已完成预热"
         else
-            log_warn "未获取到预热时长配置，默认等待 30s 让 Provider1 成为老实例"
+            log_warn "未获取到预热时长配置，默认等待 30s 让老实例完成预热"
             sleep 30
         fi
 
@@ -826,7 +956,7 @@ main() {
         baseline_instances=$(get_instance_list 2>/dev/null || echo "")
         if [[ -n "$baseline_instances" ]]; then
             echo "$baseline_instances" > "$baseline_file"
-            log_info "基线实例列表（Provider2 启动前）:"
+            log_info "基线实例列表（Provider2 启动前，共 ${needed_old_count} 个老实例）:"
             while IFS= read -r inst; do
                 log_info "  - $inst"
             done <<< "$baseline_instances"
@@ -1087,7 +1217,7 @@ main() {
     if [[ $existing_count -gt 0 ]]; then
         echo "  运行模式:          场景A（被调已有可用实例，仅启动一个新 Provider）"
     else
-        echo "  运行模式:          场景B（被调无可用实例，先启动老实例等预热结束再启动新实例）"
+        echo "  运行模式:          场景B（被调无可用实例，启动 ${needed_old_count} 个老实例等预热结束再启动新实例）"
     fi
     echo "  总请求数:          ${total_requests}"
     if [[ -n "$old_ports" ]]; then
@@ -1126,18 +1256,15 @@ main() {
         echo "  预热终止保护:      已启用"
         echo "  触发阈值:          ${overload_protection_threshold}%"
 
-        # 在场景B中，只有2个实例（1老1新），新实例占比=50%
-        # 在场景A中，需要根据实际实例数计算
+        # 根据实际实例数计算预热实例占比
         local total_instance_count=0
-        local warmup_instance_count=0
+        local warmup_instance_count=1  # 新实例始终是1个
         if [[ $existing_count -gt 0 ]]; then
             # 场景A: 已有实例 + 1个新实例
             total_instance_count=$((existing_count + 1))
-            warmup_instance_count=1
         else
-            # 场景B: 1个老实例 + 1个新实例
-            total_instance_count=2
-            warmup_instance_count=1
+            # 场景B: needed_old_count 个老实例 + 1个新实例
+            total_instance_count=$((needed_old_count + 1))
         fi
         local warmup_percentage=$((warmup_instance_count * 100 / total_instance_count))
         echo "  当前预热实例占比:  ${warmup_instance_count}/${total_instance_count} = ${warmup_percentage}%"
@@ -1148,7 +1275,6 @@ main() {
             log_warn "预热实例占比(${warmup_percentage}%) >= 阈值(${overload_protection_threshold}%)"
             log_warn "当预热终止保护触发时，WarmupWeightAdjuster 将跳过权重调整，"
             log_warn "所有实例按原始权重均匀分配流量，预热效果将不会体现。"
-            log_warn "如果新实例流量接近50%（2实例场景），这很可能是预热终止保护导致的。"
             echo ""
             log_info "解决方案:"
             log_info "  1. 在北极星控制台调高预热终止保护阈值（当前: ${overload_protection_threshold}%）"
@@ -1179,13 +1305,12 @@ main() {
         log_info "新实例流量 >= 老实例"
         if [[ "$overload_protection_enabled" == "true" ]]; then
             local check_total=0
-            local check_warmup=0
+            local check_warmup=1
             if [[ $existing_count -gt 0 ]]; then
                 check_total=$((existing_count + 1))
             else
-                check_total=2
+                check_total=$((needed_old_count + 1))
             fi
-            check_warmup=1
             local check_pct=$((check_warmup * 100 / check_total))
             if [[ $check_pct -ge $overload_protection_threshold ]]; then
                 log_warn "这很可能是预热终止保护触发导致的（预热实例占比 ${check_pct}% >= 阈值 ${overload_protection_threshold}%）"
