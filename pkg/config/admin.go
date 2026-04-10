@@ -74,12 +74,12 @@ func (a *AdminConfigImpl) SetPort(port int) {
 	a.Port = port
 }
 
-// GetType 负载均衡类型
+// GetType 获取Admin监听类型
 func (a *AdminConfigImpl) GetType() string {
 	return a.Type
 }
 
-// SetType 设置负载均衡类型
+// SetType 设置Admin监听类型
 func (a *AdminConfigImpl) SetType(typ string) {
 	a.Type = typ
 }
