@@ -5,6 +5,10 @@ global:
   client:
     labels:
       env: pre
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
 config:
   configConnector:
     addresses:

@@ -28,6 +28,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
@@ -368,17 +369,15 @@ func (r *ConfigFileRepo) removeCacheConfigFile(file *configconnector.ConfigFile)
 }
 
 func (r *ConfigFileRepo) handleEventReporterChain(f *configconnector.ConfigFile) {
-	e := &model.BaseEventImpl{
-		BaseType: model.ConfigBaseEvent,
-		ConfigEvent: &model.ConfigEventImpl{
-			EventName:         model.ConfigUpdated,
-			EventTime:         time.Now().Format("2006-01-02 15:04:05"),
-			Namespace:         r.configFileMetadata.GetNamespace(),
-			ConfigGroup:       r.configFileMetadata.GetFileGroup(),
-			ConfigFileName:    r.configFileMetadata.GetFileName(),
-			ConfigFileVersion: f.GetVersionName(),
-			ClientType:        model.ConfigFileRequestMode2Str[r.configFileMetadata.GetFileMode()],
-		},
+	e := &event.BaseEventImpl{
+		EventType:         event.ConfigEventType.EventTypeString(),
+		EventName:         event.ConfigUpdated,
+		EventTime:         time.Now().Format("2006-01-02 15:04:05"),
+		Namespace:         r.configFileMetadata.GetNamespace(),
+		ConfigGroup:       r.configFileMetadata.GetFileGroup(),
+		ConfigFileName:    r.configFileMetadata.GetFileName(),
+		ConfigFileVersion: f.GetVersionName(),
+		ClientType:        model.ConfigFileRequestMode2Str[r.configFileMetadata.GetFileMode()],
 	}
 	for _, chain := range r.eventReporterChain {
 		if err := chain.ReportEvent(e); err != nil {

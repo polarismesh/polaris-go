@@ -73,6 +73,8 @@ const (
 	MinCircuitBreakerCheckPeriod = 1 * time.Second
 	// DefaultCircuitBreakerEnabled 熔断器默认开启与否.
 	DefaultCircuitBreakerEnabled bool = true
+	// DefaultWeightAdjustEnabled 权重调整默认开启与否.
+	DefaultWeightAdjustEnabled bool = false
 	// DefaultRecoverAllEnabled 服务路由的全死全活默认开启与否.
 	DefaultRecoverAllEnabled bool = true
 	// DefaultPercentOfMinInstances 路由至少返回节点数百分比.
@@ -153,6 +155,8 @@ const (
 	DefaultMinRegisterInterval = 30 * time.Second
 	// DefaultConfigFilterEnabled 默认配置过滤是否开启
 	DefaultConfigFilterEnabled bool = true
+	// DefaultLosslessEnabled 默认启用无损上下线
+	DefaultLosslessEnabled = false
 )
 
 // defaultBuiltinServerPort 默认埋点server的端口，与上面的IP一一对应.
@@ -202,6 +206,8 @@ const (
 	DefaultLoadBalancerHash string = "hash"
 	// DefaultCircuitBreaker 默认错误率熔断器.
 	DefaultCircuitBreaker string = "composite"
+	// DefaultWeightAdjuster 默认权重调整插件.
+	DefaultWeightAdjuster string = "warmup"
 	// DefaultCircuitBreakerErrRate 默认错误率熔断器.
 	DefaultCircuitBreakerErrRate string = "errorRate"
 	// DefaultCircuitBreakerErrCount 默认持续错误熔断器.
@@ -234,6 +240,22 @@ const (
 	DefaultLimiterNamespace string = "Polaris"
 	// DefaultLimiterService 默认的限流服务
 	DefaultLimiterService string = "polaris.limiter"
+
+	// DefaultAdminHost 默认Admin监听地址
+	DefaultAdminHost = "0.0.0.0"
+	// DefaultAdminPort 默认Admin监听端口
+	DefaultAdminPort = 28080
+	// DefaultAdminType 默认Admin插件类型
+	DefaultAdminType = "httpServer"
+
+	// DefaultLosslessType 默认无损上下线插件类型
+	DefaultLosslessType string = "losslessController"
+	// DefaultLosslessDelayRegisterInterval 默认延迟注册间隔 30 秒
+	DefaultLosslessDelayRegisterInterval = 30 * time.Second
+	// DefaultLosslessHealthCheckInterval 默认健康检查间隔 5 秒
+	DefaultLosslessHealthCheckInterval = 5 * time.Second
+	// DefaultLosslessStrategy 默认无损上线延迟策略为时长延迟策略
+	DefaultLosslessStrategy = model.LosslessDelayRegisterStrategyDelayByTime
 )
 
 // 默认的就近路由配置.
@@ -453,6 +475,9 @@ func (g *GlobalConfigImpl) Verify() error {
 	if err = g.EventReporter.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = g.Admin.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -464,6 +489,7 @@ func (g *GlobalConfigImpl) SetDefault() {
 	g.StatReporter.SetDefault()
 	g.EventReporter.SetDefault()
 	g.Location.SetDefault()
+	g.Admin.SetDefault()
 }
 
 // Init 全局配置初始化.
@@ -481,6 +507,8 @@ func (g *GlobalConfigImpl) Init() {
 	g.Location.Init()
 	g.Client = &ClientConfigImpl{}
 	g.Client.Init()
+	g.Admin = &AdminConfigImpl{}
+	g.Admin.Init()
 }
 
 // Init 初始化ConsumerConfigImpl.
@@ -495,6 +523,8 @@ func (c *ConsumerConfigImpl) Init() {
 	c.Loadbalancer.Init()
 	c.HealthCheck = &HealthCheckConfigImpl{}
 	c.HealthCheck.Init()
+	c.WeightAdjust = &WeightAdjustConfigImpl{}
+	c.WeightAdjust.Init()
 }
 
 // Verify 检验consumerConfig配置.
@@ -519,6 +549,9 @@ func (c *ConsumerConfigImpl) Verify() error {
 	if err = c.HealthCheck.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = c.WeightAdjust.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -529,6 +562,7 @@ func (c *ConsumerConfigImpl) SetDefault() {
 	c.ServiceRouter.SetDefault()
 	c.CircuitBreaker.SetDefault()
 	c.HealthCheck.SetDefault()
+	c.WeightAdjust.SetDefault()
 }
 
 // Init 初始化整体配置对象.

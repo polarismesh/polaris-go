@@ -101,6 +101,12 @@ func (m *MaglevLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	}
 
 	instance := svcInstances.GetInstances()[index]
+
+	m.logCtx.GetBaseLogger().Debugf("[MaglevLoadBalancer] ChooseInstance tableSize=%d, instanceCount=%d, selectedIndex=%d",
+		targetInstances.Count(), svcInstances.GetTotalWeight(), index)
+	m.logCtx.GetBaseLogger().Infof("[MaglevLoadBalancer] ChooseInstance selected instance %s (host=%s, port=%d)",
+		instance.GetId(), instance.GetHost(), instance.GetPort())
+
 	return instance, nil
 }
 

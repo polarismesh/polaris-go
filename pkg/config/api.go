@@ -48,6 +48,8 @@ type GlobalConfig interface {
 	GetLocation() LocationConfig
 	// GetClient global.client前缀开头的所有配置项
 	GetClient() ClientConfig
+	// GetAdmin global.admin前缀开头的所有配置项
+	GetAdmin() AdminConfig
 }
 
 // ConsumerConfig consumer config object.
@@ -65,6 +67,8 @@ type ConsumerConfig interface {
 	GetHealthCheck() HealthCheckConfig
 	// GetServiceSpecific 服务独立配置
 	GetServiceSpecific(namespace string, service string) ServiceSpecificConfig
+	// GetWeightAdjust get weight adjust config
+	GetWeightAdjust() WeightAdjustConfig
 }
 
 // ProviderConfig 被调端配置对象.
@@ -74,6 +78,8 @@ type ProviderConfig interface {
 	GetRateLimit() RateLimitConfig
 	// GetMinRegisterInterval get minimum interval between two register operation
 	GetMinRegisterInterval() time.Duration
+	// GetLossless 获取无损上下线配置
+	GetLossless() LosslessConfig
 }
 
 // ConfigFileConfig 配置中心的配置.
@@ -119,6 +125,53 @@ type RateLimitConfig interface {
 	SetLimiterNamespace(value string)
 	// GetLimiterNamespace 获取限流命名空间
 	GetLimiterNamespace() string
+}
+
+// LosslessConfig 无损上下线配置.
+type LosslessConfig interface {
+	BaseConfig
+	PluginConfig
+	// IsEnable 是否启用无损上下线
+	IsEnable() bool
+	// SetEnable 设置是否启用无损上下线
+	SetEnable(bool)
+	// GetType 获取无损上下线插件类型
+	GetType() string
+	// SetType 设置无损上下线插件类型
+	SetType(string)
+	// GetStrategy 获取延迟注册策略
+	GetStrategy() string
+	// SetStrategy 设置延迟注册策略
+	SetStrategy(string)
+	// GetDelayRegisterInterval 获取时长延迟注册的等待时间
+	GetDelayRegisterInterval() time.Duration
+	// SetDelayRegisterInterval 设置时长延迟注册的等待时间
+	SetDelayRegisterInterval(time.Duration)
+	// GetHealthCheckInterval 获取探测延迟注册的探测周期
+	GetHealthCheckInterval() time.Duration
+	// SetHealthCheckInterval 设置探测延迟注册的探测周期
+	SetHealthCheckInterval(time.Duration)
+}
+
+// AdminConfig Admin相关配置.
+type AdminConfig interface {
+	BaseConfig
+	// GetHost 获取Admin监听的IP地址
+	GetHost() string
+	// SetHost 设置Admin监听的IP地址
+	SetHost(string)
+	// GetPort 获取Admin监听的端口
+	GetPort() int
+	// SetPort 设置Admin监听的端口
+	SetPort(int)
+	// GetType 获取Admin监听类型
+	GetType() string
+	// SetType 设置Admin监听类型
+	SetType(string)
+	// RegisterPath 注册路径
+	RegisterPath(adminHandler model.AdminHandler)
+	// GetPaths 获取注册的路径
+	GetPaths() []model.AdminHandler
 }
 
 // SystemConfig 系统配置信息.
@@ -488,6 +541,20 @@ type CircuitBreakerConfig interface {
 	GetDefaultMinimumRequest() int
 	// SetDefaultMinimumRequest 设置默认实例级熔断最小请求数阈值
 	SetDefaultMinimumRequest(count int)
+}
+
+// WeightAdjustConfig 权重调整相关配置项.
+type WeightAdjustConfig interface {
+	BaseConfig
+	PluginConfig
+	// IsEnable 是否启用权重调整
+	IsEnable() bool
+	// SetEnable 设置是否启用权重调整
+	SetEnable(bool)
+	// GetChain 权重调整插件链
+	GetChain() []string
+	// SetChain 设置权重调整插件链
+	SetChain([]string)
 }
 
 // Configuration 全量配置对象.

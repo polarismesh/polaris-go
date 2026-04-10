@@ -143,6 +143,10 @@ const (
 	NetworkLogger
 	// CacheLogger 缓存更新日志
 	CacheLogger
+	// EventLogger 事件日志
+	EventLogger
+	// LosslessLogger 无损上下线日志对象
+	LosslessLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -180,6 +184,16 @@ func (c *container) SetNetworkLogger(logger Logger) {
 // SetCacheLogger 设置缓存更新日志对象
 func (c *container) SetCacheLogger(logger Logger) {
 	c.loggers[CacheLogger].Store(&logger)
+}
+
+// SetEventLogger 设置事件日志对象
+func (c *container) SetEventLogger(logger Logger) {
+	c.loggers[EventLogger].Store(&logger)
+}
+
+// SetLosslessLogger 设置无损上下线日志对象
+func (c *container) SetLosslessLogger(logger Logger) {
+	c.loggers[LosslessLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -236,6 +250,24 @@ func (c *container) GetCacheLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetEventLogger 获取事件日志对象
+func (c *container) GetEventLogger() Logger {
+	value := c.loggers[EventLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
+// GetLosslessLogger 获取无损上下线日志对象
+func (c *container) GetLosslessLogger() Logger {
+	value := c.loggers[LosslessLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -264,6 +296,16 @@ func SetCacheLogger(logger Logger) {
 // SetNetworkLogger 全局设置网络交互日志对象
 func SetNetworkLogger(logger Logger) {
 	logContainer.SetNetworkLogger(logger)
+}
+
+// SetEventLogger 全局设置事件日志对象
+func SetEventLogger(logger Logger) {
+	logContainer.SetEventLogger(logger)
+}
+
+// SetLosslessLogger 全局设置无损上下线日志对象
+func SetLosslessLogger(logger Logger) {
+	logContainer.SetLosslessLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -299,6 +341,16 @@ func GetDetectLogger() Logger {
 // GetNetworkLogger 获取全局网络交互日志对象
 func GetNetworkLogger() Logger {
 	return logContainer.GetNetworkLogger()
+}
+
+// GetEventLogger 获取全局事件日志对象
+func GetEventLogger() Logger {
+	return logContainer.GetEventLogger()
+}
+
+// GetLosslessLogger 获取全局无损上下线日志对象
+func GetLosslessLogger() Logger {
+	return logContainer.GetLosslessLogger()
 }
 
 // Options defines the set of options for component logging package.
@@ -409,6 +461,14 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default cache logger %s", name)))
 		}
+		if err = ConfigDefaultEventLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default event logger %s", name)))
+		}
+		if err = ConfigDefaultLosslessLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default lossless logger %s", name)))
+		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
@@ -493,6 +553,26 @@ func ConfigCacheLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigEventLogger 配置事件日志器
+func ConfigEventLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, eventLoggerName, options, DefaultEventLogLevel)
+	if err != nil {
+		return err
+	}
+	SetEventLogger(logger)
+	return nil
+}
+
+// ConfigLosslessLogger 配置无损上下线日志器
+func ConfigLosslessLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, losslessLoggerName, options, DefaultLosslessLogLevel)
+	if err != nil {
+		return err
+	}
+	SetLosslessLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -536,4 +616,16 @@ func ConfigDefaultNetworkLogger(pluginName string) error {
 func ConfigDefaultCacheLogger(pluginName string) error {
 	return ConfigCacheLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultCacheLogRotationFile, DefaultCacheLogLevel))
+}
+
+// ConfigDefaultEventLogger 配置默认的事件日志器
+func ConfigDefaultEventLogger(pluginName string) error {
+	return ConfigEventLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultEventLogRotationFile, DefaultEventLogLevel))
+}
+
+// ConfigDefaultLosslessLogger 配置默认的无损上下线日志器
+func ConfigDefaultLosslessLogger(pluginName string) error {
+	return ConfigLosslessLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultLosslessLogRotationFile, DefaultLosslessLogLevel))
 }

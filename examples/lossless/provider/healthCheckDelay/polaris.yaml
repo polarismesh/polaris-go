@@ -1,0 +1,22 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+    connectTimeout: 5000ms
+  api:
+    timeout: 5s
+    maxRetryTimes: 2
+    retryInterval: 1s
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+# 被调方配置
+provider:
+  # 无损上下线配置
+  lossless:
+    # 是否启用无损上下线
+    enable: true
+    strategy: DELAY_BY_HEALTH_CHECK
+    healthCheckInterval: 5s

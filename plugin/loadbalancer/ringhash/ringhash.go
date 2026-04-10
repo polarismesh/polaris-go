@@ -98,7 +98,13 @@ func (k *KetamaLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 		criteria.ReplicateInfo.Nodes = nodes.GetInstances()
 	}
 
-	instance := inputInstances.GetInstances()[index]
+	instance := inputInstances.GetServiceClusters().GetServiceInstances().GetInstances()[index]
+
+	k.logCtx.GetBaseLogger().Debugf("[RingHashLoadBalancer] ChooseInstance ringSize=%d, selectedIndex=%d",
+		targetInstances.Count(), index)
+	k.logCtx.GetBaseLogger().Infof("[RingHashLoadBalancer] ChooseInstance selected instance %s (host=%s, port=%d)",
+		instance.GetId(), instance.GetHost(), instance.GetPort())
+
 	return instance, nil
 }
 

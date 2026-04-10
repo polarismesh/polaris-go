@@ -42,9 +42,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/loadbalancer"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/plugin/location"
+	"github.com/polarismesh/polaris-go/pkg/plugin/lossless"
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
@@ -66,6 +68,8 @@ type Engine struct {
 	reporterChain []statreporter.StatReporter
 	// 事件插件链
 	eventChain []events.EventReporter
+	// 无损上下线插件
+	lossless lossless.Lossless
 	// 负载均衡器
 	loadbalancer loadbalancer.LoadBalancer
 	// 限流处理协助辅助类
@@ -91,6 +95,8 @@ type Engine struct {
 	// 配置过滤链
 	configFilterChain configfilter.Chain
 	logCtx            *log.ContextLogger
+	// weightAdjuster .
+	weightAdjuster []weightadjuster.WeightAdjuster
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -134,8 +140,15 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 			return err
 		}
 	}
-
 	flowEngine.eventChain, err = data.GetEventReporterChain(cfg, plugins)
+	if err != nil {
+		return err
+	}
+	flowEngine.lossless, err = data.GetLossless(cfg, plugins)
+	if err != nil {
+		return err
+	}
+	flowEngine.weightAdjuster, err = data.GetWeightAdjuster(cfg, plugins)
 	if err != nil {
 		return err
 	}
@@ -261,6 +274,28 @@ func (e *Engine) GetContext() sdk.ValueContext {
 
 func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
 	return e.circuitBreakerFlow
+}
+
+func (e *Engine) GetRegisterState() sdk.RegisterState {
+	return e.registerStates
+}
+
+// GetEventReportChain 获取事件上报插件链
+func (e *Engine) GetEventReportChain() interface{} {
+	return e.eventChain
+}
+
+// GetAdmin 获取管理接口
+func (e *Engine) GetAdmin() sdk.Admin {
+	adminType := e.configuration.GetGlobal().GetAdmin().GetType()
+	targetPlugin, err := e.plugins.GetPlugin(common.TypeAdmin, adminType)
+	if err != nil {
+		return nil
+	}
+	if adminPlugin, ok := targetPlugin.(sdk.Admin); ok {
+		return adminPlugin
+	}
+	return nil
 }
 
 // ServiceEventCallback serviceUpdate消息订阅回调

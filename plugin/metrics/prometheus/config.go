@@ -54,10 +54,11 @@ func (c *Config) SetDefault() {
 	}
 	if c.PortStr == "" {
 		c.port = defaultMetricPort
+	} else {
+		port, _ := strconv.ParseInt(c.PortStr, 10, 64)
+		c.port = int(port)
 	}
 	if c.Interval == 0 {
 		c.Interval = 15 * time.Second
 	}
-	port, _ := strconv.ParseInt(c.PortStr, 10, 64)
-	c.port = int(port)
 }

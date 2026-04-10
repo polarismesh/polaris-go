@@ -1,13 +1,14 @@
 global:
   serverConnector:
     addresses:
-      - 127.0.0.1:8091
-  #描述:主调端配置
-  statReporter:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+    connectTimeout: 5000ms
+  api:
+    timeout: 5s
+    maxRetryTimes: 2
+    retryInterval: 1s
+  eventReporter:
     enable: true
     chain:
-      - prometheus
-    plugin:
-      prometheus:
-        type: pull
-        metricPort: 0
+      - pushgateway

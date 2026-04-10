@@ -42,6 +42,20 @@ func (c *providerAPI) RegisterInstance(instance *InstanceRegisterRequest) (*mode
 	return c.context.GetEngine().SyncRegister(&instance.InstanceRegisterRequest)
 }
 
+// LosslessRegister after the service is successfully registered,
+func (c *providerAPI) LosslessRegister(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse,
+	error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if err := instance.Validate(); err != nil {
+		return nil, err
+	}
+	instance.AutoHeartbeat = true
+	// 延迟注册的检查
+	return c.context.GetEngine().SyncLosslessRegister(&instance.InstanceRegisterRequest)
+}
+
 // Register 同步注册服务，服务注册成功后会填充instance中的InstanceId字段
 // 用户可保持该instance对象用于反注册和心跳上报
 func (c *providerAPI) Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error) {

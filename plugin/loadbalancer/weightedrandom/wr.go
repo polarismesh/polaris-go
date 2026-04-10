@@ -20,6 +20,7 @@ package weightedrandom
 import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/rand"
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -31,6 +32,7 @@ import (
 type WRLoadBalancer struct {
 	*plugin.PluginBase
 	scalableRand *rand.ScalableRand
+	log          *log.ContextLogger
 }
 
 // Type 插件类型
@@ -45,8 +47,10 @@ func (g *WRLoadBalancer) Name() string {
 
 // Init 初始化插件
 func (g *WRLoadBalancer) Init(ctx *plugin.InitContext) error {
+	g.log = ctx.ValueCtx.GetContextLogger()
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.scalableRand = rand.NewScalableRand()
+	g.log.GetBaseLogger().Infof("weightedrandom load balancer initialized")
 	return nil
 }
 
@@ -58,6 +62,13 @@ func (g *WRLoadBalancer) Destroy() error {
 // ChooseInstance 获取单个服务实例
 func (g *WRLoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 	svcInstances model.ServiceInstances) (model.Instance, error) {
+	// 当存在动态权重时，使用动态权重进行权重随机选择
+	if len(criteria.DynamicWeight) > 0 {
+		g.log.GetBaseLogger().Debugf("[WRLoadBalancer] ChooseInstance using dynamic weight path, dynamicWeight "+
+			"entries: %d", len(criteria.DynamicWeight))
+		return g.chooseInstanceWithDynamicWeight(criteria, svcInstances)
+	}
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] ChooseInstance using static weight path")
 	return g.clusterBasedChooseInstance(criteria.IgnoreHalfOpen, criteria.Cluster, svcInstances.GetServiceClusters())
 }
 
@@ -74,10 +85,15 @@ func (g *WRLoadBalancer) clusterBasedChooseInstance(ignoreHalfOpen bool,
 			"instances of %s in cluster %s all weight 0 (instance count %d) in load balance, includeHalfOpen: %v",
 			svcClusters.GetServiceKey(), *cluster, targetInstances.Count(), cluster.IncludeHalfOpen)
 	}
+	g.log.GetBaseLogger().Debugf("[WRLoadBalancer] clusterBasedChooseInstance service %s, "+
+		"available instances: %d, totalWeight: %d",
+		svcClusters.GetServiceKey(), targetInstances.Count(), targetInstances.TotalWeight())
 	// 优化进行随机半开节点的分配
 	instance = g.clusterBasedSelectWeightedInstance(svcInstances, targetInstances)
 	if nil == instance {
 		// 一般不会走到这一步，除非BUG，这里只是做个预案
+		g.log.GetBaseLogger().Warnf("[WRLoadBalancer] clusterBasedSelectWeightedInstance returned nil, using random "+
+			"fallback for service %s", svcClusters.GetServiceKey())
 		selector := g.getSelector(targetInstances.Count())
 		instanceIndex := targetInstances.GetInstances()[selector]
 		instance = svcInstances.GetInstances()[instanceIndex.Index]

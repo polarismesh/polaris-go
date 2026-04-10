@@ -92,10 +92,12 @@ type InstanceHeartbeatRequest api.InstanceHeartbeatRequest
 // ProviderAPI CL5服务端API的主接口.
 type ProviderAPI interface {
 	api.SDKOwner
-	// RegisterInstance
+	// RegisterInstance 注册后会定时上报心跳
 	// minimum supported version of polaris-server is v1.10.0
 	RegisterInstance(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
-	// Register
+	// LosslessRegister 无损上线注册, 会定时上报心跳
+	LosslessRegister(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)
+	// Register 注册接口, 根据配置决定是否上报心跳
 	// 同步注册服务，服务注册成功后会填充instance中的InstanceID字段
 	// 用户可保持该instance对象用于反注册和心跳上报
 	Register(instance *InstanceRegisterRequest) (*model.InstanceRegisterResponse, error)

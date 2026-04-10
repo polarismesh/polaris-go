@@ -46,6 +46,8 @@ type SelectStatus struct {
 func (p *Proxy) ChooseInstance(criteria *Criteria, instances model.ServiceInstances) (model.Instance, error) {
 	// 包括处于半开的实例
 	criteria.Cluster.IncludeHalfOpen = true
+	p.engine.GetContext().GetContextLogger().GetBaseLogger().Debugf("choose instance, cluster: %s, instances: %v",
+		criteria.Cluster.ClusterKey, instances)
 	result, err := p.LoadBalancer.ChooseInstance(criteria, instances)
 	return result, err
 }

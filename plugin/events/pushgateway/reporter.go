@@ -18,7 +18,7 @@
 package pushgateway
 
 import (
-	bytes2 "bytes"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,6 +29,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
@@ -51,8 +52,9 @@ type PushgatewayReporter struct {
 	clientID string
 	once     sync.Once
 	cancel   context.CancelFunc
-	events   []model.BaseEvent
-	reqChan  chan model.BaseEvent
+	events   []event.BaseEvent
+	reqChan  chan event.BaseEvent
+	doneChan chan struct{} // 用于等待协程完成
 
 	httpClient *http.Client
 	targetUrl  string
@@ -73,6 +75,17 @@ func (p *PushgatewayReporter) Name() string {
 }
 
 func (p *PushgatewayReporter) Destroy() error {
+	// 先取消 context 并等待事件 Flush 完成，然后再销毁 PluginBase 和 RunContext
+	if p.cancel != nil {
+		p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] canceling context and waiting for flush")
+		p.cancel()
+		// 等待协程完成 Flush
+		if p.doneChan != nil {
+			<-p.doneChan
+			p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] flush completed")
+		}
+	}
+
 	if p.PluginBase != nil {
 		if err := p.PluginBase.Destroy(); err != nil {
 			return err
@@ -82,9 +95,6 @@ func (p *PushgatewayReporter) Destroy() error {
 		if err := p.RunContext.Destroy(); err != nil {
 			return err
 		}
-	}
-	if p.cancel != nil {
-		p.cancel()
 	}
 
 	return nil
@@ -108,8 +118,10 @@ func (p *PushgatewayReporter) Init(ctx *plugin.InitContext) error {
 }
 
 // ReportEvent 数据记录在缓存中，定期1分钟上报
-func (p *PushgatewayReporter) ReportEvent(e model.BaseEvent) error {
+func (p *PushgatewayReporter) ReportEvent(e event.BaseEvent) error {
 	p.prepare()
+	p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] ReportEvent called, event type: %v, event name: %v", e.GetEventType(),
+		e.GetEventName())
 
 	select {
 	case p.reqChan <- e:
@@ -122,20 +134,23 @@ func (p *PushgatewayReporter) ReportEvent(e model.BaseEvent) error {
 
 func (p *PushgatewayReporter) prepare() {
 	p.once.Do(func() {
+		p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] prepare called, initializing...")
 		// 只有触发了Chain.ReportEvent，才需要初始化chan，启动接受协程（一次任务）
-		p.events = make([]model.BaseEvent, 0, p.cfg.EventQueueSize+1)
-		p.reqChan = make(chan model.BaseEvent, p.cfg.EventQueueSize+1)
+		p.events = make([]event.BaseEvent, 0, p.cfg.EventQueueSize+1)
+		p.reqChan = make(chan event.BaseEvent, p.cfg.EventQueueSize+1)
+		p.doneChan = make(chan struct{})
 
 		p.httpClient = &http.Client{Timeout: time.Second * 3}
 		if p.cfg.Address != "" {
 			p.targetUrl = fmt.Sprintf("http://%s/%s", p.cfg.Address, p.cfg.ReportPath)
 		}
-
 		ctx, cancel := context.WithCancel(context.Background())
 		p.cancel = cancel
+		p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] starting event consumer goroutine")
 		go func(ctx context.Context) {
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
+			defer close(p.doneChan) // 协程退出时关闭 doneChan，通知 Destroy 方法
 			for {
 				select {
 				case e := <-p.reqChan:
@@ -146,10 +161,24 @@ func (p *PushgatewayReporter) prepare() {
 				case <-ticker.C:
 					p.Flush(false)
 				case <-ctx.Done():
-					p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] receive destroy signal, flush " +
-						"events")
+					p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] context done, draining " +
+						"channel...")
+					// 先把 channel 中剩余的事件消费完
+					for {
+						select {
+						case e := <-p.reqChan:
+							p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] drained event from " +
+								"channel")
+							p.events = append(p.events, e)
+						default:
+							goto flushAndExit
+						}
+					}
+				flushAndExit:
+					p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] flushing %d events before exit",
+						len(p.events))
 					p.Flush(true) // 退出之前同步flush数据
-					p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] pushgateway reporter is " +
+					p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] pushgateway reporter is " +
 						"stopping")
 					return
 				}
@@ -185,56 +214,75 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 	}
 
 	var batchEvents BatchEvents
-	batchEvents.Batch = make([]model.ConfigEvent, 0, len(p.events))
+	batchEvents.Batch = make([]event.BaseEvent, 0, len(p.events))
 	for _, entry := range p.events {
 		// 刷新之前，填充SDK的公共数据
-		entry.GetConfigEvent().SetClientIp(p.clientIP)
-		entry.GetConfigEvent().SetClientId(p.clientID)
-		p.logCtx.GetStatReportLogger().Infof("[EventReporter][Pushgateway] new config event: %+v",
-			entry.GetConfigEvent())
-
-		batchEvents.Batch = append(batchEvents.Batch, entry.GetConfigEvent())
-
+		entry.SetClientIP(p.clientIP)
+		entry.SetClientID(p.clientID)
+		p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] new event: %v", model.JSONString(entry))
+		batchEvents.Batch = append(batchEvents.Batch, entry)
 	}
 	// 重置p.events
-	p.events = make([]model.BaseEvent, 0, p.cfg.EventQueueSize+1)
+	p.events = make([]event.BaseEvent, 0, p.cfg.EventQueueSize+1)
 
 	flushHandler := func(batch BatchEvents) {
 		data, err := json.Marshal(batch)
 		if err != nil {
-			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] marshal data(%+v) err: %+v",
-				batchEvents, err)
+			p.logCtx.GetEventLogger().Errorf("[EventReporter][Pushgateway] marshal data(%+v) err: %+v", batchEvents, err)
 			return
 		}
 
-		dataBuffer := bytes2.NewBuffer(data)
 		targetUrl, err := p.getTargetUrl()
 		if err != nil {
-			p.logCtx.GetStatReportLogger().Warnf("[EventReporter][Pushgateway] not found target event server addr, "+
-				"ignore it. %s", err.Error())
-			return
-		}
-		req, err := http.NewRequest(http.MethodPost, targetUrl, dataBuffer)
-		if err != nil {
-			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] new request err: %+v", err)
+			p.logCtx.GetEventLogger().Warnf("[EventReporter][Pushgateway] not found target event server addr, ignore it. %s", err.Error())
 			return
 		}
 
-		var respBuffer bytes2.Buffer
-		var respCode int
-		resp, respErr := p.httpClient.Do(req)
-		if resp != nil {
-			respCode = resp.StatusCode
-			if resp.Body != nil {
-				_, _ = io.Copy(&respBuffer, resp.Body)
-				defer resp.Body.Close()
+		// 重试配置：最多重试 3 次，每次间隔递增
+		maxRetries := 3
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			dataBuffer := bytes.NewBuffer(data)
+			req, err := http.NewRequest(http.MethodPost, targetUrl, dataBuffer)
+			if err != nil {
+				p.logCtx.GetEventLogger().Errorf("[EventReporter][Pushgateway] new request err: %+v", err)
+				return
+			}
+
+			var respBuffer bytes.Buffer
+			var respCode int
+			resp, respErr := p.httpClient.Do(req)
+			if resp != nil {
+				respCode = resp.StatusCode
+				if resp.Body != nil {
+					_, _ = io.Copy(&respBuffer, resp.Body)
+					_ = resp.Body.Close()
+				}
+			}
+
+			// 请求成功，直接返回
+			if respErr == nil && respCode >= 200 && respCode < 300 {
+				p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] request success, code: %d", respCode)
+				return
+			}
+
+			// 请求失败，记录日志
+			if respErr != nil {
+				p.logCtx.GetEventLogger().Warnf("[EventReporter][Pushgateway] do request err (attempt %d/%d): %+v, code: %d, resp: %s",
+					attempt, maxRetries, respErr, respCode, respBuffer.String())
+			} else {
+				p.logCtx.GetEventLogger().Warnf("[EventReporter][Pushgateway] request failed (attempt %d/%d), code: %d, resp: %s",
+					attempt, maxRetries, respCode, respBuffer.String())
+			}
+
+			// 如果不是最后一次重试，等待一段时间后重试
+			if attempt < maxRetries {
+				retryDelay := time.Duration(attempt) * time.Second
+				p.logCtx.GetEventLogger().Infof("[EventReporter][Pushgateway] retrying after %v...", retryDelay)
+				time.Sleep(retryDelay)
 			}
 		}
-		if respErr != nil {
-			p.logCtx.GetStatReportLogger().Errorf("[EventReporter][Pushgateway] do request err: %+v, code: %d, "+
-				"resp: %s", respErr, respCode, respBuffer.String())
-			return
-		}
+
+		p.logCtx.GetEventLogger().Errorf("[EventReporter][Pushgateway] all %d retry attempts failed", maxRetries)
 	}
 
 	if isSync {
@@ -247,5 +295,5 @@ func (p *PushgatewayReporter) Flush(isSync bool) {
 }
 
 type BatchEvents struct {
-	Batch []model.ConfigEvent
+	Batch []event.BaseEvent `json:"batch"`
 }

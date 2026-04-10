@@ -292,6 +292,8 @@ func (s *CacheObject) OnServiceUpdate(event *serverconnector.ServiceEvent) {
 				atomic.StoreInt32(&cachedValue.(*pb.ServiceRuleInProto).CacheLoaded, 0)
 			case model.EventNearbyRouteRule:
 				atomic.StoreInt32(&cachedValue.(*pb.ServiceRuleInProto).CacheLoaded, 0)
+			case model.EventLossless:
+				atomic.StoreInt32(&cachedValue.(*pb.ServiceRuleInProto).CacheLoaded, 0)
 			}
 		}
 	}

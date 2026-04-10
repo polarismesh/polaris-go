@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/algorithm/hash"
 	"github.com/polarismesh/polaris-go/pkg/algorithm/search"
 	mconfig "github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -33,6 +34,7 @@ type LoadBalancer struct {
 	*plugin.PluginBase
 	cfg      *Config
 	hashFunc hash.HashFuncWithSeed
+	log      *log.ContextLogger
 }
 
 // Type 插件类型
@@ -47,6 +49,7 @@ func (g *LoadBalancer) Name() string {
 
 // Init 初始化插件
 func (g *LoadBalancer) Init(ctx *plugin.InitContext) error {
+	g.log = ctx.ValueCtx.GetContextLogger()
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	var err error
 	g.cfg = ctx.Config.GetConsumer().GetLoadbalancer().GetPluginConfig(g.Name()).(*Config)
@@ -74,12 +77,18 @@ func (g *LoadBalancer) ChooseInstance(criteria *loadbalancer.Criteria,
 		return nil, model.NewSDKError(model.ErrCodeInternalError, err, "fail to cal hash value")
 	}
 	targetValue := hashValue % uint64(targetInstances.TotalWeight())
+	g.log.GetBaseLogger().Debugf("[HashLoadBalancer] ChooseInstance hashValue=%d, totalWeight=%d, targetValue=%d",
+		hashValue, targetInstances.TotalWeight(), targetValue)
 	weightedSlice := targetInstances
 	// 按照权重区间来寻找
 	targetIndex := search.BinarySearch(weightedSlice, uint64(targetValue))
 	instanceIndex := targetInstances.GetInstances()[targetIndex]
 
 	instance := inputInstances.GetServiceClusters().GetServiceInstances().GetInstances()[instanceIndex.Index]
+
+	g.log.GetBaseLogger().Infof("[HashLoadBalancer] ChooseInstance selected instance %s (host=%s, port=%d), "+
+		"targetIndex=%d, instanceIndex=%d",
+		instance.GetId(), instance.GetHost(), instance.GetPort(), targetIndex, instanceIndex.Index)
 
 	return instance, nil
 }

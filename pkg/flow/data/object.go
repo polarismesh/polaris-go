@@ -203,6 +203,7 @@ func (c *CommonInstancesRequest) clearValues(cfg config.Configuration) {
 	c.Criteria.HashValue = 0
 	c.Criteria.HashKey = nil
 	c.Criteria.Cluster = nil
+	c.Criteria.DynamicWeight = nil
 	c.Trigger.Clear()
 	c.Criteria.ReplicateInfo.Count = 0
 	c.Criteria.ReplicateInfo.Nodes = nil

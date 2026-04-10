@@ -31,6 +31,8 @@ var DefaultRateLimitEnable = true
 type ProviderConfigImpl struct {
 	// 限流配置
 	RateLimit *RateLimitConfigImpl `yaml:"rateLimit" json:"rateLimit"`
+	// 无损上下线配置
+	Lossless *LosslessConfigImpl `yaml:"lossless" json:"lossless"`
 	// minimum interval between tow register operation
 	MinRgisterInterval time.Duration `yaml:"minRegisterInterval" json:"minRegisterInterval"`
 }
@@ -45,6 +47,11 @@ func (p *ProviderConfigImpl) GetMinRegisterInterval() time.Duration {
 	return p.MinRgisterInterval
 }
 
+// GetLossless 获取无损上下线配置
+func (p *ProviderConfigImpl) GetLossless() LosslessConfig {
+	return p.Lossless
+}
+
 // Verify 校验配置参数.
 func (p *ProviderConfigImpl) Verify() error {
 	if nil == p {
@@ -53,6 +60,9 @@ func (p *ProviderConfigImpl) Verify() error {
 	var errs error
 	var err error
 	if err = p.RateLimit.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
+	if err = p.Lossless.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	if p.MinRgisterInterval <= 0 {
@@ -70,10 +80,16 @@ func (p *ProviderConfigImpl) SetDefault() {
 	if p.MinRgisterInterval == 0 {
 		p.MinRgisterInterval = DefaultMinRegisterInterval
 	}
+	if nil == p.Lossless {
+		p.Lossless = &LosslessConfigImpl{}
+	}
+	p.Lossless.SetDefault()
 }
 
 // Init 配置初始化.
 func (p *ProviderConfigImpl) Init() {
 	p.RateLimit = &RateLimitConfigImpl{}
 	p.RateLimit.Init()
+	p.Lossless = &LosslessConfigImpl{}
+	p.Lossless.Init()
 }

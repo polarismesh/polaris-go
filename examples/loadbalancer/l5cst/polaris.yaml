@@ -1,0 +1,26 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+  connectTimeout: 5000ms
+  api:
+    timeout: 5s
+    maxRetryTimes: 2
+    retryInterval: 1s
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        address: ${POLARIS_SERVER}:9091
+        type: push
+consumer:
+  loadbalancer:
+    type: l5cst
+

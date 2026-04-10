@@ -35,15 +35,17 @@ var (
 	port       int64
 	token      string
 	lbPolicy   string
+	hashKey    string
 	configPath string
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "LoadBalanceEchoServer", "service")
-	flag.Int64Var(&port, "port", 18080, "port")
+	flag.Int64Var(&port, "port", 17080, "port")
 	flag.StringVar(&token, "token", "", "token")
-	flag.StringVar(&lbPolicy, "lbPolicy", "weightedRandom", "loadBalancer plugin")
+	flag.StringVar(&lbPolicy, "lbPolicy", "ringHash", "loadBalancer plugin")
+	flag.StringVar(&hashKey, "hashKey", "example-hash-key", "hashKey")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
 }
 
@@ -53,7 +55,6 @@ type PolarisConsumer struct {
 	router    polaris.RouterAPI
 	namespace string
 	service   string
-	lbPolicy  string
 }
 
 // Run .
@@ -75,9 +76,18 @@ func (svr *PolarisConsumer) runWebServer() {
 			return
 		}
 		log.Printf("all instances count %d", len(instancesResp.Instances))
+		for i, inst := range instancesResp.Instances {
+			cbStatus := "none"
+			if inst.GetCircuitBreakerStatus() != nil {
+				cbStatus = fmt.Sprintf("%d", inst.GetCircuitBreakerStatus().GetStatus())
+			}
+			log.Printf("instance[%d]: %s:%d weight=%d healthy=%v isolated=%v circuitBreaker=%s",
+				i, inst.GetHost(), inst.GetPort(), inst.GetWeight(), inst.IsHealthy(), inst.IsIsolated(), cbStatus)
+		}
 		lbRequest := &polaris.ProcessLoadBalanceRequest{}
 		lbRequest.DstInstances = instancesResp
-		lbRequest.LbPolicy = svr.lbPolicy
+		lbRequest.LbPolicy = lbPolicy
+		lbRequest.HashKey = []byte(hashKey)
 		log.Printf("loadBalancer request %s", mustJson(lbRequest))
 		lbResp, err := svr.router.ProcessLoadBalance(lbRequest)
 		if nil != err || lbResp.GetInstances() == nil {
@@ -92,6 +102,52 @@ func (svr *PolarisConsumer) runWebServer() {
 			log.Printf("handleLoadBalancer get random instance unHealthy instance: %s:%d",
 				instance.GetHost(), instance.GetPort())
 		}
+
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		if err != nil {
+			log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
+				instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+		defer resp.Body.Close()
+
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("[error] read resp from %s:%d fail: %s", instance.GetHost(), instance.GetPort(), err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s",
+				instance.GetHost(), instance.GetPort(), err)))
+			return
+		}
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write(data)
+	})
+
+	http.HandleFunc("/call", func(rw http.ResponseWriter, r *http.Request) {
+		log.Printf("start to invoke getOneInstance operation")
+		getOneRequest := &polaris.GetOneInstanceRequest{}
+		getOneRequest.Namespace = namespace
+		getOneRequest.Service = service
+		getOneRequest.LbPolicy = lbPolicy
+		getOneRequest.HashKey = []byte(hashKey)
+		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+		if nil != err {
+			log.Printf("[error] fail to getOneInstance, err is %v", err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("fail to getOneInstance, err is %v", err)))
+			return
+		}
+		instance := oneInstResp.GetInstance()
+		if instance == nil {
+			log.Printf("[error] getOneInstance returned nil instance")
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte("getOneInstance returned nil instance"))
+			return
+		}
+		log.Printf("getOneInstance is %s:%d weight=%d healthy=%v isolated=%v",
+			instance.GetHost(), instance.GetPort(), instance.GetWeight(), instance.IsHealthy(), instance.IsIsolated())
 
 		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
 		if err != nil {
@@ -144,7 +200,6 @@ func main() {
 		router:    polaris.NewRouterAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
-		lbPolicy:  lbPolicy,
 	}
 
 	svr.Run()

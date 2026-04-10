@@ -50,7 +50,7 @@ const (
 	LabelKeyQuery         = "$query."
 	LabelKeyCallerService = "$caller_service."
 	LabelKeyCallerIp      = "$caller_ip"
-	LabelKeyPath          = "$path"
+	LabelKeyPath          = "$Path"
 	LabelKeyCookie        = "$cookie."
 )
 
