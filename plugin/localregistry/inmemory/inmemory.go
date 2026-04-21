@@ -809,6 +809,25 @@ func (g *LocalCache) LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifi
 	})
 }
 
+// GetServiceLaneRule 非阻塞获取泳道规则
+func (g *LocalCache) GetServiceLaneRule(key *model.ServiceKey, includeCache bool) model.ServiceRule {
+	svcEventKey := poolGetSvcEventKey(key, model.EventLane)
+	svcRule := g.GetServiceRule(svcEventKey, includeCache)
+	poolPutSvcEventKey(svcEventKey)
+	return svcRule
+}
+
+// LoadServiceLaneRule 非阻塞发起泳道规则加载
+func (g *LocalCache) LoadServiceLaneRule(key *model.ServiceKey) (*common.Notifier, error) {
+	return g.LoadServiceRule(&model.ServiceEventKey{
+		ServiceKey: model.ServiceKey{
+			Namespace: key.Namespace,
+			Service:   key.Service,
+		},
+		Type: model.EventLane,
+	})
+}
+
 // LoadServices 非阻塞加载批量服务
 func (g *LocalCache) LoadServices(key *model.ServiceKey) (*common.Notifier, error) {
 	g.logCtx.GetBaseLogger().Infof("LoadServices: %s", *key)

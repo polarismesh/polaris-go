@@ -25,6 +25,8 @@ type NotifyTrigger struct {
 	EnableSrcRoute     bool
 	EnableDstRateLimit bool
 	EnableServices     bool
+	EnableDstLane      bool
+	EnableSrcLane      bool
 }
 
 // Clear 清理缓存信息
@@ -35,4 +37,6 @@ func (n *NotifyTrigger) Clear() {
 	n.EnableSrcRoute = false
 	n.EnableDstRateLimit = false
 	n.EnableServices = false
+	n.EnableDstLane = false
+	n.EnableSrcLane = false
 }

@@ -34,6 +34,16 @@ func (e *Engine) ProcessRouters(req *model.ProcessRoutersRequest) (*model.Instan
 	commonRequest := data.PoolGetCommonInstancesRequest(e.plugins)
 	commonRequest.InitByProcessRoutersRequest(req, e.configuration, routers)
 	resp, err := e.doSyncGetInstances(commonRequest)
+	// 将路由链执行过程中写入的 EnvironmentVariables 回传给调用方（RouteMetadata）。
+	// 例如泳道路由在首次染色成功后会写入 service-lane 标签，网关可从中获取完整的 stainLabel。
+	// 注意：必须复制 map 而不是直接引用，因为 commonRequest 将被归还对象池。
+	if err == nil && resp != nil && len(commonRequest.RouteInfo.EnvironmentVariables) > 0 {
+		routeMeta := make(map[string]string, len(commonRequest.RouteInfo.EnvironmentVariables))
+		for k, v := range commonRequest.RouteInfo.EnvironmentVariables {
+			routeMeta[k] = v
+		}
+		resp.RouteMetadata = routeMeta
+	}
 	e.syncInstancesReportAndFinalize(commonRequest)
 	return resp, err
 }

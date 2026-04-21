@@ -661,6 +661,10 @@ type InstancesResponse struct {
 	Cluster *Cluster
 	// 服务是否存在
 	NotExists bool
+	// RouteMetadata 路由插件回传的元数据，由路由链执行期间写入。
+	// 例如泳道路由在染色成功后写入 {"service-lane": "groupName/ruleName"}，
+	// 供调用方（如网关）读取并透传给下游服务。
+	RouteMetadata map[string]string
 }
 
 // GetType 获取配置类型

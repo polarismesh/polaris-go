@@ -219,7 +219,14 @@ consumer:
     startUseFileCache: true
   #描述:服务路由相关配置
   serviceRouter:
-    # 服务路由链, 不填则默认开启自定义路由和就近路由插件
+    # 前置路由链，在主路由链之前执行，不填则默认开启泳道路由插件
+    # 泳道路由（laneRouter）优先于规则路由执行，用于灰度发布、A/B 测试等流量隔离场景
+    beforeChain:
+      # 泳道路由策略（默认的前置路由策略）
+      # 根据请求中的泳道染色标签（service-lane）将流量路由到对应泳道实例
+      # 无染色标签时尝试通过流量匹配规则自动染色，匹配失败则回退到基线实例
+      - laneRouter
+    # 主路由链, 不填则默认开启自定义路由和就近路由插件
     chain:
       # 基于主调和被调服务规则的路由策略(默认的路由策略)
       - ruleBasedRouter
@@ -232,6 +239,14 @@ consumer:
       # - zeroProtectRouter
     #描述：服务路由插件的配置
     plugin:
+      laneRouter:
+        #描述:基线泳道实例的选取模式
+        #类型:int
+        #范围:
+        #  0（OnlyUntaggedInstance）：只选取没有任何泳道标签（无 lane 元数据 key）的实例作为基线（默认）
+        #  1（ExcludeEnabledLaneInstance）：排除已启用泳道关联的实例，其余实例均作为基线
+        #默认值:0
+        baseLaneMode: 0
       nearbyBasedRouter:
         #描述:就近路由的最小匹配级别
         #类型:string

@@ -134,9 +134,17 @@ func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeI
 	return result, nil
 }
 
-// GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
+// GetFilterCluster 根据服务路由链，过滤服务节点，返回对应的cluster
 func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
+	return GetFilterClusterWithin(ctx, routers, routeInfo, svcClusters, nil)
+}
+
+// GetFilterClusterWithin 在指定的初始 cluster 范围内执行路由链过滤。
+// withinCluster 为 nil 时自动创建新 cluster（等价于 GetFilterCluster）。
+// 用于将前置链的输出 cluster 作为主链的输入，实现 beforeChain → chain 的串联。
+func GetFilterClusterWithin(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+	svcClusters model.ServiceClusters, withinCluster *model.Cluster) (*RouteResult, model.SDKError) {
 	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
 	}
@@ -145,7 +153,10 @@ func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *
 	routerCount := len(routers)
 	pluginsIf, _ := ctx.GetValue(sdk.ContextKeyPlugins)
 	plugins := pluginsIf.(plugin.Supplier)
-	cluster := model.NewCluster(svcClusters, nil)
+	cluster := withinCluster
+	if cluster == nil {
+		cluster = model.NewCluster(svcClusters, nil)
+	}
 	if routerCount > 0 {
 		if nil == routeInfo.chainEnables {
 			routeInfo.Init(plugins)
@@ -155,18 +166,15 @@ func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *
 			return nil, err
 		}
 		if nil != result && nil != result.RedirectDestService {
-			// 重定向服务优先返回
 			return result, nil
 		}
 	} else {
-		// 没有路由规则，则返回全量服务实例
 		cluster.HasLimitedInstances = true
 	}
 	if nil == result {
 		result = PoolGetRouteResult(ctx)
 		result.OutputCluster = cluster
 	}
-	// 初始化集群缓存
 	result.OutputCluster.GetClusterValue()
 	if routerCount > 0 {
 		handlers := plugins.GetEventSubscribers(common.OnRoutedClusterReturned)

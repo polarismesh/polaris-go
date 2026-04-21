@@ -295,6 +295,12 @@ func (c *Cluster) ClearClusterValue() {
 	c.value = nil
 }
 
+// SetClusterValue 直接设置集群缓存值，用于跳过常规的 metadata 匹配构建流程。
+// 调用方负责确保 value 中的实例集合正确。
+func (c *Cluster) SetClusterValue(value *ClusterValue) {
+	c.value = value
+}
+
 // GetClusterValue 重构建集群缓存
 func (c *Cluster) GetClusterValue() *ClusterValue {
 	if nil != c.value {

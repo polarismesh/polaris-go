@@ -106,8 +106,8 @@ func (g *NearbyBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, 
 	hasNearbyRouteRules := g.enableNearByRouteRules(routeInfo)
 	enabled := hasLocation && (isNearbyEnabled || hasNearbyRouteRules)
 
-	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetBaseLogger().Debugf("NearbyRouter.Enable: service=%s, enabled=%v (location=%v, nearbyEnabled=%v, rules=%v)",
+	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf("NearbyRouter.Enable: service=%s, enabled=%v (location=%v, nearbyEnabled=%v, rules=%v)",
 			clusters.GetServiceKey(), enabled, hasLocation, isNearbyEnabled, hasNearbyRouteRules)
 	}
 
@@ -137,8 +137,8 @@ func (g *NearbyBasedInstancesFilter) enableNearByRouteRules(routeInfo *servicero
 	}
 
 	hasEnabledRules := enabledRuleCount > 0
-	if hasEnabledRules && g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: found %d enabled nearby rules (total %d)",
+	if hasEnabledRules && g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf("NearbyRouter: found %d enabled nearby rules (total %d)",
 			enabledRuleCount, len(rt.Rules))
 	}
 
@@ -256,7 +256,7 @@ func (g *NearbyBasedInstancesFilter) GetLevel(clusters model.ServiceClusters) (i
 				if maxMatchLevelTmp <= matchLevel {
 					maxMatchLevel = maxMatchLevelTmp
 				} else {
-					g.logCtx.GetBaseLogger().Warnf("%s %s nearbyConfig maxMatchLevel > matchLevel", namespace, service)
+					g.logCtx.GetRouteLogger().Warnf("%s %s nearbyConfig maxMatchLevel > matchLevel", namespace, service)
 				}
 			}
 		}
@@ -281,8 +281,8 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 		// 假如是全量服务，则尝试直接获取缓存
 		nearCluster, finalLevel = clusters.GetNearbyCluster(*location)
 		if nil != nearCluster {
-			if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetBaseLogger().Debugf("NearbyRouter: using cached cluster, level=%d", finalLevel)
+			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetRouteLogger().Debugf("NearbyRouter: using cached cluster, level=%d", finalLevel)
 			}
 			outCluster = nearCluster
 			setNearbyCluster = false
@@ -307,7 +307,7 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 
 	// 如果priorityLevelAll级别的实例数量为0，说明没有实例，直接报错
 	if allLevelsCount[priorityLevelAll].allCount == 0 {
-		g.logCtx.GetBaseLogger().Warnf("NearbyRouter: no instances found")
+		g.logCtx.GetRouteLogger().Warnf("NearbyRouter: no instances found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
@@ -330,15 +330,15 @@ func (g *NearbyBasedInstancesFilter) GetFilteredInstances(rInfo *servicerouter.R
 	}
 	// 额外的安全检查：如果finalLevel仍然小于priorityLevelAll（即为-1），说明所有级别都没有实例
 	if finalLevel < priorityLevelAll {
-		g.logCtx.GetBaseLogger().Warnf("NearbyRouter: no valid level found")
+		g.logCtx.GetRouteLogger().Warnf("NearbyRouter: no valid level found")
 		outCluster.MissLocationInstances = true
 		outCluster.LocationMatchInfo = allLevelsCountToString(&allLevelsCount)
 		goto finally
 	}
 
 	// 如果进行降级，修改outcluster的地域信息以对齐最终匹配级别，否则直接使用已经匹配到的实例
-	if matchLevel != finalLevel && g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: degrade from level %d to %d", matchLevel, finalLevel)
+	if matchLevel != finalLevel && g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf("NearbyRouter: degrade from level %d to %d", matchLevel, finalLevel)
 	}
 	g.modifyOutClusterLevel(outCluster, finalLevel)
 
@@ -354,8 +354,8 @@ finally:
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = outCluster
 	result.Status = checkNearbyStatus(matchLevel, finalLevel)
-	if g.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetBaseLogger().Debugf("NearbyRouter: matched level=%d, instances=%d, status=%v",
+	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf("NearbyRouter: matched level=%d, instances=%d, status=%v",
 			finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	}
 	return result, nil

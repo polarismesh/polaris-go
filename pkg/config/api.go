@@ -442,10 +442,15 @@ type NearbyConfig interface {
 type ServiceRouterConfig interface {
 	BaseConfig
 	PluginConfig
+	// GetBeforeChain consumer.serviceRouter.beforeChain
+	// 路由责任链前置路由配置，在主链之前执行（如泳道路由）
+	GetBeforeChain() []string
+	// SetBeforeChain 设置路由责任链前置路由配置
+	SetBeforeChain([]string)
 	// GetChain consumer.serviceRouter.chain
 	// 路由责任链配置
 	GetChain() []string
-	// GetChain consumer.serviceRouter.afterChain
+	// GetAfterChain consumer.serviceRouter.afterChain
 	// 路由责任链后置路由配置
 	GetAfterChain() []string
 	// SetChain 设置路由责任链配置

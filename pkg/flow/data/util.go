@@ -124,18 +124,24 @@ func GetHealthCheckers(cfg config.Configuration, supplier plugin.Supplier) ([]he
 
 // GetServiceRouterChain 获取服务路由插件链
 func GetServiceRouterChain(cfg config.Configuration, supplier plugin.Supplier) (*servicerouter.RouterChain, error) {
-	filterChain := cfg.GetConsumer().GetServiceRouter().GetChain()
+	routerCfg := cfg.GetConsumer().GetServiceRouter()
 	filters := &servicerouter.RouterChain{
-		Chain: make([]servicerouter.ServiceRouter, 0, len(filterChain)),
+		BeforeChain: make([]servicerouter.ServiceRouter, 0),
+		Chain:       make([]servicerouter.ServiceRouter, 0),
 	}
-	if len(filterChain) > 0 {
-		for _, filter := range filterChain {
-			targetPlugin, err := supplier.GetPlugin(common.TypeServiceRouter, filter)
-			if err != nil {
-				return nil, err
-			}
-			filters.Chain = append(filters.Chain, targetPlugin.(servicerouter.ServiceRouter))
+	for _, name := range routerCfg.GetBeforeChain() {
+		targetPlugin, err := supplier.GetPlugin(common.TypeServiceRouter, name)
+		if err != nil {
+			return nil, err
 		}
+		filters.BeforeChain = append(filters.BeforeChain, targetPlugin.(servicerouter.ServiceRouter))
+	}
+	for _, name := range routerCfg.GetChain() {
+		targetPlugin, err := supplier.GetPlugin(common.TypeServiceRouter, name)
+		if err != nil {
+			return nil, err
+		}
+		filters.Chain = append(filters.Chain, targetPlugin.(servicerouter.ServiceRouter))
 	}
 	return filters, nil
 }

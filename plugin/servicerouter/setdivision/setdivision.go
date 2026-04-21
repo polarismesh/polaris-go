@@ -177,7 +177,7 @@ func (g *SetEnableFilter) sourceSet(routeInfo *servicerouter.RouteInfo, setName 
 	}
 	errorText := fmt.Sprintf("route set division with set group rule  not match, "+
 		"source set name is %s, not instances found in this set group,please check", setName)
-	g.logCtx.GetBaseLogger().Errorf(errorText)
+	g.logCtx.GetRouteLogger().Errorf(errorText)
 	return nil, model.NewSDKError(model.ErrCodeAPIInstanceNotFound, nil, errorText)
 }
 

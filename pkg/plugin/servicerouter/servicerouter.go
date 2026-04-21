@@ -45,6 +45,10 @@ type RouteInfo struct {
 	DestService model.ServiceMetadata
 	// 目标路由规则
 	DestRouteRule model.ServiceRule
+	// 目标泳道规则
+	DestLaneRule model.ServiceRule
+	// 源服务泳道规则
+	SourceLaneRule model.ServiceRule
 	// 目标就近路由规则
 	DestNearbyRouteRule model.ServiceRule
 	// 在路由匹配过程中使用到的环境变量
@@ -84,16 +88,24 @@ func (r *RouteInfo) SetIgnoreFilterOnlyOnEndChain(run bool) {
 	r.ignoreFilterOnlyOnEndChain = run
 }
 
+// IsIgnoreFilterOnlyOnEndChain 获取是否跳过全死全活插件兜底
+func (r *RouteInfo) IsIgnoreFilterOnlyOnEndChain() bool {
+	return r.ignoreFilterOnlyOnEndChain
+}
+
 // ClearValue 清理值
 func (r *RouteInfo) ClearValue() {
 	r.DestService = nil
 	r.SourceService = nil
+	r.SourceRouteRule = nil
 	r.DestRouteRule = nil
+	r.DestLaneRule = nil
+	r.SourceLaneRule = nil
 	r.DestNearbyRouteRule = nil
-	r.SourceService = nil
 	r.FilterOnlyRouter = nil
 	r.MatchRuleType = UnknownRule
 	r.ignoreFilterOnlyOnEndChain = false
+	r.EnvironmentVariables = nil
 	for k := range r.chainEnables {
 		r.chainEnables[k] = true
 	}
@@ -192,7 +204,9 @@ type RouteResult struct {
 
 // RouterChain 服务路由链结构
 type RouterChain struct {
-	// 服务路由链
+	// BeforeChain 前置路由链，在主链之前执行
+	BeforeChain []ServiceRouter
+	// Chain 主服务路由链
 	Chain []ServiceRouter
 }
 

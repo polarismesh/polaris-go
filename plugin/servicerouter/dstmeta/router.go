@@ -172,7 +172,7 @@ func (g *InstancesFilter) metaNotMatchError(routeInfo *servicerouter.RouteInfo) 
 		"dstmeta not match, dstService %s(namespace %s), metadata is %v",
 		routeInfo.DestService.GetService(), routeInfo.DestService.GetNamespace(),
 		routeInfo.DestService.GetMetadata())
-	g.logCtx.GetBaseLogger().Errorf(errorText)
+	g.logCtx.GetRouteLogger().Errorf(errorText)
 	return model.NewSDKError(model.ErrCodeDstMetaMismatch, nil, errorText)
 }
 

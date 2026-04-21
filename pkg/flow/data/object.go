@@ -138,6 +138,16 @@ func (br *BaseRequest) SetDstRoute(rule model.ServiceRule) {
 	// do nothing
 }
 
+// SetDstLane 设置泳道规则
+func (br *BaseRequest) SetDstLane(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (br *BaseRequest) SetSrcLane(rule model.ServiceRule) {
+	// do nothing
+}
+
 // SetDstNearbyRoute 设置就近路由规则
 func (br *BaseRequest) SetDstNearbyRoute(rule model.ServiceRule) {
 	// do nothing
@@ -232,6 +242,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if nil != srcService {
 		c.HasSrcService = true
@@ -240,6 +251,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 		c.RouteInfo.SourceService = srcService
 		if len(srcService.Namespace) > 0 && len(srcService.Service) > 0 {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
 		}
 	}
 	c.Criteria.HashKey = request.HashKey
@@ -289,6 +301,7 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = false
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
@@ -297,6 +310,28 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 		c.RouteInfo.SourceService = &srcService
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
+		}
+	}
+	if len(request.EnvironmentVariables) > 0 {
+		c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.EnvironmentVariables))
+		for k, v := range request.EnvironmentVariables {
+			c.RouteInfo.EnvironmentVariables[k] = v
+		}
+	}
+	// 将 Arguments 也合并到 EnvironmentVariables 中，供泳道路由等前置插件使用。
+	// Arguments 由 AddArguments() 传入（如 Header/Query 参数），EnvironmentVariables 优先级更高。
+	// 注意：此处只用 arg.Key() 做 key（不含类型前缀），与 lane router 的 findTrafficValue 行为一致。
+	// 如果同一个 key 在不同类型中都存在（如 Header user 和 Query user），以先出现的为准。
+	if len(request.Arguments) > 0 {
+		if c.RouteInfo.EnvironmentVariables == nil {
+			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
+		}
+		for _, arg := range request.Arguments {
+			key := arg.Key()
+			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
+				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
+			}
 		}
 	}
 	c.CallResult.APIName = model.ApiProcessRouters
@@ -318,6 +353,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
@@ -326,6 +362,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 		c.RouteInfo.SourceService = srcService
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
 		}
 	}
 	c.CallResult.APIName = model.ApiGetInstances
@@ -356,8 +393,10 @@ func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.Serv
 	c.DstService.Service = redirectedService.Service
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	c.RouteInfo.DestRouteRule = nil
+	c.RouteInfo.DestLaneRule = nil
 	c.DstInstances = nil
 }
 
@@ -390,6 +429,16 @@ func (c *CommonInstancesRequest) SetDstInstances(instances model.ServiceInstance
 // SetDstRoute 设置目标服务路由规则
 func (c *CommonInstancesRequest) SetDstRoute(rule model.ServiceRule) {
 	c.RouteInfo.DestRouteRule = rule
+}
+
+// SetDstLane 设置目标服务泳道规则
+func (c *CommonInstancesRequest) SetDstLane(rule model.ServiceRule) {
+	c.RouteInfo.DestLaneRule = rule
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (c *CommonInstancesRequest) SetSrcLane(rule model.ServiceRule) {
+	c.RouteInfo.SourceLaneRule = rule
 }
 
 // SetDstNearbyRoute 设置目标服务就近路由规则
@@ -672,6 +721,16 @@ func (cl *CommonRateLimitRequest) SetDstInstances(instances model.ServiceInstanc
 
 // SetDstRoute 设置目标服务路由规则
 func (cl *CommonRateLimitRequest) SetDstRoute(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetDstLane 设置目标服务泳道规则
+func (cl *CommonRateLimitRequest) SetDstLane(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (cl *CommonRateLimitRequest) SetSrcLane(rule model.ServiceRule) {
 	// do nothing
 }
 

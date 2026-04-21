@@ -1,0 +1,14 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+consumer:
+  serviceRouter:
+    # laneRouter 在 beforeChain 中默认启用，无需在 chain 中重复配置
+    chain: []
+    plugin:
+      laneRouter:
+        # baseLaneMode 基线泳道模式：
+        #   0 = OnlyUntaggedInstance    只选取没有任何泳道标签的实例作为基线（默认）
+        #   1 = ExcludeEnabledLaneInstance  排除已启用泳道关联实例，其余作为基线
+        baseLaneMode: 0

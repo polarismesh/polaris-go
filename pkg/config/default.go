@@ -193,6 +193,8 @@ const (
 	DefaultServiceRouterCanary string = "canaryRouter"
 	// DefaultServiceRouterZeroProtect 零实例保护
 	DefaultServiceRouterZeroProtect string = "zeroProtectRouter"
+	// DefaultServiceRouterLane 泳道路由
+	DefaultServiceRouterLane string = "laneRouter"
 
 	// DefaultLoadBalancerWR 默认负载均衡器,权重随机.
 	DefaultLoadBalancerWR string = "weightedRandom"

@@ -65,6 +65,8 @@ const (
 	DefaultEventLogLevel = log.DefaultEventLogLevel
 	// DefaultLosslessLogLevel 默认无损上下线日志级别
 	DefaultLosslessLogLevel = log.DefaultLosslessLogLevel
+	// DefaultRouteLogLevel 默认路由日志级别
+	DefaultRouteLogLevel = log.DefaultRouteLogLevel
 )
 
 // SetBaseLogger 设置基础日志对象
@@ -137,6 +139,16 @@ func GetLosslessLogger() Logger {
 	return log.GetLosslessLogger()
 }
 
+// SetRouteLogger 设置路由日志对象
+func SetRouteLogger(logger Logger) {
+	log.SetRouteLogger(logger)
+}
+
+// GetRouteLogger 获取路由日志对象
+func GetRouteLogger() Logger {
+	return log.GetRouteLogger()
+}
+
 // ConfigLoggers 全局配置日志对象
 func ConfigLoggers(logDir string, logLevel int) error {
 	var err error
@@ -163,6 +175,9 @@ func ConfigLoggers(logDir string, logLevel int) error {
 	}
 	if err = ConfigLosslessLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigLosslessLogger: %v", err)
+	}
+	if err = ConfigRouteLogger(logDir, logLevel); err != nil {
+		return fmt.Errorf("fail to ConfigRouteLogger: %v", err)
 	}
 	return nil
 }
@@ -215,6 +230,12 @@ func ConfigLosslessLogger(logDir string, logLevel int) error {
 	return log.ConfigLosslessLogger(log.DefaultLogger, option)
 }
 
+// ConfigRouteLogger 配置路由日志对象
+func ConfigRouteLogger(logDir string, logLevel int) error {
+	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultRouteLogRotationPath), logLevel)
+	return log.ConfigRouteLogger(log.DefaultLogger, option)
+}
+
 // SetLoggersLevel 设置所有日志级别
 func SetLoggersLevel(loglevel int) error {
 	var err error
@@ -249,6 +270,10 @@ func SetLoggersLevel(loglevel int) error {
 	logErr = log.GetLosslessLogger().SetLogLevel(loglevel)
 	if nil != logErr {
 		err = multierror.Append(err, multierror.Prefix(err, "fail to set lossless logLevel"))
+	}
+	logErr = log.GetRouteLogger().SetLogLevel(loglevel)
+	if nil != logErr {
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set route logLevel"))
 	}
 	return err
 }
@@ -303,6 +328,12 @@ func SetLoggersDir(logDir string) error {
 	if err = log.ConfigLosslessLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default lossless logger with logDir %s", logDir)))
+	}
+	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultRouteLogRotationPath),
+		DefaultRouteLogLevel)
+	if err = log.ConfigRouteLogger(log.DefaultLogger, option); err != nil {
+		errs = multierror.Append(errs, multierror.Prefix(err,
+			fmt.Sprintf("fail to create default route logger with logDir %s", logDir)))
 	}
 	return errs
 }

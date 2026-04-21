@@ -230,8 +230,45 @@ func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime ti
 func (e *Engine) getServiceRoutedInstances(
 	req *data.CommonInstancesRequest) (routeResult *servicerouter.RouteResult, err model.SDKError) {
 	var routerChain = e.resolveRouterChain(req)
-	return servicerouter.GetFilterCluster(e.globalCtx, routerChain.Chain, &req.RouteInfo,
-		req.DstInstances.GetServiceClusters())
+	clusters := req.DstInstances.GetServiceClusters()
+	// 先执行前置链（如泳道路由）
+	if len(routerChain.BeforeChain) > 0 {
+		routeResult, err = servicerouter.GetFilterCluster(e.globalCtx, routerChain.BeforeChain, &req.RouteInfo, clusters)
+		if err != nil {
+			return nil, err
+		}
+		// 前置链返回重定向或降级状态时，直接返回不进入主链
+		if routeResult != nil {
+			if routeResult.RedirectDestService != nil {
+				return routeResult, nil
+			}
+			if routeResult.Status == servicerouter.DegradeToFilterOnly {
+				return routeResult, nil
+			}
+			// 前置链设置了 ignoreFilterOnlyOnEndChain 时，表明其输出 cluster 已是最终结果，
+			// 不可被主链（ruleBasedRouter/filterOnly）重新过滤。直接返回。
+			// 典型场景：泳道路由的 routeToBaseline 使用 NotContainMetaKey 筛选，
+			// 该语义无法通过 metadata 精确匹配传递给下游路由链。
+			if req.RouteInfo.IsIgnoreFilterOnlyOnEndChain() {
+				return routeResult, nil
+			}
+			// 用前置链输出的 cluster 作为主链的输入
+			if routeResult.OutputCluster != nil {
+				beforeCluster := routeResult.OutputCluster
+				// 归还前置链的 RouteResult 到对象池，避免泄漏
+				servicerouter.GetRouteResultPool().Put(routeResult)
+				return servicerouter.GetFilterClusterWithin(
+					e.globalCtx, routerChain.Chain, &req.RouteInfo, clusters, beforeCluster)
+			}
+			// 防御：前置链返回非 nil 但 OutputCluster 为 nil，这是插件契约违约。
+			// 记录告警并回收对象，避免内存泄漏，回退走原始 clusters。
+			e.logCtx.GetBaseLogger().Warnf(
+				"[Router] beforeChain returned nil OutputCluster (status=%d), falling back to main chain",
+				routeResult.Status)
+			servicerouter.GetRouteResultPool().Put(routeResult)
+		}
+	}
+	return servicerouter.GetFilterCluster(e.globalCtx, routerChain.Chain, &req.RouteInfo, clusters)
 }
 
 func (e *Engine) resolveRouterChain(req *data.CommonInstancesRequest) *servicerouter.RouterChain {
