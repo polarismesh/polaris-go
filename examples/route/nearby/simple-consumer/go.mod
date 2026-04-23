@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-nearby-consumer-processrouters
+module github.com/polarismesh/polaris-go-nearby-consumer
 
 go 1.24
 

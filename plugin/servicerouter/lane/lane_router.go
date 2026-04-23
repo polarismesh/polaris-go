@@ -163,29 +163,53 @@ func isTrafficEntry(entries []*apitraffic.TrafficEntry, sourceService model.Serv
 	if sourceService == nil {
 		return false
 	}
+	routeLogger := log.GetRouteLogger()
+	debugEnabled := routeLogger.IsLevelEnabled(log.DebugLog)
 	for _, entry := range entries {
 		switch entry.GetType() {
 		case gatewayEntryType:
 			sel := &apitraffic.ServiceGatewaySelector{}
 			if err := entry.GetSelector().UnmarshalTo(sel); err != nil {
+				if debugEnabled {
+					routeLogger.Debugf("[Router][Lane] isTrafficEntry: failed to unmarshal gateway selector, err=%v", err)
+				}
 				continue
 			}
-			if matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService) &&
-				matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata()) {
+			svcMatched := matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService)
+			labelMatched := matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata())
+			if debugEnabled {
+				routeLogger.Debugf("[Router][Lane] isTrafficEntry: gateway entry check, "+
+					"selector=%s/%s, source=%s/%s, svcMatched=%v, labelMatched=%v",
+					sel.GetNamespace(), sel.GetService(),
+					sourceService.GetNamespace(), sourceService.GetService(),
+					svcMatched, labelMatched)
+			}
+			if svcMatched && labelMatched {
 				return true
 			}
 		case serviceEntryType:
 			sel := &apitraffic.ServiceSelector{}
 			if err := entry.GetSelector().UnmarshalTo(sel); err != nil {
+				if debugEnabled {
+					routeLogger.Debugf("[Router][Lane] isTrafficEntry: failed to unmarshal service selector, err=%v", err)
+				}
 				continue
 			}
-			if matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService) &&
-				matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata()) {
+			svcMatched := matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService)
+			labelMatched := matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata())
+			if debugEnabled {
+				routeLogger.Debugf("[Router][Lane] isTrafficEntry: service entry check, "+
+					"selector=%s/%s, source=%s/%s, svcMatched=%v, labelMatched=%v",
+					sel.GetNamespace(), sel.GetService(),
+					sourceService.GetNamespace(), sourceService.GetService(),
+					svcMatched, labelMatched)
+			}
+			if svcMatched && labelMatched {
 				return true
 			}
 		default:
 			// 未知入口类型，跳过
-			log.GetRouteLogger().Warnf("[Router][Lane] isTrafficEntry: unknown entry type %q, skipped",
+			routeLogger.Warnf("[Router][Lane] isTrafficEntry: unknown entry type %q, skipped",
 				entry.GetType())
 		}
 	}
@@ -233,10 +257,19 @@ func matchTrafficRule(rule *apitraffic.TrafficMatchRule, envVars map[string]stri
 	if len(args) == 0 {
 		return false
 	}
+	routeLogger := log.GetRouteLogger()
+	debugEnabled := routeLogger.IsLevelEnabled(log.DebugLog)
 	isAND := rule.GetMatchMode() == apitraffic.TrafficMatchRule_AND
-	for _, arg := range args {
+	for i, arg := range args {
 		trafficValue := findTrafficValue(arg, envVars, sourceService)
 		matched := matchStringValue(arg.GetValue(), trafficValue)
+		if debugEnabled {
+			routeLogger.Debugf("[Router][Lane] matchTrafficRule: arg[%d] type=%s, key=%q, "+
+				"expected=%q(%s), actual=%q, matched=%v, mode=%s",
+				i, arg.GetType(), arg.GetKey(),
+				arg.GetValue().GetValue().GetValue(), arg.GetValue().GetType(),
+				trafficValue, matched, rule.GetMatchMode())
+		}
 		if isAND && !matched {
 			return false
 		}
@@ -424,16 +457,36 @@ func checkServiceInLane(group *apitraffic.LaneGroup, destService model.ServiceMe
 	if destService == nil {
 		return false
 	}
-	for _, dest := range group.GetDestinations() {
+	routeLogger := log.GetRouteLogger()
+	debugEnabled := routeLogger.IsLevelEnabled(log.DebugLog)
+	dests := group.GetDestinations()
+	for i, dest := range dests {
 		destNs := dest.GetNamespace()
 		destSvc := dest.GetService()
 		if destNs != "" && destNs != destService.GetNamespace() {
+			if debugEnabled {
+				routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s dest[%d] ns mismatch, "+
+					"ruleNs=%q, actualNs=%q", group.GetName(), i, destNs, destService.GetNamespace())
+			}
 			continue
 		}
 		if destSvc != "" && destSvc != destService.GetService() {
+			if debugEnabled {
+				routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s dest[%d] svc mismatch, "+
+					"ruleSvc=%q, actualSvc=%q", group.GetName(), i, destSvc, destService.GetService())
+			}
 			continue
 		}
+		if debugEnabled {
+			routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s matched dest[%d]=%s/%s",
+				group.GetName(), i, destNs, destSvc)
+		}
 		return true
+	}
+	if debugEnabled {
+		routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s no dest matched, "+
+			"destsCount=%d, target=%s/%s",
+			group.GetName(), len(dests), destService.GetNamespace(), destService.GetService())
 	}
 	return false
 }
@@ -510,7 +563,13 @@ func (r *LaneRouter) Destroy() error {
 
 // Enable 是否需要启动泳道路由
 func (r *LaneRouter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
-	return r.getLaneGroups(routeInfo) != nil
+	groups := r.getLaneGroups(routeInfo)
+	enabled := groups != nil
+	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] Enable: service=%s, enabled=%v, laneGroups=%d",
+			clusters.GetServiceKey(), enabled, len(groups))
+	}
+	return enabled
 }
 
 // getLaneGroups 从 routeInfo 中获取泳道规则列表。
@@ -529,7 +588,9 @@ func (r *LaneRouter) getLaneGroups(routeInfo *servicerouter.RouteInfo) []*apitra
 	seen := make(map[string]struct{})
 	var merged []*apitraffic.LaneGroup
 
-	appendGroups := func(rule model.ServiceRule) {
+	var callerCount, calleeCount, dupCount int
+
+	appendGroups := func(rule model.ServiceRule, side string) {
 		if rule == nil {
 			return
 		}
@@ -547,16 +608,27 @@ func (r *LaneRouter) getLaneGroups(routeInfo *servicerouter.RouteInfo) []*apitra
 			}
 			name := group.GetName()
 			if _, dup := seen[name]; dup {
+				dupCount++
 				continue
 			}
 			seen[name] = struct{}{}
 			merged = append(merged, group)
+			if side == "caller" {
+				callerCount++
+			} else {
+				calleeCount++
+			}
 		}
 	}
 
 	// 顺序关键：caller 先，callee 后。
-	appendGroups(routeInfo.SourceLaneRule)
-	appendGroups(routeInfo.DestLaneRule)
+	appendGroups(routeInfo.SourceLaneRule, "caller")
+	appendGroups(routeInfo.DestLaneRule, "callee")
+
+	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] getLaneGroups merged: caller=%d, callee=%d, "+
+			"duplicated=%d, total=%d", callerCount, calleeCount, dupCount, len(merged))
+	}
 
 	if len(merged) == 0 {
 		return nil
@@ -594,11 +666,13 @@ func (r *LaneRouter) GetFilteredInstances(
 		destSvc = routeInfo.DestService.GetService()
 	}
 
-	r.logCtx.GetRouteLogger().Debugf(
-		"[Router][Lane] start routing, source=%s/%s, dest=%s/%s, laneGroups=%d, "+
-			"stainLabel=%q, alreadyStained=%v, envVars=%v",
-		sourceNs, sourceSvc, destNs, destSvc,
-		len(laneGroups), stainLabel, alreadyStained, envVars)
+	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetRouteLogger().Debugf(
+			"[Router][Lane] start routing, source=%s/%s, dest=%s/%s, laneGroups=%d, "+
+				"stainLabel=%q, alreadyStained=%v, envVars=%v",
+			sourceNs, sourceSvc, destNs, destSvc,
+			len(laneGroups), stainLabel, alreadyStained, envVars)
+	}
 
 	// 构建泳道规则容器
 	container := newLaneRuleContainer(laneGroups, routeInfo.SourceService)
@@ -646,9 +720,11 @@ func (r *LaneRouter) GetFilteredInstances(
 
 	// 无匹配规则 → 回退基线
 	if matchedItem == nil {
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] no rule matched, fallback to baseline, source=%s/%s, dest=%s/%s",
-			sourceNs, sourceSvc, destNs, destSvc)
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] no rule matched, fallback to baseline, source=%s/%s, dest=%s/%s",
+				sourceNs, sourceSvc, destNs, destSvc)
+		}
 		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 	}
 
@@ -669,9 +745,11 @@ func (r *LaneRouter) GetFilteredInstances(
 			routeInfo.EnvironmentVariables = make(map[string]string, 1)
 		}
 		routeInfo.EnvironmentVariables[trafficStainLabel] = matchedItem.stainLabel
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] stain label set: %s=%s (first-time stain)",
-			trafficStainLabel, matchedItem.stainLabel)
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] stain label set: %s=%s (first-time stain)",
+				trafficStainLabel, matchedItem.stainLabel)
+		}
 	}
 
 	// 目标服务不在此泳道组的 destinations 中 → 回退基线
@@ -693,10 +771,12 @@ func (r *LaneRouter) GetFilteredInstances(
 	laneInstSet := tmpLaneCls.GetClusterValue().GetInstancesSet(false, true)
 
 	if laneInstSet.Count() > 0 {
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] route to lane, group=%s, rule=%s, %s=%s, instances=%d, dest=%s/%s",
-			matchedItem.group.GetName(), matchedItem.rule.GetName(),
-			laneKey, laneVal, laneInstSet.Count(), destNs, destSvc)
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] route to lane, group=%s, rule=%s, %s=%s, instances=%d, dest=%s/%s",
+				matchedItem.group.GetName(), matchedItem.rule.GetName(),
+				laneKey, laneVal, laneInstSet.Count(), destNs, destSvc)
+		}
 		result := servicerouter.PoolGetRouteResult(r.valueCtx)
 		// 直接返回带 lane metadata 的 cluster，其 GetClusterValue() 已缓存正确的泳道实例集。
 		// 设置 ignoreFilterOnlyOnEndChain 阻止 filterOnly 重建 cluster。
@@ -777,32 +857,39 @@ func (r *LaneRouter) routeToBaseline(
 	}
 	tmpCls.PoolPut()
 
-	// ExcludeEnabledLaneInstance 模式：也接受泳道值不在已启用集合中的实例
+	// ExcludeEnabledLaneInstance 模式：排除元数据值命中"已启用泳道规则集合"的实例,其余作为基线。
+	//
+	// 实现借助 Cluster 原生的 containNotMatchMetadata 语义:
+	//   - 对 Cluster 添加 `laneKey=excludedVal1`, `laneKey=excludedVal2` ... 多条 metadata
+	//     (MetaCount > 1 下,同一 key 下的多个 value 在 containNotMatchMetadata 中按"并集"处理);
+	//   - 调用 GetContainNotMatchMetaKeyClusterValue 得到"包含 laneKey 但 value 不在 excluded 集合内"
+	//     的实例集,正是 mode=1 期望的基线子集。
+	//   - 这样复用 Cluster 机制既能命中 verifyCluster 的 revision 一致性检查,又不会被后续
+	//     主链 filterOnly 基于原始 clusters 重建覆盖。
 	if r.cfg.BaseLaneMode == ExcludeEnabledLaneInstance {
-		r.logCtx.GetRouteLogger().Debugf(
-			"[Router][Lane] baseline: no untagged instances, trying ExcludeEnabledLaneInstance mode")
 		enabledVals := buildEnabledLaneValues(laneGroups)
-		if vals, ok := enabledVals[laneKey]; ok {
-			for excludeVal := range vals {
-				tmpExcCls := model.NewCluster(clusters, withinCluster)
-				tmpExcCls.AddMetadata(laneKey, excludeVal)
-				tmpExcCls.ReloadComposeMetaValue()
-				notMatchInstSet := tmpExcCls.GetContainNotMatchMetaKeyClusterValue().GetInstancesSet(false, true)
-				if notMatchInstSet.Count() > 0 {
-					r.logCtx.GetRouteLogger().Debugf(
-						"[Router][Lane] baseline: found %d instances excluding %s=%s",
-						notMatchInstSet.Count(), laneKey, excludeVal)
-					baselineCls := model.NewCluster(clusters, withinCluster)
-					baselineCls.SetClusterValue(tmpExcCls.GetContainNotMatchMetaKeyClusterValue())
-					result.OutputCluster = baselineCls
-					result.Status = servicerouter.Normal
-					tmpExcCls.PoolPut()
-					return result
-				}
-				tmpExcCls.PoolPut()
-				// 只使用第一个启用的泳道值作为排除基准
-				break
+		if excluded, hasKey := enabledVals[laneKey]; hasKey && len(excluded) > 0 {
+			excludeCls := model.NewCluster(clusters, withinCluster)
+			for excludedVal := range excluded {
+				excludeCls.AddMetadata(laneKey, excludedVal)
 			}
+			excludeCls.ReloadComposeMetaValue()
+			baselineSet := excludeCls.GetContainNotMatchMetaKeyClusterValue().GetInstancesSet(false, true)
+			if baselineSet.Count() > 0 {
+				if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+					r.logCtx.GetRouteLogger().Debugf(
+						"[Router][Lane] baseline (ExcludeEnabledLaneInstance): laneKey=%s excluded=%v, "+
+							"%d instances survive",
+						laneKey, excluded, baselineSet.Count())
+				}
+				// 设置 ignoreFilterOnlyOnEndChain,阻止后续主链 filterOnly 基于原始 clusters
+				// 重建 cluster 并冲掉过滤结果。
+				routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+				result.OutputCluster = excludeCls
+				result.Status = servicerouter.Normal
+				return result
+			}
+			excludeCls.PoolPut()
 		}
 	}
 

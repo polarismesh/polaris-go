@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-route-metadata-consumer
+module github.com/polarismesh/polaris-go-route-metadata-consumer-processrouters
 
 go 1.24
 

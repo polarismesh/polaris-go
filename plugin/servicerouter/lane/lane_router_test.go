@@ -344,3 +344,164 @@ func BenchmarkLaneRouter_Enable_WithRule(b *testing.B) {
 		_ = r.Enable(routeInfo, nil)
 	}
 }
+
+// makeRule 便捷构造带 defaultLabelValue 的 LaneRule
+func makeRule(name, labelKey, defaultLabelValue string, enable bool) *apitraffic.LaneRule {
+	return &apitraffic.LaneRule{
+		Name:              name,
+		Enable:            enable,
+		LabelKey:          labelKey,
+		DefaultLabelValue: defaultLabelValue,
+	}
+}
+
+// makeGroupWithRules 便捷构造带 rules 的 LaneGroup
+func makeGroupWithRules(name string, rules ...*apitraffic.LaneRule) *apitraffic.LaneGroup {
+	return &apitraffic.LaneGroup{Name: name, Rules: rules}
+}
+
+// TestBuildEnabledLaneValues 覆盖 buildEnabledLaneValues 的 5 个场景。
+// 这是 ExcludeEnabledLaneInstance 模式的核心辅助函数:mode=1 下,routeToBaseline
+// 需要一个 "已启用泳道值集合",把元数据值命中该集合的实例从基线里排除。
+func TestBuildEnabledLaneValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		groups []*apitraffic.LaneGroup
+		want   map[string]map[string]struct{}
+	}{
+		{
+			// 单组单规则,labelKey 为空 → 落回默认 instanceLaneKey="lane"
+			name: "single_enabled_rule_default_key",
+			groups: []*apitraffic.LaneGroup{
+				makeGroupWithRules("g1", makeRule("gray", "", "gray", true)),
+			},
+			want: map[string]map[string]struct{}{
+				"lane": {"gray": {}},
+			},
+		},
+		{
+			// 规则禁用 → 不计入
+			name: "disabled_rule_skipped",
+			groups: []*apitraffic.LaneGroup{
+				makeGroupWithRules("g1", makeRule("gray", "", "gray", false)),
+			},
+			want: map[string]map[string]struct{}{},
+		},
+		{
+			// defaultLabelValue 为空 → 跳过
+			name: "empty_default_value_skipped",
+			groups: []*apitraffic.LaneGroup{
+				makeGroupWithRules("g1", makeRule("gray", "", "", true)),
+			},
+			want: map[string]map[string]struct{}{},
+		},
+		{
+			// 多规则同 laneKey,聚合成 set
+			name: "multiple_rules_same_key_aggregated",
+			groups: []*apitraffic.LaneGroup{
+				makeGroupWithRules("g1",
+					makeRule("gray", "", "gray", true),
+					makeRule("canary", "", "canary", true),
+				),
+			},
+			want: map[string]map[string]struct{}{
+				"lane": {"gray": {}, "canary": {}},
+			},
+		},
+		{
+			// 不同 labelKey 各自独立
+			name: "custom_label_key_separate_buckets",
+			groups: []*apitraffic.LaneGroup{
+				makeGroupWithRules("g1",
+					makeRule("gray", "custom_lane", "gray", true),
+					makeRule("canary", "", "canary", true),
+				),
+			},
+			want: map[string]map[string]struct{}{
+				"custom_lane": {"gray": {}},
+				"lane":        {"canary": {}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildEnabledLaneValues(tt.groups)
+			if len(got) != len(tt.want) {
+				t.Fatalf("buildEnabledLaneValues() key count = %d, want %d (got=%v)",
+					len(got), len(tt.want), got)
+			}
+			for k, wantVals := range tt.want {
+				gotVals, ok := got[k]
+				if !ok {
+					t.Errorf("missing key %q in result", k)
+					continue
+				}
+				if len(gotVals) != len(wantVals) {
+					t.Errorf("key %q value count = %d, want %d (got=%v)",
+						k, len(gotVals), len(wantVals), gotVals)
+				}
+				for v := range wantVals {
+					if _, ok := gotVals[v]; !ok {
+						t.Errorf("key %q missing value %q (got=%v)", k, v, gotVals)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestConfig_SetDefault_BaseLaneMode 验证默认配置下 BaseLaneMode=OnlyUntaggedInstance。
+// 这是大部分生产环境的行为基线,用户不显式设置时 lane router 不会走 ExcludeEnabledLaneInstance
+// 的特殊分支,保持向后兼容。
+func TestConfig_SetDefault_BaseLaneMode(t *testing.T) {
+	c := &Config{}
+	c.SetDefault()
+	if c.BaseLaneMode != OnlyUntaggedInstance {
+		t.Errorf("SetDefault().BaseLaneMode = %d, want %d (OnlyUntaggedInstance)",
+			c.BaseLaneMode, OnlyUntaggedInstance)
+	}
+	if err := c.Verify(); err != nil {
+		t.Errorf("Verify() = %v, want nil", err)
+	}
+}
+
+// TestConfig_BaseLaneMode_ExcludeEnabledLaneInstance 验证显式设为模式 1 时配置通过校验。
+// 此模式下 routeToBaseline 的 ExcludeEnabledLaneInstance 分支才会生效。
+func TestConfig_BaseLaneMode_ExcludeEnabledLaneInstance(t *testing.T) {
+	c := &Config{BaseLaneMode: ExcludeEnabledLaneInstance}
+	if err := c.Verify(); err != nil {
+		t.Errorf("Verify() = %v, want nil", err)
+	}
+	if c.BaseLaneMode != 1 {
+		t.Errorf("BaseLaneMode numeric value = %d, want 1", c.BaseLaneMode)
+	}
+}
+
+// TestGetLaneKey_FallbackToDefault 确认 labelKey 为空时回落到 instanceLaneKey="lane"。
+// routeToBaseline 直接依赖这个函数计算要排除/保留的元数据 key。
+func TestGetLaneKey_FallbackToDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		rule *apitraffic.LaneRule
+		want string
+	}{
+		{
+			name: "explicit_label_key",
+			rule: &apitraffic.LaneRule{LabelKey: "custom"},
+			want: "custom",
+		},
+		{
+			name: "empty_label_key_fallback",
+			rule: &apitraffic.LaneRule{LabelKey: ""},
+			want: instanceLaneKey,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getLaneKey(tt.rule); got != tt.want {
+				t.Errorf("getLaneKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

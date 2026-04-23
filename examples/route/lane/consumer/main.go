@@ -153,9 +153,22 @@ func (svr *LaneConsumer) registerService() {
 	} else {
 		req.Metadata = map[string]string{}
 	}
-	resp, err := svr.provider.RegisterInstance(req)
+	// 首次注册容易因服务端连接抖动(尤其远程 Polaris)失败,重试 5 次避免进程立即挂掉。
+	const maxRetry = 5
+	var resp *model.InstanceRegisterResponse
+	var err error
+	for i := 1; i <= maxRetry; i++ {
+		resp, err = svr.provider.RegisterInstance(req)
+		if err == nil {
+			break
+		}
+		log.Printf("[WARN] register instance attempt %d/%d failed: %v", i, maxRetry, err)
+		if i < maxRetry {
+			time.Sleep(2 * time.Second)
+		}
+	}
 	if err != nil {
-		log.Fatalf("fail to register instance, err is %v", err)
+		log.Fatalf("fail to register instance after %d retries, err is %v", maxRetry, err)
 	}
 	log.Printf("register response: instanceId=%s, host=%s:%d, lane=%q, metadata=%v",
 		resp.InstanceID, svr.host, svr.port, lane, req.Metadata)
@@ -188,7 +201,13 @@ func (svr *LaneConsumer) runMainLoop() {
 }
 
 func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
-	log.Printf("received request from %s", r.RemoteAddr)
+	// consumer 自身的泳道标签：空串视为基线实例
+	myLaneLabel := lane
+	if myLaneLabel == "" {
+		myLaneLabel = "(baseline)"
+	}
+	log.Printf("received request from %s, self=%s/%s, myLane=%s, headers=%v",
+		r.RemoteAddr, selfNamespace, selfService, myLaneLabel, r.Header)
 
 	// 1. 获取全量实例
 	getAllReq := &polaris.GetAllInstancesRequest{}
@@ -286,7 +305,6 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer resp.Body.Close()
-
 			data, err := io.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("read resp from %s:%d fail: %s", instance.GetHost(), instance.GetPort(), err)
@@ -296,13 +314,27 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 			}
 
 			svr.reportResult(callResult, model.RetSuccess, int32(resp.StatusCode))
-			_, _ = buf.Write(data)
-			_ = buf.WriteByte('\n')
+			log.Printf("upstream %s:%d ok, status=%d, bytes=%d",
+				instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
+			// consumer 自己的一行信息：self/lane/host:port/callee addr/callee lane/callee resp
+			calleeLane := instance.GetMetadata()["lane"]
+			if calleeLane == "" {
+				calleeLane = "(baseline)"
+			}
+			msg := fmt.Sprintf("Hello, I'm %s. lane=%s, host=%s:%d, callee addr:%s:%d, callee lane=%s, callee resp=%s",
+				selfService, myLaneLabel, svr.host, svr.port,
+				instance.GetHost(), instance.GetPort(), calleeLane, string(data))
+			log.Printf("resp to caller: %s, bytes~=%d", msg, len(msg))
+			_, _ = buf.WriteString(msg)
+			if len(msg) == 0 || msg[len(msg)-1] != '\n' {
+				_ = buf.WriteByte('\n')
+			}
 			time.Sleep(30 * time.Millisecond)
 		}()
 	}
 
 	rw.WriteHeader(http.StatusOK)
+	log.Printf("resp to caller, bytes=%d", buf.Len())
 	_, _ = rw.Write(buf.Bytes())
 }
 
@@ -335,6 +367,7 @@ func buildRouteArguments(r *http.Request) []model.Argument {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if namespace == "" || service == "" {

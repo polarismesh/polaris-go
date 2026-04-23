@@ -27,9 +27,11 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
@@ -88,9 +90,22 @@ func (svr *LaneProvider) registerService() {
 	} else {
 		req.Metadata = map[string]string{}
 	}
-	resp, err := svr.provider.RegisterInstance(req)
+	// 首次注册容易因服务端连接抖动(尤其远程 Polaris)失败,重试 5 次避免进程立即挂掉。
+	const maxRetry = 5
+	var resp *model.InstanceRegisterResponse
+	var err error
+	for i := 1; i <= maxRetry; i++ {
+		resp, err = svr.provider.RegisterInstance(req)
+		if err == nil {
+			break
+		}
+		log.Printf("[WARN] register instance attempt %d/%d failed: %v", i, maxRetry, err)
+		if i < maxRetry {
+			time.Sleep(2 * time.Second)
+		}
+	}
 	if err != nil {
-		log.Fatalf("fail to register instance, err is %v", err)
+		log.Fatalf("fail to register instance after %d retries, err is %v", maxRetry, err)
 	}
 	log.Printf("register response: instanceId=%s, host=%s:%d, lane=%q, metadata=%v",
 		resp.InstanceID, svr.host, svr.port, svr.lane, req.Metadata)
@@ -121,8 +136,7 @@ func (svr *LaneProvider) runWebServer() {
 		if laneLabel == "" {
 			laneLabel = "(baseline)"
 		}
-		msg := fmt.Sprintf("Hello, I'm LaneEchoServer. lane=%s, host=%s:%d",
-			laneLabel, svr.host, svr.port)
+		msg := fmt.Sprintf("Hello, I'm %s. lane=%s, host=%s:%d", svr.service, laneLabel, svr.host, svr.port)
 		log.Printf("get echo request from %s, response: %s", r.RemoteAddr, msg)
 		_, _ = rw.Write([]byte(msg))
 	})
@@ -152,6 +166,7 @@ func (svr *LaneProvider) runMainLoop() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if namespace == "" || service == "" {

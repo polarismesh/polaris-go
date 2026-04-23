@@ -95,7 +95,7 @@ func (g *RuleBasedInstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, cl
 	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
 		destStr := model.ToStringService(routeInfo.DestService, true)
 		sourceStr := model.ToStringService(routeInfo.SourceService, true)
-		g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter.Enable: source=%s, dest=%s, dstRoutes(inbound)=%d, "+
+		g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] Enable: source=%s, dest=%s, dstRoutes(inbound)=%d, "+
 			"sourceRoutes(outbound)=%d, enabled=%v", sourceStr, destStr, len(dstRoutes), len(sourceRoutes), enabled)
 	}
 	return enabled
@@ -132,12 +132,12 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		dstFilteredInstances = filteredInstances
 		if nil == dstFilteredInstances {
 			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter: dest inbound matched but no instances, status=fail")
+				g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] dest inbound matched but no instances, status=fail")
 			}
 			ruleStatus = dstRuleFail
 		} else {
 			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter: dest inbound matched, instances=%d",
+				g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] dest inbound matched, instances=%d",
 					dstFilteredInstances.GetClusterValue().Count())
 			}
 			ruleStatus = dstRuleSuccess
@@ -158,12 +158,12 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 		sourceFilteredInstances = filteredInstances
 		if nil == sourceFilteredInstances {
 			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter: source outbound matched but no instances, status=fail")
+				g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] source outbound matched but no instances, status=fail")
 			}
 			ruleStatus = sourceRuleFail
 		} else {
 			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter: source outbound matched, instances=%d",
+				g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] source outbound matched, instances=%d",
 					sourceFilteredInstances.GetClusterValue().Count())
 			}
 			ruleStatus = sourceRuleSuccess
@@ -186,7 +186,7 @@ finally:
 			failoverType = &g.routerConf.failoverType
 		}
 		if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-			g.logCtx.GetRouteLogger().Debugf("RuleBasedRouter: route failed, failover=%v", *failoverType)
+			g.logCtx.GetRouteLogger().Debugf("[Router][RuleBased] route failed, failover=%v", *failoverType)
 		}
 
 		if *failoverType == servicerouter.FailOverNone {

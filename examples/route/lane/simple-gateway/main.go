@@ -15,38 +15,27 @@
  * specific language governing permissions and limitations under the License.
  */
 
-// Package main 泳道网关入口示例。
+// Package main 泳道路由简化网关示例（基于 GetOneInstance）。
 //
-// LaneGateway 是泳道路由的入口（染色点），负责根据 HTTP 请求头匹配泳道规则，
-// 将流量染色后路由到对应泳道的下游服务实例。
+// 与 gateway 示例不同，本示例使用 ConsumerAPI.GetOneInstance 一步完成
+// 服务发现 + 路由过滤（含泳道路由）+ 负载均衡，不需要手动调用
+// ProcessRouters 和 ProcessLoadBalance。
+//
+// 在作为泳道入口的场景下，HTTP Header 会被自动转换为 GetOneInstanceRequest
+// 的 Arguments，lane router 的 TrafficMatchRule 会据此进行流量识别和染色。
 //
 // 用法：
 //
-//	./bin -selfNamespace=default -selfService=LaneRouterGateway -port=48090
+//	./bin -selfNamespace=default -selfService=LaneRouterGatewayService -port=48096
 //
-// 请求格式：
+// 请求格式（路径第一段为下游服务名，会被路由到对应的泳道实例）：
 //
-//	http://localhost:48090/{targetService}/{path...}
+//	http://localhost:48096/{targetService}/{path...}
 //
 // 请求示例：
 //
-//	# 基线路由（无 Header）
-//	curl http://localhost:48090/LaneCallerService/lane/caller/rest
-//
-//	# 路由到 gray 泳道
-//	curl -H "color:gray" http://localhost:48090/LaneCallerService/lane/caller/rest
-//
-//	# 路由到 blue 泳道
-//	curl -H "color:blue" http://localhost:48090/LaneCallerService/lane/caller/rest
-//
-// 路由流程：
-//  1. 从请求 URL 的第一段路径提取目标服务名（如 LaneCallerService）。
-//  2. 获取目标服务的全量实例。
-//  3. 将 HTTP Header / Query 参数转为路由 Arguments，供泳道规则的
-//     TrafficMatchRule 进行流量识别和染色。
-//  4. 通过 ProcessRouters 执行泳道路由过滤。
-//  5. 通过 ProcessLoadBalance 选取单个实例。
-//  6. 将请求转发给选中的实例，并在 Header 中透传泳道染色标签。
+//	curl http://localhost:48096/LaneEchoClient/echo
+//	curl -H "warmup-user: gray" http://localhost:48096/LaneEchoClient/echo
 package main
 
 import (
@@ -60,7 +49,6 @@ import (
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -75,32 +63,29 @@ var (
 	selfService   string
 	namespace     string
 	port          int64
-	token         string
 	debug         bool
 )
 
 func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "网关自身的 namespace（用于泳道入口匹配）")
-	flag.StringVar(&selfService, "selfService", "LaneRouterGateway", "网关自身的服务名（泳道入口服务）")
+	flag.StringVar(&selfService, "selfService", "LaneRouterGatewayService", "网关自身的服务名（泳道入口服务）")
 	flag.StringVar(&namespace, "namespace", "default", "目标服务的 namespace")
-	flag.Int64Var(&port, "port", 48080, "网关 HTTP 监听端口")
-	flag.StringVar(&token, "token", "", "token（北极星开启鉴权时使用）")
+	flag.Int64Var(&port, "port", 48096, "网关 HTTP 监听端口")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
-// LaneGateway 泳道网关入口
-type LaneGateway struct {
+// SimpleLaneGateway 使用 GetOneInstance 的简化泳道网关。
+type SimpleLaneGateway struct {
 	consumer      polaris.ConsumerAPI
-	router        polaris.RouterAPI
 	selfNamespace string
 	selfService   string
 	namespace     string
 }
 
-// Run 启动网关 HTTP 服务
-func (gw *LaneGateway) Run() {
+// Run 启动网关 HTTP 服务。
+func (gw *SimpleLaneGateway) Run() {
 	http.HandleFunc("/", gw.handleProxy)
-	log.Printf("[INFO] start lane gateway, port: %d, selfService: %s/%s",
+	log.Printf("[INFO] start simple lane gateway, port: %d, selfService: %s/%s",
 		port, gw.selfNamespace, gw.selfService)
 	if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil); err != nil {
 		log.Fatalf("[ERROR] fail to run gateway, err is %v", err)
@@ -108,11 +93,8 @@ func (gw *LaneGateway) Run() {
 }
 
 // handleProxy 接收客户端请求并转发到目标服务的泳道实例。
-//
-// 请求路径格式：/{targetService}/{path...}
-// 例如：/LaneCallerService/lane/caller/rest → 路由到 LaneCallerService 的某个泳道实例，
-// 转发路径为 /lane/caller/rest。
-func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
+// 路径格式：/{targetService}/{path...}
+func (gw *SimpleLaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	// 1. 解析目标服务名和转发路径
 	targetService, forwardPath, ok := parsePath(r.URL.Path)
 	if !ok {
@@ -122,46 +104,24 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	log.Printf("[INFO] received request: %s %s → self=%s/%s, targetService=%s, forwardPath=%s",
 		r.Method, r.URL.Path, gw.selfNamespace, gw.selfService, targetService, forwardPath)
 
-	// 2. 获取目标服务全量实例
-	getAllReq := &polaris.GetAllInstancesRequest{}
-	getAllReq.Namespace = gw.namespace
-	getAllReq.Service = targetService
-	instancesResp, err := gw.consumer.GetAllInstances(getAllReq)
-	if err != nil {
-		log.Printf("[ERROR] fail to getAllInstances for %s: %v", targetService, err)
-		http.Error(rw, fmt.Sprintf("fail to getAllInstances: %v", err), http.StatusInternalServerError)
-		return
+	// 2. 构造 GetOneInstance 请求。作为泳道入口，必须：
+	//    - 设置 SourceService 为自身服务（lane router 据此匹配入口）
+	//    - 把 HTTP Header / Query 参数通过 AddArguments 传入，供 TrafficMatchRule
+	//      做流量识别和染色
+	getOneReq := &polaris.GetOneInstanceRequest{}
+	getOneReq.Namespace = gw.namespace
+	getOneReq.Service = targetService
+	getOneReq.SourceService = &model.ServiceInfo{
+		Namespace: gw.selfNamespace,
+		Service:   gw.selfService,
 	}
-	log.Printf("[INFO] %s all instances count: %d", targetService, len(instancesResp.Instances))
+	getOneReq.AddArguments(buildRouteArguments(r)...)
 
-	// 3. 构建路由请求
-	routerReq := &polaris.ProcessRoutersRequest{}
-	routerReq.DstInstances = instancesResp
-	routerReq.SourceService.Service = gw.selfService
-	routerReq.SourceService.Namespace = gw.selfNamespace
-
-	// 4. 网关作为泳道入口（染色点），将 HTTP Header / Query 参数转为路由 Arguments，
-	//    供泳道规则中的 TrafficMatchRule 进行流量识别和染色
-	routerReq.AddArguments(buildRouteArguments(r)...)
-
-	// 5. 执行路由过滤（泳道路由 + 规则路由）
-	routedResp, err := gw.router.ProcessRouters(routerReq)
+	// 3. GetOneInstance 一步完成服务发现 + 路由（含泳道）+ 负载均衡
+	oneInstResp, err := gw.consumer.GetOneInstance(getOneReq)
 	if err != nil {
-		log.Printf("[ERROR] fail to processRouters for %s: %v", targetService, err)
-		http.Error(rw, fmt.Sprintf("fail to processRouters: %v", err), http.StatusInternalServerError)
-		return
-	}
-	log.Printf("[INFO] %s routed instances count: %d, routeMetadata=%v",
-		targetService, len(routedResp.Instances), routedResp.RouteMetadata)
-
-	// 6. 负载均衡，选取单个实例
-	lbReq := &polaris.ProcessLoadBalanceRequest{}
-	lbReq.DstInstances = routedResp
-	lbReq.LbPolicy = config.DefaultLoadBalancerWR
-	oneInstResp, err := gw.router.ProcessLoadBalance(lbReq)
-	if err != nil {
-		log.Printf("[ERROR] fail to processLoadBalance for %s: %v", targetService, err)
-		http.Error(rw, fmt.Sprintf("fail to processLoadBalance: %v", err), http.StatusInternalServerError)
+		log.Printf("[ERROR] fail to getOneInstance for %s: %v", targetService, err)
+		http.Error(rw, fmt.Sprintf("fail to getOneInstance: %v", err), http.StatusInternalServerError)
 		return
 	}
 	instance := oneInstResp.GetInstance()
@@ -174,10 +134,10 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	if laneLabel == "" {
 		laneLabel = "(baseline)"
 	}
-	log.Printf("[INFO] selected instance: %s:%d, lane=%s, metadata=%v",
-		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
+	log.Printf("[INFO] selected instance: %s:%d, lane=%s, metadata=%v, routeMetadata=%v",
+		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata(), oneInstResp.RouteMetadata)
 
-	// 7. 构建转发请求
+	// 4. 构建上游请求并透传染色标签
 	callResult := &polaris.ServiceCallResult{}
 	callResult.SetCalledInstance(instance)
 	startTime := time.Now()
@@ -200,25 +160,23 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 透传泳道染色标签：
-	// 如果原始请求已携带 service-lane header（如直接染色场景），则已通过上面的 header 复制透传，无需处理。
-	// 如果原始请求未携带（流量匹配染色场景），则需要根据路由结果中的 RouteMetadata
-	// 获取泳道路由器写回的完整 stainLabel（格式：groupName/ruleName）。
+	// 透传泳道染色标签。本例作为入口，原始请求通常不带 service-lane，
+	// 需要根据路由结果把染色后的 stainLabel 补上给下游。
 	if r.Header.Get(trafficStainHeader) == "" {
-		// 优先从 RouteMetadata 获取泳道路由器写回的完整 stainLabel
-		if stainLabel := routedResp.RouteMetadata[trafficStainHeader]; stainLabel != "" {
+		// 优先从 RouteMetadata 获取 lane router 回写的完整 stainLabel
+		if stainLabel := oneInstResp.RouteMetadata[trafficStainHeader]; stainLabel != "" {
 			upstreamReq.Header.Set(trafficStainHeader, stainLabel)
 			log.Printf("[INFO] propagate stain label from routeMetadata: %s=%s",
 				trafficStainHeader, stainLabel)
 		} else if lane := instance.GetMetadata()["lane"]; lane != "" {
-			// 回退：使用短格式（仅 lane 值），下游 matchByStainLabel 支持短格式查找
+			// 回退：用实例 lane 元数据值作为短格式染色标签
 			upstreamReq.Header.Set(trafficStainHeader, lane)
 			log.Printf("[INFO] propagate stain label from instance metadata: %s=%s",
 				trafficStainHeader, lane)
 		}
 	}
 
-	// 8. 发送请求到下游实例
+	// 5. 发送请求到下游实例
 	resp, err := http.DefaultClient.Do(upstreamReq)
 	callResult.SetDelay(time.Since(startTime))
 
@@ -242,10 +200,9 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	log.Printf("[INFO] upstream %s:%d ok, status=%d, bytes=%d",
 		instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
 
-	// 9. 将下游响应返回给客户端：拼成单行 msg（self/lane/host:port/callee addr/callee lane/callee resp）
+	// 6. 将下游响应返回给客户端：拼成单行 msg（self/lane/host:port/callee addr/callee lane/callee resp）
 	// 注意: 不能照搬下游 Content-Length,否则 net/http 会按下游 body 长度截断/提前关连接。
 	for k, vs := range resp.Header {
-		// 跳过 Content-Length / Transfer-Encoding,让 Go 按我们新 body 重新计算。
 		if strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "Transfer-Encoding") {
 			continue
 		}
@@ -261,7 +218,7 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	_, _ = rw.Write([]byte(msg))
 }
 
-func (gw *LaneGateway) reportResult(result *polaris.ServiceCallResult, retStatus model.RetStatus, retCode int32) {
+func (gw *SimpleLaneGateway) reportResult(result *polaris.ServiceCallResult, retStatus model.RetStatus, retCode int32) {
 	result.SetRetStatus(retStatus)
 	result.SetRetCode(retCode)
 	if err := gw.consumer.UpdateServiceCallResult(result); err != nil {
@@ -271,7 +228,7 @@ func (gw *LaneGateway) reportResult(result *polaris.ServiceCallResult, retStatus
 
 // parsePath 从请求路径中解析目标服务名和转发路径。
 // 路径格式：/{targetService}/{path...}
-// 例如：/LaneCallerService/lane/caller/rest → ("LaneCallerService", "/lane/caller/rest", true)
+// 例如：/LaneEchoClient/echo → ("LaneEchoClient", "/echo", true)
 func parsePath(urlPath string) (targetService string, forwardPath string, ok bool) {
 	path := strings.TrimPrefix(urlPath, "/")
 	if path == "" {
@@ -279,14 +236,13 @@ func parsePath(urlPath string) (targetService string, forwardPath string, ok boo
 	}
 	idx := strings.Index(path, "/")
 	if idx < 0 {
-		// 只有服务名，转发路径为 /
 		return path, "/", true
 	}
 	return path[:idx], path[idx:], true
 }
 
 // buildRouteArguments 将 HTTP Header 和 Query 参数转为路由 Arguments，
-// 用于泳道规则中 TrafficMatchRule 的流量识别。
+// 供泳道规则中 TrafficMatchRule 的流量识别使用。
 func buildRouteArguments(r *http.Request) []model.Argument {
 	args := make([]model.Argument, 0, 8)
 	for k, vs := range r.Header {
@@ -317,15 +273,14 @@ func main() {
 		}
 	}
 
-	sdkCtx, err := polaris.NewSDKContext()
+	consumer, err := polaris.NewConsumerAPI()
 	if err != nil {
-		log.Fatalf("fail to create sdk context: %v", err)
+		log.Fatalf("fail to create consumerAPI: %v", err)
 	}
-	defer sdkCtx.Destroy()
+	defer consumer.Destroy()
 
-	gw := &LaneGateway{
-		consumer:      polaris.NewConsumerAPIByContext(sdkCtx),
-		router:        polaris.NewRouterAPIByContext(sdkCtx),
+	gw := &SimpleLaneGateway{
+		consumer:      consumer,
 		selfNamespace: selfNamespace,
 		selfService:   selfService,
 		namespace:     namespace,

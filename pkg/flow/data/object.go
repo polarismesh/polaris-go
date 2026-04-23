@@ -254,6 +254,20 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 			c.Trigger.EnableSrcLane = true
 		}
 	}
+	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
+	// 与 InitByProcessRoutersRequest 行为一致：只用 arg.Key() 做 key（不含类型前缀），
+	// 与 lane router findTrafficValue 从 envVars[arg.GetKey()] 读取的约定对齐。
+	if len(request.Arguments) > 0 {
+		if c.RouteInfo.EnvironmentVariables == nil {
+			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
+		}
+		for _, arg := range request.Arguments {
+			key := arg.Key()
+			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
+				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
+			}
+		}
+	}
 	c.Criteria.HashKey = request.HashKey
 	c.Criteria.HashValue = request.HashValue
 	c.Criteria.ReplicateInfo.Count = request.ReplicateCount
@@ -363,6 +377,19 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
 			c.Trigger.EnableSrcLane = true
+		}
+	}
+	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
+	// 与 InitByProcessRoutersRequest 行为一致。
+	if len(request.Arguments) > 0 {
+		if c.RouteInfo.EnvironmentVariables == nil {
+			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
+		}
+		for _, arg := range request.Arguments {
+			key := arg.Key()
+			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
+				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
+			}
 		}
 	}
 	c.CallResult.APIName = model.ApiGetInstances

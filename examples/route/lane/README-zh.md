@@ -44,17 +44,26 @@ lane/
 │   ├── go.mod
 │   ├── Makefile
 │   └── polaris.yaml
-├── simple-consumer/  # 简化消费端（基于 GetOneInstance 一步完成路由）
+├── simple-gateway/   # 简化网关（基于 GetOneInstance 的入口，替代 gateway）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── simple-consumer/  # 简化消费端（基于 GetOneInstance 的中间节点，替代 consumer）
 │   ├── main.go
 │   ├── go.mod
 │   ├── Makefile
 │   └── polaris.yaml
 ├── polaris.yaml      # SDK 顶层默认配置
-├── lane-test.sh      # 泳道路由端到端测试脚本
+├── lane-test.sh      # 泳道路由端到端测试脚本（覆盖 4 种链路组合）
 ├── lane-warmup-test.sh # 泳道预热（Warmup）测试脚本
 ├── cleanup.sh        # 残留进程清理脚本
 └── README-zh.md
 ```
+
+> **链路组合**：`gateway` 与 `simple-gateway` 均可作为入口（染色点），`consumer` 与 `simple-consumer` 均可作为中间节点，
+> 4 种组合（`gateway→consumer`、`gateway→simple-consumer`、`simple-gateway→consumer`、`simple-gateway→simple-consumer`）均被 `lane-test.sh` 覆盖验证。
+> `simple-*` 版本使用 `GetOneInstance` 一步完成服务发现 + 路由 + 负载均衡，无需手动调用 `ProcessRouters` / `ProcessLoadBalance`。
 
 ---
 
@@ -130,6 +139,52 @@ curl http://127.0.0.1:19080/echo
 预期响应示例：
 ```
 Hello, I'm LaneEchoServer. lane=(baseline), host=127.0.0.1:18083
+```
+
+---
+
+## 链路组合与网关入口
+
+本示例同时提供两种风格的网关（入口）与消费端（中间节点），可自由组合为 4 种链路：
+
+| 链路组合                                      | 入口监听端口 | 中间节点监听端口 | 说明                                 |
+|---------------------------------------------|-------------|----------------|--------------------------------------|
+| `gateway` → `consumer`                       | `48080`     | `19080`        | 均为显式调用 `ProcessRouters + ProcessLoadBalance` |
+| `gateway` → `simple-consumer`                | `48080`     | `19082`        | 中间节点采用 `GetOneInstance` 简化流程 |
+| `simple-gateway` → `consumer`                | `48096`     | `19080`        | 入口采用 `GetOneInstance` 简化流程    |
+| `simple-gateway` → `simple-consumer`         | `48096`     | `19082`        | 全链路均为 `GetOneInstance` 简化流程   |
+
+> 网关入口通过 URL 路径第一段选择下游服务，例如 `http://localhost:48080/LaneEchoClient/echo` 会被转发到 `LaneEchoClient`。
+
+### 启动 Simple Gateway
+
+```bash
+cd simple-gateway
+make run
+# 等同于：./bin -selfNamespace=default -selfService=LaneRouterGatewayService -port=48096
+```
+
+### 启动 Simple Consumer
+
+```bash
+cd simple-consumer
+make run
+# 等同于：./bin -namespace=default -service=LaneEchoServer -selfService=SimpleLaneEchoClient -port=19082
+```
+
+> **注意**：`simple-consumer` 的 `-selfService` 默认为 `SimpleLaneEchoClient`（与 `consumer` 的 `LaneEchoClient` 不同），因此需要在 Polaris 泳道组的 `destinations` 中同时包含 `LaneEchoClient` 和 `SimpleLaneEchoClient`，`lane-test.sh` 会自动完成这一同步。
+
+### 快速请求 simple-gateway 链路
+
+```bash
+# 基线
+curl http://127.0.0.1:48096/LaneEchoClient/echo
+
+# 通过 TrafficMatchRule 触发染色
+curl -H "user: gray" http://127.0.0.1:48096/LaneEchoClient/echo
+
+# 直接染色
+curl -H "service-lane: lane-go-example/gray" http://127.0.0.1:48096/LaneEchoClient/echo
 ```
 
 ---
@@ -256,142 +311,58 @@ consumer:
 
 ### Simple Consumer 参数
 
-Simple Consumer 基于 `GetOneInstance` 一步完成服务发现 + 路由过滤 + 负载均衡，适用于不需要手动控制路由流程的场景。
+Simple Consumer 基于 `GetOneInstance` 一步完成服务发现 + 路由过滤（含泳道路由）+ 负载均衡，
+作为多跳链路的中间节点时会将自己注册到 Polaris，供上游网关发现。
 
-| 参数          | 默认值           | 说明                    |
-|--------------|-----------------|------------------------|
-| `-namespace` | `default`       | 目标服务命名空间          |
-| `-service`   | `LaneEchoServer` | 目标服务名              |
-| `-port`      | `19081`         | Consumer HTTP 监听端口  |
-| `-debug`     | `false`         | 是否开启 Polaris SDK debug 日志 |
+| 参数              | 默认值                  | 说明                                           |
+|------------------|------------------------|------------------------------------------------|
+| `-namespace`     | `default`              | 目标服务命名空间                                |
+| `-service`       | `LaneEchoServer`       | 目标服务名                                     |
+| `-selfNamespace` | `default`              | 当前服务的 namespace                            |
+| `-selfService`   | `SimpleLaneEchoClient` | 当前服务名，用于 Polaris 注册和流量入口匹配       |
+| `-port`          | `19082`                | Consumer HTTP 监听端口（0 表示随机）             |
+| `-lane`          | `""`（基线）            | Simple Consumer 自身的泳道标签                  |
+| `-token`         | `""`                   | 服务鉴权 Token                                 |
+| `-debug`         | `false`                | 是否开启 Polaris SDK debug 日志                  |
+
+### Simple Gateway 参数
+
+Simple Gateway 基于 `GetOneInstance` 的简化网关实现，支持按 `/{targetService}/{path...}` 路径路由到下游服务，
+HTTP Header 会自动作为 Arguments 传入 SDK，供泳道路由的 TrafficMatchRule 做流量识别与染色。
+
+| 参数              | 默认值                        | 说明                              |
+|------------------|------------------------------|----------------------------------|
+| `-selfNamespace` | `default`                    | 网关自身的 namespace（用于泳道入口匹配）|
+| `-selfService`   | `LaneRouterGatewayService`   | 网关自身的服务名（泳道入口服务）      |
+| `-namespace`     | `default`                    | 目标服务的 namespace               |
+| `-port`          | `48096`                      | 网关 HTTP 监听端口                  |
+| `-debug`         | `false`                      | 是否开启 Polaris SDK debug 日志      |
 
 ---
 
 ## 测试脚本
 
-目录下提供了三个辅助脚本，用于自动化构建、启动、测试和清理：
+目录下提供了以下辅助脚本，用于自动化构建、启动、测试和清理：
 
-### 测试用例覆盖
+- [`lane-test.sh`](./lane-test.sh)：泳道路由端到端测试（4 种链路组合 × 6 类核心场景 + `baseLaneMode` / 泳道组剔除专项）
+- [`lane-warmup-test.sh`](./lane-warmup-test.sh)：泳道预热（Warmup）测试（预热早期 / 进行中 / 完成 / 基线隔离 / 混合隔离）
+- [`cleanup.sh`](./cleanup.sh)：残留进程清理
 
-**lane-test.sh**（共 7 个用例）：
+> **完整测试方案（测试目标、前置条件、拓扑端口、用例矩阵、PASS/SKIP/FAIL 判定、排障指引）请见 👉 [test.md](./test.md)**
 
-| 用例 | 场景                                                | 验证点                                          |
-|-----|----------------------------------------------------|------------------------------------------------|
-| 1   | 无 Header                                           | 全链路路由到基线实例 `lane=(baseline)`             |
-| 2   | `service-lane` 直接染色                              | laneRouter 按染色标签直接路由到 gray 泳道         |
-| 3   | 流量匹配 STRICT — Header `user=gray`                 | Gateway 按 TrafficMatchRule 染色，路由到 gray 泳道 |
-| 4   | 流量匹配 PERMISSIVE — Header `user=noexist`          | 无目标泳道实例时自动回退基线                       |
-| 5   | 未命中任何规则的 Header                               | 网关无法染色，回退基线                             |
-| 6   | 泳道隔离并发验证                                      | baseline 与 gray 请求并发时互不干扰                |
-| 7   | 服务移出泳道组（`OnlyUntaggedInstance` 模式）          | 移除 `LaneEchoServer` 后染色请求只走无标签基线实例   |
-
-**lane-warmup-test.sh**（共 5 个用例）：
-
-| 用例 | 场景                 | 验证点                                                         |
-|-----|---------------------|---------------------------------------------------------------|
-| 1   | 预热早期阶段          | uptime 极小时 probability ≈ 0%，绝大多数请求回退基线             |
-| 2   | 预热进行中           | 按曲线采样多个时间点，验证实际 gray 比例与 `pow(u/i, c)` 理论值接近  |
-| 3   | 预热完成             | uptime ≥ warmup_interval 后，gray 比例稳定在 100%                |
-| 4   | 基线路由不受预热影响   | 无染色请求始终路由到基线                                         |
-| 5   | 染色 / 基线并发隔离   | 预热期内两类流量独立判定，不互相串扰                              |
-
----
-
-### lane-test.sh — 泳道路由测试
-
-一键完成泳道路由功能的端到端验证，覆盖灰度路由和 PERMISSIVE 降级场景。
+两个测试脚本均支持统一的命令入口：
 
 ```bash
-# 用法
-./lane-test.sh <命令> [polaris地址]
-
-# 命令说明
-#   all     完整流程（构建 → 验证规则 → 启动 → 等待 → 测试 → 停止）
-#   build   仅构建 Go 二进制
-#   check   仅检查 Polaris 泳道规则是否已正确配置
-#   start   构建并启动服务（含规则检查）
-#   test    执行测试用例（服务需已启动）
-#   stop    停止所有服务
-```
-
-**示例：**
-
-```bash
-# 对本地 Polaris 执行完整测试流程
-./lane-test.sh all 127.0.0.1
-
-# 仅构建二进制（不启动服务）
-./lane-test.sh build
-
-# 服务已启动，单独执行测试用例
-./lane-test.sh test
-
-# 停止所有服务
-./lane-test.sh stop
-```
-
-**前置规则配置要求：**
-
-| 泳道组名             | 入口服务              | 目标服务                          |
-|---------------------|----------------------|----------------------------------|
-| `lane-go-example`   | `LaneRouterGateway`  | `LaneEchoClient`, `LaneEchoServer` |
-
-> **注意**：脚本启动时会自动检查泳道规则配置。如果检测到目标服务缺失（例如上次测试未正确恢复），脚本会自动调用 Polaris 管理 API 修复，无需手动干预。
-
-| 泳道规则名      | 匹配条件              | 目标泳道          | 匹配模式       |
-|---------------|----------------------|-----------------|--------------|
-| `gray`        | Header `user=gray`   | `lane=gray`     | STRICT       |
-| `permissive`  | Header `user=noexist` | `lane=noexist`  | PERMISSIVE   |
-
----
-
-### lane-warmup-test.sh — 泳道预热测试
-
-验证泳道预热（Warmup）功能，通过统计灰度泳道的流量比例验证预热曲线是否符合预期。
-
-```bash
-# 用法
+./lane-test.sh        <命令> [polaris地址]
 ./lane-warmup-test.sh <命令> [polaris地址]
 
-# 命令说明（与 lane-test.sh 一致）
-#   all     完整流程（构建 → 验证规则 → 启动 → 等待 → 测试 → 停止）
-#   build   仅构建 Go 二进制
-#   check   仅检查 Polaris 泳道规则
-#   start   构建并启动服务（含规则检查）
-#   test    执行测试用例（服务需已启动）
-#   stop    停止所有服务
+# 命令: all | build | check | start | test | stop
+# 典型用法:
+#   ./lane-test.sh all 127.0.0.1
+#   ./lane-warmup-test.sh all 127.0.0.1
 ```
 
-**示例：**
-
-```bash
-# 对本地 Polaris 执行完整预热测试
-./lane-warmup-test.sh all 127.0.0.1
-
-# 仅检查预热规则是否配置正确
-./lane-warmup-test.sh check 127.0.0.1
-```
-
-**预热算法：**
-
-```
-probability = pow(uptime / warmup_interval, curvature) × 100%
-uptime      = 当前时间 - etime（规则最近一次启用时间）
-```
-
-当 `uptime >= warmup_interval` 时，probability = 100%（预热完成）。
-
-**前置规则配置要求：**
-
-| 泳道组名           | 入口服务                    | 目标服务                          |
-|-------------------|---------------------------|----------------------------------|
-| `lane-go-warmup`  | `LaneRouterGatewayService` | `LaneEchoClient`, `LaneEchoServer` |
-
-| 泳道规则名 | default_label_value | warmup_interval | curvature | enable |
-|-----------|---------------------|-----------------|-----------|--------|
-| `gray`    | `gray`              | 60（秒）         | 2         | true   |
-
-> **注意**：`lane-warmup-test.sh` 与 `lane-test.sh` 使用相同的服务端口，不可同时运行。
+> **注意**：两个脚本使用相同的服务端口，**不可同时运行**；切换前请先 `stop` 或执行 `./cleanup.sh`。
 
 ---
 

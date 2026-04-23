@@ -19,6 +19,7 @@ package filteronly
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -32,6 +33,8 @@ type InstancesFilter struct {
 	percentOfMinInstances float64
 	valueCtx              sdk.ValueContext
 	recoverAll            bool
+	// 上下文日志
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -51,6 +54,7 @@ func (g *InstancesFilter) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.recoverAll = ctx.Config.GetConsumer().GetServiceRouter().IsEnableRecoverAll()
 	g.valueCtx = ctx.ValueCtx
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
 }
 
@@ -62,7 +66,7 @@ func (g *InstancesFilter) Destroy() error {
 // GetFilteredInstances 插件模式进行服务实例过滤，并返回过滤后的实例列表
 func (g *InstancesFilter) GetFilteredInstances(routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters, withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
-	return GetFilteredInstances(g.valueCtx, routeInfo, clusters, g.percentOfMinInstances, withinCluster, g.recoverAll)
+	return getFilteredInstancesWithLog(g.logCtx, g.valueCtx, routeInfo, clusters, g.percentOfMinInstances, withinCluster, g.recoverAll)
 }
 
 // Enable 是否需要启动规则路由
@@ -73,6 +77,13 @@ func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters mo
 // GetFilteredInstances 进行服务实例过滤，并返回过滤后的实例列表
 func GetFilteredInstances(ctx sdk.ValueContext, routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters,
 	percentOfMinInstances float64, withinCluster *model.Cluster, recoverAll bool) (*servicerouter.RouteResult, error) {
+	return getFilteredInstancesWithLog(ctx.GetContextLogger(), ctx, routeInfo, clusters, percentOfMinInstances, withinCluster, recoverAll)
+}
+
+// getFilteredInstancesWithLog 带日志的过滤实现
+func getFilteredInstancesWithLog(logCtx *log.ContextLogger, ctx sdk.ValueContext, routeInfo *servicerouter.RouteInfo,
+	clusters model.ServiceClusters, percentOfMinInstances float64, withinCluster *model.Cluster,
+	recoverAll bool) (*servicerouter.RouteResult, error) {
 	outCluster := model.NewCluster(clusters, withinCluster)
 	clsValue := outCluster.GetClusterValue()
 	// 至少要返回多少实例
@@ -91,6 +102,12 @@ func GetFilteredInstances(ctx sdk.ValueContext, routeInfo *servicerouter.RouteIn
 		hasLimitedInstances = true
 	}
 	outCluster.HasLimitedInstances = hasLimitedInstances
+	if logCtx != nil && logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		logCtx.GetRouteLogger().Debugf(
+			"[Router][FilterOnly] filter done, service=%s, all=%d, healthy=%d, min=%d, recoverAll=%v, hasLimited=%v, includeCircuitBreak=%v",
+			clusters.GetServiceKey(), allInstancesCount, healthyCount, minInstances, recoverAll,
+			hasLimitedInstances, routeInfo.IncludeCircuitBreakInstances)
+	}
 	result := servicerouter.PoolGetRouteResult(ctx)
 	result.OutputCluster = outCluster
 	routeInfo.SetIgnoreFilterOnlyOnEndChain(true)

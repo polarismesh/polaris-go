@@ -1,5 +1,6 @@
 GOPATH ?= $(shell go env GOPATH)
 
+# Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
   $(error Please set the environment variable GOPATH before running `make`)
 endif
@@ -10,9 +11,10 @@ build: clean
 
 .PHONY: run
 run: build
-	./bin -namespace=default -service=LaneEchoServer -selfService=SimpleLaneEchoClient -port=19082
+	./bin
 
 .PHONY: clean
 clean:
 	rm -f bin
 	rm -rf polaris
+

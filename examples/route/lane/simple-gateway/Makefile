@@ -10,7 +10,7 @@ build: clean
 
 .PHONY: run
 run: build
-	./bin -namespace=default -service=LaneEchoServer -selfService=SimpleLaneEchoClient -port=19082
+	./bin -selfNamespace=default -selfService=LaneRouterGatewayService -port=48096
 
 .PHONY: clean
 clean:

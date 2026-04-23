@@ -591,6 +591,9 @@ type ServiceInfo struct {
 
 // AddArgument 添加本次流量标签参数
 func (i *ServiceInfo) AddArgument(arg Argument) {
+	if i.Metadata == nil {
+		i.Metadata = map[string]string{}
+	}
 	arg.ToLabels(i.Metadata)
 }
 

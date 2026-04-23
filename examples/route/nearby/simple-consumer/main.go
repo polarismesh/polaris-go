@@ -34,13 +34,14 @@ import (
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
+	// defaultRequestTimeout HTTP请求超时时间
 	defaultRequestTimeout = 5 * time.Second
-	sleepAfterRequest     = 30 * time.Millisecond
+	// sleepAfterRequest 请求后的等待时间
+	sleepAfterRequest = 30 * time.Millisecond
 )
 
 var (
@@ -66,17 +67,8 @@ func initArgs() {
 }
 
 // PolarisConsumer .
-// 本示例演示 ProcessRouters + ProcessLoadBalance 的手动三段式调用，
-// 配合"就近路由"场景：
-//  1. GetAllInstances 拉取被调服务的全量实例；
-//  2. ProcessRouters 按 SDK 配置的路由链（规则路由 + 就近路由）进行过滤；
-//  3. ProcessLoadBalance 从过滤结果里选一个实例发起调用。
-//
-// 若只是想让 SDK 内部一把梭（GetOneInstance），参考同级目录下的
-// simple-consumer/ 示例。
 type PolarisConsumer struct {
 	consumer   polaris.ConsumerAPI
-	router     polaris.RouterAPI
 	provider   polaris.ProviderAPI
 	namespace  string
 	service    string
@@ -91,6 +83,7 @@ func (svr *PolarisConsumer) Run() {
 	if nil != err {
 		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
 	}
+
 	svr.host = tmpHost
 	if selfRegister {
 		svr.registerService()
@@ -134,6 +127,7 @@ func (svr *PolarisConsumer) runMainLoop() {
 		syscall.SIGINT, syscall.SIGTERM,
 		syscall.SIGSEGV,
 	}...)
+
 	for s := range ch {
 		log.Printf("catch signal(%+v), stop servers", s)
 		if selfRegister {
@@ -161,16 +155,19 @@ func (svr *PolarisConsumer) callInstance(instance model.Instance) ([]byte, error
 	client := &http.Client{
 		Timeout: defaultRequestTimeout,
 	}
+
 	url := fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort())
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("send request to %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
 	}
 	defer resp.Body.Close()
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read resp from %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
 	}
+
 	return data, nil
 }
 
@@ -183,6 +180,7 @@ func (svr *PolarisConsumer) runWebServer() {
 	if err != nil {
 		log.Fatalf("[ERROR]fail to listen tcp, err is %v", err)
 	}
+
 	svr.port = ln.Addr().(*net.TCPAddr).Port
 
 	go func() {
@@ -195,92 +193,78 @@ func (svr *PolarisConsumer) runWebServer() {
 	}()
 }
 
-// handleEcho 处理 echo 请求：GetAllInstances → ProcessRouters → ProcessLoadBalance
+// handleEcho 处理echo请求
 func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
-	// 1) 获取全量实例
-	log.Printf("start to invoke getAllInstances operation")
-	getAllRequest := &polaris.GetAllInstancesRequest{}
-	getAllRequest.Namespace = svr.namespace
-	getAllRequest.Service = svr.service
-	allResp, err := svr.consumer.GetAllInstances(getAllRequest)
-	if err != nil {
-		log.Printf("[error] fail to getAllInstances, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to getAllInstances, err is %v", err), http.StatusInternalServerError)
-		return
-	}
-	log.Printf("all instances count %d", len(allResp.Instances))
+	log.Printf("start to invoke getOneInstance operation")
 
-	// 2) ProcessRouters: 跑规则路由 + 就近路由等路由链
-	routerRequest := &polaris.ProcessRoutersRequest{}
-	routerRequest.DstInstances = allResp
-	routerRequest.SourceService = model.ServiceInfo{
+	// 获取服务实例
+	getOneRequest := &polaris.GetOneInstanceRequest{}
+	getOneRequest.Namespace = namespace
+	getOneRequest.Service = service
+	// 设置源服务信息，用于路由规则匹配
+	// SourceService 的 Metadata 会用于匹配 inbound 路由规则中的 source metadata
+	queryMeta := convertQuery(r.URL.RawQuery)
+	getOneRequest.SourceService = &model.ServiceInfo{
 		Namespace: selfNamespace,
 		Service:   selfService,
+		Metadata:  queryMeta,
 	}
-	routerRequest.AddArguments(convertRouteArguments(r)...)
-	routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
+	getOneRequest.Metadata = queryMeta
+	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
-		log.Printf("[error] fail to processRouters, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to processRouters, err is %v", err), http.StatusInternalServerError)
+		log.Printf("[error] fail to getOneInstance, err is %v", err)
+		http.Error(rw, fmt.Sprintf("fail to getOneInstance, err is %v", err), http.StatusInternalServerError)
 		return
-	}
-	log.Printf("router instances count %d", len(routerInstancesResp.Instances))
-	for i, inst := range routerInstancesResp.Instances {
-		log.Printf("  [%d] %s:%d region=%s zone=%s campus=%s",
-			i, inst.GetHost(), inst.GetPort(),
-			inst.GetRegion(), inst.GetZone(), inst.GetCampus())
 	}
 
-	// 3) ProcessLoadBalance: 从就近过滤后的实例里挑一个
-	lbRequest := &polaris.ProcessLoadBalanceRequest{}
-	lbRequest.DstInstances = routerInstancesResp
-	lbRequest.LbPolicy = config.DefaultLoadBalancerWR
-	oneInstResp, err := svr.router.ProcessLoadBalance(lbRequest)
-	if err != nil {
-		log.Printf("[error] fail to processLoadBalance, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to processLoadBalance, err is %v", err), http.StatusInternalServerError)
-		return
-	}
 	instance := oneInstResp.GetInstance()
 	if instance == nil {
 		log.Printf("[error] no available instance")
 		http.Error(rw, "no available instance", http.StatusServiceUnavailable)
 		return
 	}
-	log.Printf("instance picked is %s:%d region=%s zone=%s campus=%s",
-		instance.GetHost(), instance.GetPort(),
-		instance.GetRegion(), instance.GetZone(), instance.GetCampus())
 
-	// 4) 真正发起调用并上报
+	log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+
+	// 构建响应头部信息
 	var buf bytes.Buffer
 	loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
-	locStr, _ := json.Marshal(loc)
-	msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ",
-		string(locStr), svr.host, svr.port)
+	locStr, err := json.Marshal(loc)
+	if err != nil {
+		log.Printf("[warn] fail to marshal location, err is %v", err)
+		locStr = []byte("unknown")
+	}
+
+	msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ", string(locStr), svr.host, svr.port)
 	buf.WriteString(msg)
 
+	// 服务调用结果，用于在后面进行调用结果上报
 	svcCallResult := &polaris.ServiceCallResult{}
 	svcCallResult.SetCalledInstance(instance)
 
+	// 调用远程服务
 	requestStartTime := time.Now()
 	data, err := svr.callInstance(instance)
 	svcCallResult.SetDelay(time.Since(requestStartTime))
+
 	if err != nil {
 		log.Printf("[error] %v", err)
 		svr.reportResult(svcCallResult, api.RetFail, -1)
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
+
 	log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
 	svr.reportResult(svcCallResult, api.RetSuccess, 0)
 
 	buf.Write(data)
 	buf.WriteByte('\n')
 
+	// 模拟处理延迟
 	time.Sleep(sleepAfterRequest)
 
 	rw.WriteHeader(http.StatusOK)
-	_, _ = rw.Write(buf.Bytes())
+	rw.Write(buf.Bytes())
 }
 
 func main() {
@@ -295,47 +279,50 @@ func main() {
 		log.Fatalf("fail to create sdk context, err is %v", err)
 	}
 	defer sdkCtx.Destroy()
-
 	if debug {
+		// 设置日志级别为DEBUG
 		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
 			log.Printf("fail to set log level to DEBUG, err is %v", err)
 		} else {
 			log.Printf("successfully set log level to DEBUG")
 		}
 	}
-
 	svcRouter := sdkCtx.GetConfig().GetConsumer().GetServiceRouter()
 	log.Printf("service router config: %+v", jsonEncode(svcRouter))
 	loc := sdkCtx.GetConfig().GetGlobal().GetLocation()
 	log.Printf("location config: %+v", jsonEncode(loc))
+	statReporter := sdkCtx.GetConfig().GetGlobal().GetStatReporter()
+	log.Printf("stat reporter config: %+v", jsonEncode(statReporter))
 
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
-		router:    polaris.NewRouterAPIByContext(sdkCtx),
 		provider:  polaris.NewProviderAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
 	}
 
 	svr.Run()
+
 }
 
-func convertRouteArguments(r *http.Request) []model.Argument {
-	arguments := make([]model.Argument, 0, 4)
-	for k, vs := range r.Header {
-		if len(vs) == 0 {
+func convertQuery(rawQuery string) map[string]string {
+	meta := make(map[string]string)
+	if len(rawQuery) == 0 {
+		return meta
+	}
+	tokens := strings.Split(rawQuery, "&")
+	for _, token := range tokens {
+		if token == "" {
 			continue
 		}
-		arguments = append(arguments, model.BuildHeaderArgument(strings.ToLower(k), vs[0]))
-	}
-	for k, vs := range r.URL.Query() {
-		if len(vs) == 0 {
-			continue
+		values := strings.Split(token, "=")
+		if len(values) >= 2 {
+			meta[values[0]] = values[1]
+		} else if len(values) == 1 {
+			meta[values[0]] = ""
 		}
-		arguments = append(arguments, model.BuildQueryArgument(strings.ToLower(k), vs[0]))
 	}
-	log.Printf("total arguments count: %d, %v", len(arguments), arguments)
-	return arguments
+	return meta
 }
 
 func getLocalHost(serverAddr string) (string, error) {

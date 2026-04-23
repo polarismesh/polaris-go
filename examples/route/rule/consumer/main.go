@@ -49,7 +49,7 @@ func initArgs() {
 	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
 	flag.StringVar(&selfService, "selfService", "", "selfService")
-	flag.Int64Var(&port, "port", 18080, "port")
+	flag.Int64Var(&port, "port", 18070, "port")
 	flag.StringVar(&token, "token", "", "token")
 	flag.IntVar(&times, "times", 1, "times")
 }
@@ -86,7 +86,12 @@ func (svr *PolarisConsumer) runWebServer() {
 		routerRequest.DstInstances = instancesResp
 		routerRequest.SourceService.Service = selfService
 		routerRequest.SourceService.Namespace = selfNamespace
-		routerRequest.AddArguments(convertRouteArguments(r)...)
+		// 将请求参数构造成 Arguments；polaris.ProcessRoutersRequest 内部的 convert()
+		// 会自动把它们以 $query.<k> / $header.<k> 的形式写入 SourceService.Metadata，
+		// 供 ruleBasedRouter 做源标签匹配（与 verify_rule_route.sh 自动创建的 CUSTOM
+		// 规则一起工作时，Consumer 的 convertRouteArguments 同时上报 CUSTOM 类型参数）。
+		args := convertRouteArguments(r)
+		routerRequest.AddArguments(args...)
 		routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
 		if nil != err {
 			log.Printf("[error] fail to processRouters, err is %v", err)
@@ -205,7 +210,7 @@ func main() {
 }
 
 func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResult, retStatus model.RetStatus,
-	retCode int32) {
+		retCode int32) {
 	svcCallResult.SetRetStatus(retStatus)
 	svcCallResult.SetRetCode(retCode)
 	err := svr.consumer.UpdateServiceCallResult(svcCallResult)
@@ -236,8 +241,16 @@ func convertRouteArguments(r *http.Request) []model.Argument {
 			if len(vs) == 0 {
 				continue
 			}
-			arg := model.BuildQueryArgument(strings.ToLower(k), vs[0])
-			arguments = append(arguments, arg)
+			// 同时上报 QUERY 与 CUSTOM：
+			// - QUERY 形态 (SourceService.Metadata 键为 "$query.xxx") 用于匹配
+			//   type=QUERY 的路由规则；
+			// - CUSTOM 形态 (键为原始 key，如 "env") 用于匹配 type=CUSTOM 规则，
+			//   这是 polaris-go SDK 测试样例 (pkg test/testdata/route_rule) 的标准写法，
+			//   也与本工程 verify_rule_route.sh 自动创建的规则对齐。
+			lowerKey := strings.ToLower(k)
+			arguments = append(arguments,
+				model.BuildQueryArgument(lowerKey, vs[0]),
+				model.BuildCustomArgument(lowerKey, vs[0]))
 		}
 	}
 	log.Printf("total arguments count: %d, %v", len(arguments), arguments)

@@ -34,8 +34,14 @@ type Config struct {
 }
 
 // SetDefault 设置默认值
+//
+// BaseLaneMode 的默认值即 Go 零值(OnlyUntaggedInstance=0),因此无需显式赋值。
+// 注意:这里 **不能**调用 `c.BaseLaneMode = OnlyUntaggedInstance`,否则会在 YAML 解析
+// 后的 SetDefault 环节把用户显式设置的非零值(如 ExcludeEnabledLaneInstance=1)覆盖回 0,
+// 导致配置失效。参见 pkg/config/plugin.go:convertFromTextValues + PluginConfigs.SetDefault
+// 的执行顺序:Marshal→Unmarshal→SetDefault。
 func (c *Config) SetDefault() {
-	c.BaseLaneMode = OnlyUntaggedInstance
+	// intentionally empty: zero value of BaseLaneMode is OnlyUntaggedInstance
 }
 
 // Verify 校验配置

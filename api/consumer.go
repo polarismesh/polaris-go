@@ -56,6 +56,8 @@ func (r *GetOneInstanceRequest) convert() {
 			Metadata: map[string]string{},
 		}
 		serviceInfo = r.SourceService
+	} else if serviceInfo.Metadata == nil {
+		serviceInfo.Metadata = map[string]string{}
 	}
 
 	for i := range r.Arguments {
@@ -80,6 +82,8 @@ func (r *GetInstancesRequest) convert() {
 			Metadata: map[string]string{},
 		}
 		serviceInfo = r.SourceService
+	} else if serviceInfo.Metadata == nil {
+		serviceInfo.Metadata = map[string]string{}
 	}
 
 	for i := range r.Arguments {

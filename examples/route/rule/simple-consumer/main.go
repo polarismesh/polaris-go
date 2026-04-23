@@ -26,21 +26,19 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/api"
-	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 const (
+	// defaultRequestTimeout HTTP请求超时时间
 	defaultRequestTimeout = 5 * time.Second
-	sleepAfterRequest     = 30 * time.Millisecond
+	// sleepAfterRequest 请求后的等待时间
+	sleepAfterRequest = 30 * time.Millisecond
 )
 
 var (
@@ -48,7 +46,6 @@ var (
 	service       string
 	selfNamespace string
 	selfService   string
-	selfRegister  bool
 	port          int64
 	token         string
 	debug         bool
@@ -56,33 +53,24 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "RouteNearbyEchoServer", "service")
-	flag.BoolVar(&selfRegister, "selfRegister", false, "selfRegister")
+	flag.StringVar(&service, "service", "RouteEchoServer", "service")
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
-	flag.StringVar(&selfService, "selfService", "RouteNearbyEchoClient", "selfService")
-	flag.Int64Var(&port, "port", 18080, "port")
+	flag.StringVar(&selfService, "selfService", "RouteEchoClient", "selfService")
+	flag.Int64Var(&port, "port", 18070, "port")
 	flag.StringVar(&token, "token", "", "token")
 	flag.BoolVar(&debug, "debug", false, "debug")
 }
 
 // PolarisConsumer .
-// 本示例演示 ProcessRouters + ProcessLoadBalance 的手动三段式调用，
-// 配合"就近路由"场景：
-//  1. GetAllInstances 拉取被调服务的全量实例；
-//  2. ProcessRouters 按 SDK 配置的路由链（规则路由 + 就近路由）进行过滤；
-//  3. ProcessLoadBalance 从过滤结果里选一个实例发起调用。
-//
-// 若只是想让 SDK 内部一把梭（GetOneInstance），参考同级目录下的
-// simple-consumer/ 示例。
+// 本示例通过 GetOneInstance 直接获取一个实例（由 SDK 内部完成规则路由 + 负载均衡），
+// 适合业务只需要"取一个可用实例"的轻量调用场景。
+// 如需手动分开调用 ProcessRouters + ProcessLoadBalance，参考同级目录下的 consumer/ 示例。
 type PolarisConsumer struct {
-	consumer   polaris.ConsumerAPI
-	router     polaris.RouterAPI
-	provider   polaris.ProviderAPI
-	namespace  string
-	service    string
-	host       string
-	port       int
-	isShutdown bool
+	consumer  polaris.ConsumerAPI
+	namespace string
+	service   string
+	host      string
+	port      int
 }
 
 // Run .
@@ -92,56 +80,7 @@ func (svr *PolarisConsumer) Run() {
 		panic(fmt.Errorf("error occur while fetching localhost: %v", err))
 	}
 	svr.host = tmpHost
-	if selfRegister {
-		svr.registerService()
-	}
 	svr.runWebServer()
-	svr.runMainLoop()
-}
-
-func (svr *PolarisConsumer) registerService() {
-	log.Printf("start to invoke register operation")
-	registerRequest := &polaris.InstanceRegisterRequest{}
-	registerRequest.Service = selfService
-	registerRequest.Namespace = selfNamespace
-	registerRequest.Host = svr.host
-	registerRequest.Port = svr.port
-	registerRequest.ServiceToken = token
-	resp, err := svr.provider.RegisterInstance(registerRequest)
-	if err != nil {
-		log.Fatalf("fail to register instance, err is %v", err)
-	}
-	log.Printf("register response: instanceId %s", resp.InstanceID)
-}
-
-func (svr *PolarisConsumer) deregisterService() {
-	log.Printf("start to invoke deregister operation")
-	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
-	deregisterRequest.Service = selfService
-	deregisterRequest.Namespace = selfNamespace
-	deregisterRequest.Host = svr.host
-	deregisterRequest.Port = svr.port
-	deregisterRequest.ServiceToken = token
-	if err := svr.provider.Deregister(deregisterRequest); err != nil {
-		log.Fatalf("fail to deregister instance, err is %v", err)
-	}
-	log.Printf("deregister successfully.")
-}
-
-func (svr *PolarisConsumer) runMainLoop() {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, []os.Signal{
-		syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGSEGV,
-	}...)
-	for s := range ch {
-		log.Printf("catch signal(%+v), stop servers", s)
-		if selfRegister {
-			svr.isShutdown = true
-			svr.deregisterService()
-		}
-		return
-	}
 }
 
 func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResult, retStatus model.RetStatus,
@@ -167,6 +106,7 @@ func (svr *PolarisConsumer) callInstance(instance model.Instance) ([]byte, error
 		return nil, fmt.Errorf("send request to %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
 	}
 	defer resp.Body.Close()
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read resp from %s:%d fail: %w", instance.GetHost(), instance.GetPort(), err)
@@ -185,98 +125,74 @@ func (svr *PolarisConsumer) runWebServer() {
 	}
 	svr.port = ln.Addr().(*net.TCPAddr).Port
 
-	go func() {
-		log.Printf("[INFO] start http server, listen port is %v", svr.port)
-		if err := http.Serve(ln, nil); err != nil {
-			if !svr.isShutdown {
-				log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
-			}
-		}
-	}()
+	log.Printf("[INFO] start http server, listen port is %v", svr.port)
+	if err := http.Serve(ln, nil); err != nil {
+		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
+	}
 }
 
-// handleEcho 处理 echo 请求：GetAllInstances → ProcessRouters → ProcessLoadBalance
+// handleEcho 处理 echo 请求
+// 规则路由的参数来源于 HTTP Header 与 Query，通过 AddArguments 传给 SDK，
+// SDK 会根据 Polaris 控制台上配置的 inbound/outbound 路由规则进行实例过滤。
 func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
-	// 1) 获取全量实例
-	log.Printf("start to invoke getAllInstances operation")
-	getAllRequest := &polaris.GetAllInstancesRequest{}
-	getAllRequest.Namespace = svr.namespace
-	getAllRequest.Service = svr.service
-	allResp, err := svr.consumer.GetAllInstances(getAllRequest)
-	if err != nil {
-		log.Printf("[error] fail to getAllInstances, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to getAllInstances, err is %v", err), http.StatusInternalServerError)
-		return
-	}
-	log.Printf("all instances count %d", len(allResp.Instances))
+	log.Printf("start to invoke getOneInstance operation")
 
-	// 2) ProcessRouters: 跑规则路由 + 就近路由等路由链
-	routerRequest := &polaris.ProcessRoutersRequest{}
-	routerRequest.DstInstances = allResp
-	routerRequest.SourceService = model.ServiceInfo{
+	getOneRequest := &polaris.GetOneInstanceRequest{}
+	getOneRequest.Namespace = namespace
+	getOneRequest.Service = service
+	// 设置主调方服务信息，用于匹配 inbound 路由规则中的 sources
+	getOneRequest.SourceService = &model.ServiceInfo{
 		Namespace: selfNamespace,
 		Service:   selfService,
 	}
-	routerRequest.AddArguments(convertRouteArguments(r)...)
-	routerInstancesResp, err := svr.router.ProcessRouters(routerRequest)
+	// 从 HTTP 请求中提取 header / query 作为路由参数
+	getOneRequest.AddArguments(convertRouteArguments(r)...)
+
+	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
-		log.Printf("[error] fail to processRouters, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to processRouters, err is %v", err), http.StatusInternalServerError)
+		log.Printf("[error] fail to getOneInstance, err is %v", err)
+		http.Error(rw, fmt.Sprintf("fail to getOneInstance, err is %v", err), http.StatusInternalServerError)
 		return
-	}
-	log.Printf("router instances count %d", len(routerInstancesResp.Instances))
-	for i, inst := range routerInstancesResp.Instances {
-		log.Printf("  [%d] %s:%d region=%s zone=%s campus=%s",
-			i, inst.GetHost(), inst.GetPort(),
-			inst.GetRegion(), inst.GetZone(), inst.GetCampus())
 	}
 
-	// 3) ProcessLoadBalance: 从就近过滤后的实例里挑一个
-	lbRequest := &polaris.ProcessLoadBalanceRequest{}
-	lbRequest.DstInstances = routerInstancesResp
-	lbRequest.LbPolicy = config.DefaultLoadBalancerWR
-	oneInstResp, err := svr.router.ProcessLoadBalance(lbRequest)
-	if err != nil {
-		log.Printf("[error] fail to processLoadBalance, err is %v", err)
-		http.Error(rw, fmt.Sprintf("fail to processLoadBalance, err is %v", err), http.StatusInternalServerError)
-		return
-	}
 	instance := oneInstResp.GetInstance()
 	if instance == nil {
 		log.Printf("[error] no available instance")
 		http.Error(rw, "no available instance", http.StatusServiceUnavailable)
 		return
 	}
-	log.Printf("instance picked is %s:%d region=%s zone=%s campus=%s",
-		instance.GetHost(), instance.GetPort(),
-		instance.GetRegion(), instance.GetZone(), instance.GetCampus())
+	log.Printf("instance getOneInstance is %s:%d, metadata: %v",
+		instance.GetHost(), instance.GetPort(), instance.GetMetadata())
 
-	// 4) 真正发起调用并上报
 	var buf bytes.Buffer
 	loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
 	locStr, _ := json.Marshal(loc)
-	msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ",
+	msg := fmt.Sprintf("RouteEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ",
 		string(locStr), svr.host, svr.port)
 	buf.WriteString(msg)
 
+	// 服务调用结果，用于在后面进行调用结果上报
 	svcCallResult := &polaris.ServiceCallResult{}
 	svcCallResult.SetCalledInstance(instance)
 
 	requestStartTime := time.Now()
 	data, err := svr.callInstance(instance)
 	svcCallResult.SetDelay(time.Since(requestStartTime))
+
 	if err != nil {
 		log.Printf("[error] %v", err)
 		svr.reportResult(svcCallResult, api.RetFail, -1)
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
+
 	log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
 	svr.reportResult(svcCallResult, api.RetSuccess, 0)
 
 	buf.Write(data)
 	buf.WriteByte('\n')
 
+	// 模拟处理延迟
 	time.Sleep(sleepAfterRequest)
 
 	rw.WriteHeader(http.StatusOK)
@@ -306,13 +222,9 @@ func main() {
 
 	svcRouter := sdkCtx.GetConfig().GetConsumer().GetServiceRouter()
 	log.Printf("service router config: %+v", jsonEncode(svcRouter))
-	loc := sdkCtx.GetConfig().GetGlobal().GetLocation()
-	log.Printf("location config: %+v", jsonEncode(loc))
 
 	svr := &PolarisConsumer{
 		consumer:  polaris.NewConsumerAPIByContext(sdkCtx),
-		router:    polaris.NewRouterAPIByContext(sdkCtx),
-		provider:  polaris.NewProviderAPIByContext(sdkCtx),
 		namespace: namespace,
 		service:   service,
 	}
@@ -320,8 +232,10 @@ func main() {
 	svr.Run()
 }
 
+// convertRouteArguments 把 HTTP Header 与 URL Query 转换成 polaris-go 路由参数
 func convertRouteArguments(r *http.Request) []model.Argument {
 	arguments := make([]model.Argument, 0, 4)
+
 	for k, vs := range r.Header {
 		if len(vs) == 0 {
 			continue
