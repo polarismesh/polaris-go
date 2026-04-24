@@ -785,23 +785,35 @@ func (r *LaneRouter) GetFilteredInstances(
 		result.Status = servicerouter.Normal
 		return result, nil
 	}
-	defer tmpLaneCls.PoolPut()
 
 	// 无泳道实例
 	if matchedItem.rule.GetMatchMode() == apitraffic.LaneRule_STRICT {
 		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] no lane instances for %s=%s (STRICT mode), "+
-				"degrade to filterOnly, group=%s, rule=%s, dest=%s/%s",
+			"[Router][Lane] no lane instances for %s=%s (STRICT mode)，"+
+				"return empty cluster to trigger HTTP 503，group=%s，rule=%s，dest=%s/%s",
 			laneKey, laneVal, matchedItem.group.GetName(), matchedItem.rule.GetName(),
 			destNs, destSvc)
-		// STRICT 模式：降级到 filterOnly 由上层处理
+		// STRICT 模式：SDK 语义要求"没有匹配的泳道实例时直接视为没有可用实例"。
+		// 返回上面 metadata 过滤后的空 cluster（tmpLaneCls 的 ClusterValue 实例数=0），
+		// 同时设置 ignoreFilterOnlyOnEndChain=true 阻止下游 filterOnly 基于原始 clusters
+		// 重建出一个非空 cluster，否则 STRICT 会被意外降级成"全量实例"而丧失隔离性。
+		// 外部调用方（LoadBalancer / HTTP gateway）看到空实例后会返回 HTTP 503，
+		// 这正是 lane-test.sh 用例 1.4b/2.4b/3.4b/4.4b 的期望行为。
+		//
+		// ⚠ OutputCluster 生命周期说明：
+		// tmpLaneCls 在被赋给 result.OutputCluster 后，不在此函数内 PoolPut。
+		// 归还责任由上层调用方（InstancesResponse Finalize 流程）承担，与
+		// routeToBaseline 的约定保持一致。因此函数开头的 `defer tmpLaneCls.PoolPut()`
+		// 必须放在 STRICT 分支 return 之后、PERMISSIVE 分支之前（见下方）。
+		routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
 		result := servicerouter.PoolGetRouteResult(r.valueCtx)
-		strictCls := model.NewCluster(clusters, withinCluster)
-		strictCls.HasLimitedInstances = true
-		result.OutputCluster = strictCls
+		result.OutputCluster = tmpLaneCls
 		result.Status = servicerouter.DegradeToFilterOnly
 		return result, nil
 	}
+	// PERMISSIVE 分支会走 routeToBaseline 构造新的 cluster，不再需要 tmpLaneCls。
+	// 在 STRICT 早退之后再 PoolPut，避免 STRICT 路径误回收仍在对外输出的对象。
+	defer tmpLaneCls.PoolPut()
 
 	// PERMISSIVE 模式：回退基线
 	r.logCtx.GetRouteLogger().Infof(

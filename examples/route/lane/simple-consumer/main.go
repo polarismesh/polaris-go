@@ -38,6 +38,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -203,6 +204,16 @@ func (svr *SimpleLaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Reques
 	instance, err := svr.getOneInstance(r)
 	if err != nil {
 		log.Printf("[error] fail to getOneInstance: %v", err)
+		// ErrCodeAPIInstanceNotFound 表示路由过滤后没有候选实例 (STRICT 泳道常见),
+		// 向外返回 503 以区分"服务级不可用"与"网关内部错误".
+		cause := err
+		if unwrapped := errors.Unwrap(err); unwrapped != nil {
+			cause = unwrapped
+		}
+		if sdkErr, ok := cause.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
+			http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(rw, fmt.Sprintf("fail to getOneInstance: %v", err), http.StatusInternalServerError)
 		return
 	}

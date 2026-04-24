@@ -50,20 +50,23 @@ func (r *GetOneInstanceRequest) convert() {
 		return
 	}
 
-	serviceInfo := r.SourceService
-	if serviceInfo == nil {
-		r.SourceService = &model.ServiceInfo{
-			Metadata: map[string]string{},
-		}
-		serviceInfo = r.SourceService
-	} else if serviceInfo.Metadata == nil {
-		serviceInfo.Metadata = map[string]string{}
+	// 不能原地 mutate 调用方传入的 SourceService.Metadata; 见 api.go
+	// ProcessRoutersRequest.convert 的说明, 同一张 map 会被业务侧跨请求重复使用,
+	// 原地追加会污染后续请求.
+	var srcMeta map[string]string
+	if r.SourceService != nil {
+		srcMeta = r.SourceService.Metadata
+	} else {
+		r.SourceService = &model.ServiceInfo{}
 	}
-
+	merged := make(map[string]string, len(srcMeta)+len(r.Arguments))
+	for k, v := range srcMeta {
+		merged[k] = v
+	}
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(serviceInfo.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // GetInstancesRequest 获取多个服务的请求对象
@@ -76,20 +79,23 @@ func (r *GetInstancesRequest) convert() {
 		return
 	}
 
-	serviceInfo := r.SourceService
-	if serviceInfo == nil {
-		r.SourceService = &model.ServiceInfo{
-			Metadata: map[string]string{},
-		}
-		serviceInfo = r.SourceService
-	} else if serviceInfo.Metadata == nil {
-		serviceInfo.Metadata = map[string]string{}
+	// 不能原地 mutate 调用方传入的 SourceService.Metadata; 见 api.go
+	// ProcessRoutersRequest.convert 的说明, 同一张 map 会被业务侧跨请求重复使用,
+	// 原地追加会污染后续请求.
+	var srcMeta map[string]string
+	if r.SourceService != nil {
+		srcMeta = r.SourceService.Metadata
+	} else {
+		r.SourceService = &model.ServiceInfo{}
 	}
-
+	merged := make(map[string]string, len(srcMeta)+len(r.Arguments))
+	for k, v := range srcMeta {
+		merged[k] = v
+	}
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(serviceInfo.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // GetAllInstancesRequest 获取服务下所有实例的请求对象

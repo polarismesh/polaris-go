@@ -200,14 +200,21 @@ func (r *ProcessRoutersRequest) convert() {
 		return
 	}
 
-	if len(r.SourceService.Metadata) == 0 {
-		r.SourceService.Metadata = map[string]string{}
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	//
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的
+	// 同一张 map 引用 (例如业务 Consumer 通常会在启动时把 env=prod 放进一个长期持有的
+	// metadataMap, 并在每次请求里把它赋给 SourceService.Metadata). 原地写入会让
+	// 后续请求看到上一次请求遗留的 $header.* / $query.* 键, 导致 Consumer 侧的元数据
+	// 过滤/展示出现脏数据. 复制一份再写就能保留调用方 map 的纯净.
+	merged := make(map[string]string, len(r.SourceService.Metadata)+len(r.Arguments))
+	for k, v := range r.SourceService.Metadata {
+		merged[k] = v
 	}
-
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(r.SourceService.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // ProcessLoadBalanceRequest process load balancer to get the target instances

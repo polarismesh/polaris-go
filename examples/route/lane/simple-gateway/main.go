@@ -121,6 +121,13 @@ func (gw *SimpleLaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request
 	oneInstResp, err := gw.consumer.GetOneInstance(getOneReq)
 	if err != nil {
 		log.Printf("[ERROR] fail to getOneInstance for %s: %v", targetService, err)
+		// ErrCodeAPIInstanceNotFound 表示路由链过滤后没有任何可用实例
+		// (例如 STRICT 泳道匹配但无实例), 应当返回 HTTP 503 而不是 500,
+		// 以便调用方能区分"没有候选实例"与"网关自身异常".
+		if sdkErr, ok := err.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
+			http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(rw, fmt.Sprintf("fail to getOneInstance: %v", err), http.StatusInternalServerError)
 		return
 	}

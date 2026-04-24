@@ -231,9 +231,14 @@ func (e *Engine) getServiceRoutedInstances(
 	req *data.CommonInstancesRequest) (routeResult *servicerouter.RouteResult, err model.SDKError) {
 	var routerChain = e.resolveRouterChain(req)
 	clusters := req.DstInstances.GetServiceClusters()
-	// 先执行前置链（如泳道路由）
+	// 先执行前置链（如泳道路由）.
+	// 注意必须使用 GetFilterClusterBefore 而非 GetFilterCluster:
+	//   GetFilterCluster 会在链尾追加一次 FilterOnlyRouter 兜底, 而 FilterOnly 内部会
+	//   调用 SetIgnoreFilterOnlyOnEndChain(true), 从而让本函数后续跳过主链. 这是
+	//   "beforeChain 加入 laneRouter 后规则/就近/元数据路由全部失效" 问题的根因.
+	//   前置链的兜底由主链 (GetFilterClusterWithin) 自己完成即可.
 	if len(routerChain.BeforeChain) > 0 {
-		routeResult, err = servicerouter.GetFilterCluster(e.globalCtx, routerChain.BeforeChain, &req.RouteInfo, clusters)
+		routeResult, err = servicerouter.GetFilterClusterBefore(e.globalCtx, routerChain.BeforeChain, &req.RouteInfo, clusters)
 		if err != nil {
 			return nil, err
 		}

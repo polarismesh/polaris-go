@@ -510,6 +510,164 @@ stop_consumer() {
     CONSUMER_PIDS=("${new_pids[@]:-}")
 }
 
+# ======================== 正/负用例执行逻辑 ========================
+#
+# run_positive_case 与 run_negative_case 把链路 A/B 发请求、统计结果、写 CSV 的
+# 共同逻辑抽成函数，避免在 main() 里多处重复。
+#
+# 契约：
+#   - 正用例 run_positive_case <chain> <target_env> <consumer_port> <result_file>
+#     通过全局变量 ENV_TOTAL / ENV_SUCCESS / ENV_FAIL / ENV_CORRECT / ENV_WRONG
+#     把本次 env 的统计回传给调用方累加到 grand_* 变量。
+#   - 负用例 run_negative_case <chain> <neg_env> <consumer_port> <result_file>
+#     通过 NEG_TOTAL / NEG_AS_EXPECTED / NEG_UNEXPECTED 回传。
+#
+# CSV 列定义：链路,用例类型,env值,序号,HTTP状态码,路由目标,是否正确,响应内容
+run_positive_case() {
+    local chain="$1"
+    local target_env="$2"
+    local consumer_port="$3"
+    local result_file="$4"
+
+    # 下面 5 个统计量不加 local / declare，以便跨函数回传给调用方 (main() 内的 a_/b_grand_*)。
+    # 说明：macOS 自带 bash 3.2 不支持 declare -g，而在 bash 函数里的"裸赋值"本身就是
+    # 全局写入，只要调用方使用不同的变量名，就不会污染 local 上下文。
+    ENV_TOTAL=0
+    ENV_SUCCESS=0
+    ENV_FAIL=0
+    ENV_CORRECT=0
+    ENV_WRONG=0
+
+    printf "  ${CYAN}%-6s %-12s %-30s %-8s %s${NC}\n" "序号" "状态" "路由目标" "正确?" "响应摘要"
+    printf "  %-6s %-12s %-30s %-8s %s\n" "------" "------------" "------------------------------" "--------" "--------------------------------------------"
+
+    for i in $(seq 1 "$REQUEST_COUNT"); do
+        ENV_TOTAL=$((ENV_TOTAL + 1))
+        local resp
+        local http_code
+        http_code=$(curl -s -o /tmp/_md_resp_$$.tmp -w '%{http_code}' --connect-timeout 5 \
+            "http://127.0.0.1:${consumer_port}/echo" 2>/dev/null || echo "000")
+        resp=$(cat /tmp/_md_resp_$$.tmp 2>/dev/null || echo "")
+        rm -f /tmp/_md_resp_$$.tmp
+
+        local route_target="unknown"
+        local is_correct="?"
+        local status_icon=""
+
+        if [[ "$http_code" == "200" ]]; then
+            ENV_SUCCESS=$((ENV_SUCCESS + 1))
+            if echo "$resp" | grep -q "env=${target_env}"; then
+                route_target="Provider-${target_env} (env=${target_env})"
+                is_correct="✓"
+                status_icon="${GREEN}✓${NC}"
+                ENV_CORRECT=$((ENV_CORRECT + 1))
+            else
+                local actual_env=""
+                for check_env in dev test pre prod; do
+                    if echo "$resp" | grep -q "env=${check_env}"; then
+                        actual_env="$check_env"
+                        break
+                    fi
+                done
+                if [[ -n "$actual_env" ]]; then
+                    route_target="Provider-${actual_env} (env=${actual_env})"
+                else
+                    route_target="未知实例"
+                fi
+                is_correct="✗"
+                status_icon="${RED}✗${NC}"
+                ENV_WRONG=$((ENV_WRONG + 1))
+            fi
+        else
+            ENV_FAIL=$((ENV_FAIL + 1))
+            route_target="请求失败 (HTTP ${http_code})"
+            is_correct="✗"
+            status_icon="${RED}✗${NC}"
+        fi
+
+        local resp_summary
+        resp_summary=$(echo "$resp" | head -1 | cut -c1-80)
+        printf "  %-6s ${status_icon} %-10s %-30s %-8s %s\n" \
+            "$i" "HTTP $http_code" "$route_target" "$is_correct" "$resp_summary"
+        # CSV 行：链路,用例类型,env值,序号,HTTP状态码,路由目标,是否正确,响应内容
+        echo "${chain},positive,${target_env},${i},${http_code},${route_target},${is_correct},${resp}" >> "$result_file"
+        sleep 0.1
+    done
+
+    echo ""
+    if [[ "$ENV_CORRECT" -eq "$REQUEST_COUNT" ]]; then
+        echo -e "  ${GREEN}[链路${chain}] env=${target_env}: 全部正确 (${ENV_CORRECT}/${REQUEST_COUNT})${NC}"
+    elif [[ "$ENV_FAIL" -eq "$REQUEST_COUNT" ]]; then
+        echo -e "  ${RED}[链路${chain}] env=${target_env}: 全部失败 (${ENV_FAIL}/${REQUEST_COUNT})${NC}"
+    else
+        echo -e "  ${YELLOW}[链路${chain}] env=${target_env}: 正确=${ENV_CORRECT}, 错误路由=${ENV_WRONG}, 失败=${ENV_FAIL} (共 ${REQUEST_COUNT})${NC}"
+    fi
+}
+
+run_negative_case() {
+    local chain="$1"
+    local neg_env="$2"
+    local consumer_port="$3"
+    local result_file="$4"
+
+    # 下面 3 个统计量不加 local / declare，以便跨函数回传给调用方 (a_/b_neg_*)。
+    # 同 run_positive_case：bash 3.2 不支持 declare -g，裸赋值即是全局写入。
+    NEG_TOTAL=0
+    NEG_AS_EXPECTED=0
+    NEG_UNEXPECTED=0
+
+    printf "  ${CYAN}%-6s %-12s %-30s %-12s %s${NC}\n" "序号" "状态" "路由目标" "预期?" "响应摘要"
+    printf "  %-6s %-12s %-30s %-12s %s\n" "------" "------------" "------------------------------" "------------" "--------------------------------------------"
+
+    for i in $(seq 1 "$REQUEST_COUNT"); do
+        NEG_TOTAL=$((NEG_TOTAL + 1))
+        local resp
+        local http_code
+        http_code=$(curl -s -o /tmp/_md_neg_resp_$$.tmp -w '%{http_code}' --connect-timeout 5 \
+            "http://127.0.0.1:${consumer_port}/echo" 2>/dev/null || echo "000")
+        resp=$(cat /tmp/_md_neg_resp_$$.tmp 2>/dev/null || echo "")
+        rm -f /tmp/_md_neg_resp_$$.tmp
+
+        local route_target=""
+        local verdict=""
+        local status_icon=""
+
+        # 负用例期望：无任何 provider 被命中（元数据匹配不到，应当返回错误或空实例）
+        if [[ "$http_code" == "200" ]] && echo "$resp" | grep -qE "env=(dev|test|pre|prod)"; then
+            local actual_env=""
+            for check_env in dev test pre prod; do
+                if echo "$resp" | grep -q "env=${check_env}"; then
+                    actual_env="$check_env"
+                    break
+                fi
+            done
+            route_target="意外命中 Provider-${actual_env}"
+            verdict="意外"
+            status_icon="${RED}✗${NC}"
+            NEG_UNEXPECTED=$((NEG_UNEXPECTED + 1))
+        else
+            route_target="无 provider（符合预期）"
+            verdict="符合预期"
+            status_icon="${GREEN}✓${NC}"
+            NEG_AS_EXPECTED=$((NEG_AS_EXPECTED + 1))
+        fi
+
+        local resp_summary
+        resp_summary=$(echo "$resp" | head -1 | cut -c1-80)
+        printf "  %-6s ${status_icon} %-10s %-30s %-12s %s\n" \
+            "$i" "HTTP $http_code" "$route_target" "$verdict" "$resp_summary"
+        echo "${chain},negative,${neg_env},${i},${http_code},${route_target},${verdict},${resp}" >> "$result_file"
+        sleep 0.1
+    done
+
+    echo ""
+    if [[ "$NEG_UNEXPECTED" -eq 0 ]]; then
+        echo -e "  ${GREEN}[链路${chain}] env=${neg_env}(负用例): 全部符合预期，无意外路由 (${NEG_AS_EXPECTED}/${NEG_TOTAL})${NC}"
+    else
+        echo -e "  ${RED}[链路${chain}] env=${neg_env}(负用例): 出现 ${NEG_UNEXPECTED} 次意外路由${NC}"
+    fi
+}
+
 # ======================== 主流程 ========================
 
 main() {
@@ -719,7 +877,15 @@ main() {
         log_info "\u5df2\u901a\u8fc7 --no-negative-case \u8df3\u8fc7\u94fe\u8defB \u8d1f\u7528\u4f8b"
     fi
 
-    # \u5408\u5e76\u7edf\u8ba1\uff0c\u4ee5\u4fbf\u540e\u7eed\u603b\u7ed3\u8bba\u4f7f\u7528\n    local grand_total=$((a_grand_total + b_grand_total))\n    local grand_success=$((a_grand_success + b_grand_success))\n    local grand_fail=$((a_grand_fail + b_grand_fail))\n    local grand_correct=$((a_grand_correct + b_grand_correct))\n    local grand_wrong=$((a_grand_wrong + b_grand_wrong))\n    local negative_total=$((a_neg_total + b_neg_total))\n    local negative_as_expected=$((a_neg_as_expected + b_neg_as_expected))\n    local negative_unexpected=$((a_neg_unexpected + b_neg_unexpected))
+    # \u5408\u5e76\u7edf\u8ba1\uff0c\u4ee5\u4fbf\u540e\u7eed\u603b\u7ed3\u8bba\u4f7f\u7528
+    local grand_total=$((a_grand_total + b_grand_total))
+    local grand_success=$((a_grand_success + b_grand_success))
+    local grand_fail=$((a_grand_fail + b_grand_fail))
+    local grand_correct=$((a_grand_correct + b_grand_correct))
+    local grand_wrong=$((a_grand_wrong + b_grand_wrong))
+    local negative_total=$((a_neg_total + b_neg_total))
+    local negative_as_expected=$((a_neg_as_expected + b_neg_as_expected))
+    local negative_unexpected=$((a_neg_unexpected + b_neg_unexpected))
 
     # ==================== \u6b65\u9aa48: \u7ed3\u679c\u6c47\u603b\u4e0e\u9a8c\u8bc1\u7ed3\u8bba ====================
     log_step "8/8 \u7ed3\u679c\u6c47\u603b"

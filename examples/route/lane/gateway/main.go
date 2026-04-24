@@ -161,6 +161,14 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	oneInstResp, err := gw.router.ProcessLoadBalance(lbReq)
 	if err != nil {
 		log.Printf("[ERROR] fail to processLoadBalance for %s: %v", targetService, err)
+		// ErrCodeAPIInstanceNotFound 表示路由链过滤后没有任何可用实例
+		// (例如 STRICT 泳道匹配但无实例), 这是一种"路径不通"而不是"网关内部错误",
+		// 应向外部返回 HTTP 503 (Service Unavailable), 以便调用方/测试脚本能区分
+		// "没有候选实例" 与 "网关自身异常".
+		if sdkErr, ok := err.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
+			http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(rw, fmt.Sprintf("fail to processLoadBalance: %v", err), http.StatusInternalServerError)
 		return
 	}

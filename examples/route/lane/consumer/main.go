@@ -272,6 +272,12 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 		oneInstResp, err := svr.router.ProcessLoadBalance(lbReq)
 		if err != nil {
 			log.Printf("[error] fail to processLoadBalance: %v", err)
+			// ErrCodeAPIInstanceNotFound 表示路由过滤后没有候选实例 (STRICT 泳道常见),
+			// 向外返回 503 而不是 500, 便于调用方区分"无可用实例"与"网关自身异常".
+			if sdkErr, ok := err.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
+				http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+				return
+			}
 			http.Error(rw, fmt.Sprintf("fail to processLoadBalance: %v", err), http.StatusInternalServerError)
 			return
 		}
