@@ -196,6 +196,11 @@ finally:
 				Metadata:  withinCluster.GetClusters().GetServiceInstances().GetMetadata(),
 			}, withinCluster.GetClusters().GetServiceInstances(), []model.Instance{}))
 			targetCluster = model.NewCluster(emptyCluster, withinCluster)
+			// 抑制主路由链尾部的 filteronly 全死全活兜底；否则 failoverType=none 语义
+			// 会被 filteronly 通过 svcClusters 恢复全量实例而失效
+			// （见 pkg/plugin/servicerouter/util.go:121-127 +
+			//  plugin/servicerouter/filteronly/router.go:87）。
+			routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
 		} else {
 			targetCluster = model.NewCluster(clusters, withinCluster)
 		}

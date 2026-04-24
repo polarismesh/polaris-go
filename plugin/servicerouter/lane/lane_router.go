@@ -281,26 +281,66 @@ func matchTrafficRule(rule *apitraffic.TrafficMatchRule, envVars map[string]stri
 	return isAND
 }
 
-// findTrafficValue 根据 SourceMatch 类型从环境变量或调用方元数据中提取流量值
+// findTrafficValue 根据 SourceMatch 类型从环境变量或调用方元数据中提取流量值.
+//
+// 与 polaris-java LaneUtils.findTrafficValue (polaris-plugins/polaris-plugins-router/
+// router-lane/src/main/java/com/tencent/polaris/plugins/router/lane/LaneUtils.java) 保持
+// 相同的 7 类匹配维度: HEADER / CUSTOM / METHOD / CALLER_IP / COOKIE / QUERY / PATH,
+// 外加 Go 特有的 CALLER_METADATA (从 SourceService.Metadata 直接取).
+//
+// 查询策略:
+//  1. 按维度类型拼出带前缀的 label key (如 "$header.user" / "$method" / "$caller_ip"),
+//     先从 envVars 查;
+//  2. 查不到时 fallback 到 sourceService.Metadata 的同一 key (api.go / api/consumer.go
+//     的 convert() 已经用 Argument.ToLabels 保证了同样的前缀约定);
+//  3. 都没有则返回 "".
+//
+// 修复:
+//   - METHOD / CALLER_IP / PATH 三类 Argument 的 Key() 为空串, 以前被错误地按
+//     envVars[""] 写入又按 envVars["method"] / envVars["caller_ip"] 读取, 永远读不到.
+//   - HEADER / QUERY / COOKIE 以前都按短 key (arg.Key()) 入 envVars, "$header.user" 和
+//     "$query.user" 之间互撞. 现在各自按前缀命名空间存取, 6 个维度相互独立.
 func findTrafficValue(arg *apitraffic.SourceMatch, envVars map[string]string, sourceService model.ServiceMetadata) string {
-	if envVars == nil {
-		envVars = map[string]string{}
+	lookup := func(labelKey string) string {
+		if labelKey == "" {
+			return ""
+		}
+		if v, ok := envVars[labelKey]; ok && v != "" {
+			return v
+		}
+		if sourceService != nil {
+			meta := sourceService.GetMetadata()
+			if v, ok := meta[labelKey]; ok {
+				return v
+			}
+		}
+		return ""
 	}
+
 	switch arg.GetType() {
-	case apitraffic.SourceMatch_CUSTOM, apitraffic.SourceMatch_HEADER,
-		apitraffic.SourceMatch_QUERY, apitraffic.SourceMatch_COOKIE, apitraffic.SourceMatch_PATH:
-		return envVars[arg.GetKey()]
+	case apitraffic.SourceMatch_HEADER:
+		return lookup(model.LabelKeyHeader + arg.GetKey())
+	case apitraffic.SourceMatch_QUERY:
+		return lookup(model.LabelKeyQuery + arg.GetKey())
+	case apitraffic.SourceMatch_COOKIE:
+		return lookup(model.LabelKeyCookie + arg.GetKey())
 	case apitraffic.SourceMatch_METHOD:
-		return envVars["method"]
+		return lookup(model.LabelKeyMethod)
 	case apitraffic.SourceMatch_CALLER_IP:
-		return envVars["caller_ip"]
+		return lookup(model.LabelKeyCallerIp)
+	case apitraffic.SourceMatch_PATH:
+		return lookup(model.LabelKeyPath)
+	case apitraffic.SourceMatch_CUSTOM:
+		// CUSTOM 维度的 Key 由用户自定义, 不套前缀 (与 Argument.ToLabels 的 Custom 分支一致).
+		return lookup(arg.GetKey())
 	case apitraffic.SourceMatch_CALLER_METADATA:
 		if sourceService != nil {
 			return sourceService.GetMetadata()[arg.GetKey()]
 		}
 		return ""
 	default:
-		return envVars[arg.GetKey()]
+		// 未知类型兜底: 与 CUSTOM 同策略, 按原始 key 直查, 避免引入隐式默认行为.
+		return lookup(arg.GetKey())
 	}
 }
 
@@ -651,7 +691,21 @@ func (r *LaneRouter) GetFilteredInstances(
 	envVars := routeInfo.EnvironmentVariables
 	stainLabel := ""
 	if envVars != nil {
-		stainLabel = envVars[trafficStainLabel]
+		// 染色标签优先级:
+		// 1) routeInfo.EnvironmentVariables[trafficStainLabel]: 上游 lane router 首次染色后主动写回的裸 key;
+		// 2) envVars[$header.service-lane]: 外部(gateway / consumer)把请求头透传成 HeaderArgument,
+		//    经 ToLabels 落到 "$header.service-lane" 这个带前缀的 key;
+		// 3) envVars[$query.service-lane] / $cookie.service-lane: 兼容把染色标签放到 query / cookie 的
+		//    非主流用法, 覆盖 Java LaneUtils 里 message container 多来源的语义。
+		if v := envVars[trafficStainLabel]; v != "" {
+			stainLabel = v
+		} else if v := envVars[model.LabelKeyHeader+trafficStainLabel]; v != "" {
+			stainLabel = v
+		} else if v := envVars[model.LabelKeyQuery+trafficStainLabel]; v != "" {
+			stainLabel = v
+		} else if v := envVars[model.LabelKeyCookie+trafficStainLabel]; v != "" {
+			stainLabel = v
+		}
 	}
 	alreadyStained := stainLabel != ""
 

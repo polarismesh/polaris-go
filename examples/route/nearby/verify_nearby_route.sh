@@ -180,6 +180,9 @@ BUILD_DIR="${SCRIPT_DIR}/.build"
 LOG_DIR="${SCRIPT_DIR}/.logs"
 POLARIS_HTTP_ADDR="http://${POLARIS_SERVER}:8090"
 
+# 测试总日志文件（同时输出到标准输出和日志文件，参考 lane-test.sh）
+TEST_LOG_FILE="${LOG_DIR}/verify_nearby_route-$(date +%Y%m%d_%H%M%S).log"
+
 PROVIDER_1_PID=""
 PROVIDER_2_PID=""
 PROVIDER_3_PID=""
@@ -223,6 +226,19 @@ log_step() {
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}  步骤: $*${NC}"
     echo -e "${CYAN}========================================${NC}"
+}
+
+# setup_test_log 初始化测试总日志文件，并把后续所有 stdout/stderr 同时输出到终端和日志文件
+# 参考 examples/route/lane/lane-test.sh 的做法
+setup_test_log() {
+    mkdir -p "${LOG_DIR}"
+    {
+        echo "===== 就近路由测试日志 $(date '+%Y-%m-%d %H:%M:%S') ====="
+        echo "Command: $0 $*"
+    } > "${TEST_LOG_FILE}"
+    # 使用 process substitution + sed 去除 ANSI 颜色码后写入日志文件，
+    # 终端仍然保留颜色输出。
+    exec > >(tee >(sed -u 's/\x1b\[[0-9;]*m//g' >> "${TEST_LOG_FILE}")) 2>&1
 }
 
 # 检查进程是否存活
@@ -922,6 +938,9 @@ summarize_link() {
 # ======================== 主流程 ========================
 
 main() {
+    # 初始化测试总日志（stdout/stderr 同时输出到终端和日志文件）
+    setup_test_log "$@"
+
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║       就近路由(Nearby Route)功能验证脚本         ║${NC}"
@@ -939,6 +958,7 @@ main() {
     echo "  跳过规则检查:       ${SKIP_RULE_CHECK}"
     echo "  自动创建规则:       ${AUTO_CREATE_RULE}"
     echo "  请求次数:           ${REQUEST_COUNT}"
+    echo "  测试日志文件:       ${TEST_LOG_FILE}"
     echo ""
     echo "地域信息:"
     echo "  Region:             ${REGION}"
@@ -1131,6 +1151,7 @@ main() {
 
     echo ""
     echo -e "${BLUE}提示: 查看详细日志:${NC}"
+    echo -e "${BLUE}  测试总日志:      cat ${TEST_LOG_FILE}${NC}"
     echo -e "${BLUE}  Provider-1:      cat ${LOG_DIR}/provider_1.log${NC}"
     echo -e "${BLUE}  Provider-2:      cat ${LOG_DIR}/provider_2.log${NC}"
     echo -e "${BLUE}  Provider-3:      cat ${LOG_DIR}/provider_3.log${NC}"

@@ -42,8 +42,8 @@
 // 路由流程：
 //  1. 从请求 URL 的第一段路径提取目标服务名（如 LaneCallerService）。
 //  2. 获取目标服务的全量实例。
-//  3. 将 HTTP Header / Query 参数转为路由 Arguments，供泳道规则的
-//     TrafficMatchRule 进行流量识别和染色。
+//  3. 将 HTTP Method / Header / Query / Cookie / Path / 主调 IP 六类输入转为路由
+//     Arguments，供泳道规则的 TrafficMatchRule 进行流量识别和染色。
 //  4. 通过 ProcessRouters 执行泳道路由过滤。
 //  5. 通过 ProcessLoadBalance 选取单个实例。
 //  6. 将请求转发给选中的实例，并在 Header 中透传泳道染色标签。
@@ -54,6 +54,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -140,8 +141,9 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	routerReq.SourceService.Service = gw.selfService
 	routerReq.SourceService.Namespace = gw.selfNamespace
 
-	// 4. 网关作为泳道入口（染色点），将 HTTP Header / Query 参数转为路由 Arguments，
-	//    供泳道规则中的 TrafficMatchRule 进行流量识别和染色
+	// 4. 网关作为泳道入口（染色点），将 HTTP Method / Header / Query / Cookie / Path /
+	//    主调 IP 六类输入转为路由 Arguments，供泳道规则中的 TrafficMatchRule
+	//    进行流量识别和染色
 	routerReq.AddArguments(buildRouteArguments(r)...)
 
 	// 5. 执行路由过滤（泳道路由 + 规则路由）
@@ -293,22 +295,39 @@ func parsePath(urlPath string) (targetService string, forwardPath string, ok boo
 	return path[:idx], path[idx:], true
 }
 
-// buildRouteArguments 将 HTTP Header 和 Query 参数转为路由 Arguments，
-// 用于泳道规则中 TrafficMatchRule 的流量识别。
+// buildRouteArguments 将 HTTP Method / Header / Query / Cookie / Path / 主调 IP
+// 六类输入转为路由 Arguments，用于泳道规则中 TrafficMatchRule 的流量识别。
+// 与 polaris-java LaneUtils 保持一致的 6 类匹配维度。
 func buildRouteArguments(r *http.Request) []model.Argument {
-	args := make([]model.Argument, 0, 8)
+	args := make([]model.Argument, 0, 16)
+	// 1. $method —— HTTP 方法（GET/POST/...)
+	args = append(args, model.BuildMethodArgument(r.Method))
+	// 2. Header —— 遍历所有请求头，key 统一小写避免大小写踩坑
 	for k, vs := range r.Header {
 		if len(vs) == 0 {
 			continue
 		}
 		args = append(args, model.BuildHeaderArgument(strings.ToLower(k), vs[0]))
 	}
+	// 3. Query —— URL 查询参数
 	for k, vs := range r.URL.Query() {
 		if len(vs) == 0 {
 			continue
 		}
 		args = append(args, model.BuildQueryArgument(strings.ToLower(k), vs[0]))
 	}
+	// 4. Cookie —— Go 标准库已帮我们把 Cookie header 解析成 (name, value) 对
+	for _, c := range r.Cookies() {
+		args = append(args, model.BuildCookieArgument(c.Name, c.Value))
+	}
+	// 5. $Path —— 使用完整 URL path（含目标服务名前缀），与规则作者的直觉一致
+	args = append(args, model.BuildPathArgument(r.URL.Path))
+	// 6. $caller_ip —— 从 RemoteAddr 拆出 host 部分（剥掉端口号）
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		host = r.RemoteAddr
+	}
+	args = append(args, model.BuildCallerIPArgument(host))
 	return args
 }
 

@@ -19,7 +19,7 @@
 | Provider 服务 | `LaneEchoServer`；`baseLaneMode=1` 专项使用 `StableLaneEchoServer` |
 | Consumer 服务 | `LaneEchoClient` / `SimpleLaneEchoClient` |
 | 染色 Header（直接染色） | `service-lane: <laneGroup>/<laneRule>`（如 `lane-go-example/gray`、`lane-go-warmup/gray`） |
-| 流量匹配 Header | 主脚本：`user: gray` / `user: noexist` / `user: other`；warmup 脚本：`warmup-user: gray` |
+| 流量匹配 Header | 主脚本：`user: gray` / `user: noexist` / `user: other`；六类维度规则守卫：`lane-test: <规则名>`；warmup 脚本：`warmup-user: gray` |
 | 支持的命令 | `all` / `build` / `check` / `start` / `test` / `stop` |
 | 典型启动 | `./lane-test.sh all 127.0.0.1`、`./lane-warmup-test.sh all 127.0.0.1` |
 
@@ -37,8 +37,9 @@
 4. 流量匹配规则 `PERMISSIVE` 模式回退基线
 5. 规则未命中 → 走 baseline
 6. 并发下 baseline 与 gray 路径相互隔离
-7. `baseLaneMode=ExcludeEnabledLaneInstance (=1)` 时 baseline 只走未启用泳道实例
-8. 服务不在泳道组内（破坏性）→ 仅走无标签实例
+7. **六类匹配维度全覆盖**：`$method` / `Header` / `Query` / `Cookie` / `$path` / `$caller_ip`，验证 SDK `findTrafficValue` 7 类 SourceMatch 中的 6 类对外暴露维度（CALLER_METADATA 由 sourceService 元数据提供，已在染色路径覆盖）
+8. `baseLaneMode=ExcludeEnabledLaneInstance (=1)` 时 baseline 只走未启用泳道实例
+9. 服务不在泳道组内（破坏性）→ 仅走无标签实例
 
 ### 2.2 前置条件（Polaris 控制台配置）
 - 泳道组：`lane-go-example`
@@ -46,6 +47,16 @@
 - 目标服务：`LaneEchoClient`、`SimpleLaneEchoClient`、`LaneEchoServer`、`StableLaneEchoServer`
 - 规则 `gray`：Header `user=gray` → `lane=gray`，匹配模式 `STRICT`，`enable=true`
 - 规则 `permissive`：Header `user=noexist` → `lane=noexist`（无实例），匹配模式 `PERMISSIVE`，`enable=true`
+- 规则 `strict-noexist`：Header `user=strict` → `lane=strict-noexist`（无实例），STRICT，期望命中即返回 HTTP 503
+- **六类匹配维度规则（全部 STRICT，染到 `lane=gray`，复用 provider-gray 实例）**：
+  - 规则 `method-post`：`METHOD=POST` AND `Header lane-test=method-post` → `lane=gray`
+  - 规则 `query-env`：`QUERY env=gray` AND `Header lane-test=query-env` → `lane=gray`
+  - 规则 `cookie-user`：`COOKIE user=gray` AND `Header lane-test=cookie-user` → `lane=gray`
+  - 规则 `path-gray`：`PATH = /LaneEchoClient/gray-path`（独占路径，无需守卫） → `lane=gray`
+  - 规则 `caller-ip-local`：`CALLER_IP EXACT 127.0.0.1` AND `Header lane-test=caller-ip-local` → `lane=gray`
+  - 规则 `caller-ip-not-zero`：`CALLER_IP NOT_EQUALS 0.0.0.0` AND `Header lane-test=caller-ip-not-zero` → `lane=gray`
+
+> 上述 6 条新规则由脚本 `create_full_lane_group()` / `add_rule_to_lane_group()` 自动创建，亦可手工在控制台配置。除 `path-gray` 外均叠加 `Header lane-test=<规则名>` 二级守卫，避免污染已有 baseline / permissive / isolation 用例。
 
 脚本中 `validate_lane_rules()` 会自动拉取并校验以上配置；若不满足则终止测试。
 
@@ -81,14 +92,14 @@
                 └───────────────────────────┘
 ```
 
-四条被测链路，每条均跑 6 个基础用例（编号与脚本 `log_title` 保持一致）：
+四条被测链路，编号与脚本 `log_title` 保持一致；其中 1.x / 2.x 两条入口链路在 6 个基础用例之外**额外执行 6 个六类匹配维度用例（1.7~1.12 / 2.7~2.12）**，3.x / 4.x 仅跑 6 个基础用例：
 
-| 链路编号 | 链路标签 | Gateway | Consumer | Provider |
-| --- | --- | --- | --- | --- |
-| 1.x | 主链路 | `gateway` | `LaneEchoClient` | `LaneEchoServer` |
-| 2.x | `[simple]` | `simple-gateway` | `LaneEchoClient` | `LaneEchoServer` |
-| 3.x | `[gw→sc]` | `gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` |
-| 4.x | `[sg→sc]` | `simple-gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` |
+| 链路编号 | 链路标签 | Gateway | Consumer | Provider | 用例数 |
+| --- | --- | --- | --- | --- | --- |
+| 1.x | 主链路 | `gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
+| 2.x | `[simple]` | `simple-gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
+| 3.x | `[gw→sc]` | `gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
+| 4.x | `[sg→sc]` | `simple-gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
 
 外加两个专项链路：
 - **用例 5.1**：`gateway-excl` → `StableLaneEchoServer`（脚本把 `polaris.yaml` 中 `baseLaneMode: 0` 替换为 `baseLaneMode: 1`）
@@ -109,7 +120,22 @@
 
 > x ∈ {1, 2, 3, 4}，共 **24 条基础用例**。
 
-#### 2.4.2 专项用例
+#### 2.4.2 六类匹配维度用例（仅 1.x / 2.x 两条入口链路）
+
+验证 gateway / simple-gateway 把 HTTP 请求中的 `$method / Header / Query / Cookie / $path / $caller_ip` 六类输入构造为 `model.Argument` 上报给 SDK，并能被 `TrafficMatchRule` 正确识别。
+
+| 序号 | 维度 | 请求条件 | 命中规则 | 关键校验点 |
+| --- | --- | --- | --- | --- |
+| `x.7`  | `$method`    | `-X POST` + `lane-test: method-post` | `method-post` | 响应含 `lane=gray` |
+| `x.8`  | `Query`      | `?env=gray` + `lane-test: query-env` | `query-env` | 响应含 `lane=gray` |
+| `x.9`  | `Cookie`     | `Cookie: user=gray` + `lane-test: cookie-user` | `cookie-user` | 响应含 `lane=gray` |
+| `x.10` | `$path`      | 访问路径 `/LaneEchoClient/gray-path`（无守卫） | `path-gray` | 响应含 `lane=gray`；下游 consumer 返回 404 是预期，不校验 status code |
+| `x.11` | `$caller_ip` (EXACT)      | 本地 curl + `lane-test: caller-ip-local` | `caller-ip-local` | 响应含 `lane=gray` |
+| `x.12` | `$caller_ip` (NOT_EQUALS) | 本地 curl + `lane-test: caller-ip-not-zero` | `caller-ip-not-zero` | 响应含 `lane=gray` |
+
+> x ∈ {1, 2}，共 **12 条维度用例**。`Header` 维度已由基础用例 `x.3 / x.4 / x.5`（`user=gray / noexist / other`）覆盖。
+
+#### 2.4.3 专项用例
 
 | 编号 | 用例 | 说明 | 关键校验点 |
 | --- | --- | --- | --- |

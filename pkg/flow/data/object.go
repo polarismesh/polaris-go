@@ -255,17 +255,19 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 		}
 	}
 	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
-	// 与 InitByProcessRoutersRequest 行为一致：只用 arg.Key() 做 key（不含类型前缀），
-	// 与 lane router findTrafficValue 从 envVars[arg.GetKey()] 读取的约定对齐。
+	// 统一通过 arg.ToLabels(...) 写入带前缀的 label key ($header./$query./$cookie./
+	// $method/$caller_ip/$Path)，与 pkg/model/argument.go 和 polaris-java
+	// LaneUtils.findTrafficValue 的约定保持一致；lane router 的 findTrafficValue
+	// 会按 SourceMatch 类型拼出同样的前缀 key 回查。
+	// 不再用裸短 key（arg.Key()）以避免：
+	//   (a) Method / CallerIP / Path 三类 Argument 的 Key() 为空串相互覆盖，
+	//   (b) Header / Query / Cookie 同名 key（如都叫 user）跨维度互撞。
 	if len(request.Arguments) > 0 {
 		if c.RouteInfo.EnvironmentVariables == nil {
 			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
 		}
-		for _, arg := range request.Arguments {
-			key := arg.Key()
-			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
-				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
-			}
+		for i := range request.Arguments {
+			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
 		}
 	}
 	c.Criteria.HashKey = request.HashKey
@@ -335,17 +337,18 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 	}
 	// 将 Arguments 也合并到 EnvironmentVariables 中，供泳道路由等前置插件使用。
 	// Arguments 由 AddArguments() 传入（如 Header/Query 参数），EnvironmentVariables 优先级更高。
-	// 注意：此处只用 arg.Key() 做 key（不含类型前缀），与 lane router 的 findTrafficValue 行为一致。
-	// 如果同一个 key 在不同类型中都存在（如 Header user 和 Query user），以先出现的为准。
+	// 统一通过 arg.ToLabels(...) 写入带前缀的 label key
+	// ($header./$query./$cookie./$method/$caller_ip/$Path)，与 pkg/model/argument.go 及
+	// polaris-java LaneUtils.findTrafficValue 保持一致。
+	// 不再用裸短 key（arg.Key()）以避免：
+	//   (a) Method / CallerIP / Path 三类 Argument 的 Key() 为空串互相覆盖，
+	//   (b) Header / Query / Cookie 同名 key（如都叫 user）跨维度互撞。
 	if len(request.Arguments) > 0 {
 		if c.RouteInfo.EnvironmentVariables == nil {
 			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
 		}
-		for _, arg := range request.Arguments {
-			key := arg.Key()
-			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
-				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
-			}
+		for i := range request.Arguments {
+			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
 		}
 	}
 	c.CallResult.APIName = model.ApiProcessRouters
@@ -380,16 +383,14 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 		}
 	}
 	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
-	// 与 InitByProcessRoutersRequest 行为一致。
+	// 与 InitByProcessRoutersRequest 行为一致：统一用 arg.ToLabels(...) 写入带前缀的
+	// label key，避免 Method/CallerIP/Path 覆盖以及 Header/Query/Cookie 同名互撞。
 	if len(request.Arguments) > 0 {
 		if c.RouteInfo.EnvironmentVariables == nil {
 			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
 		}
-		for _, arg := range request.Arguments {
-			key := arg.Key()
-			if _, exists := c.RouteInfo.EnvironmentVariables[key]; !exists {
-				c.RouteInfo.EnvironmentVariables[key] = arg.Value()
-			}
+		for i := range request.Arguments {
+			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
 		}
 	}
 	c.CallResult.APIName = model.ApiGetInstances

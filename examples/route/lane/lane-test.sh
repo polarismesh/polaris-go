@@ -29,6 +29,23 @@
 #     - 匹配条件: Header user=strict
 #     - 目标泳道: lane=strict-noexist（无实例）
 #     - 匹配模式: STRICT（无可用实例时期望 HTTP 503）
+#
+#   六类匹配维度验证规则（全部 STRICT 染到 lane=gray，复用 provider-gray）:
+#   规则 method-post:
+#     - 匹配条件: METHOD=POST  AND  Header lane-test=method-post
+#   规则 query-env:
+#     - 匹配条件: QUERY env=gray  AND  Header lane-test=query-env
+#   规则 cookie-user:
+#     - 匹配条件: COOKIE user=gray  AND  Header lane-test=cookie-user
+#   规则 path-gray:
+#     - 匹配条件: PATH = /LaneEchoClient/gray-path （独占路径，无需守卫）
+#   规则 caller-ip-local:
+#     - 匹配条件: CALLER_IP EXACT 127.0.0.1  AND  Header lane-test=caller-ip-local
+#   规则 caller-ip-not-zero:
+#     - 匹配条件: CALLER_IP NOT_EQUALS 0.0.0.0  AND  Header lane-test=caller-ip-not-zero
+#
+#   说明：除 path-gray 外，5 条维度规则均 AND 上 Header lane-test=<规则名> 作为二级守卫，
+#   避免污染已有 baseline / permissive / isolation 用例。
 # ============================================================
 
 # ==================== 配置区 ====================
@@ -223,47 +240,37 @@ rules = target_group.get('rules', [])
 rules_by_name = {r.get('name', ''): r for r in rules}
 fixable_rules = []  # 泳道组已存在但缺少特定规则时，记录可自动修复的规则名
 
-# 4.1 检查 gray 规则
-rule_gray = rules_by_name.get('gray')
-if rule_gray is None:
-    fixable_rules.append('gray')
-    errors.append(f'未找到泳道规则 gray，当前规则: {list(rules_by_name.keys())}')
-else:
-    if not rule_gray.get('enable', False):
-        errors.append('泳道规则 gray 未启用 (enable=false)')
-    match_mode = rule_gray.get('match_mode', '')
-    if match_mode != 'STRICT':
-        errors.append(f'泳道规则 gray 匹配模式应为 STRICT，实际为: {match_mode}')
-    label = rule_gray.get('default_label_value', '')
-    if label != 'gray':
-        errors.append(f'泳道规则 gray 目标泳道标签应为 gray，实际为: {label}')
+# 必需规则清单：规则名 -> 期望的 match_mode 和 default_label_value。
+# 旧规则（gray / permissive / strict-noexist）+ 六类匹配维度新规则全部在这里登记。
+# 将来再增加规则只需改这一处即可。
+REQUIRED_RULES = {
+    'gray':               {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'permissive':         {'match_mode': 'PERMISSIVE', 'default_label_value': 'noexist'},
+    'strict-noexist':     {'match_mode': 'STRICT',     'default_label_value': 'strict-noexist'},
+    'method-post':        {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'query-env':          {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'cookie-user':        {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'path-gray':          {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'caller-ip-local':    {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+    'caller-ip-not-zero': {'match_mode': 'STRICT',     'default_label_value': 'gray'},
+}
 
-# 4.2 检查 permissive 规则
-rule_p = rules_by_name.get('permissive')
-if rule_p is None:
-    fixable_rules.append('permissive')
-    errors.append(f'未找到泳道规则 permissive，当前规则: {list(rules_by_name.keys())}')
-else:
-    if not rule_p.get('enable', False):
-        errors.append('泳道规则 permissive 未启用 (enable=false)')
-    match_mode = rule_p.get('match_mode', '')
-    if match_mode != 'PERMISSIVE':
-        errors.append(f'泳道规则 permissive 匹配模式应为 PERMISSIVE，实际为: {match_mode}')
-
-# 4.3 检查 strict-noexist 规则（STRICT 模式 + 无实例的泳道，期望请求命中时返回 503）
-rule_sn = rules_by_name.get('strict-noexist')
-if rule_sn is None:
-    fixable_rules.append('strict-noexist')
-    errors.append(f'未找到泳道规则 strict-noexist，当前规则: {list(rules_by_name.keys())}')
-else:
-    if not rule_sn.get('enable', False):
-        errors.append('泳道规则 strict-noexist 未启用 (enable=false)')
-    match_mode = rule_sn.get('match_mode', '')
-    if match_mode != 'STRICT':
-        errors.append(f'泳道规则 strict-noexist 匹配模式应为 STRICT，实际为: {match_mode}')
-    label = rule_sn.get('default_label_value', '')
-    if label != 'strict-noexist':
-        errors.append(f'泳道规则 strict-noexist 目标泳道标签应为 strict-noexist，实际为: {label}')
+for rname, expect in REQUIRED_RULES.items():
+    rule = rules_by_name.get(rname)
+    if rule is None:
+        fixable_rules.append(rname)
+        errors.append(f'未找到泳道规则 {rname}，当前规则: {list(rules_by_name.keys())}')
+        continue
+    if not rule.get('enable', False):
+        errors.append(f'泳道规则 {rname} 未启用 (enable=false)')
+    actual_mode = rule.get('match_mode', '')
+    if actual_mode != expect['match_mode']:
+        errors.append(f'泳道规则 {rname} 匹配模式应为 {expect["match_mode"]}，实际为: {actual_mode}')
+    # permissive 规则的 default_label_value 为 noexist（历史原因），只有在期望值
+    # 明确写在 REQUIRED_RULES 中时才校验，保证错误提示准确。
+    actual_label = rule.get('default_label_value', '')
+    if actual_label != expect['default_label_value']:
+        errors.append(f'泳道规则 {rname} 目标泳道标签应为 {expect["default_label_value"]}，实际为: {actual_label}')
 
 # 输出结果
 if errors:
@@ -325,9 +332,15 @@ else:
         log_info "  泳道组: ${EXPECTED_LANE_GROUP}"
         log_info "  入口: ${EXPECTED_ENTRY_SERVICE} (${NAMESPACE} 命名空间)"
         log_info "  目标服务: ${CONSUMER_SERVICE}, ${SIMPLE_CONSUMER_SERVICE}, ${PROVIDER_SERVICE}, ${PROVIDER_EXCL_SERVICE}"
-        log_info "  规则 gray:           Header user=gray    → lane=gray,           模式 STRICT"
-        log_info "  规则 permissive:     Header user=noexist → lane=noexist,        模式 PERMISSIVE"
-        log_info "  规则 strict-noexist: Header user=strict  → lane=strict-noexist, 模式 STRICT (无实例 → 期望 HTTP 503)"
+        log_info "  规则 gray:               Header user=gray       → lane=gray,           STRICT"
+        log_info "  规则 permissive:         Header user=noexist    → lane=noexist,        PERMISSIVE"
+        log_info "  规则 strict-noexist:     Header user=strict     → lane=strict-noexist, STRICT (无实例 → HTTP 503)"
+        log_info "  规则 method-post:        METHOD=POST  AND Header lane-test=method-post        → lane=gray, STRICT"
+        log_info "  规则 query-env:          QUERY env=gray  AND Header lane-test=query-env       → lane=gray, STRICT"
+        log_info "  规则 cookie-user:        COOKIE user=gray  AND Header lane-test=cookie-user   → lane=gray, STRICT"
+        log_info "  规则 path-gray:          PATH = /LaneEchoClient/gray-path                     → lane=gray, STRICT"
+        log_info "  规则 caller-ip-local:    CALLER_IP=127.0.0.1 AND Header lane-test=caller-ip-local      → lane=gray, STRICT"
+        log_info "  规则 caller-ip-not-zero: CALLER_IP≠0.0.0.0  AND Header lane-test=caller-ip-not-zero    → lane=gray, STRICT"
         log_info ""
         log_info "请在 Polaris 控制台 (${POLARIS_CONSOLE}) 配置泳道规则后重试"
         return 1
@@ -400,9 +413,15 @@ validate_rules_with_wait() {
 # create_full_lane_group 在泳道组不存在时，通过管理 API 创建符合测试预期的完整配置：
 #   - 入口: ${GATEWAY_SERVICE} (default 命名空间)
 #   - 目标服务: ${CONSUMER_SERVICE}, ${PROVIDER_SERVICE}
-#   - 规则 gray:           Header user=gray    → lane=gray,           模式 STRICT
-#   - 规则 permissive:     Header user=noexist → lane=noexist,        模式 PERMISSIVE
-#   - 规则 strict-noexist: Header user=strict  → lane=strict-noexist, 模式 STRICT (无实例 → 期望 HTTP 503)
+#   - 规则 gray:               Header user=gray    → lane=gray,           STRICT
+#   - 规则 permissive:         Header user=noexist → lane=noexist,        PERMISSIVE
+#   - 规则 strict-noexist:     Header user=strict  → lane=strict-noexist, STRICT (无实例 → 期望 HTTP 503)
+#   - 规则 method-post:        METHOD=POST  AND Header lane-test=method-post        → lane=gray, STRICT
+#   - 规则 query-env:          QUERY env=gray  AND Header lane-test=query-env       → lane=gray, STRICT
+#   - 规则 cookie-user:        COOKIE user=gray  AND Header lane-test=cookie-user   → lane=gray, STRICT
+#   - 规则 path-gray:          PATH = /LaneEchoClient/gray-path                     → lane=gray, STRICT
+#   - 规则 caller-ip-local:    CALLER_IP=127.0.0.1 AND Header lane-test=caller-ip-local     → lane=gray, STRICT
+#   - 规则 caller-ip-not-zero: CALLER_IP≠0.0.0.0  AND Header lane-test=caller-ip-not-zero   → lane=gray, STRICT
 create_full_lane_group() {
     log_info "尝试自动创建泳道组 [${EXPECTED_LANE_GROUP}]..."
 
@@ -474,6 +493,102 @@ group = {
                 'match_mode': 'AND',
             },
         },
+        # ---------- 六类匹配维度验证规则（全部 STRICT 染到 lane=gray） ----------
+        # 除 path-gray 外均 AND 上 Header lane-test=<规则名> 作为二级守卫，
+        # 避免污染已有 baseline / permissive / strict-noexist / isolation 用例。
+        {
+            'name': 'method-post',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'METHOD', 'key': '',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'POST'}},
+                    {'type': 'HEADER', 'key': 'lane-test',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'method-post'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
+        {
+            'name': 'query-env',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'QUERY', 'key': 'env',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'gray'}},
+                    {'type': 'HEADER', 'key': 'lane-test',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'query-env'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
+        {
+            'name': 'cookie-user',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'COOKIE', 'key': 'user',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'gray'}},
+                    {'type': 'HEADER', 'key': 'lane-test',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'cookie-user'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
+        {
+            # path-gray 使用独占路径 /LaneEchoClient/gray-path，现有用例都访问 /echo，
+            # 无需 Header 守卫即可天然隔离。consumer 对 /gray-path 没有 handler 会返回 404，
+            # 但 gateway 的响应 msg 里仍会包含 callee lane=gray，测试脚本只断言 lane=gray。
+            'name': 'path-gray',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'PATH', 'key': '',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': '/LaneEchoClient/gray-path'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
+        {
+            'name': 'caller-ip-local',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'CALLER_IP', 'key': '',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': '127.0.0.1'}},
+                    {'type': 'HEADER', 'key': 'lane-test',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'caller-ip-local'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
+        {
+            # NOT_EQUALS 几乎匹配所有 IP，必须配 Header 守卫；只有显式带
+            # lane-test=caller-ip-not-zero 的请求才会命中，避免灾难性误染。
+            'name': 'caller-ip-not-zero',
+            'enable': True,
+            'match_mode': 'STRICT',
+            'default_label_value': 'gray',
+            'traffic_match_rule': {
+                'arguments': [
+                    {'type': 'CALLER_IP', 'key': '',
+                     'value': {'type': 'NOT_EQUALS', 'value_type': 'TEXT', 'value': '0.0.0.0'}},
+                    {'type': 'HEADER', 'key': 'lane-test',
+                     'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'caller-ip-not-zero'}},
+                ],
+                'match_mode': 'AND',
+            },
+        },
     ],
 }
 
@@ -492,7 +607,7 @@ try:
     resp_data = json.loads(resp.read().decode('utf-8'))
     code = resp_data.get('code', 0)
     if code in (200000, 200001):
-        print(f'OK|已创建泳道组 ${EXPECTED_LANE_GROUP}（含 gray + permissive + strict-noexist 三条规则）')
+        print(f'OK|已创建泳道组 ${EXPECTED_LANE_GROUP}（含 9 条规则：gray + permissive + strict-noexist + 6 条维度规则）')
     else:
         info = resp_data.get('info', '')
         print(f'ERROR|创建失败，返回码: {code}, 信息: {info}')
@@ -873,6 +988,95 @@ rule_templates = {
                 'key': 'user',
                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'strict'},
             }],
+            'match_mode': 'AND',
+        },
+    },
+    # ---------- 六类匹配维度验证规则 ----------
+    'method-post': {
+        'name': 'method-post',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'METHOD', 'key': '',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'POST'}},
+                {'type': 'HEADER', 'key': 'lane-test',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'method-post'}},
+            ],
+            'match_mode': 'AND',
+        },
+    },
+    'query-env': {
+        'name': 'query-env',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'QUERY', 'key': 'env',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'gray'}},
+                {'type': 'HEADER', 'key': 'lane-test',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'query-env'}},
+            ],
+            'match_mode': 'AND',
+        },
+    },
+    'cookie-user': {
+        'name': 'cookie-user',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'COOKIE', 'key': 'user',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'gray'}},
+                {'type': 'HEADER', 'key': 'lane-test',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'cookie-user'}},
+            ],
+            'match_mode': 'AND',
+        },
+    },
+    'path-gray': {
+        'name': 'path-gray',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'PATH', 'key': '',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': '/LaneEchoClient/gray-path'}},
+            ],
+            'match_mode': 'AND',
+        },
+    },
+    'caller-ip-local': {
+        'name': 'caller-ip-local',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'CALLER_IP', 'key': '',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': '127.0.0.1'}},
+                {'type': 'HEADER', 'key': 'lane-test',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'caller-ip-local'}},
+            ],
+            'match_mode': 'AND',
+        },
+    },
+    'caller-ip-not-zero': {
+        'name': 'caller-ip-not-zero',
+        'enable': True,
+        'match_mode': 'STRICT',
+        'default_label_value': 'gray',
+        'traffic_match_rule': {
+            'arguments': [
+                {'type': 'CALLER_IP', 'key': '',
+                 'value': {'type': 'NOT_EQUALS', 'value_type': 'TEXT', 'value': '0.0.0.0'}},
+                {'type': 'HEADER', 'key': 'lane-test',
+                 'value': {'type': 'EXACT', 'value_type': 'TEXT', 'value': 'caller-ip-not-zero'}},
+            ],
             'match_mode': 'AND',
         },
     },
@@ -1526,6 +1730,160 @@ test_lane_isolation() {
     fi
 }
 
+# ==================================================================
+# 六类匹配维度测试（主链路：gateway → consumer → provider）
+# ==================================================================
+# 规则设计要点（详见 Part D）:
+#   - 除 path-gray 外，其余 5 条规则均 AND 上 Header lane-test=<规则名> 作为守卫，
+#     只有测试用例显式携带该 Header 时才会命中，其他用例一概绕开，
+#     确保 baseline / permissive / isolation 等用例不被污染。
+
+# ---------- 用例 1.7: $method 维度 — METHOD=POST 路由到 gray 泳道 ----------
+test_method_post_match() {
+    log_title "用例 1.7: \$method 维度 — METHOD=POST 路由到 gray 泳道"
+    log_info "测试目的: gateway 把 HTTP Method 作为 Argument 上报，TrafficMatchRule 按 METHOD=POST 染色"
+    log_info "请求: POST + Header lane-test=method-post (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -X POST \
+        -H "lane-test: method-post" \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.7] METHOD=POST 命中 method-post 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例1.7] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.7] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 1.8: Query 维度 — ?env=gray 路由到 gray 泳道 ----------
+test_query_env_match() {
+    log_title "用例 1.8: Query 维度 — QUERY env=gray 路由到 gray 泳道"
+    log_info "测试目的: gateway 把 URL 查询参数作为 Argument 上报，命中 query-env 规则"
+    log_info "请求: ?env=gray + Header lane-test=query-env (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: query-env" \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/echo?env=gray" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.8] QUERY env=gray 命中 query-env 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例1.8] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.8] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 1.9: Cookie 维度 — Cookie user=gray 路由到 gray 泳道 ----------
+test_cookie_user_match() {
+    log_title "用例 1.9: Cookie 维度 — COOKIE user=gray 路由到 gray 泳道"
+    log_info "测试目的: gateway 遍历 r.Cookies() 把每个 Cookie 作为 Argument 上报"
+    log_info "请求: Cookie: user=gray + Header lane-test=cookie-user (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: cookie-user" \
+        -H "Cookie: user=gray" \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.9] COOKIE user=gray 命中 cookie-user 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例1.9] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.9] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 1.10: $path 维度 — PATH=/LaneEchoClient/gray-path 路由到 gray 泳道 ----------
+test_path_gray_match() {
+    log_title "用例 1.10: \$path 维度 — PATH=/LaneEchoClient/gray-path 路由到 gray 泳道"
+    log_info "测试目的: gateway 把 r.URL.Path 作为 Argument 上报，命中 path-gray 规则"
+    log_info "请求: 访问 /LaneEchoClient/gray-path (consumer 无该 handler 会返回 404，"
+    log_info "     但 gateway 响应 msg 里仍包含 callee lane=gray，只断言 lane=gray 不检查 status code)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/gray-path" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.10] PATH=/LaneEchoClient/gray-path 命中 path-gray 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer\|LaneRouterGateway"; then
+        test_fail "[用例1.10] 收到响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.10] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 1.11: $caller_ip 维度 — EXACT 127.0.0.1 路由到 gray 泳道 ----------
+test_caller_ip_local_match() {
+    log_title "用例 1.11: \$caller_ip 维度 — EXACT 127.0.0.1 路由到 gray 泳道"
+    log_info "测试目的: gateway 把 r.RemoteAddr 拆 host 作为 Argument 上报，命中 caller-ip-local 规则"
+    log_info "请求: 本地 curl (RemoteAddr = 127.0.0.1) + Header lane-test=caller-ip-local (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: caller-ip-local" \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.11] CALLER_IP=127.0.0.1 命中 caller-ip-local 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例1.11] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.11] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 1.12: $caller_ip 维度 — NOT_EQUALS 0.0.0.0 路由到 gray 泳道 ----------
+test_caller_ip_not_zero_match() {
+    log_title "用例 1.12: \$caller_ip 维度 — NOT_EQUALS 0.0.0.0 路由到 gray 泳道"
+    log_info "测试目的: NOT_EQUALS 匹配模式，任意非 0.0.0.0 的来源 IP 均命中"
+    log_info "请求: 本地 curl + Header lane-test=caller-ip-not-zero (必须守卫，否则会误染所有请求)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: caller-ip-not-zero" \
+        "http://127.0.0.1:${GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例1.12] CALLER_IP NOT_EQUALS 0.0.0.0 命中 caller-ip-not-zero 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例1.12] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例1.12] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
 # ---------- simple 链路用例: simple-gateway → consumer → provider ----------
 # 与主链路共用 SourceService=${GATEWAY_SERVICE} 作为泳道入口,但使用 GetOneInstance API 简化实现。
 # 目标: 验证简化 API 下,laneRouter 能正确完成流量匹配、染色透传和泳道路由。
@@ -1708,6 +2066,152 @@ test_simple_lane_isolation() {
         [ "$baseline_ok" = false ] && detail="baseline 路由异常 "
         [ "$gray_ok" = false ] && detail="${detail}gray 路由异常"
         test_fail "[用例2.6] 泳道隔离失败: ${detail}"
+    fi
+}
+
+# ==================================================================
+# 六类匹配维度测试（simple-gateway 链路：simple-gateway → consumer → provider）
+# ==================================================================
+# 入口换成 simple-gateway (GetOneInstance API)，与 1.7-1.12 用例对照，
+# 验证两种入口 API 下六类维度的路由决策一致。
+
+# ---------- 用例 2.7: [simple] $method 维度 — METHOD=POST → gray ----------
+test_simple_method_post_match() {
+    log_title "用例 2.7: [simple] \$method 维度 — METHOD=POST 路由到 gray 泳道"
+    log_info "链路: simple-gateway → consumer → provider"
+    log_info "请求: POST + Header lane-test=method-post (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -X POST \
+        -H "lane-test: method-post" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.7] METHOD=POST 命中 method-post 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例2.7] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.7] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 2.8: [simple] Query 维度 ----------
+test_simple_query_env_match() {
+    log_title "用例 2.8: [simple] Query 维度 — QUERY env=gray 路由到 gray 泳道"
+    log_info "请求: ?env=gray + Header lane-test=query-env (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: query-env" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/echo?env=gray" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.8] QUERY env=gray 命中 query-env 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例2.8] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.8] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 2.9: [simple] Cookie 维度 ----------
+test_simple_cookie_user_match() {
+    log_title "用例 2.9: [simple] Cookie 维度 — COOKIE user=gray 路由到 gray 泳道"
+    log_info "请求: Cookie: user=gray + Header lane-test=cookie-user (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: cookie-user" \
+        -H "Cookie: user=gray" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.9] COOKIE user=gray 命中 cookie-user 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例2.9] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.9] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 2.10: [simple] $path 维度 ----------
+test_simple_path_gray_match() {
+    log_title "用例 2.10: [simple] \$path 维度 — PATH=/LaneEchoClient/gray-path 路由到 gray 泳道"
+    log_info "请求: 访问 /LaneEchoClient/gray-path (consumer 无 handler 返回 404 为预期)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/gray-path" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.10] PATH=/LaneEchoClient/gray-path 命中 path-gray 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer\|SimpleLaneGateway\|LaneRouterGateway"; then
+        test_fail "[用例2.10] 收到响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.10] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 2.11: [simple] $caller_ip 维度 EXACT ----------
+test_simple_caller_ip_local_match() {
+    log_title "用例 2.11: [simple] \$caller_ip 维度 — EXACT 127.0.0.1 路由到 gray 泳道"
+    log_info "请求: 本地 curl + Header lane-test=caller-ip-local (守卫)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: caller-ip-local" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.11] CALLER_IP=127.0.0.1 命中 caller-ip-local 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例2.11] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.11] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 2.12: [simple] $caller_ip 维度 NOT_EQUALS ----------
+test_simple_caller_ip_not_zero_match() {
+    log_title "用例 2.12: [simple] \$caller_ip 维度 — NOT_EQUALS 0.0.0.0 路由到 gray 泳道"
+    log_info "请求: 本地 curl + Header lane-test=caller-ip-not-zero (必须守卫，避免误染)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "lane-test: caller-ip-not-zero" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q "lane=gray"; then
+        test_pass "[用例2.12] CALLER_IP NOT_EQUALS 0.0.0.0 命中 caller-ip-not-zero 规则路由到 lane=gray"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例2.12] 收到 provider 响应但未路由到 gray 泳道"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例2.12] 未收到有效响应"
+        log_info "  响应: ${resp}"
     fi
 }
 
@@ -2321,6 +2825,13 @@ run_all_tests() {
     test_traffic_match_strict_no_instance_503
     test_no_rule_match_baseline
     test_lane_isolation
+    # 六类匹配维度验证（主链路）
+    test_method_post_match
+    test_query_env_match
+    test_cookie_user_match
+    test_path_gray_match
+    test_caller_ip_local_match
+    test_caller_ip_not_zero_match
 
     # ========== simple 链路: simple-gateway → consumer → provider (GetOneInstance) ==========
     log_title "开始 simple 链路测试（simple-gateway → consumer → provider）"
@@ -2332,6 +2843,13 @@ run_all_tests() {
     test_simple_traffic_match_strict_no_instance_503
     test_simple_no_rule_match_baseline
     test_simple_lane_isolation
+    # 六类匹配维度验证（simple-gateway 链路）
+    test_simple_method_post_match
+    test_simple_query_env_match
+    test_simple_cookie_user_match
+    test_simple_path_gray_match
+    test_simple_caller_ip_local_match
+    test_simple_caller_ip_not_zero_match
 
     # ========== gw→sc 链路: gateway → simple-consumer → provider ==========
     log_title "开始 gw→sc 链路测试（gateway → simple-consumer → provider）"
@@ -2467,9 +2985,15 @@ usage() {
     echo "  泳道组: lane-go-example"
     echo "  入口: LaneRouterGateway/default"
     echo "  目标: LaneEchoClient, SimpleLaneEchoClient, LaneEchoServer, StableLaneEchoServer"
-    echo "  规则 gray:           Header user=gray    → lane=gray,           STRICT"
-    echo "  规则 permissive:     Header user=noexist → lane=noexist,        PERMISSIVE"
-    echo "  规则 strict-noexist: Header user=strict  → lane=strict-noexist, STRICT (无实例 → HTTP 503)"
+    echo "  规则 gray:               Header user=gray       → lane=gray,           STRICT"
+    echo "  规则 permissive:         Header user=noexist    → lane=noexist,        PERMISSIVE"
+    echo "  规则 strict-noexist:     Header user=strict     → lane=strict-noexist, STRICT (无实例 → HTTP 503)"
+    echo "  规则 method-post:        METHOD=POST + Header lane-test=method-post     → lane=gray, STRICT"
+    echo "  规则 query-env:          QUERY env=gray + Header lane-test=query-env    → lane=gray, STRICT"
+    echo "  规则 cookie-user:        COOKIE user=gray + Header lane-test=cookie-user → lane=gray, STRICT"
+    echo "  规则 path-gray:          PATH = /LaneEchoClient/gray-path                → lane=gray, STRICT"
+    echo "  规则 caller-ip-local:    CALLER_IP=127.0.0.1 + Header lane-test=caller-ip-local      → lane=gray, STRICT"
+    echo "  规则 caller-ip-not-zero: CALLER_IP≠0.0.0.0  + Header lane-test=caller-ip-not-zero    → lane=gray, STRICT"
     echo ""
     echo "示例:"
     echo "  $0 all 127.0.0.1         # 完整测试"

@@ -27,8 +27,10 @@ import (
 )
 
 // TestInitByGetOneRequest_ArgumentsToEnvironmentVariables 验证:
-// GetOneInstanceRequest 的 Arguments（如 Header/Query）会被合并到
-// RouteInfo.EnvironmentVariables 中,lane router 的 matchTrafficRule 才能读到。
+// GetOneInstanceRequest 的 Arguments (Header / Query / Cookie / Method / Caller-IP / Path /
+// Custom) 会被合并到 RouteInfo.EnvironmentVariables,使用带前缀的 label key
+// ($header./$query./$cookie./$method/$caller_ip/$Path, Custom 按原 key),
+// 与 lane router findTrafficValue 以及 polaris-java LaneUtils.findTrafficValue 的约定对齐。
 func TestInitByGetOneRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 	cfg := config.NewDefaultConfiguration(nil)
 
@@ -44,8 +46,8 @@ func TestInitByGetOneRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 				model.BuildQueryArgument("scene", "canary"),
 			},
 			expected: map[string]string{
-				"user":  "gray",
-				"scene": "canary",
+				"$header.user":  "gray",
+				"$query.scene":  "canary",
 			},
 		},
 		{
@@ -59,6 +61,32 @@ func TestInitByGetOneRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 				model.BuildCustomArgument("uid", "42"),
 			},
 			expected: map[string]string{"uid": "42"},
+		},
+		{
+			name: "method / caller_ip / path arguments",
+			args: []model.Argument{
+				model.BuildMethodArgument("GET"),
+				model.BuildCallerIPArgument("10.0.0.1"),
+				model.BuildPathArgument("/api/v1/echo"),
+			},
+			expected: map[string]string{
+				"$method":     "GET",
+				"$caller_ip":  "10.0.0.1",
+				"$Path":       "/api/v1/echo",
+			},
+		},
+		{
+			name: "header and query with same short key do not collide",
+			args: []model.Argument{
+				model.BuildHeaderArgument("user", "gray"),
+				model.BuildQueryArgument("user", "qval"),
+				model.BuildCookieArgument("user", "cval"),
+			},
+			expected: map[string]string{
+				"$header.user": "gray",
+				"$query.user":  "qval",
+				"$cookie.user": "cval",
+			},
 		},
 	}
 
@@ -107,7 +135,7 @@ func TestInitByGetMultiRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 	common.InitByGetMultiRequest(req, cfg)
 
 	assert.NotNil(t, common.RouteInfo.EnvironmentVariables)
-	assert.Equal(t, "gray", common.RouteInfo.EnvironmentVariables["user"])
+	assert.Equal(t, "gray", common.RouteInfo.EnvironmentVariables["$header.user"])
 }
 
 // TestInitByGetOneRequest_EnableSrcLane 在 SourceService 有效时,EnableSrcLane 应被触发。
