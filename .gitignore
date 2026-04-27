@@ -16,6 +16,7 @@ style_tool/
 goimports-reviser
 
 .codebuddy/
+CODEBUDDY.md
 .claude/
 CLAUDE.md
 
