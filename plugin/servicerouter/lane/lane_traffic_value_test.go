@@ -55,8 +55,8 @@ type stubSourceService struct {
 	metadata map[string]string
 }
 
-func (s *stubSourceService) GetNamespace() string          { return s.ns }
-func (s *stubSourceService) GetService() string            { return s.svc }
+func (s *stubSourceService) GetNamespace() string           { return s.ns }
+func (s *stubSourceService) GetService() string             { return s.svc }
 func (s *stubSourceService) GetMetadata() map[string]string { return s.metadata }
 
 // buildSourceMatch 构造一个按 EXACT 模式匹配的 SourceMatch。
@@ -78,10 +78,10 @@ func buildSourceMatch(typ apitraffic.SourceMatch_Type, key, expect string) *apit
 // 借此确认不同维度之间不会互相读串。
 func TestFindTrafficValue_SixDimensions(t *testing.T) {
 	type caseDef struct {
-		name     string
-		envVars  map[string]string
-		arg      *apitraffic.SourceMatch
-		expect   string
+		name    string
+		envVars map[string]string
+		arg     *apitraffic.SourceMatch
+		expect  string
 	}
 	cases := []caseDef{
 		{

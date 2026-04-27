@@ -46,8 +46,8 @@ func TestInitByGetOneRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 				model.BuildQueryArgument("scene", "canary"),
 			},
 			expected: map[string]string{
-				"$header.user":  "gray",
-				"$query.scene":  "canary",
+				"$header.user": "gray",
+				"$query.scene": "canary",
 			},
 		},
 		{
@@ -70,9 +70,9 @@ func TestInitByGetOneRequest_ArgumentsToEnvironmentVariables(t *testing.T) {
 				model.BuildPathArgument("/api/v1/echo"),
 			},
 			expected: map[string]string{
-				"$method":     "GET",
-				"$caller_ip":  "10.0.0.1",
-				"$Path":       "/api/v1/echo",
+				"$method":    "GET",
+				"$caller_ip": "10.0.0.1",
+				"$Path":      "/api/v1/echo",
 			},
 		},
 		{
