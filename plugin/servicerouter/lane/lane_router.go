@@ -15,6 +15,15 @@
  * specific language governing permissions and limitations under the License.
  */
 
+// Package lane 实现泳道路由（Lane Router）插件。
+//
+// 泳道路由通过 ServiceClusters 的 lane 元数据，将带有特定染色标签（service-lane）
+// 的流量路由到对应的泳道实例；未染色的流量则按照 TrafficMatchRule 自动识别与染色，
+// 或回退到基线实例。支持 STRICT / PERMISSIVE 两种匹配模式，以及 OnlyUntaggedInstance /
+// ExcludeEnabledLaneInstance 两种基线选取策略。
+//
+// 该插件注册为 ServiceRouter 类型，默认在 consumer.serviceRouter.beforeChain 中启用，
+// 与 rulebase / nearbybase / dstmeta 等后续路由插件串联工作。
 package lane
 
 import (
@@ -682,6 +691,44 @@ func (r *LaneRouter) getLaneGroups(routeInfo *servicerouter.RouteInfo) []*apitra
 	return merged
 }
 
+// findMatchedRule 在规则容器中查找当前请求匹配的泳道规则。
+// 如果已染色则走 stainLabel 索引查找，否则按 TrafficMatchRule 识别流量。
+// 未命中返回 nil。该函数从 GetFilteredInstances 中抽出，仅为降低主函数体积。
+func (r *LaneRouter) findMatchedRule(
+	container *laneRuleContainer,
+	alreadyStained bool,
+	stainLabel string,
+	envVars map[string]string,
+	sourceService model.ServiceMetadata,
+) *laneRuleItem {
+	debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
+	if alreadyStained {
+		matchedItem := container.matchByStainLabel(stainLabel)
+		if debugEnabled {
+			if matchedItem != nil {
+				r.logCtx.GetRouteLogger().Debugf(
+					"[Router][Lane] matched by stain label %q → group=%s, rule=%s",
+					stainLabel, matchedItem.group.GetName(), matchedItem.rule.GetName())
+			} else {
+				r.logCtx.GetRouteLogger().Debugf(
+					"[Router][Lane] stain label %q not found in rule index", stainLabel)
+			}
+		}
+		return matchedItem
+	}
+	matchedItem := container.matchByRouteInfo(envVars, sourceService)
+	if debugEnabled {
+		if matchedItem != nil {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] matched by traffic rule → group=%s, rule=%s, stainLabel=%s",
+				matchedItem.group.GetName(), matchedItem.rule.GetName(), matchedItem.stainLabel)
+		} else {
+			r.logCtx.GetRouteLogger().Debugf("[Router][Lane] no traffic rule matched")
+		}
+	}
+	return matchedItem
+}
+
 // GetFilteredInstances 泳道路由过滤入口
 func (r *LaneRouter) GetFilteredInstances(
 	routeInfo *servicerouter.RouteInfo,
@@ -752,31 +799,7 @@ func (r *LaneRouter) GetFilteredInstances(
 	}
 
 	// 查找匹配的规则
-	var matchedItem *laneRuleItem
-	if alreadyStained {
-		matchedItem = container.matchByStainLabel(stainLabel)
-		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-			if matchedItem != nil {
-				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] matched by stain label %q → group=%s, rule=%s",
-					stainLabel, matchedItem.group.GetName(), matchedItem.rule.GetName())
-			} else {
-				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] stain label %q not found in rule index", stainLabel)
-			}
-		}
-	} else {
-		matchedItem = container.matchByRouteInfo(envVars, routeInfo.SourceService)
-		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-			if matchedItem != nil {
-				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] matched by traffic rule → group=%s, rule=%s, stainLabel=%s",
-					matchedItem.group.GetName(), matchedItem.rule.GetName(), matchedItem.stainLabel)
-			} else {
-				r.logCtx.GetRouteLogger().Debugf("[Router][Lane] no traffic rule matched")
-			}
-		}
-	}
+	matchedItem := r.findMatchedRule(container, alreadyStained, stainLabel, envVars, routeInfo.SourceService)
 
 	// 无匹配规则 → 回退基线
 	if matchedItem == nil {
