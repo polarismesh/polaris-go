@@ -6,47 +6,47 @@
 
 ## [Unreleased]
 
+### 添加的特性
+
+- **泳道路由（Lane Router）**：新增 `plugin/servicerouter/lane`，支持染色标签
+  `service-lane` 直接路由与 `TrafficMatchRule` 流量染色，覆盖 `$method` / `Header` /
+  `Query` / `Cookie` / `$path` / `$caller_ip` 六类匹配维度；支持 `STRICT` / `PERMISSIVE`
+  匹配模式与 `baseLaneMode` 基线选取策略（`OnlyUntaggedInstance` / `ExcludeEnabledLaneInstance`）。
+- **caller+callee 泳道规则合并**：同时拉取主被调侧规则并以 caller 优先去重，规避
+  Polaris Server naming cache 按服务独立刷新的滞后问题。
+- **`beforeChain` 路由链**：`consumer.serviceRouter.beforeChain` 用于在主路由链之前
+  执行泳道路由，跨链同名插件自动去重。
+- **`examples/route/lane/`**：新增 5 组件完整示例（provider / consumer / gateway /
+  simple-consumer / simple-gateway），覆盖 `ProcessRouters` × `GetOneInstance` 的 4 种链路组合。
+- **`examples/route/{metadata,nearby,rule}/simple-consumer`**：基于 `GetOneInstance`
+  的简化消费端，与已有 `consumer/`（手动三段式）形成对照。
+- **端到端验证脚本**：`lane-test.sh` / `lane-warmup-test.sh` + 3 个 `verify_*.sh`；
+  聚合入口 `run_all_tests.sh` / `cleanup_all.sh`。
+- **`RouteLogger`**：独立路由日志通道 `route/polaris-route.log`。
+
 ### 修复的 BUG
 
-- **路由链回归**：`beforeChain` 启用 `laneRouter` 后，规则路由 / 就近路由 / 元数据路由
-  全部失效。根因是 `processServiceRouters` 在前置链尾部追加的 `FilterOnlyRouter` 会
-  调用 `SetIgnoreFilterOnlyOnEndChain(true)`，使上层 `getServiceRoutedInstances`
-  误判前置链已产出最终结果而跳过主链。修复：新增 `GetFilterClusterBefore` 入口，
-  前置链不再追加 FilterOnly 兜底。
-- **`ProcessRouters` / `GetOneInstance` / `GetInstances` 的 `convert()` 脏数据**：
-  原实现直接向调用方传入的 `SourceService.Metadata` 写入 `$header.*` / `$query.*` 键，
-  业务代码跨请求复用同一张 map 会看到上一次请求遗留的键。修复：改为复制一份再写。
-- **泳道路由 6 类流量匹配维度失效 / 互撞**：`pkg/flow/data/object.go` 把 `Arguments`
-  合并到 `RouteInfo.EnvironmentVariables` 时使用短 key (`arg.Key()`)，导致：
-  - `METHOD` / `CALLER_IP` / `PATH` 三类 `Argument` 的 `Key()` 为空串，写入时互相覆盖、
-    读取时永远 miss，这三类规则实际无法生效；
-  - `HEADER` / `QUERY` / `COOKIE` 同名短 key（如 `user`）跨维度互相覆盖，
-    Header `user=gray` 和 Query `user=xxx` 存在命名空间冲突。
-  修复：参照 polaris-java `LaneUtils.findTrafficValue`，Arguments 改用 `ToLabels` 写入
-  带前缀的 label key（`$header.xxx` / `$query.xxx` / `$cookie.xxx` / `$method` /
-  `$caller_ip` / `$Path`）；lane router `findTrafficValue` 也按 `SourceMatch` 类型拼出
-  同样的前缀 key 读取，6 个维度完全独立；`service-lane` 染色标签支持裸 key / `$header.` /
-  `$query.` / `$cookie.` 四种来源依次 fallback，保证 gateway→consumer 的 header 透传能正确
-  被下游 lane router 识别。
+- **`beforeChain` 触发 FilterOnly 兜底**：前置链尾部追加的 `FilterOnlyRouter`
+  会置位 `IgnoreFilterOnlyOnEndChain`，导致主链（规则/就近/元数据路由）被跳过。
+  修复：新增 `GetFilterClusterBefore` 入口，前置链不再追加 FilterOnly。
+- **`convert()` 污染调用方 `SourceService.Metadata`**：原实现向用户 map 写入
+  `$header.*` / `$query.*` 键，跨请求复用时遗留上一次数据。修复：改为 copy-on-write。
+- **泳道路由 6 类流量匹配维度互撞 / 失效**：`Arguments` 合并到 `EnvironmentVariables`
+  时用短 key 导致 METHOD/CALLER_IP/PATH（`Key()` 为空）互相覆盖，HEADER/QUERY/COOKIE
+  同名 key 串扰。修复：统一改用 `Argument.ToLabels` 的前缀 key（`$header.xxx` /
+  `$query.xxx` / `$cookie.xxx` / `$method` / `$caller_ip` / `$Path`），6 维完全独立。
+- **`zeroprotect` 日志 ns/svc 参数顺序颠倒**：搭车修复。
 
 ### ⚠ 破坏性变更
 
-- **泳道 STRICT 模式无可用实例时的返回语义**：
-  - 旧行为：`lane router` 返回全量 cluster + `HasLimitedInstances=true`，下游有可能
-    拿到任意实例继续发送请求（与 STRICT "严格隔离" 语义不符，实际上是缺陷）。
-  - 新行为：返回**已按 lane metadata 过滤的空 cluster**，`LoadBalance`/`GetOneInstance`
-    将直接返回 `ErrCodeAPIInstanceNotFound`。
-  - 升级影响：曾依赖 `HasLimitedInstances` 在 STRICT 无实例时做兜底的调用方，需要改为
-    捕获 `ErrCodeAPIInstanceNotFound`（SDK 错误码）并自行决定是否降级 / 返回 503。
-    可参考 `examples/route/lane/gateway/main.go` 中的处理方式。
-- **`RouteInfo.EnvironmentVariables` 中 Arguments 的 key 约定**：
-  - 旧行为：按 `arg.Key()` 短 key 存入（如 `user` / `scene`），对 Method/CallerIP/Path
-    实际是空串。
-  - 新行为：按 `Argument.ToLabels` 的前缀 key 存入（`$header.user` / `$query.scene` /
-    `$method` / `$caller_ip` / `$Path` 等）。
-  - 升级影响：直接读取 `RouteInfo.EnvironmentVariables[...]` 做自定义路由的调用方需要
-    改用带前缀的 key。SDK 内部只有 lane router 依赖该约定，普通调用方（只通过
-    `AddArguments` 传参）无需任何改动。
+- **泳道 STRICT 模式无实例时的返回语义**：旧行为返回全量 cluster +
+  `HasLimitedInstances=true`；新行为返回空 cluster，`GetOneInstance` 直接返回
+  `ErrCodeAPIInstanceNotFound`。依赖 `HasLimitedInstances` 兜底的调用方需改为捕获
+  错误码并自行决策（参考 `examples/route/lane/gateway/main.go`）。
+- **`RouteInfo.EnvironmentVariables` key 约定变更**：从 `arg.Key()` 短 key
+  改为 `Argument.ToLabels` 的前缀 key。直接读取该 map 的自定义路由需改用带前缀的 key；
+  普通调用方（仅通过 `AddArguments` 传参）无需修改。
+
 
 ## [0.9.0] - 2021-5-7
 
