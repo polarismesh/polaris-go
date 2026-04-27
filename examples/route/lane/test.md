@@ -4,7 +4,7 @@
 
 - 测试脚本：
   - [lane-test.sh](./lane-test.sh)：**泳道路由**功能测试（baseline / gray 隔离、流量匹配 STRICT/PERMISSIVE、baseLaneMode、泳道组剔除等）
-  - [lane-warmup-test.sh](./lane-warmup-test.sh)：**泳道预热（Warmup）**功能测试（按概率曲线灰度放量）
+  - [lane-warmup-test.sh](./lane-warmup-test.sh)：**泳道预热（Warmup）+ 百分比灰度（Percentage）**功能测试（按概率曲线灰度放量 + 按百分比切流）
 
 两个脚本使用相同端口段（`48095 / 19080-19091` 等），**不可同时运行**，需先 `stop` 或 `./cleanup.sh` 后再切换。
 
@@ -153,10 +153,10 @@
 
 ---
 
-## 三、`lane-warmup-test.sh` —— 泳道预热测试方案
+## 三、`lane-warmup-test.sh` —— 泳道预热 + 百分比灰度测试方案
 
 ### 3.1 测试目标
-验证 `laneRouter` 的 `WARMUP` 染色类型是否按以下公式做概率放量：
+1. 验证 `laneRouter` 的 `WARMUP` 染色类型是否按以下公式做概率放量（用例 1-5）：
 
 ```
 probability = pow(uptime / warmup_interval, curvature) * 100%
@@ -164,7 +164,15 @@ uptime = now - etime        // etime 为规则最近一次启用时间
 当 uptime >= interval 时 probability = 100%
 ```
 
-通过统计响应中 `lane=gray` 的比例，验证预热曲线在三个阶段的正确性。
+2. 验证 `laneRouter` 的 `PERCENTAGE` 百分比染色类型（用例 6-9），覆盖 `plugin/servicerouter/lane/lane_router.go:tryStainByPercentage` 的有效分支：
+   - `percent` 极小值（=1） → 期望 `gray% ≈ 1%`，验证概率抽样在低概率端的正确性；
+   - `percent` 中段（=50） → 期望 `gray% ≈ 50%`，验证常规概率抽样；
+   - `percent` 满值（=100）→ 完全染色（命中 `percent >= 100 → return true` 分支）；
+   - 以及基线请求在 PERCENTAGE 模式下不受染色概率影响。
+
+> **不验证 `percent=0`**：specification/lane.proto 中 `Percentage.percent` 是 proto3 裸 `int32 (json:"omitempty")`，零值在 JSON 序列化时被 omit，Polaris 服务端会以 `400103` 拒绝该请求；SDK 端 `percent <= 0 → return false` 这条分支因此外部不可达。
+
+通过统计响应中 `lane=gray` 的比例，验证两种染色类型各自的行为正确性。
 
 ### 3.2 前置条件
 - 泳道组：`lane-go-warmup`（与 `lane-go-example` 互相隔离）
@@ -214,11 +222,20 @@ uptime = now - etime        // etime 为规则最近一次启用时间
 | 用例 3 预热完成 | 等待 `uptime ≥ warmup_interval` 后发送大批染色请求 | 统计 `gray%` | ≥ 90%（理想）；≥ 75% 视为基本符合预期 | 剩余等待时间 > `MAX_WARMUP_WAIT`（建议缩短 `warmup_interval`） | `gray%` < 75% |
 | 用例 4 基线不受预热影响 | 不带染色 Header 发送请求 | 统计 `baseline` / `gray` 计数 | 全部走 baseline（或零 `gray` 泄漏） | — | 任一无染色请求被错误路由到 gray |
 | 用例 5 混合隔离 | 染色 + 不染色请求多轮交替 | 分别统计两路结果 | 无染色请求**零泄漏**到 gray；染色请求按预热概率命中 gray（允许部分回退 baseline） | — | 任一无染色请求落到 gray（`baseline_leak > 0`） |
+| 用例 6 PERCENTAGE=1 | 通过管理 API 把 gray 规则切换为 `PERCENTAGE(percent=1)`，发送 300 个染色请求 | 实际 `gray%` ≤ 6%（N=300, p=0.01 的均值=3，3σ ≈ 5.2，留 6 作上限） | — | 管理 API 无权限或服务端拒绝（如 4xx） | `gray%` > 6% |
+| 用例 7 PERCENTAGE=50 | 切换为 `PERCENTAGE(percent=50)`，发送 200 个染色请求 | 实际 `gray%` ∈ `[35%, 65%]`（N=200, p=0.5 的 ±3σ ≈ ±10%，留 ±15% 容忍） | — | 管理 API 无权限 | `gray%` 超出 `[35%, 65%]` 区间 |
+| 用例 8 PERCENTAGE=100 | 切换为 `PERCENTAGE(percent=100)`，发送 50 个染色请求 | 实际 `gray%` ≥ 95%（理想）；≥ 85% 视为基本符合 | — | 管理 API 无权限 | `gray%` < 85% |
+| 用例 9 PERCENTAGE 模式基线零泄漏 | 保持 `PERCENTAGE(percent=100)`，发送 50 个**无染色 Header** 的基线请求 | `gray == 0`：染色概率只影响 matched 流量，不影响 unmatched 流量 | — | 管理 API 无权限 | 任一无染色请求落到 gray |
+
+> **用例 6-9 组收尾**：`run_all_tests` 在 4 个 PERCENTAGE 用例全部跑完后（或被 Ctrl-C 打断时通过 trap）自动调用 `restore_gray_rule_to_warmup`，把 gray 规则的 `traffic_gray` 还原为 WARMUP，使用 `validate_lane_rules` 从 Polaris 读取到的 `WARMUP_INTERVAL / WARMUP_CURVATURE`。
+>
+> **关于 percent=0 不可测**：`_set_gray_rule_traffic_gray` 在收到 4xx/5xx 错误码时会显式 `return 1`，让上层用例 FAIL 而不是静默继续；这是初次跑测发现 percent=0 被服务端拒绝（返回 `400103`）后加入的防御。
 
 ### 3.5 辅助能力
 - `get_gray_etime()`：从 Polaris OpenAPI 读取 `gray` 规则的 `etime`，用于计算 `uptime`
 - `validate_rules_with_wait(rule_name)`：`disable → enable` 规则，并轮询等待 SDK 侧生效（避免缓存滞后）
 - `calc_warmup_probability(uptime, interval, curvature)`：Python 实现预热概率公式，作为实际比例的理论基线
+- `set_gray_rule_percentage(percent)` / `restore_gray_rule_to_warmup()`：用例 6-9 专用。通过 `PUT /naming/v1/lane/groups` 将 gray 规则的 `traffic_gray` 在 `PERCENTAGE` / `WARMUP` 两种模式间切换；切换后 sleep 3s 给 SDK 拉缓存
 - 当 `WARMUP_INTERVAL > MAX_WARMUP_WAIT` 时，脚本会在日志中提示「建议将 `warmup_interval` 设为 ≤`MAX_WARMUP_WAIT`s 以缩短测试耗时」
 
 ### 3.6 执行与结果

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# 泳道预热（Warmup）测试脚本（Go SDK 版本）
+# 泳道预热（Warmup）+ 百分比（Percentage）灰度测试脚本（Go SDK 版本）
 #
 # 用法: ./lane-warmup-test.sh <命令> [polaris地址]
 # 示例: ./lane-warmup-test.sh all 127.0.0.1
@@ -33,6 +33,19 @@
 #   通过 service-lane: lane-go-warmup/gray Header 将请求染色到 gray 泳道，
 #   laneRouter 根据预热概率决定路由到 gray 实例还是回退到 baseline 实例。
 #   通过统计响应中 lane=gray 的比例来验证预热曲线是否正确。
+#
+# PERCENTAGE 专项 (用例 6-9):
+#   在 warmup 组结束后追加 4 个 PERCENTAGE 模式用例。这部分会通过管理 API
+#   将 gray 规则的 traffic_gray 临时切换为 {mode: PERCENTAGE, percentage.percent: N}，
+#   验证 lane_router.go tryStainByPercentage 在 N=1/50/100 三档下的概率行为，
+#   以及基线请求不受 percent 影响。run_all_tests 结束前会自动调用
+#   restore_gray_rule_to_warmup 把规则恢复为 WARMUP 模式，脚本被 Ctrl-C 打断时
+#   也会通过 trap 做同样的恢复，以免影响后续跑测或共用 Polaris 的其他脚本。
+#
+#   备注: 不验证 percent=0 —— specification/lane.proto 的 percent 是 proto3 裸 int32
+#   (json:"omitempty")，零值会被 omit，Polaris 服务端以 400103 拒绝该请求；SDK 端
+#   `percent <= 0 → return false` 这条分支因此外部不可达，本测试用 percent=1
+#   验证「极小比例几乎不染色」语义。
 # ============================================================
 
 # ==================== 配置区 ====================
@@ -287,6 +300,148 @@ reset_lane_rule() {
     else
         log_warn "规则 etime 可能未更新（etime=${GRAY_ETIME}, drift=${drift}s），继续执行"
     fi
+}
+
+# ==================== PERCENTAGE 模式切换 ====================
+#
+# set_gray_rule_traffic_gray 将 gray 规则的 traffic_gray 字段整体替换为指定内容，
+# 并通过 PUT /naming/v1/lane/groups 提交。用于 percentage / warmup 模式切换，
+# 便于在同一个 lane-go-warmup 泳道组上复用 gray 规则做不同染色策略的回归测试。
+#
+# 参数:
+#   $1 mode     'PERCENTAGE' 或 'WARMUP'
+#   $2 value    mode=PERCENTAGE 时是 percent (0-100 整数)；mode=WARMUP 时是 "interval|curvature"
+# 返回: 0=成功, 1=失败
+_set_gray_rule_traffic_gray() {
+    local mode="$1"
+    local value="$2"
+
+    local group_json
+    group_json=$(query_lane_group_full)
+    if [ -z "$group_json" ]; then
+        log_fail "查询泳道组失败，无法连接 Polaris 管理接口"
+        return 1
+    fi
+
+    local updated_json
+    updated_json=$(echo "$group_json" | MODE="$mode" VALUE="$value" python3 -c "
+import sys, json, os
+
+mode = os.environ['MODE']
+value = os.environ['VALUE']
+
+try:
+    data = json.load(sys.stdin)
+    groups = data.get('data', [])
+    if not groups:
+        sys.stderr.write('no group found\n')
+        sys.exit(1)
+    group = groups[0]
+    # 移除顶层 @type，保留 entries[].selector.@type
+    group.pop('@type', None)
+
+    found = False
+    for rule in group.get('rules', []):
+        if rule.get('name') != 'gray':
+            continue
+        found = True
+        if mode == 'PERCENTAGE':
+            rule['traffic_gray'] = {
+                'mode': 'PERCENTAGE',
+                'percentage': {
+                    'percent': int(value),
+                },
+            }
+        elif mode == 'WARMUP':
+            interval, curvature = value.split('|')
+            rule['traffic_gray'] = {
+                'mode': 'WARMUP',
+                'warmup': {
+                    'interval_second': int(interval),
+                    'curvature': int(float(curvature)),
+                },
+            }
+        else:
+            sys.stderr.write(f'unknown mode: {mode}\n')
+            sys.exit(1)
+    if not found:
+        sys.stderr.write('gray rule not found\n')
+        sys.exit(1)
+    print(json.dumps([group]))
+except Exception as e:
+    sys.stderr.write(str(e) + '\n')
+    sys.exit(1)
+" 2>/dev/null)
+
+    if [ -z "$updated_json" ]; then
+        log_fail "构造 ${mode} 模式规则更新 body 失败"
+        return 1
+    fi
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -X PUT "${POLARIS_HTTP_ADDR}/naming/v1/lane/groups" \
+        -H "Content-Type: application/json" \
+        -H "X-Polaris-Token: ${POLARIS_TOKEN}" \
+        -d "$updated_json" 2>/dev/null || true)
+
+    local ok
+    ok=$(echo "$resp" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    responses = d.get('responses', [d])
+    codes = [str(r.get('code', 0)) for r in responses]
+    if any(c in ('200000','200001') for c in codes):
+        print('ok')
+    else:
+        print('fail:' + ','.join(codes))
+except:
+    print('fail:parse')
+" 2>/dev/null || echo "fail:curl")
+
+    if [[ "$ok" == "ok" ]]; then
+        return 0
+    fi
+
+    # 区分 4xx / 5xx 等明确错误（如 400103=参数校验失败）和 "non-standard 2xx 但未列出 ok 码" 两种情况：
+    # - 含 4xx / 5xx 三位数 code → 真失败，必须 return 1，让上层用例显式 FAIL
+    # - 其他（如纯解析失败、curl 失败、未知 6 位 code）→ 沿用宽容策略 return 0，附 warn
+    if echo "$ok" | grep -qE "fail:[45][0-9]{2}|fail:[45][0-9]{5}"; then
+        log_fail "更新 gray 规则 mode=${mode} 失败: ${ok}（服务端拒绝）"
+        return 1
+    fi
+    log_warn "更新 gray 规则 mode=${mode} 返回: ${ok}（部分环境非标准返回，继续）"
+    return 0
+}
+
+# set_gray_rule_percentage 把 gray 规则切换到 PERCENTAGE 模式。
+# 参数: $1 = percent (0~100)
+# 额外 sleep 3s 给 SDK 拉缓存。
+set_gray_rule_percentage() {
+    local percent="$1"
+    log_info "将 gray 规则切换到 PERCENTAGE 模式，percent=${percent}..."
+    if ! _set_gray_rule_traffic_gray "PERCENTAGE" "$percent"; then
+        return 1
+    fi
+    sleep 3
+    log_ok "gray 规则已切换到 PERCENTAGE (percent=${percent})"
+    return 0
+}
+
+# restore_gray_rule_to_warmup 恢复 gray 规则为 WARMUP 模式，使用 WARMUP_INTERVAL/CURVATURE
+# 这两个由 validate_lane_rules 预先读取的运行时变量；任一为空则回退默认 60/2。
+restore_gray_rule_to_warmup() {
+    local interval="${WARMUP_INTERVAL:-60}"
+    local curvature="${WARMUP_CURVATURE:-2}"
+    log_info "恢复 gray 规则为 WARMUP 模式 (interval=${interval}s, curvature=${curvature})..."
+    if ! _set_gray_rule_traffic_gray "WARMUP" "${interval}|${curvature}"; then
+        log_warn "恢复 WARMUP 失败，请手动在 Polaris 控制台 [${POLARIS_CONSOLE}] 核对 [${EXPECTED_LANE_GROUP}] 的 gray 规则"
+        return 1
+    fi
+    sleep 3
+    log_ok "gray 规则已恢复为 WARMUP"
+    return 0
 }
 
 # ==================== 泳道规则验证 ====================
@@ -1400,6 +1555,133 @@ test_mixed_isolation() {
     fi
 }
 
+# ---------- 用例 6: PERCENTAGE=1 — 仅 ~1% 染色 ----------
+# 说明: 不验证 percent=0 的原因——
+#   specification/lane.proto TrafficGray.Percentage.percent 是 proto3 裸 int32 (json:"percent,omitempty")，
+#   serialize 时 0 值会被 omit；Polaris 服务端会以 400103 拒绝 percent=0 的更新请求
+#   （视为「未设置」而不是合法零值）。SDK 的 `percent <= 0 → return false` 分支因此外部不可达。
+# 因此这里改用 percent=1 验证「极小比例几乎不染色」语义。
+test_percentage_minimum() {
+    log_title "用例 6: PERCENTAGE 模式 — percent=1 极小比例几乎不染色"
+    log_info "测试目的: gray 规则切换为 PERCENTAGE(percent=1) 后，绝大多数匹配请求应回落到 baseline；"
+    log_info "          gray% 期望 ≈ 1%，N=300 时 ±5% 内（≤6%）即视为通过"
+
+    if ! set_gray_rule_percentage 1; then
+        test_fail "[用例6] 无法将 gray 规则切换到 PERCENTAGE(percent=1)，请检查 Polaris Token 权限或服务端版本"
+        return
+    fi
+
+    local sample_count=300
+    log_info "发送 ${sample_count} 个染色请求（Header warmup-user=gray，percent=1 应几乎全 baseline）..."
+    local result
+    result=$(send_warmup_requests "$sample_count")
+    local gray_count baseline_count other_count
+    read -r gray_count baseline_count other_count <<< "$result"
+
+    local actual_percent=$((gray_count * 100 / sample_count))
+    log_raw "  结果: gray=${gray_count}, baseline=${baseline_count}, other=${other_count}"
+    log_raw "  实际 gray 比例: ${actual_percent}% (期望: ≈1%, 容忍 ≤6%)"
+
+    # 二项分布 N=300, p=0.01 的均值=3，3σ ≈ 5.2；保守取 6 作为上限
+    if [ "$actual_percent" -le 6 ]; then
+        test_pass "[用例6] PERCENTAGE(percent=1): gray=${gray_count}/${sample_count} (${actual_percent}%) ≤ 6%，符合预期"
+    else
+        test_fail "[用例6] PERCENTAGE(percent=1) 偏高: ${actual_percent}% > 6%（gray=${gray_count}/${sample_count}）"
+    fi
+}
+
+# ---------- 用例 7: PERCENTAGE=50 — gray 比例应接近 50% ----------
+# 验证 tryStainByPercentage 的概率抽样分支 (`roll := rand.Intn(100); stained := roll < int(percent)`)。
+test_percentage_half() {
+    log_title "用例 7: PERCENTAGE 模式 — percent=50 约一半染色"
+    log_info "测试目的: gray 规则切换为 PERCENTAGE(percent=50) 后，大样本下 gray 比例应 ≈ 50% ± 15%"
+
+    if ! set_gray_rule_percentage 50; then
+        test_fail "[用例7] 无法将 gray 规则切换到 PERCENTAGE(percent=50)"
+        return
+    fi
+
+    local sample_count=200
+    log_info "发送 ${sample_count} 个染色请求（concurrent=1，统计 gray 比例）..."
+    local result
+    result=$(send_warmup_requests "$sample_count")
+    local gray_count baseline_count other_count
+    read -r gray_count baseline_count other_count <<< "$result"
+
+    local actual_percent=$((gray_count * 100 / sample_count))
+    log_raw "  结果: gray=${gray_count}, baseline=${baseline_count}, other=${other_count}"
+    log_raw "  实际 gray 比例: ${actual_percent}% (期望: 50% ± 15%)"
+
+    # 二项分布 N=200, p=0.5 的 ±3σ ≈ ±10%，保守取 ±15% 以吸收其他路由插件抖动
+    local lower=35
+    local upper=65
+    if [ "$actual_percent" -ge "$lower" ] && [ "$actual_percent" -le "$upper" ]; then
+        test_pass "[用例7] PERCENTAGE(percent=50): 实际 ${actual_percent}% ∈ [${lower}%, ${upper}%]"
+    else
+        test_fail "[用例7] PERCENTAGE(percent=50) 偏离预期: ${actual_percent}% ∉ [${lower}%, ${upper}%]"
+    fi
+}
+
+# ---------- 用例 8: PERCENTAGE=100 — gray 比例应 ≥ 95% ----------
+# 验证 tryStainByPercentage 的 `percent >= 100 → return true` 分支：100% 必然染色。
+test_percentage_full() {
+    log_title "用例 8: PERCENTAGE 模式 — percent=100 全部染色"
+    log_info "测试目的: gray 规则切换为 PERCENTAGE(percent=100) 后，匹配请求应全部进入 gray"
+
+    if ! set_gray_rule_percentage 100; then
+        test_fail "[用例8] 无法将 gray 规则切换到 PERCENTAGE(percent=100)"
+        return
+    fi
+
+    local sample_count=50
+    log_info "发送 ${sample_count} 个染色请求（Header warmup-user=gray，percent=100 应全染色）..."
+    local result
+    result=$(send_warmup_requests "$sample_count")
+    local gray_count baseline_count other_count
+    read -r gray_count baseline_count other_count <<< "$result"
+
+    local actual_percent=$((gray_count * 100 / sample_count))
+    log_raw "  结果: gray=${gray_count}, baseline=${baseline_count}, other=${other_count}"
+    log_raw "  实际 gray 比例: ${actual_percent}% (期望: ≥ 95%)"
+
+    # 理论 100%；留 5% 给网络/上报抖动（failover / 实例剔除等）
+    if [ "$actual_percent" -ge 95 ]; then
+        test_pass "[用例8] PERCENTAGE(percent=100): 实际 ${actual_percent}% ≥ 95%，符合预期"
+    elif [ "$actual_percent" -ge 85 ]; then
+        test_pass "[用例8] PERCENTAGE(percent=100): 实际 ${actual_percent}% ≥ 85%（达到基本符合阈值）"
+    else
+        test_fail "[用例8] PERCENTAGE(percent=100) 偏低: 实际 ${actual_percent}%（期望 ≥ 95%）"
+    fi
+}
+
+# ---------- 用例 9: PERCENTAGE 模式下基线不受影响 ----------
+# 验证即便 percent=100 让所有匹配请求都染色，不带匹配 Header 的基线请求仍保持走 baseline 实例，
+# 即染色概率只影响 matched 流量，不影响 unmatched 流量。
+test_percentage_baseline_unaffected() {
+    log_title "用例 9: PERCENTAGE 模式 — 基线请求零泄漏到 gray"
+    log_info "测试目的: 即便在 PERCENTAGE=100（最极端染色）下，无染色 Header 的请求也不应落到 gray 泳道"
+
+    if ! set_gray_rule_percentage 100; then
+        test_fail "[用例9] 无法将 gray 规则切换到 PERCENTAGE(percent=100)"
+        return
+    fi
+
+    local sample_count=50
+    log_info "发送 ${sample_count} 个不带 Header 的基线请求..."
+    local result
+    result=$(send_baseline_requests "$sample_count")
+    local baseline_count gray_count other_count
+    read -r baseline_count gray_count other_count <<< "$result"
+
+    log_raw "  结果: baseline=${baseline_count}, gray=${gray_count}, other=${other_count}"
+
+    if [ "$gray_count" -eq 0 ]; then
+        test_pass "[用例9] PERCENTAGE 模式下基线零泄漏: baseline=${baseline_count}/${sample_count}"
+    else
+        test_fail "[用例9] PERCENTAGE 模式下基线泄漏: ${gray_count} 个无染色请求被错误路由到 gray"
+    fi
+}
+
 # ==================== 运行所有测试 ====================
 run_all_tests() {
     log_title "开始泳道预热测试"
@@ -1420,12 +1702,28 @@ run_all_tests() {
 
     # 用例顺序参考 SCT 版本 (lane-warmup-test.sh)：
     #   先跑不依赖预热重置的用例（4: 基线），再跑需要重置 etime 的时序用例（1.1 → 2.1 → 3.1），
-    #   最后验证混合流量隔离 (5)。这样即使时序用例失败，基础功能的可达性也已经得到验证。
+    #   再验证混合流量隔离 (5)，最后跑 PERCENTAGE 模式专项 (6-9)。
+    #   PERCENTAGE 组放在最后，是因为它会临时修改 gray 规则的 traffic_gray 字段
+    #   （WARMUP → PERCENTAGE），组结束后必须恢复为 WARMUP，以免影响后续测试或外部脚本。
     test_baseline_unaffected
     test_warmup_early_phase
     test_warmup_progression
     test_warmup_completed
     test_mixed_isolation
+
+    # ========== PERCENTAGE 专项 (用例 6-9) ==========
+    log_title "开始 PERCENTAGE 模式专项测试"
+    # 使用 trap 保证组中任一用例 fail / 脚本被 Ctrl-C 打断也能恢复规则
+    # shellcheck disable=SC2064
+    trap "log_warn 'PERCENTAGE 测试组被打断，尝试恢复 gray 规则到 WARMUP'; restore_gray_rule_to_warmup || true" INT TERM
+    test_percentage_minimum
+    test_percentage_half
+    test_percentage_full
+    test_percentage_baseline_unaffected
+    # 恢复规则
+    log_title "恢复 gray 规则为 WARMUP 模式（PERCENTAGE 组结束）"
+    restore_gray_rule_to_warmup || log_warn "规则恢复失败，后续如需重跑 warmup 用例请手动恢复"
+    trap - INT TERM
 
     log_title "测试结果汇总"
     _log "总计: ${TOTAL_COUNT}  ${GREEN}通过: ${TOTAL_PASS}${NC}  ${RED}失败: ${TOTAL_FAIL}${NC}  ${YELLOW}跳过: ${TOTAL_SKIP}${NC}"
@@ -1468,6 +1766,10 @@ usage() {
     echo "  此脚本与 lane-test.sh 共用相同端口，不可同时运行。"
     echo "  预热测试通过 Polaris 管理 API 重置 etime，需要服务端 Token 权限。"
     echo "  建议将 warmup_interval 设为 ≤${MAX_WARMUP_WAIT}s 以避免测试超时等待。"
+    echo "  用例 6-9 是 PERCENTAGE 百分比灰度专项：运行时会把 gray 规则的 traffic_gray"
+    echo "  临时切换成 PERCENTAGE 模式（percent=1/50/100），全部跑完后自动恢复为 WARMUP。"
+    echo "  （不验证 percent=0：proto3 omitempty 让零值被 omit，Polaris 会以 400103 拒绝；改用 1 测极小比例。）"
+    echo "  脚本被 Ctrl-C 打断时也会通过 trap 尝试恢复规则；若仍异常请在 Polaris 控制台手动核对。"
     echo ""
     echo "示例:"
     echo "  $0 all 127.0.0.1      # 完整测试"
