@@ -31,21 +31,20 @@
   修复：新增 `GetFilterClusterBefore` 入口，前置链不再追加 FilterOnly。
 - **`convert()` 污染调用方 `SourceService.Metadata`**：原实现向用户 map 写入
   `$header.*` / `$query.*` 键，跨请求复用时遗留上一次数据。修复：改为 copy-on-write。
-- **泳道路由 6 类流量匹配维度互撞 / 失效**：`Arguments` 合并到 `EnvironmentVariables`
-  时用短 key 导致 METHOD/CALLER_IP/PATH（`Key()` 为空）互相覆盖，HEADER/QUERY/COOKIE
-  同名 key 串扰。修复：统一改用 `Argument.ToLabels` 的前缀 key（`$header.xxx` /
-  `$query.xxx` / `$cookie.xxx` / `$method` / `$caller_ip` / `$Path`），6 维完全独立。
 - **`zeroprotect` 日志 ns/svc 参数顺序颠倒**：搭车修复。
 
-### ⚠ 破坏性变更
+### 兼容性说明
 
-- **泳道 STRICT 模式无实例时的返回语义**：旧行为返回全量 cluster +
-  `HasLimitedInstances=true`；新行为返回空 cluster，`GetOneInstance` 直接返回
-  `ErrCodeAPIInstanceNotFound`。依赖 `HasLimitedInstances` 兜底的调用方需改为捕获
-  错误码并自行决策（参考 `examples/route/lane/gateway/main.go`）。
-- **`RouteInfo.EnvironmentVariables` key 约定变更**：从 `arg.Key()` 短 key
-  改为 `Argument.ToLabels` 的前缀 key。直接读取该 map 的自定义路由需改用带前缀的 key；
-  普通调用方（仅通过 `AddArguments` 传参）无需修改。
+本版本对存量用户（未启用 `laneRouter` / `beforeChain`）保持完全向后兼容：
+
+- `laneRouter` 为新插件，默认通过 `beforeChain` 启用，但 `Enable()` 在无泳道规则
+  时返回 `false`，路由链直接跳过，对原有 SDK 行为无任何影响。
+- `RouteInfo.EnvironmentVariables` 新增 `Arguments` 前缀 key（`$header.*` /
+  `$query.*` / `$cookie.*` / `$method` / `$caller_ip` / `$Path`）写入逻辑，
+  此字段此前仅由 `rulebase` 内部使用，外部调用方不受影响。
+- `HasLimitedInstances` 机制、`RuleBasedRouter` / `NearbyBasedRouter` /
+  `DstMetaRouter` 等现有插件的路由行为均未改动，兄弟插件改动仅限日志通道迁移
+  到 `RouteLogger`。
 
 
 ## [0.9.0] - 2021-5-7
