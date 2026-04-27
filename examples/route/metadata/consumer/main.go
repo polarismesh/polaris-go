@@ -345,6 +345,7 @@ func getLocalHost(serverAddr string) (string, error) {
 	if nil != err {
 		return "", err
 	}
+	defer conn.Close()
 	localAddr := conn.LocalAddr().String()
 	colonIdx := strings.LastIndex(localAddr, ":")
 	if colonIdx > 0 {

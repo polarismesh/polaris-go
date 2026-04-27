@@ -131,6 +131,7 @@ func (svr *PolarisConsumer) runWebServer() {
 				svr.reportResult(svcCallResult, api.RetFail, -1)
 				return
 			}
+			defer resp.Body.Close()
 			data, err := io.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
@@ -144,7 +145,6 @@ func (svr *PolarisConsumer) runWebServer() {
 
 			_, _ = buf.Write(data)
 			_ = buf.WriteByte('\n')
-			defer resp.Body.Close()
 			time.Sleep(30 * time.Millisecond)
 		}()
 
@@ -199,6 +199,7 @@ func getLocalHost(serverAddr string) (string, error) {
 	if nil != err {
 		return "", err
 	}
+	defer conn.Close()
 	localAddr := conn.LocalAddr().String()
 	colonIdx := strings.LastIndex(localAddr, ":")
 	if colonIdx > 0 {

@@ -83,7 +83,7 @@ func (svr *LaneProvider) registerService() {
 	req.Namespace = svr.namespace
 	req.Host = svr.host
 	req.Port = svr.port
-	req.ServiceToken = svr.token()
+	req.ServiceToken = token
 	// 根据泳道参数决定是否携带 lane 元数据
 	if svr.lane != "" {
 		req.Metadata = map[string]string{"lane": svr.lane}
@@ -109,10 +109,6 @@ func (svr *LaneProvider) registerService() {
 	}
 	log.Printf("register response: instanceId=%s, host=%s:%d, lane=%q, metadata=%v",
 		resp.InstanceID, svr.host, svr.port, svr.lane, req.Metadata)
-}
-
-func (svr *LaneProvider) token() string {
-	return token
 }
 
 func (svr *LaneProvider) deregisterService() {

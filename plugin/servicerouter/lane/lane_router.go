@@ -606,8 +606,14 @@ func (r *LaneRouter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.S
 	groups := r.getLaneGroups(routeInfo)
 	enabled := groups != nil
 	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		// clusters 理论上由调用方保证非 nil，但 Enable 作为公开接口方法加上防御性判断，
+		// 避免上游改动或单测直传 nil 时日志格式化触发 panic。
+		var serviceKey interface{} = "<nil>"
+		if clusters != nil {
+			serviceKey = clusters.GetServiceKey()
+		}
 		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] Enable: service=%s, enabled=%v, laneGroups=%d",
-			clusters.GetServiceKey(), enabled, len(groups))
+			serviceKey, enabled, len(groups))
 	}
 	return enabled
 }

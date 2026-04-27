@@ -1,6 +1,6 @@
 module github.com/polarismesh/polaris-go-route-rule-simple-consumer
 
-go 1.24
+go 1.21
 
 require github.com/polarismesh/polaris-go v1.7.0
 
