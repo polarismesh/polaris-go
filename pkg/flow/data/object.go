@@ -254,22 +254,10 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 			c.Trigger.EnableSrcLane = true
 		}
 	}
-	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
-	// 统一通过 arg.ToLabels(...) 写入带前缀的 label key ($header./$query./$cookie./
-	// $method/$caller_ip/$Path)，与 pkg/model/argument.go 和 polaris-java
-	// LaneUtils.findTrafficValue 的约定保持一致；lane router 的 findTrafficValue
-	// 会按 SourceMatch 类型拼出同样的前缀 key 回查。
-	// 不再用裸短 key（arg.Key()）以避免：
-	//   (a) Method / CallerIP / Path 三类 Argument 的 Key() 为空串相互覆盖，
-	//   (b) Header / Query / Cookie 同名 key（如都叫 user）跨维度互撞。
-	if len(request.Arguments) > 0 {
-		if c.RouteInfo.EnvironmentVariables == nil {
-			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
-		}
-		for i := range request.Arguments {
-			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
-		}
-	}
+	// Arguments 已在 api.go / api/consumer.go 的 convert() 环节摊平到 SourceService.Metadata
+	// (带前缀的 label key: $header.* / $query.* / $cookie.* / $method / $caller_ip / $Path /
+	// Custom 原 key)。路由插件 (rulebase / lane 等) 直接读 SourceService.Metadata 即可，
+	// 这里不再复制到任何中间容器。
 	c.Criteria.HashKey = request.HashKey
 	c.Criteria.HashValue = request.HashValue
 	c.Criteria.ReplicateInfo.Count = request.ReplicateCount
@@ -329,28 +317,6 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 			c.Trigger.EnableSrcLane = true
 		}
 	}
-	if len(request.EnvironmentVariables) > 0 {
-		c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.EnvironmentVariables))
-		for k, v := range request.EnvironmentVariables {
-			c.RouteInfo.EnvironmentVariables[k] = v
-		}
-	}
-	// 将 Arguments 也合并到 EnvironmentVariables 中，供泳道路由等前置插件使用。
-	// Arguments 由 AddArguments() 传入（如 Header/Query 参数），EnvironmentVariables 优先级更高。
-	// 统一通过 arg.ToLabels(...) 写入带前缀的 label key
-	// ($header./$query./$cookie./$method/$caller_ip/$Path)，与 pkg/model/argument.go 及
-	// polaris-java LaneUtils.findTrafficValue 保持一致。
-	// 不再用裸短 key（arg.Key()）以避免：
-	//   (a) Method / CallerIP / Path 三类 Argument 的 Key() 为空串互相覆盖，
-	//   (b) Header / Query / Cookie 同名 key（如都叫 user）跨维度互撞。
-	if len(request.Arguments) > 0 {
-		if c.RouteInfo.EnvironmentVariables == nil {
-			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
-		}
-		for i := range request.Arguments {
-			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
-		}
-	}
 	c.CallResult.APIName = model.ApiProcessRouters
 	c.CallResult.RetStatus = model.RetSuccess
 	c.CallResult.RetCode = model.ErrCodeSuccess
@@ -380,17 +346,6 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
 			c.Trigger.EnableSrcLane = true
-		}
-	}
-	// 将 Arguments 合并到 EnvironmentVariables，供泳道路由等前置插件使用。
-	// 与 InitByProcessRoutersRequest 行为一致：统一用 arg.ToLabels(...) 写入带前缀的
-	// label key，避免 Method/CallerIP/Path 覆盖以及 Header/Query/Cookie 同名互撞。
-	if len(request.Arguments) > 0 {
-		if c.RouteInfo.EnvironmentVariables == nil {
-			c.RouteInfo.EnvironmentVariables = make(map[string]string, len(request.Arguments))
-		}
-		for i := range request.Arguments {
-			request.Arguments[i].ToLabels(c.RouteInfo.EnvironmentVariables)
 		}
 	}
 	c.CallResult.APIName = model.ApiGetInstances

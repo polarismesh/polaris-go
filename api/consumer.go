@@ -50,9 +50,8 @@ func (r *GetOneInstanceRequest) convert() {
 		return
 	}
 
-	// 不能原地 mutate 调用方传入的 SourceService.Metadata; 见 api.go
-	// ProcessRoutersRequest.convert 的说明, 同一张 map 会被业务侧跨请求重复使用,
-	// 原地追加会污染后续请求.
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的同一张 map 引用
 	var srcMeta map[string]string
 	if r.SourceService != nil {
 		srcMeta = r.SourceService.Metadata
@@ -79,9 +78,8 @@ func (r *GetInstancesRequest) convert() {
 		return
 	}
 
-	// 不能原地 mutate 调用方传入的 SourceService.Metadata; 见 api.go
-	// ProcessRoutersRequest.convert 的说明, 同一张 map 会被业务侧跨请求重复使用,
-	// 原地追加会污染后续请求.
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的同一张 map 引用
 	var srcMeta map[string]string
 	if r.SourceService != nil {
 		srcMeta = r.SourceService.Metadata

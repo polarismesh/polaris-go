@@ -49,7 +49,13 @@ import (
 )
 
 const (
-	// trafficStainLabel 流量染色标签的 key（在 EnvironmentVariables 中传递）
+	// trafficStainLabel 跨进程染色复用时的 HTTP 协议字段名。
+	// 真实链路：上游 SDK 染色后，业务侧通过 InstancesResponse 读到结果，作为 HTTP Header
+	// 透传给下游进程；下游业务用 BuildHeaderArgument 把它包成 Argument 上报,
+	// api.go / api/consumer.go 的 convert() 会把 Arguments 统一摊平到
+	// SourceService.Metadata 的带前缀 label key ("$header.service-lane")，
+	// lane router 和 rulebase 一样只读 SourceService.Metadata。
+	// 非入口服务仅通过 "$header.service-lane" 存在性判断是否已染色，跳过流量识别。
 	trafficStainLabel = "service-lane"
 	// instanceLaneKey 实例元数据中表示泳道归属的默认 key
 	instanceLaneKey = "lane"
@@ -150,12 +156,12 @@ func (c *laneRuleContainer) matchByStainLabel(stainLabel string) *laneRuleItem {
 // matchByRouteInfo 根据路由信息匹配规则（流量识别阶段）
 // 只对流量入口（isEntry=true）的规则做 TrafficMatchRule 匹配，
 // 非入口服务不应做首次流量识别，只响应上游已透传的染色标签。
-func (c *laneRuleContainer) matchByRouteInfo(envVars map[string]string, sourceService model.ServiceMetadata) *laneRuleItem {
+func (c *laneRuleContainer) matchByRouteInfo(sourceService model.ServiceMetadata) *laneRuleItem {
 	for _, item := range c.sortedItems {
 		if !item.isEntry {
 			continue
 		}
-		if matchTrafficRule(item.rule.GetTrafficMatchRule(), envVars, sourceService) {
+		if matchTrafficRule(item.rule.GetTrafficMatchRule(), sourceService) {
 			return item
 		}
 	}
@@ -258,7 +264,7 @@ func matchSelectorLabels(labels map[string]*apimodel.MatchString, metadata map[s
 
 // matchTrafficRule 匹配 TrafficMatchRule。
 // 无规则或无匹配参数时返回 false（不匹配），避免空规则意外染色所有流量。
-func matchTrafficRule(rule *apitraffic.TrafficMatchRule, envVars map[string]string, sourceService model.ServiceMetadata) bool {
+func matchTrafficRule(rule *apitraffic.TrafficMatchRule, sourceService model.ServiceMetadata) bool {
 	if rule == nil {
 		return false
 	}
@@ -270,7 +276,7 @@ func matchTrafficRule(rule *apitraffic.TrafficMatchRule, envVars map[string]stri
 	debugEnabled := routeLogger.IsLevelEnabled(log.DebugLog)
 	isAND := rule.GetMatchMode() == apitraffic.TrafficMatchRule_AND
 	for i, arg := range args {
-		trafficValue := findTrafficValue(arg, envVars, sourceService)
+		trafficValue := findTrafficValue(arg, sourceService)
 		matched := matchStringValue(arg.GetValue(), trafficValue)
 		if debugEnabled {
 			routeLogger.Debugf("[Router][Lane] matchTrafficRule: arg[%d] type=%s, key=%q, "+
@@ -290,38 +296,32 @@ func matchTrafficRule(rule *apitraffic.TrafficMatchRule, envVars map[string]stri
 	return isAND
 }
 
-// findTrafficValue 根据 SourceMatch 类型从环境变量或调用方元数据中提取流量值.
+// findTrafficValue 根据 SourceMatch 类型从调用方元数据中提取流量值.
 //
 // 与 polaris-java LaneUtils.findTrafficValue (polaris-plugins/polaris-plugins-router/
 // router-lane/src/main/java/com/tencent/polaris/plugins/router/lane/LaneUtils.java) 保持
 // 相同的 7 类匹配维度: HEADER / CUSTOM / METHOD / CALLER_IP / COOKIE / QUERY / PATH,
-// 外加 Go 特有的 CALLER_METADATA (从 SourceService.Metadata 直接取).
+// 外加 Go 特有的 CALLER_METADATA (从 SourceService.Metadata 直接取 arg.Key).
 //
 // 查询策略:
-//  1. 按维度类型拼出带前缀的 label key (如 "$header.user" / "$method" / "$caller_ip"),
-//     先从 envVars 查;
-//  2. 查不到时 fallback 到 sourceService.Metadata 的同一 key (api.go / api/consumer.go
-//     的 convert() 已经用 Argument.ToLabels 保证了同样的前缀约定);
-//  3. 都没有则返回 "".
 //
-// 修复:
-//   - METHOD / CALLER_IP / PATH 三类 Argument 的 Key() 为空串, 以前被错误地按
-//     envVars[""] 写入又按 envVars["method"] / envVars["caller_ip"] 读取, 永远读不到.
-//   - HEADER / QUERY / COOKIE 以前都按短 key (arg.Key()) 入 envVars, "$header.user" 和
-//     "$query.user" 之间互撞. 现在各自按前缀命名空间存取, 6 个维度相互独立.
-func findTrafficValue(arg *apitraffic.SourceMatch, envVars map[string]string, sourceService model.ServiceMetadata) string {
+//	api.go / api/consumer.go 的 convert() 已经用 Argument.ToLabels 把 Arguments
+//	摊平到 SourceService.Metadata 的带前缀 label key (如 "$header.user" / "$method"
+//	/ "$caller_ip"), 因此这里 lane router 和 rulebase 一样, 只读 SourceService.Metadata,
+//	按 SourceMatch 类型拼出同样的前缀 key 回查即可。
+//
+// 类型驱动的好处:
+//   - METHOD / CALLER_IP / PATH 三类匹配维度直接用固定 label key (arg.Key 为空), 不会相互覆盖;
+//   - HEADER / QUERY / COOKIE 依靠不同前缀天然分开, 即便同名 key (如都叫 user) 也独立.
+func findTrafficValue(arg *apitraffic.SourceMatch, sourceService model.ServiceMetadata) string {
+	// 读取 sourceService.Metadata 的指定 label key
 	lookup := func(labelKey string) string {
-		if labelKey == "" {
+		if labelKey == "" || sourceService == nil {
 			return ""
 		}
-		if v, ok := envVars[labelKey]; ok && v != "" {
+		meta := sourceService.GetMetadata()
+		if v, ok := meta[labelKey]; ok {
 			return v
-		}
-		if sourceService != nil {
-			meta := sourceService.GetMetadata()
-			if v, ok := meta[labelKey]; ok {
-				return v
-			}
 		}
 		return ""
 	}
@@ -343,12 +343,13 @@ func findTrafficValue(arg *apitraffic.SourceMatch, envVars map[string]string, so
 		// CUSTOM 维度的 Key 由用户自定义, 不套前缀 (与 Argument.ToLabels 的 Custom 分支一致).
 		return lookup(arg.GetKey())
 	case apitraffic.SourceMatch_CALLER_METADATA:
+		// CALLER_METADATA 直接读调用方的原始业务 metadata (不套前缀).
 		if sourceService != nil {
 			return sourceService.GetMetadata()[arg.GetKey()]
 		}
 		return ""
 	default:
-		// 未知类型兜底: 与 CUSTOM 同策略, 按原始 key 直查, 避免引入隐式默认行为.
+		// 未知类型兜底: 按原始 key 直查, 避免引入隐式默认行为.
 		return lookup(arg.GetKey())
 	}
 }
@@ -698,7 +699,6 @@ func (r *LaneRouter) findMatchedRule(
 	container *laneRuleContainer,
 	alreadyStained bool,
 	stainLabel string,
-	envVars map[string]string,
 	sourceService model.ServiceMetadata,
 ) *laneRuleItem {
 	debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
@@ -716,7 +716,7 @@ func (r *LaneRouter) findMatchedRule(
 		}
 		return matchedItem
 	}
-	matchedItem := container.matchByRouteInfo(envVars, sourceService)
+	matchedItem := container.matchByRouteInfo(sourceService)
 	if debugEnabled {
 		if matchedItem != nil {
 			r.logCtx.GetRouteLogger().Debugf(
@@ -741,26 +741,15 @@ func (r *LaneRouter) GetFilteredInstances(
 		return r.passThroughResult(clusters, withinCluster), nil
 	}
 
-	envVars := routeInfo.EnvironmentVariables
-	stainLabel := ""
-	if envVars != nil {
-		// 染色标签优先级:
-		// 1) routeInfo.EnvironmentVariables[trafficStainLabel]: 上游 lane router 首次染色后主动写回的裸 key;
-		// 2) envVars[$header.service-lane]: 外部(gateway / consumer)把请求头透传成 HeaderArgument,
-		//    经 ToLabels 落到 "$header.service-lane" 这个带前缀的 key;
-		// 3) envVars[$query.service-lane] / $cookie.service-lane: 兼容把染色标签放到 query / cookie 的
-		//    非主流用法, 覆盖 Java LaneUtils 里 message container 多来源的语义。
-		if v := envVars[trafficStainLabel]; v != "" {
-			stainLabel = v
-		} else if v := envVars[model.LabelKeyHeader+trafficStainLabel]; v != "" {
-			stainLabel = v
-		} else if v := envVars[model.LabelKeyQuery+trafficStainLabel]; v != "" {
-			stainLabel = v
-		} else if v := envVars[model.LabelKeyCookie+trafficStainLabel]; v != "" {
-			stainLabel = v
-		}
+	// 染色检测: api.go / api/consumer.go 的 convert() 已经把请求中的 Arguments
+	// (含从上游 HTTP Header 透传来的 service-lane) 摊平到 SourceService.Metadata,
+	// 因此这里只需要按 HEADER 前缀读 "$header.service-lane" 判断是否已染色。
+	// 不再检测裸 key 或 $query/$cookie 来源, 跟业务约定的 HTTP Header 透传路径对齐。
+	var srcMeta map[string]string
+	if routeInfo.SourceService != nil {
+		srcMeta = routeInfo.SourceService.GetMetadata()
 	}
-	alreadyStained := stainLabel != ""
+	stainLabel, alreadyStained := srcMeta[model.LabelKeyHeader+trafficStainLabel]
 
 	sourceNs, sourceSvc := "", ""
 	if routeInfo.SourceService != nil {
@@ -775,10 +764,8 @@ func (r *LaneRouter) GetFilteredInstances(
 
 	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
 		r.logCtx.GetRouteLogger().Debugf(
-			"[Router][Lane] start routing, source=%s/%s, dest=%s/%s, laneGroups=%d, "+
-				"stainLabel=%q, alreadyStained=%v, envVars=%v",
-			sourceNs, sourceSvc, destNs, destSvc,
-			len(laneGroups), stainLabel, alreadyStained, envVars)
+			"[Router][Lane] start routing, source=%s/%s, dest=%s/%s, laneGroups=%d, stainLabel=%q, "+
+				"alreadyStained=%v", sourceNs, sourceSvc, destNs, destSvc, len(laneGroups), stainLabel, alreadyStained)
 	}
 
 	// 构建泳道规则容器
@@ -799,7 +786,7 @@ func (r *LaneRouter) GetFilteredInstances(
 	}
 
 	// 查找匹配的规则
-	matchedItem := r.findMatchedRule(container, alreadyStained, stainLabel, envVars, routeInfo.SourceService)
+	matchedItem := r.findMatchedRule(container, alreadyStained, stainLabel, routeInfo.SourceService)
 
 	// 无匹配规则 → 回退基线
 	if matchedItem == nil {
@@ -821,18 +808,10 @@ func (r *LaneRouter) GetFilteredInstances(
 		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 	}
 
-	// 首次染色成功后，将完整 stainLabel 写回 EnvironmentVariables，
-	// 供上层（如 Gateway/Consumer）读取并在下游请求头中透传。
-	if !alreadyStained {
-		if routeInfo.EnvironmentVariables == nil {
-			routeInfo.EnvironmentVariables = make(map[string]string, 1)
-		}
-		routeInfo.EnvironmentVariables[trafficStainLabel] = matchedItem.stainLabel
-		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-			r.logCtx.GetRouteLogger().Debugf(
-				"[Router][Lane] stain label set: %s=%s (first-time stain)",
-				trafficStainLabel, matchedItem.stainLabel)
-		}
+	if !alreadyStained && r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		r.logCtx.GetRouteLogger().Debugf(
+			"[Router][Lane] first-time stain decided: %s=%s (not written back to RouteInfo)",
+			trafficStainLabel, matchedItem.stainLabel)
 	}
 
 	// 目标服务不在此泳道组的 destinations 中 → 回退基线

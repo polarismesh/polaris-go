@@ -232,10 +232,9 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 	stainLabel := r.Header.Get(trafficStainHeader)
 	if stainLabel != "" {
 		log.Printf("found stain label in header: %s=%s", trafficStainHeader, stainLabel)
-		// 将染色标签注入 EnvironmentVariables，供泳道路由插件读取
-		routerReq.EnvironmentVariables = map[string]string{
-			trafficStainHeader: stainLabel,
-		}
+		// 把染色标签作为 HEADER 类型的 Argument 上报，供泳道路由插件按 ArgumentType 识别。
+		// lane router 的染色检测会遍历 RouteArguments 找 (Header|Query|Cookie) + key=service-lane。
+		routerReq.AddArguments(model.BuildHeaderArgument(trafficStainHeader, stainLabel))
 	} else {
 		log.Printf("no stain label in header, lane router will try traffic matching rules")
 		// 将 HTTP header、query 参数转为路由 Arguments，供泳道规则 TrafficMatchRule 匹配
@@ -249,18 +248,9 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, fmt.Sprintf("fail to processRouters: %v", err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("routed instances count: %d, routeMetadata=%v", len(routedResp.Instances), routedResp.RouteMetadata)
+	log.Printf("routed instances count: %d", len(routedResp.Instances))
 	for i, inst := range routedResp.Instances {
 		log.Printf("  [%d] %s:%d metadata=%v", i, inst.GetHost(), inst.GetPort(), inst.GetMetadata())
-	}
-
-	// 确定要透传的 stainLabel：
-	// 优先使用从上游收到的原始染色标签，其次使用路由结果中写回的 routeMetadata
-	propagateLabel := stainLabel
-	if propagateLabel == "" {
-		if meta := routedResp.RouteMetadata; meta != nil {
-			propagateLabel = meta[trafficStainHeader]
-		}
 	}
 
 	// 5. 负载均衡 + 实际调用
@@ -296,7 +286,15 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 
 			upstreamReq, _ := http.NewRequestWithContext(r.Context(), http.MethodGet,
 				fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
-			// 泳道染色标签透传：使用已确定的 propagateLabel（优先上游传入，其次路由结果写回）
+			// 泳道染色标签透传 (短格式):
+			// - 优先使用从上游收到的原始 service-lane 标签 (例如 "gray/rule1");
+			// - 否则从选中实例的 metadata 中取 "lane" 值, 以短格式透传给下游。
+			// lane router 的 matchByStainLabel 在精确匹配 stainLabelIndex 失败后,
+			// 会回落按 DefaultLabelValue 匹配, 短格式足以让下游路由到同一泳道。
+			propagateLabel := stainLabel
+			if propagateLabel == "" {
+				propagateLabel = instance.GetMetadata()["lane"]
+			}
 			if propagateLabel != "" {
 				upstreamReq.Header.Set(trafficStainHeader, propagateLabel)
 			}

@@ -30,9 +30,6 @@ type ProcessRoutersRequest struct {
 	SourceService ServiceInfo
 	// Arguments traffic labels
 	Arguments []Argument
-	// EnvironmentVariables 透传给路由插件的环境变量，用于泳道路由等场景。
-	// 例如：{"service-lane": "gray/rule1"} 用于传递泳道染色标签。
-	EnvironmentVariables map[string]string
 	// DstInstances indicate the destination instances resolved from discovery, required.
 	// Two implementations to ServiceInstances:
 	// 1. InstancesResponse, returned from ConsumerAPI.GetAllInstances.

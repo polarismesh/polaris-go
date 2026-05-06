@@ -46,7 +46,9 @@
 //     Arguments，供泳道规则的 TrafficMatchRule 进行流量识别和染色。
 //  4. 通过 ProcessRouters 执行泳道路由过滤。
 //  5. 通过 ProcessLoadBalance 选取单个实例。
-//  6. 将请求转发给选中的实例，并在 Header 中透传泳道染色标签。
+//  6. 将请求转发给选中的实例，并在 Header 中透传泳道染色标签 (短格式, 取自
+//     instance metadata 的 lane 值; 下游 lane router 的 matchByStainLabel 会
+//     按 DefaultLabelValue 回落匹配)。
 package main
 
 import (
@@ -153,8 +155,8 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, fmt.Sprintf("fail to processRouters: %v", err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("[INFO] %s routed instances count: %d, routeMetadata=%v",
-		targetService, len(routedResp.Instances), routedResp.RouteMetadata)
+	log.Printf("[INFO] %s routed instances count: %d",
+		targetService, len(routedResp.Instances))
 
 	// 6. 负载均衡，选取单个实例
 	lbReq := &polaris.ProcessLoadBalanceRequest{}
@@ -210,18 +212,15 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 透传泳道染色标签：
-	// 如果原始请求已携带 service-lane header（如直接染色场景），则已通过上面的 header 复制透传，无需处理。
-	// 如果原始请求未携带（流量匹配染色场景），则需要根据路由结果中的 RouteMetadata
-	// 获取泳道路由器写回的完整 stainLabel（格式：groupName/ruleName）。
+	// 透传泳道染色标签:
+	// 如果原始请求已携带 service-lane header (下游直接染色场景), 则已通过上面的
+	// header 复制透传, 无需处理。
+	// 如果原始请求未携带 (网关作为染色入口, 通过 TrafficMatchRule 识别命中的场景),
+	// 则从选中实例的 metadata 中取 "lane" 值, 以短格式透传给下游。
+	// lane router 的 matchByStainLabel 会在 stainLabelIndex 精确匹配失败后,
+	// 回落按 DefaultLabelValue 匹配, 因此短格式足以让下游正确路由到同一泳道。
 	if r.Header.Get(trafficStainHeader) == "" {
-		// 优先从 RouteMetadata 获取泳道路由器写回的完整 stainLabel
-		if stainLabel := routedResp.RouteMetadata[trafficStainHeader]; stainLabel != "" {
-			upstreamReq.Header.Set(trafficStainHeader, stainLabel)
-			log.Printf("[INFO] propagate stain label from routeMetadata: %s=%s",
-				trafficStainHeader, stainLabel)
-		} else if lane := instance.GetMetadata()["lane"]; lane != "" {
-			// 回退：使用短格式（仅 lane 值），下游 matchByStainLabel 支持短格式查找
+		if lane := instance.GetMetadata()["lane"]; lane != "" {
 			upstreamReq.Header.Set(trafficStainHeader, lane)
 			log.Printf("[INFO] propagate stain label from instance metadata: %s=%s",
 				trafficStainHeader, lane)

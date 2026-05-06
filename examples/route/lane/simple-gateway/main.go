@@ -143,8 +143,8 @@ func (gw *SimpleLaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request
 	if laneLabel == "" {
 		laneLabel = "(baseline)"
 	}
-	log.Printf("[INFO] selected instance: %s:%d, lane=%s, metadata=%v, routeMetadata=%v",
-		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata(), oneInstResp.RouteMetadata)
+	log.Printf("[INFO] selected instance: %s:%d, lane=%s, metadata=%v",
+		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
 
 	// 4. 构建上游请求并透传染色标签
 	callResult := &polaris.ServiceCallResult{}
@@ -169,16 +169,13 @@ func (gw *SimpleLaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 透传泳道染色标签。本例作为入口，原始请求通常不带 service-lane，
+	// 透传泳道染色标签。本例作为入口, 原始请求通常不带 service-lane,
 	// 需要根据路由结果把染色后的 stainLabel 补上给下游。
+	// 从选中实例的 metadata["lane"] 提取短格式标签透传, lane router 的
+	// matchByStainLabel 会在 stainLabelIndex 精确匹配失败后, 回落按
+	// DefaultLabelValue 匹配, 短格式足以让下游路由到同一泳道。
 	if r.Header.Get(trafficStainHeader) == "" {
-		// 优先从 RouteMetadata 获取 lane router 回写的完整 stainLabel
-		if stainLabel := oneInstResp.RouteMetadata[trafficStainHeader]; stainLabel != "" {
-			upstreamReq.Header.Set(trafficStainHeader, stainLabel)
-			log.Printf("[INFO] propagate stain label from routeMetadata: %s=%s",
-				trafficStainHeader, stainLabel)
-		} else if lane := instance.GetMetadata()["lane"]; lane != "" {
-			// 回退：用实例 lane 元数据值作为短格式染色标签
+		if lane := instance.GetMetadata()["lane"]; lane != "" {
 			upstreamReq.Header.Set(trafficStainHeader, lane)
 			log.Printf("[INFO] propagate stain label from instance metadata: %s=%s",
 				trafficStainHeader, lane)
