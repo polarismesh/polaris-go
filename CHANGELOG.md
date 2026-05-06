@@ -39,6 +39,16 @@
   Polaris Server naming cache 按服务独立刷新的滞后问题。
 - **`beforeChain` 路由链**：`consumer.serviceRouter.beforeChain` 用于在主路由链之前
   执行泳道路由，跨链同名插件自动去重。
+- **`isEntry` 门禁首次染色（对齐 polaris-java）**：首次流量（无 stain label）
+  只有当调用方是该泳道组的 `entries` 指定的流量入口时，才执行 percentage/warmup
+  染色决策并写 stain label；非入口的中间服务直接走基线，避免误染色进泳道。
+- **完整 stain label 透出（`InstancesResponse.RouteMetadata`）**：泳道路由决策
+  成功后把完整格式 `{groupName}/{ruleName}` 写入 `RouteInfo.RouteMetadata`，
+  引擎层在构建 `InstancesResponse` 时拷贝到 `RouteMetadata["service-lane"]`，
+  业务网关/consumer 从中读出后以 HTTP Header 透传给下游 —— 下游 SDK 按精确匹配
+  (`stainLabelIndex`) 直接命中，消除短格式 `gray` 在多同名 `defaultLabelValue`
+  泳道组共存时的歧义。对齐 polaris-java `MessageMetadataContainer` +
+  `TransitiveType.PASS_THROUGH` 的语义。
 
 #### 日志体系
 

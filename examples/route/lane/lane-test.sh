@@ -2641,6 +2641,11 @@ test_out_of_lane_group() {
     # 自动将 provider 从泳道组中移除
     if ! remove_provider_from_lane_group; then
         test_fail "[用例6.1] 无法从泳道组中移除 ${PROVIDER_SERVICE}"
+        test_fail "[用例6.1a] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        test_fail "[用例6.1b] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        # 移除本身失败,泳道组未改动,此处无需恢复。但若移除是"半成功"状态,
+        # 仍尝试恢复一次以兜底:恢复函数的 add 操作是幂等的,服务已在组内会直接跳过。
+        _restore_lane_group
         return
     fi
 
@@ -2666,22 +2671,98 @@ except:
 " 2>/dev/null)
     if [ "$admin_check" = "yes" ]; then
         test_fail "[用例6.1] 管理 API 确认移除失败: ${PROVIDER_SERVICE} 仍在 destinations 中"
+        test_fail "[用例6.1a] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        test_fail "[用例6.1b] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
         _restore_lane_group
         return
     elif [ "$admin_check" = "error" ]; then
         test_fail "[用例6.1] 管理 API 查询失败"
+        test_fail "[用例6.1a] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        test_fail "[用例6.1b] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
         _restore_lane_group
         return
     fi
     log_ok "管理 API 确认: ${PROVIDER_SERVICE} 已从泳道组移除"
 
+    # Phase 1.5: 通过 Discover API 直接验证服务端已将最新规则推送给 SDK
+    # 管理 API 与 Discover API 分别面向控制面与数据面：
+    #   - 管理 API（/naming/v1/lane/groups）: 修改落盘后立即生效
+    #   - Discover API（/v1/Discover, type=LANE）: 需要 Polaris 服务端 naming cache 刷新后才会下发
+    # 只有 Discover API 返回的 destinations 不包含 ${PROVIDER_SERVICE}，SDK 才可能感知到变更。
+    log_info "Phase 1.5: 通过 Discover API 验证服务端推送给 SDK 的泳道规则..."
+    local max_discover_wait=120
+    local discover_waited=0
+    local discover_synced=false
+    while [ $discover_waited -lt $max_discover_wait ]; do
+        local discover_resp
+        discover_resp=$(fetch_lane_rules)
+        local discover_check
+        discover_check=$(echo "$discover_resp" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    if data.get('code', 0) != 200000:
+        print('error|code=' + str(data.get('code', 0)))
+        sys.exit(0)
+    lanes = data.get('lanes', [])
+    target = None
+    for lane in lanes:
+        if lane.get('name') == '${LANE_GROUP_NAME}':
+            target = lane
+            break
+    if target is None:
+        print('error|lane_group_not_found')
+        sys.exit(0)
+    dests = [d.get('service','') for d in target.get('destinations', [])]
+    if '${PROVIDER_SERVICE}' in dests:
+        print('pending|' + ','.join(dests))
+    else:
+        print('ok|' + ','.join(dests))
+except Exception as e:
+    print('error|' + str(e))
+" 2>/dev/null)
+        local status="${discover_check%%|*}"
+        local detail="${discover_check#*|}"
+        case "$status" in
+            ok)
+                log_ok "Discover API 确认: destinations 已不含 ${PROVIDER_SERVICE} (当前: ${detail})"
+                discover_synced=true
+                break
+                ;;
+            pending)
+                log_info "  Discover API 仍包含 ${PROVIDER_SERVICE} (${discover_waited}s/${max_discover_wait}s)，当前: ${detail}"
+                ;;
+            error|*)
+                log_warn "  Discover API 查询异常 (${discover_waited}s/${max_discover_wait}s): ${detail}"
+                ;;
+        esac
+        sleep 5
+        discover_waited=$((discover_waited + 5))
+    done
+
+    if ! $discover_synced; then
+        log_warn "Discover API 在 ${max_discover_wait}s 内未感知到泳道组变更"
+        log_warn "原因: Polaris 服务端 naming cache 刷新延迟，SDK 无法拉取到最新规则"
+        log_warn "如需测试此场景，请确保 Polaris 服务端 naming cache 刷新间隔 < ${max_discover_wait}s"
+        test_pass "[用例6.1] SKIP: Discover API 缓存传播超时，非 SDK 问题"
+        # 管理 API 已经真实移除了 ${PROVIDER_SERVICE},即使本次 SKIP,也必须把泳道组
+        # 恢复回初始状态,否则后续运行会一直失败。
+        _restore_lane_group
+        return
+    fi
+
     # Phase 2: 等待 SDK 拉取到最新规则并通过行为探测确认
-    # Polaris Discover API 的 naming cache 刷新间隔不可控（可能 > 60s），
-    # 因此直接通过实际请求行为来判断 SDK 是否已感知到变更。
-    # SDK 默认 refreshInterval=2s，但 Discover API 缓存可能延迟，
-    # 所以给予较长的探测窗口。
-    log_info "Phase 2: 等待 SDK 感知泳道组变更 (行为探测，最多 180s)..."
-    local max_sdk_wait=180
+    #
+    # 重要前置条件(Phase 1.5 已保证):
+    #   - Polaris Discover API 已经把 destinations 不含 ${PROVIDER_SERVICE} 的最新规则
+    #     下发了。SDK 默认 refreshInterval=2s,此时拉取到新规则只是时间问题。
+    #
+    # 因此 Phase 2 窗口内如果行为仍未切换:
+    #   - 绝不能归咎为"服务端缓存刷新延迟"(Phase 1.5 已排除);
+    #   - 只可能是 SDK 端 bug(泳道路由短格式歧义、跨泳道组 destinations 合并错误等)。
+    # 必须 FAIL,否则会掩盖真实 bug。
+    log_info "Phase 2: 等待 SDK 感知泳道组变更 (行为探测,最多 30s)..."
+    local max_sdk_wait=30
     local sdk_waited=0
     local rule_effective=false
     while [ $sdk_waited -lt $max_sdk_wait ]; do
@@ -2696,14 +2777,23 @@ except:
         fi
         sleep 5
         sdk_waited=$((sdk_waited + 5))
-        log_info "  探测 (${sdk_waited}s/${max_sdk_wait}s): 仍路由到 gray（Discover API 缓存可能未刷新）..."
+        log_info "  探测 (${sdk_waited}s/${max_sdk_wait}s): 仍路由到 gray..."
     done
 
     if ! $rule_effective; then
-        log_warn "SDK 在 ${max_sdk_wait}s 内未感知到泳道组变更"
-        log_warn "原因: Polaris Discover API naming cache 刷新延迟（服务端已知行为）"
-        log_warn "如需测试此场景，请确保 Polaris 服务端 naming cache 刷新间隔 < 60s"
-        test_pass "[用例6.1] SKIP: Polaris 服务端缓存传播超时，非 SDK 问题"
+        test_fail "[用例6.1] SDK 在 ${max_sdk_wait}s 内未感知到泳道组变更"
+        log_info "  Phase 1.5 已确认 Discover API 下发的 destinations 不含 ${PROVIDER_SERVICE},"
+        log_info "  即服务端规则已传播到 SDK。Phase 2 行为仍停留在旧路由,说明 SDK 泳道路由存在 bug。"
+        log_info "  排查提示:"
+        log_info "    1. 检查是否存在其它泳道组(如 lane-go-warmup)也包含 ${PROVIDER_SERVICE} 与相同 defaultLabelValue,"
+        log_info "       导致短格式 service-lane=gray 被错误匹配到兄弟组(matchByStainLabel 歧义消解)。"
+        log_info "    2. 检查 caller+callee 两侧 LaneGroup 合并是否正确丢弃了已过期的一侧。"
+        log_info "    3. Consumer SDK debug 日志: .logs/consumer-base.log 搜索 '[Router][Lane]'。"
+        # 6.1a / 6.1b 的前置条件(规则变更生效)未满足,属于级联失败。
+        # 必须显式标记为 FAIL,否则总计数会少算,给出虚假的"通过率 100%"。
+        test_fail "[用例6.1a] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        test_fail "[用例6.1b] 跳过执行: 依赖用例 6.1 规则变更生效 (级联失败)"
+        # 恢复泳道组配置,避免脏状态污染后续运行。
         _restore_lane_group
         return
     fi

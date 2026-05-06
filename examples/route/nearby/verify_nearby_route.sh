@@ -616,6 +616,11 @@ global:
     addresses:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
+    # 默认 connectTimeout=500ms / messageTimeout=1s 对外网北极星偏小：
+    # 首次 TCP 握手/服务发现容易 context deadline exceeded，
+    # 参考 .logs/consumer.log 里 20 条 Polaris-1004 的现象。
+    connectTimeout: 3s
+    messageTimeout: 3s
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location:
     providers:
@@ -638,6 +643,10 @@ global:
   serverConnector:
     addresses:
       - ${POLARIS_SERVER}:8091
+    # 同 generate_provider_polaris_yaml：放宽 serverConnector 默认超时，
+    # 避免 consumer 在 GetAllInstances 首包冷启动阶段因 500ms 被击穿。
+    connectTimeout: 3s
+    messageTimeout: 3s
   # 地址提供插件，用于获取当前SDK所在的地域信息
   location:
     providers:

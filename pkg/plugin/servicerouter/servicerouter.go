@@ -75,6 +75,30 @@ type RouteInfo struct {
 	MatchRuleType RuleType
 	// 规则路由失败降级类型
 	FailOverType *FailOverType
+	// routeMetadata 路由插件写回的跨链路元数据,用于暴露路由决策给调用方 / 下游.
+	// 典型用途:泳道路由在确定染色后写入 {"service-lane": "{groupName}/{ruleName}"},
+	// 业务网关读 InstancesResponse.RouteMetadata 后作为 HTTP Header 透传给下游服务,
+	// 对齐 polaris-java MessageMetadataContainer + TransitiveType.PASS_THROUGH 的语义.
+	routeMetadata map[string]string
+}
+
+// SetRouteMetadata 写入跨链路路由元数据 (最后写入方胜出).
+// 路由插件染色 / 命中规则时调用,引擎层会在构建 InstancesResponse 时拷贝出去.
+// 并发:同一次 ProcessRouters 内路由链按序执行,不需要额外加锁.
+func (r *RouteInfo) SetRouteMetadata(key, value string) {
+	if key == "" {
+		return
+	}
+	if r.routeMetadata == nil {
+		r.routeMetadata = make(map[string]string, 2)
+	}
+	r.routeMetadata[key] = value
+}
+
+// GetRouteMetadata 读取路由链写入的元数据,返回内部 map 的只读视图.
+// nil 返回 nil,调用方需容忍.禁止原地修改返回值.
+func (r *RouteInfo) GetRouteMetadata() map[string]string {
+	return r.routeMetadata
 }
 
 // Init 初始化map
@@ -106,6 +130,10 @@ func (r *RouteInfo) ClearValue() {
 	r.MatchRuleType = UnknownRule
 	r.ignoreFilterOnlyOnEndChain = false
 	r.EnvironmentVariables = nil
+	// 清空 routeMetadata 但保留 map 引用,避免池化复用时反复分配.
+	for k := range r.routeMetadata {
+		delete(r.routeMetadata, k)
+	}
 	for k := range r.chainEnables {
 		r.chainEnables[k] = true
 	}

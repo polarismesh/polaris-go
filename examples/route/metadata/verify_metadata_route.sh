@@ -293,6 +293,8 @@ global:
     addresses:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
+    # 把默认 500ms 放宽到 3s：外网北极星服务端首次 TCP 握手容易超过 500ms，
+    connectTimeout: 3s
 EOF
     log_info "生成 Provider polaris.yaml -> $yaml_file"
 }
@@ -306,6 +308,8 @@ global:
   serverConnector:
     addresses:
       - ${POLARIS_SERVER}:8091
+    # 把默认 500ms 放宽到 3s：首次服务发现同样容易超过默认值，
+    connectTimeout: 3s
   statReporter:
     enable: true
     chain:
@@ -336,6 +340,8 @@ global:
   serverConnector:
     addresses:
       - ${POLARIS_SERVER}:8091
+    # 同 generate_consumer_polaris_yaml：默认 500ms 偏小，首请求易超时。
+    connectTimeout: 3s
   statReporter:
     enable: true
     chain:

@@ -135,22 +135,39 @@ func newLaneRuleContainer(groups []*apitraffic.LaneGroup, sourceService model.Se
 // 支持两种格式：
 //  1. 完整格式 "{groupName}/{ruleName}" — 优先在 stainLabelIndex 中精确匹配
 //  2. 短格式 "{laneValue}" — 当精确匹配失败时，回退到匹配 rule.DefaultLabelValue
-//
-// 短格式用于兼容网关流量匹配场景：网关通过 TrafficMatchRule 确定泳道后，只能从实例元数据
-// 中获取 lane 值（如 "gray"），无法构造完整的 stainLabel。下游服务收到短格式后，
-// 通过 defaultLabelValue 匹配即可正确路由到对应泳道。
-func (c *laneRuleContainer) matchByStainLabel(stainLabel string) *laneRuleItem {
+//  3. 歧义消解：如果存在多个匹配的规则，优先返回与 destService 相关的规则，其次返回第一个匹配的规则
+func (c *laneRuleContainer) matchByStainLabel(
+	stainLabel string,
+	sourceService, destService model.ServiceMetadata,
+) *laneRuleItem {
 	// 1. 精确匹配（完整格式）
 	if item := c.stainLabelIndex[stainLabel]; item != nil {
 		return item
 	}
-	// 2. 短格式回退：遍历规则，匹配 defaultLabelValue
+	// 2. 短格式回退 + 歧义消解
+	var firstFallback, firstRelevant *laneRuleItem
 	for _, item := range c.sortedItems {
-		if item.rule.GetDefaultLabelValue() == stainLabel {
+		if item.rule.GetDefaultLabelValue() != stainLabel {
+			continue
+		}
+		if firstFallback == nil {
+			firstFallback = item
+		}
+		// destService 必须在该泳道组的 destinations 中，否则本组与当前调用无关。
+		if destService != nil && !checkServiceInLane(item.group, destService) {
+			continue
+		}
+		if firstRelevant == nil {
+			firstRelevant = item
+		}
+		if matchTrafficRule(item.rule.GetTrafficMatchRule(), sourceService) {
 			return item
 		}
 	}
-	return nil
+	if firstRelevant != nil {
+		return firstRelevant
+	}
+	return firstFallback
 }
 
 // matchByRouteInfo 根据路由信息匹配规则（流量识别阶段）
@@ -699,11 +716,11 @@ func (r *LaneRouter) findMatchedRule(
 	container *laneRuleContainer,
 	alreadyStained bool,
 	stainLabel string,
-	sourceService model.ServiceMetadata,
+	sourceService, destService model.ServiceMetadata,
 ) *laneRuleItem {
 	debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
 	if alreadyStained {
-		matchedItem := container.matchByStainLabel(stainLabel)
+		matchedItem := container.matchByStainLabel(stainLabel, sourceService, destService)
 		if debugEnabled {
 			if matchedItem != nil {
 				r.logCtx.GetRouteLogger().Debugf(
@@ -786,7 +803,8 @@ func (r *LaneRouter) GetFilteredInstances(
 	}
 
 	// 查找匹配的规则
-	matchedItem := r.findMatchedRule(container, alreadyStained, stainLabel, routeInfo.SourceService)
+	matchedItem := r.findMatchedRule(container, alreadyStained, stainLabel,
+		routeInfo.SourceService, routeInfo.DestService)
 
 	// 无匹配规则 → 回退基线
 	if matchedItem == nil {
@@ -798,20 +816,56 @@ func (r *LaneRouter) GetFilteredInstances(
 		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 	}
 
-	// 灰度染色判断（仅在首次染色时执行）
-	if !alreadyStained && !r.tryStainCurrentTraffic(matchedItem.rule) {
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] traffic gray check rejected (not stained), group=%s, rule=%s, "+
-				"grayMode=%s, fallback to baseline",
-			matchedItem.group.GetName(), matchedItem.rule.GetName(),
-			matchedItem.rule.GetTrafficGray().GetMode())
-		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
-	}
+	// isEntry 门禁染色:对齐 polaris-java LaneUtils.tryStainCurrentTraffic.
+	// 只有当调用方是该泳道组的流量入口 (gateway/service entry) 时才能决定染色;
+	// 非入口的中间服务仅透传已有染色标签,不做二次染色决策,避免:
+	//   1. 网关外的 middle-hop 把业务请求误染色进泳道;
+	//   2. 多泳道组共享 defaultLabelValue 时,短格式标签在非入口端产生歧义匹配.
+	isEntryHit := matchedItem.isEntry
 
-	if !alreadyStained && r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-		r.logCtx.GetRouteLogger().Debugf(
-			"[Router][Lane] first-time stain decided: %s=%s (not written back to RouteInfo)",
-			trafficStainLabel, matchedItem.stainLabel)
+	// 首次流量(alreadyStained=false)场景:
+	//   - 非入口 → 非法染色点,直接走基线 (与 Java `redirectToBase(...)` 一致);
+	//   - 入口 → 走 percentage/warmup 染色概率,命中则写完整 stain label 到 RouteMetadata.
+	if !alreadyStained {
+		if !isEntryHit {
+			if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+				r.logCtx.GetRouteLogger().Debugf(
+					"[Router][Lane] caller %s/%s is NOT traffic entry of group %q, fallback to baseline",
+					sourceNs, sourceSvc, matchedItem.group.GetName())
+			}
+			return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
+		}
+		// 入口染色概率检查 (percentage / warmup)
+		if !r.tryStainCurrentTraffic(matchedItem.rule) {
+			r.logCtx.GetRouteLogger().Infof(
+				"[Router][Lane] traffic gray check rejected (not stained), group=%s, rule=%s, "+
+					"grayMode=%s, fallback to baseline",
+				matchedItem.group.GetName(), matchedItem.rule.GetName(),
+				matchedItem.rule.GetTrafficGray().GetMode())
+			return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
+		}
+		// 染色成功:把完整 stain label ({groupName}/{ruleName}) 写回 RouteMetadata.
+		// 业务网关通过 InstancesResponse.RouteMetadata["service-lane"] 读取后以 HTTP Header
+		// 形式透传给下游服务,下游 SDK 的 lane router 按精确匹配 (stainLabelIndex) 直接命中
+		fullStainLabel := matchedItem.stainLabel
+		routeInfo.SetRouteMetadata(trafficStainLabel, fullStainLabel)
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] first-time stain at entry: %s=%s → RouteMetadata (for caller passthrough)",
+				trafficStainLabel, fullStainLabel)
+		}
+	} else {
+		// 已染色场景:无论是否入口都透传,保持链路染色一致性.
+		// Java 实现对应 `calleeMsgContainer.setHeader(TRAFFIC_STAIN_LABEL, stainLabel, PASS_THROUGH)`.
+		// 注意:透传的是上游给的原始 stainLabel (可能是完整格式或短格式),调用方 (gateway)
+		// 读到什么就原样透传什么,不做格式转换,避免链路中途把完整格式降级回短格式.
+		routeInfo.SetRouteMetadata(trafficStainLabel, stainLabel)
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] passthrough stain label: %s=%s (matched group=%s, rule=%s)",
+				trafficStainLabel, stainLabel,
+				matchedItem.group.GetName(), matchedItem.rule.GetName())
+		}
 	}
 
 	// 目标服务不在此泳道组的 destinations 中 → 回退基线

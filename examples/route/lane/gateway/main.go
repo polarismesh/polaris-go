@@ -213,17 +213,27 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	// 透传泳道染色标签:
-	// 如果原始请求已携带 service-lane header (下游直接染色场景), 则已通过上面的
-	// header 复制透传, 无需处理。
-	// 如果原始请求未携带 (网关作为染色入口, 通过 TrafficMatchRule 识别命中的场景),
-	// 则从选中实例的 metadata 中取 "lane" 值, 以短格式透传给下游。
-	// lane router 的 matchByStainLabel 会在 stainLabelIndex 精确匹配失败后,
-	// 回落按 DefaultLabelValue 匹配, 因此短格式足以让下游正确路由到同一泳道。
+	//
+	// 优先级(由高到低):
+	//  1. 原始请求已携带 service-lane (下游直接染色场景) → 上面 header 复制环节已透传.
+	//  2. SDK lane router 本次路由链写入的完整 stain label
+	//     (InstancesResponse.RouteMetadata["service-lane"], 格式 "{groupName}/{ruleName}")
+	//     → 精确匹配,下游 matchByStainLabel 直接命中 stainLabelIndex,无歧义.
+	//  3. 兜底:从选中实例 metadata 读短格式 "lane" 值 .
+	//
 	if r.Header.Get(trafficStainHeader) == "" {
-		if lane := instance.GetMetadata()["lane"]; lane != "" {
-			upstreamReq.Header.Set(trafficStainHeader, lane)
-			log.Printf("[INFO] propagate stain label from instance metadata: %s=%s",
-				trafficStainHeader, lane)
+		propagated := ""
+		if routeMeta := routedResp.RouteMetadata; routeMeta != nil {
+			if v, ok := routeMeta[trafficStainHeader]; ok && v != "" {
+				propagated = v
+			}
+		}
+		if propagated == "" {
+			propagated = instance.GetMetadata()["lane"]
+		}
+		if propagated != "" {
+			upstreamReq.Header.Set(trafficStainHeader, propagated)
+			log.Printf("[INFO] propagate stain label: %s=%s", trafficStainHeader, propagated)
 		}
 	}
 

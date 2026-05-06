@@ -505,3 +505,206 @@ func TestGetLaneKey_FallbackToDefault(t *testing.T) {
 		})
 	}
 }
+
+// stubServiceMetadata 一个最小 ServiceMetadata 实现,供 matchByStainLabel 歧义消解测试使用
+type stubServiceMetadata struct {
+	namespace string
+	service   string
+	metadata  map[string]string
+}
+
+func (s *stubServiceMetadata) GetNamespace() string           { return s.namespace }
+func (s *stubServiceMetadata) GetService() string             { return s.service }
+func (s *stubServiceMetadata) GetMetadata() map[string]string { return s.metadata }
+
+// TestMatchByStainLabel_ShortFormDisambiguation 防回归:
+// 模拟 examples/route/lane 用例 6.1 的真实缓存 —— 消费端同时缓存两个泳道组:
+//   - lane-go-warmup (ctime 更老, destinations 包含 LaneEchoServer)
+//   - lane-go-example (ctime 更新, destinations 已移除 LaneEchoServer)
+//
+// 两组 rule 都有 defaultLabelValue="gray"。上游(网关)按 lane-go-example 染色后透传短格式
+// "gray" 给下游。原 matchByStainLabel 按 sortedItems 首条返回,会错误命中
+// lane-go-warmup,绕过 lane-go-example 已移除 destService 的运营变更。
+//
+// 修复后:matchByStainLabel 以 destService 是否在 group.destinations 为首要条件筛选相关
+// 候选,再用 TrafficMatchRule 做二次校验,保证命中的是真正与当前调用链相关的组。
+func TestMatchByStainLabel_ShortFormDisambiguation(t *testing.T) {
+	// dest 服务: LaneEchoServer
+	destSvc := &stubServiceMetadata{namespace: "default", service: "LaneEchoServer"}
+	srcSvc := &stubServiceMetadata{
+		namespace: "default",
+		service:   "LaneEchoClient",
+		metadata:  map[string]string{},
+	}
+
+	// 老组 (dest 在 destinations 中, 但规则并非当前调用真正命中的组)
+	// 注意: buildStainLabel 使用 rule.GroupName 字段,因此必须显式设置,否则 stainLabelIndex
+	// 的键会是 "/gray" 而非 "lane-go-warmup/gray"。
+	warmupRule := &apitraffic.LaneRule{
+		Name:              "gray",
+		GroupName:         "lane-go-warmup",
+		Enable:            true,
+		DefaultLabelValue: "gray",
+		Ctime:             "2026-04-21 17:28:56",
+	}
+	warmupGroup := &apitraffic.LaneGroup{
+		Name:  "lane-go-warmup",
+		Rules: []*apitraffic.LaneRule{warmupRule},
+		Destinations: []*apitraffic.DestinationGroup{
+			{Namespace: "default", Service: "LaneEchoServer"},
+			{Namespace: "default", Service: "LaneEchoClient"},
+		},
+	}
+
+	// 新组 (已把 LaneEchoServer 从 destinations 中移除,模拟用例 6.1 的运营变更)
+	exampleRule := &apitraffic.LaneRule{
+		Name:              "gray",
+		GroupName:         "lane-go-example",
+		Enable:            true,
+		DefaultLabelValue: "gray",
+		Ctime:             "2026-04-27 17:01:13",
+	}
+	exampleGroup := &apitraffic.LaneGroup{
+		Name:  "lane-go-example",
+		Rules: []*apitraffic.LaneRule{exampleRule},
+		Destinations: []*apitraffic.DestinationGroup{
+			{Namespace: "default", Service: "LaneEchoClient"},
+			// 注意: 不含 LaneEchoServer
+		},
+	}
+
+	t.Run("dest_removed_from_relevant_group_falls_back_to_still_relevant", func(t *testing.T) {
+		// 测试场景: exampleGroup 已移除 LaneEchoServer → 它对本次调用"不相关";
+		// warmupGroup 的 destinations 仍包含 LaneEchoServer → 相关候选。
+		// 短格式 "gray" 应命中 warmupGroup (唯一相关候选)。
+		// 这是"运营把 A 组 destinations 缩小到不含 dest、但 B 组还包含它"的场景:
+		// 旧实现和新实现结果一致都是 B 组,因为 A 组已被 destinations 过滤排除。
+		container := newLaneRuleContainer(
+			[]*apitraffic.LaneGroup{warmupGroup, exampleGroup},
+			srcSvc,
+		)
+		got := container.matchByStainLabel("gray", srcSvc, destSvc)
+		if got == nil {
+			t.Fatal("expected a matched item, got nil")
+		}
+		if got.group.GetName() != "lane-go-warmup" {
+			t.Errorf("group = %q, want %q", got.group.GetName(), "lane-go-warmup")
+		}
+	})
+
+	t.Run("both_groups_contain_dest_returns_first_sorted", func(t *testing.T) {
+		// 测试场景: 两组 destinations 都包含 dest → 两者都是"相关候选",
+		// TrafficMatchRule 未设置 (rule.GetTrafficMatchRule() 为空 → matchTrafficRule
+		// 对空规则返回 false),于是命中 firstRelevant = sortedItems 首条。
+		// 这里验证不会意外退化 / panic。
+		warmupGroup2 := &apitraffic.LaneGroup{
+			Name:  "lane-go-warmup",
+			Rules: []*apitraffic.LaneRule{warmupRule},
+			Destinations: []*apitraffic.DestinationGroup{
+				{Namespace: "default", Service: "LaneEchoServer"},
+			},
+		}
+		exampleGroup2 := &apitraffic.LaneGroup{
+			Name:  "lane-go-example",
+			Rules: []*apitraffic.LaneRule{exampleRule},
+			Destinations: []*apitraffic.DestinationGroup{
+				{Namespace: "default", Service: "LaneEchoServer"},
+			},
+		}
+		container := newLaneRuleContainer(
+			[]*apitraffic.LaneGroup{warmupGroup2, exampleGroup2},
+			srcSvc,
+		)
+		got := container.matchByStainLabel("gray", srcSvc, destSvc)
+		if got == nil {
+			t.Fatal("expected a matched item, got nil")
+		}
+		// 按 ctime 排序, warmupGroup2 更老, 作为 firstRelevant 返回
+		if got.group.GetName() != "lane-go-warmup" {
+			t.Errorf("group = %q, want %q (first sorted)", got.group.GetName(), "lane-go-warmup")
+		}
+	})
+
+	t.Run("no_relevant_group_returns_first_fallback_for_compat", func(t *testing.T) {
+		// 测试场景: 两组 destinations 都不含 dest → 没有"相关候选",
+		// 为保持与旧行为兼容(避免单组场景下退化成 nil),返回 firstFallback。
+		group1 := &apitraffic.LaneGroup{
+			Name:         "g1",
+			Rules:        []*apitraffic.LaneRule{warmupRule},
+			Destinations: []*apitraffic.DestinationGroup{{Service: "OtherSvc"}},
+		}
+		group2 := &apitraffic.LaneGroup{
+			Name:         "g2",
+			Rules:        []*apitraffic.LaneRule{exampleRule},
+			Destinations: []*apitraffic.DestinationGroup{{Service: "OtherSvc"}},
+		}
+		container := newLaneRuleContainer(
+			[]*apitraffic.LaneGroup{group1, group2},
+			srcSvc,
+		)
+		got := container.matchByStainLabel("gray", srcSvc, destSvc)
+		if got == nil {
+			t.Fatal("expected a fallback match, got nil")
+		}
+		// firstFallback = 排序后第一条 defaultLabelValue=gray 的规则
+		if got.group.GetName() != "g1" {
+			t.Errorf("group = %q, want %q (firstFallback)", got.group.GetName(), "g1")
+		}
+	})
+
+	t.Run("exact_full_format_skips_disambiguation", func(t *testing.T) {
+		// 测试场景: 完整格式 "lane-go-example/gray" 应走 stainLabelIndex 精确匹配,
+		// 绕过短格式歧义消解。无论 destinations 是否包含 dest,都应命中该组。
+		container := newLaneRuleContainer(
+			[]*apitraffic.LaneGroup{warmupGroup, exampleGroup},
+			srcSvc,
+		)
+		got := container.matchByStainLabel("lane-go-example/gray", srcSvc, destSvc)
+		if got == nil {
+			t.Fatal("expected exact match, got nil")
+		}
+		if got.group.GetName() != "lane-go-example" {
+			t.Errorf("group = %q, want lane-go-example", got.group.GetName())
+		}
+	})
+}
+
+// TestRouteInfo_RouteMetadata_RoundTrip 验证 RouteInfo.SetRouteMetadata / GetRouteMetadata
+// 的基本读写与 ClearValue 语义,这是 InstancesResponse.RouteMetadata 暴露 stain label 的底层依赖。
+// 注:本测试直接检验 servicerouter.RouteInfo,不走 lane 插件初始化链路。
+func TestRouteInfo_RouteMetadata_RoundTrip(t *testing.T) {
+	var ri servicerouter.RouteInfo
+
+	// 未写入时应为 nil,调用方需要容忍 nil
+	if got := ri.GetRouteMetadata(); got != nil {
+		t.Errorf("initial GetRouteMetadata() = %v, want nil", got)
+	}
+
+	// 写入单条
+	ri.SetRouteMetadata("service-lane", "lane-go-example/gray")
+	meta := ri.GetRouteMetadata()
+	if meta == nil {
+		t.Fatal("GetRouteMetadata() = nil after Set, want non-nil")
+	}
+	if got := meta["service-lane"]; got != "lane-go-example/gray" {
+		t.Errorf("meta[service-lane] = %q, want lane-go-example/gray", got)
+	}
+
+	// 覆写 (最后写入方胜出)
+	ri.SetRouteMetadata("service-lane", "lane-go-warmup/gray")
+	if got := ri.GetRouteMetadata()["service-lane"]; got != "lane-go-warmup/gray" {
+		t.Errorf("overwrite: meta[service-lane] = %q, want lane-go-warmup/gray", got)
+	}
+
+	// 空 key 应被丢弃,避免插件误写污染
+	ri.SetRouteMetadata("", "junk")
+	if _, ok := ri.GetRouteMetadata()[""]; ok {
+		t.Error("empty key should not be stored")
+	}
+
+	// ClearValue 必须清空 metadata, 防止 CommonInstancesRequest 池化复用时泄漏脏数据
+	ri.ClearValue()
+	if got := ri.GetRouteMetadata(); len(got) != 0 {
+		t.Errorf("after ClearValue: metadata = %v, want empty", got)
+	}
+}

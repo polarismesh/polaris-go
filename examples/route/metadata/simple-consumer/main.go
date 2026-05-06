@@ -86,72 +86,7 @@ func (svr *PolarisConsumer) reportResult(svcCallResult *polaris.ServiceCallResul
 }
 
 func (svr *PolarisConsumer) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
-		getOneRequest := &polaris.GetOneInstanceRequest{}
-		getOneRequest.Namespace = calleeNamespace
-		getOneRequest.Service = calleeService
-		getOneRequest.Metadata = svr.metadataMap
-		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
-		if nil != err {
-			log.Printf("[error] fail to getAllInstances, err is %v", err)
-			rw.WriteHeader(http.StatusOK)
-			_, _ = rw.Write([]byte(fmt.Sprintf("fail to getAllInstances, err is %v", err)))
-			return
-		}
-
-		instance := oneInstResp.GetInstance()
-		if nil != instance {
-			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-		}
-
-		var buf bytes.Buffer
-
-		loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
-		locStr, _ := json.Marshal(loc)
-
-		svr.consumer.SDKContext().GetConfig()
-		msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ", string(locStr), svr.host, svr.port)
-		_, _ = buf.WriteString(msg)
-
-		//服务调用结果，用于在后面进行调用结果上报
-		svcCallResult := &polaris.ServiceCallResult{}
-		//将服务上报对象设置为获取到的实例
-		svcCallResult.SetCalledInstance(instance)
-
-		func() {
-			requestStartTime := time.Now()
-			resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
-			//设置调用耗时
-			svcCallResult.SetDelay(time.Since(requestStartTime))
-			if err != nil {
-				log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-				rw.WriteHeader(http.StatusOK)
-				_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-				svr.reportResult(svcCallResult, api.RetFail, -1)
-				return
-			}
-			defer resp.Body.Close()
-			data, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-				rw.WriteHeader(http.StatusOK)
-				_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-				svr.reportResult(svcCallResult, api.RetFail, -1)
-				return
-			}
-			log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
-			svr.reportResult(svcCallResult, api.RetSuccess, 0)
-
-			_, _ = buf.Write(data)
-			_ = buf.WriteByte('\n')
-			time.Sleep(30 * time.Millisecond)
-		}()
-
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write(buf.Bytes())
-
-	})
+	http.HandleFunc("/echo", svr.handleEcho)
 
 	log.Printf("start run web server, port : %d", port)
 
@@ -165,6 +100,75 @@ func (svr *PolarisConsumer) runWebServer() {
 	if err := http.Serve(ln, nil); err != nil {
 		log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 	}
+}
+
+// handleEcho 处理 /echo 请求：拉取一个实例并转发调用。
+// 注意：所有错误分支都用 early-return 直接写一次响应并返回，
+// 避免原先用匿名 func 包裹时，内层 return 只退出匿名 func 导致
+// 外层再次 WriteHeader 触发 "superfluous response.WriteHeader" 警告。
+func (svr *PolarisConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
+	log.Printf("start to invoke getOneInstance operation")
+	getOneRequest := &polaris.GetOneInstanceRequest{}
+	getOneRequest.Namespace = calleeNamespace
+	getOneRequest.Service = calleeService
+	getOneRequest.Metadata = svr.metadataMap
+	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+	if nil != err {
+		log.Printf("[error] fail to getAllInstances, err is %v", err)
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte(fmt.Sprintf("fail to getAllInstances, err is %v", err)))
+		return
+	}
+
+	instance := oneInstResp.GetInstance()
+	if nil != instance {
+		log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
+	}
+
+	loc := svr.consumer.SDKContext().GetValueContext().GetCurrentLocation().GetLocation()
+	locStr, _ := json.Marshal(loc)
+	msg := fmt.Sprintf("RouteNearbyEchoServer Consumer, MyLocInfo's : %s, host : %s:%d => ",
+		string(locStr), svr.host, svr.port)
+
+	// 服务调用结果，用于在后面进行调用结果上报
+	svcCallResult := &polaris.ServiceCallResult{}
+	// 将服务上报对象设置为获取到的实例
+	svcCallResult.SetCalledInstance(instance)
+
+	requestStartTime := time.Now()
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+	// 设置调用耗时
+	svcCallResult.SetDelay(time.Since(requestStartTime))
+	if err != nil {
+		log.Printf("[error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+		svr.reportResult(svcCallResult, api.RetFail, -1)
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte(fmt.Sprintf("send request to %s:%d fail : %s",
+			instance.GetHost(), instance.GetPort(), err)))
+		return
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+		svr.reportResult(svcCallResult, api.RetFail, -1)
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte(fmt.Sprintf("read resp from %s:%d fail : %s",
+			instance.GetHost(), instance.GetPort(), err)))
+		return
+	}
+	log.Printf("read resp from %s:%d, data:%s", instance.GetHost(), instance.GetPort(), string(data))
+	svr.reportResult(svcCallResult, api.RetSuccess, 0)
+
+	var buf bytes.Buffer
+	_, _ = buf.WriteString(msg)
+	_, _ = buf.Write(data)
+	_ = buf.WriteByte('\n')
+	time.Sleep(30 * time.Millisecond)
+
+	rw.WriteHeader(http.StatusOK)
+	_, _ = rw.Write(buf.Bytes())
 }
 
 func main() {

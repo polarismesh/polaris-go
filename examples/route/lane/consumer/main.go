@@ -286,12 +286,23 @@ func (svr *LaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
 
 			upstreamReq, _ := http.NewRequestWithContext(r.Context(), http.MethodGet,
 				fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
-			// 泳道染色标签透传 (短格式):
-			// - 优先使用从上游收到的原始 service-lane 标签 (例如 "gray/rule1");
-			// - 否则从选中实例的 metadata 中取 "lane" 值, 以短格式透传给下游。
-			// lane router 的 matchByStainLabel 在精确匹配 stainLabelIndex 失败后,
-			// 会回落按 DefaultLabelValue 匹配, 短格式足以让下游路由到同一泳道。
+			// 泳道染色标签透传:
+			//
+			// 优先级(由高到低),与 gateway/main.go 一致:
+			//  1. 上游透传来的 service-lane header (stainLabel 变量已从 Header 取出).
+			//  2. SDK lane router 本次路由链写入的 RouteMetadata["service-lane"] —— 完整
+			//     格式 "{groupName}/{ruleName}",供下游精确匹配.在 consumer 场景这主要
+			//     走 passthrough 路径 (因 consumer 不是流量入口,不会首次染色),仍提供
+			//     非空兜底以防上游 header 与 RouteMetadata 不一致.
+			//  3. 兜底:选中实例 metadata 的 "lane" 短格式 .
 			propagateLabel := stainLabel
+			if propagateLabel == "" {
+				if routeMeta := routedResp.RouteMetadata; routeMeta != nil {
+					if v, ok := routeMeta[trafficStainHeader]; ok && v != "" {
+						propagateLabel = v
+					}
+				}
+			}
 			if propagateLabel == "" {
 				propagateLabel = instance.GetMetadata()["lane"]
 			}
