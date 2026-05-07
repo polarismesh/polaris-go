@@ -254,10 +254,6 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 			c.Trigger.EnableSrcLane = true
 		}
 	}
-	// Arguments 已在 api.go / api/consumer.go 的 convert() 环节摊平到 SourceService.Metadata
-	// (带前缀的 label key: $header.* / $query.* / $cookie.* / $method / $caller_ip / $Path /
-	// Custom 原 key)。路由插件 (rulebase / lane 等) 直接读 SourceService.Metadata 即可，
-	// 这里不再复制到任何中间容器。
 	c.Criteria.HashKey = request.HashKey
 	c.Criteria.HashValue = request.HashValue
 	c.Criteria.ReplicateInfo.Count = request.ReplicateCount
