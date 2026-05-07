@@ -147,6 +147,8 @@ const (
 	EventLogger
 	// LosslessLogger 无损上下线日志对象
 	LosslessLogger
+	// RouteLogger 路由日志对象
+	RouteLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -194,6 +196,11 @@ func (c *container) SetEventLogger(logger Logger) {
 // SetLosslessLogger 设置无损上下线日志对象
 func (c *container) SetLosslessLogger(logger Logger) {
 	c.loggers[LosslessLogger].Store(&logger)
+}
+
+// SetRouteLogger 设置路由日志对象
+func (c *container) SetRouteLogger(logger Logger) {
+	c.loggers[RouteLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -268,6 +275,15 @@ func (c *container) GetLosslessLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetRouteLogger 获取路由日志对象
+func (c *container) GetRouteLogger() Logger {
+	value := c.loggers[RouteLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -306,6 +322,11 @@ func SetEventLogger(logger Logger) {
 // SetLosslessLogger 全局设置无损上下线日志对象
 func SetLosslessLogger(logger Logger) {
 	logContainer.SetLosslessLogger(logger)
+}
+
+// SetRouteLogger 全局设置路由日志对象
+func SetRouteLogger(logger Logger) {
+	logContainer.SetRouteLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -351,6 +372,11 @@ func GetEventLogger() Logger {
 // GetLosslessLogger 获取全局无损上下线日志对象
 func GetLosslessLogger() Logger {
 	return logContainer.GetLosslessLogger()
+}
+
+// GetRouteLogger 获取全局路由日志对象
+func GetRouteLogger() Logger {
+	return logContainer.GetRouteLogger()
 }
 
 // Options defines the set of options for component logging package.
@@ -469,6 +495,10 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default lossless logger %s", name)))
 		}
+		if err = ConfigDefaultRouteLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default route logger %s", name)))
+		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
@@ -573,6 +603,16 @@ func ConfigLosslessLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigRouteLogger 配置路由日志器
+func ConfigRouteLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, routeLoggerName, options, DefaultRouteLogLevel)
+	if err != nil {
+		return err
+	}
+	SetRouteLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -628,4 +668,10 @@ func ConfigDefaultEventLogger(pluginName string) error {
 func ConfigDefaultLosslessLogger(pluginName string) error {
 	return ConfigLosslessLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultLosslessLogRotationFile, DefaultLosslessLogLevel))
+}
+
+// ConfigDefaultRouteLogger 配置默认的路由日志器
+func ConfigDefaultRouteLogger(pluginName string) error {
+	return ConfigRouteLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultRouteLogRotationFile, DefaultRouteLogLevel))
 }

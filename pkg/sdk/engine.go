@@ -33,6 +33,10 @@ type CacheValueQuery interface {
 	SetDstInstances(instances model.ServiceInstances)
 	// SetDstRoute 设置目标服务路由规则
 	SetDstRoute(rule model.ServiceRule)
+	// SetDstLane 设置目标服务泳道规则
+	SetDstLane(rule model.ServiceRule)
+	// SetSrcLane 设置源服务泳道规则
+	SetSrcLane(rule model.ServiceRule)
 	// SetDstNearbyRoute 设置目标服务就近路由规则
 	SetDstNearbyRoute(rule model.ServiceRule)
 	// SetDstRateLimit 设置目标服务限流规则

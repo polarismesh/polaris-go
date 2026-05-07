@@ -76,11 +76,23 @@ func (g *InstancesFilter) GetFilteredInstances(
 	if len(dstMetadata) > 0 {
 		instSet := targetCluster.GetClusterValue().GetInstancesSet(true, true)
 		if instSet.Count() > 0 {
+			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetRouteLogger().Debugf(
+					"[Router][DstMeta] metadata matched, service=%s/%s, metadata=%v, instances=%d",
+					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+					dstMetadata, instSet.Count())
+			}
 			return g.getResult(targetCluster), nil
 		}
 
 		targetCluster.PoolPut()
 		if routeInfo.EnableFailOverDefaultMeta {
+			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+				g.logCtx.GetRouteLogger().Debugf(
+					"[Router][DstMeta] metadata not matched, fallback to failOverDefaultMeta, type=%v, service=%s/%s",
+					routeInfo.FailOverDefaultMeta.Type,
+					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService())
+			}
 			targetCluster, err := g.failOverDefaultMetaHandler(clusters, withinCluster, routeInfo)
 			if err != nil {
 				return nil, err
@@ -92,6 +104,11 @@ func (g *InstancesFilter) GetFilteredInstances(
 		return nil, g.metaNotMatchError(routeInfo)
 	}
 
+	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf(
+			"[Router][DstMeta] no dst metadata required, service=%s/%s, pass through",
+			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService())
+	}
 	return g.getResult(targetCluster), nil
 }
 
@@ -172,7 +189,7 @@ func (g *InstancesFilter) metaNotMatchError(routeInfo *servicerouter.RouteInfo) 
 		"dstmeta not match, dstService %s(namespace %s), metadata is %v",
 		routeInfo.DestService.GetService(), routeInfo.DestService.GetNamespace(),
 		routeInfo.DestService.GetMetadata())
-	g.logCtx.GetBaseLogger().Errorf(errorText)
+	g.logCtx.GetRouteLogger().Warnf("[Router][DstMeta] %s", errorText)
 	return model.NewSDKError(model.ErrCodeDstMetaMismatch, nil, errorText)
 }
 
@@ -199,5 +216,12 @@ func init() {
 
 // Enable 是否需要启动规则路由
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
-	return len(routeInfo.DestService.GetMetadata()) != 0
+	enabled := len(routeInfo.DestService.GetMetadata()) != 0
+	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf(
+			"[Router][DstMeta] Enable: service=%s/%s, enabled=%v, metadata=%v",
+			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+			enabled, routeInfo.DestService.GetMetadata())
+	}
+	return enabled
 }

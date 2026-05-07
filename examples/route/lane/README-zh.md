@@ -1,0 +1,424 @@
+# 泳道路由（Lane Router）示例
+
+## 功能说明
+
+泳道路由（Lane Router）是一种流量隔离机制，通过将实例打上泳道标签（如 `lane=gray`、`lane=stable`）将微服务集群划分为若干逻辑分组（泳道），实现灰度发布、A/B 测试等场景。
+
+本示例演示以下核心能力：
+
+- **Provider 侧**：注册带有不同泳道标签的服务实例
+  - `lane=gray`：灰度泳道实例
+  - `lane=stable`：稳定泳道实例
+  - *(无标签)*：基线实例，所有无法匹配泳道的流量兜底到此
+
+- **Consumer 侧**：依据 HTTP 请求头中的染色标签（`service-lane`）路由到对应泳道
+
+---
+
+## 前置条件
+
+1. 已部署并运行 [Polaris 服务端](https://github.com/polarismesh/polaris)（版本需支持泳道路由，建议 v1.19.0+）。
+2. 在 Polaris 控制台创建泳道组（LaneGroup），指定入口服务、目标服务（destinations）和流量识别规则（TrafficMatchRule）。
+3. 各示例目录下的 `polaris.yaml` 需将 `global.serverConnector.addresses` 指向 Polaris 服务端的注册发现端口（默认 `8091`）。
+
+> **提示**：如仅运行测试脚本（`lane-test.sh` / `lane-warmup-test.sh`），脚本会自动通过 Polaris 管理 API 检测并修复所需的泳道规则，无需手动在控制台配置。
+
+---
+
+## 目录结构
+
+```
+lane/
+├── gateway/          # 泳道网关入口（染色点，反向代理到下游泳道实例）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── provider/         # 服务提供端（注册带泳道标签的实例）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── consumer/         # 服务消费端（显式 ProcessRouters + ProcessLoadBalance）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── simple-gateway/   # 简化网关（基于 GetOneInstance 的入口，替代 gateway）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── simple-consumer/  # 简化消费端（基于 GetOneInstance 的中间节点，替代 consumer）
+│   ├── main.go
+│   ├── go.mod
+│   ├── Makefile
+│   └── polaris.yaml
+├── polaris.yaml      # SDK 顶层默认配置
+├── lane-test.sh      # 泳道路由端到端测试脚本（覆盖 4 种链路组合）
+├── lane-warmup-test.sh # 泳道预热（Warmup）测试脚本
+├── cleanup.sh        # 残留进程清理脚本
+└── README-zh.md
+```
+
+> **链路组合**：`gateway` 与 `simple-gateway` 均可作为入口（染色点），`consumer` 与 `simple-consumer` 均可作为中间节点，
+> 4 种组合（`gateway→consumer`、`gateway→simple-consumer`、`simple-gateway→consumer`、`simple-gateway→simple-consumer`）均被 `lane-test.sh` 覆盖验证。
+> `simple-*` 版本使用 `GetOneInstance` 一步完成服务发现 + 路由 + 负载均衡，无需手动调用 `ProcessRouters` / `ProcessLoadBalance`。
+
+---
+
+## 快速开始
+
+### 1. 启动 Provider
+
+分别启动三种泳道的 Provider：
+
+```bash
+cd provider
+make build
+
+# 终端 1：灰度泳道实例（携带 lane=gray 元数据）
+cd lane-gray && ./bin -lane=gray -port=18081
+
+# 终端 2：稳定泳道实例（携带 lane=stable 元数据）
+cd lane-stable && ./bin -lane=stable -port=18082
+
+# 终端 3：基线实例（不携带泳道元数据）
+cd lane-baseline && ./bin -lane= -port=18083
+```
+
+或者直接使用 make 命令：
+
+```bash
+make run-gray      # 启动灰度泳道
+make run-stable    # 启动稳定泳道
+make run-baseline  # 启动基线
+```
+
+### 2. 启动 Consumer
+
+```bash
+cd consumer
+make run
+```
+
+Consumer 默认监听 `19080` 端口。
+
+### 3. 发送测试请求
+
+#### 路由到灰度泳道
+
+在请求头中携带 `service-lane: gray/rule1`（值格式为 `{laneGroupName}/{laneRuleName}`）：
+
+```bash
+curl -H "service-lane: gray/rule1" http://127.0.0.1:19080/echo
+```
+
+预期响应示例：
+```
+Hello, I'm LaneEchoServer. lane=gray, host=127.0.0.1:18081
+```
+
+#### 路由到稳定泳道
+
+```bash
+curl -H "service-lane: stable/rule2" http://127.0.0.1:19080/echo
+```
+
+预期响应示例：
+```
+Hello, I'm LaneEchoServer. lane=stable, host=127.0.0.1:18082
+```
+
+#### 路由到基线（无染色标签）
+
+```bash
+curl http://127.0.0.1:19080/echo
+```
+
+预期响应示例：
+```
+Hello, I'm LaneEchoServer. lane=(baseline), host=127.0.0.1:18083
+```
+
+---
+
+## 链路组合与网关入口
+
+本示例同时提供两种风格的网关（入口）与消费端（中间节点），可自由组合为 4 种链路：
+
+| 链路组合                                      | 入口监听端口 | 中间节点监听端口 | 说明                                 |
+|---------------------------------------------|-------------|----------------|--------------------------------------|
+| `gateway` → `consumer`                       | `48080`     | `19080`        | 均为显式调用 `ProcessRouters + ProcessLoadBalance` |
+| `gateway` → `simple-consumer`                | `48080`     | `19082`        | 中间节点采用 `GetOneInstance` 简化流程 |
+| `simple-gateway` → `consumer`                | `48096`     | `19080`        | 入口采用 `GetOneInstance` 简化流程    |
+| `simple-gateway` → `simple-consumer`         | `48096`     | `19082`        | 全链路均为 `GetOneInstance` 简化流程   |
+
+> 网关入口通过 URL 路径第一段选择下游服务，例如 `http://localhost:48080/LaneEchoClient/echo` 会被转发到 `LaneEchoClient`。
+
+### 启动 Simple Gateway
+
+```bash
+cd simple-gateway
+make run
+# 等同于：./bin -selfNamespace=default -selfService=LaneRouterGatewayService -port=48096
+```
+
+### 启动 Simple Consumer
+
+```bash
+cd simple-consumer
+make run
+# 等同于：./bin -namespace=default -service=LaneEchoServer -selfService=SimpleLaneEchoClient -port=19082
+```
+
+> **注意**：`simple-consumer` 的 `-selfService` 默认为 `SimpleLaneEchoClient`（与 `consumer` 的 `LaneEchoClient` 不同），因此需要在 Polaris 泳道组的 `destinations` 中同时包含 `LaneEchoClient` 和 `SimpleLaneEchoClient`，`lane-test.sh` 会自动完成这一同步。
+
+### 快速请求 simple-gateway 链路
+
+```bash
+# 基线
+curl http://127.0.0.1:48096/LaneEchoClient/echo
+
+# 通过 TrafficMatchRule 触发染色
+curl -H "user: gray" http://127.0.0.1:48096/LaneEchoClient/echo
+
+# 直接染色
+curl -H "service-lane: lane-go-example/gray" http://127.0.0.1:48096/LaneEchoClient/echo
+```
+
+---
+
+## 路由逻辑说明
+
+### Consumer 端路由流程
+
+```
+HTTP 请求
+  │
+  ├── 携带 service-lane 请求头？
+  │     ├── 是 → 从 header 提取染色标签 → 注入 EnvironmentVariables["service-lane"]
+  │     │       → LaneRouter.matchByStainLabel() 直接匹配泳道规则
+  │     └── 否 → 将 HTTP header/query 转为 RouteArguments
+  │               → LaneRouter.matchByRouteInfo() 按 TrafficMatchRule 识别流量
+  │
+  ├── 找到匹配的泳道规则？
+  │     ├── 是 → 执行灰度染色概率判断（TrafficGray）
+  │     │       → 检查目标服务是否在泳道 destinations 中
+  │     │       → 路由到带 lane={value} 元数据的实例
+  │     └── 否 → 路由到基线实例（无 lane 元数据的实例）
+  │
+  └── 透传染色标签给下游服务
+        → 下游 HTTP 请求头中携带 service-lane: {stainLabel}
+```
+
+### 泳道规则（需在 Polaris 控制台配置）
+
+下表以虚构的 `gray` / `stable` 两个泳道组为例，说明「染色标签」与「目标实例 `lane` 元数据」的对应关系。
+测试脚本 `lane-test.sh` 使用的是泳道组 `lane-go-example`、规则 `gray`，染色标签为 `lane-go-example/gray`。
+
+| 泳道组名 | 泳道规则名 | 染色标签（stainLabel） | 目标实例标签    |
+|---------|-----------|---------------------|---------------|
+| gray    | rule1     | `gray/rule1`        | `lane=gray`   |
+| stable  | rule2     | `stable/rule2`      | `lane=stable` |
+
+### 实例元数据
+
+| 实例类型 | `lane` 元数据值 | 说明                |
+|---------|---------------|-------------------|
+| 灰度实例 | `gray`        | 处理灰度泳道流量      |
+| 稳定实例 | `stable`      | 处理稳定泳道流量      |
+| 基线实例 | *(无此 key)*  | 兜底，处理未染色流量  |
+
+---
+
+## Consumer 配置说明（polaris.yaml）
+
+```yaml
+consumer:
+  serviceRouter:
+    # laneRouter 在 beforeChain 中默认启用，无需在 chain 中重复配置
+    chain: []
+    plugin:
+      laneRouter:
+        # baseLaneMode 基线泳道模式：
+        #   0 = OnlyUntaggedInstance       只选取没有任何泳道标签的实例作为基线（默认）
+        #   1 = ExcludeEnabledLaneInstance  排除已启用泳道规则所关联的实例，其余实例作为基线
+        baseLaneMode: 0
+```
+
+### baseLaneMode 行为详解
+
+当路由命中「需回退基线」的场景（如规则未命中、目标服务不在泳道 destinations、PERMISSIVE 降级等）时，
+`laneRouter` 按以下顺序选取基线候选实例：
+
+1. **优先选取「无 `lane` 元数据 key」的实例**。若存在则直接返回，与 `baseLaneMode` 取值无关。
+2. 若上一步为空，且 `baseLaneMode = 1`（`ExcludeEnabledLaneInstance`），则退化为「排除已启用泳道对应标签值的实例」，返回剩余实例。
+3. 仍为空时兜底返回全量实例，避免链路中断。
+
+> **实践建议**：若 Provider 基线实例未携带 `lane` 元数据（推荐做法），使用默认 `baseLaneMode=0` 即可；
+> 若基线实例也被迫打上了 `lane=baseline` 等标签值，则需要将 `baseLaneMode` 设为 `1`。
+
+---
+
+## 泳道降级说明
+
+| 场景                        | STRICT 模式           | PERMISSIVE 模式（默认）|
+|----------------------------|----------------------|----------------------|
+| 目标泳道无存活实例            | 返回 filterOnly 状态  | 回退到基线实例         |
+| 目标服务不在泳道 destinations | 回退到基线实例         | 回退到基线实例         |
+| 无匹配的泳道规则              | 回退到基线实例         | 回退到基线实例         |
+
+---
+
+## 参数说明
+
+### Provider 参数
+
+| 参数          | 默认值          | 说明                                    |
+|--------------|----------------|----------------------------------------|
+| `-namespace` | `default`      | 服务命名空间                             |
+| `-service`   | `LaneEchoServer` | 服务名                                |
+| `-port`      | `0`（随机）     | 监听端口                                |
+| `-lane`      | `""`（基线）    | 泳道标签值，如 `gray`、`stable`、空字符串 |
+| `-token`     | `""`           | 服务鉴权 Token                          |
+| `-debug`     | `false`        | 是否开启 Polaris SDK debug 日志          |
+
+### Consumer 参数
+
+| 参数              | 默认值           | 说明                    |
+|------------------|-----------------|------------------------|
+| `-namespace`     | `default`       | 目标服务命名空间          |
+| `-service`       | `LaneEchoServer` | 目标服务名              |
+| `-selfNamespace` | `default`       | 当前服务命名空间（用于流量入口匹配）|
+| `-selfService`   | `LaneEchoClient` | 当前服务名              |
+| `-port`          | `19080`         | Consumer HTTP 监听端口（0 表示随机） |
+| `-times`         | `1`             | 每次请求的转发次数         |
+| `-lane`          | `""`（基线）     | Consumer 自身的泳道标签（用于将 Consumer 实例也纳入泳道）|
+| `-token`         | `""`            | 服务鉴权 Token            |
+| `-debug`         | `false`         | 是否开启 Polaris SDK debug 日志 |
+
+### Gateway 参数
+
+| 参数              | 默认值                        | 说明                              |
+|------------------|------------------------------|----------------------------------|
+| `-selfNamespace` | `default`                    | 网关自身的 namespace（用于泳道入口匹配）|
+| `-selfService`   | `LaneRouterGateway`          | 网关自身的服务名（泳道入口服务）      |
+| `-namespace`     | `default`                    | 目标服务的 namespace               |
+| `-port`          | `48080`                      | 网关 HTTP 监听端口                  |
+| `-token`         | `""`                         | 服务鉴权 Token                     |
+| `-debug`         | `false`                      | 是否开启 Polaris SDK debug 日志      |
+
+### Simple Consumer 参数
+
+Simple Consumer 基于 `GetOneInstance` 一步完成服务发现 + 路由过滤（含泳道路由）+ 负载均衡，
+作为多跳链路的中间节点时会将自己注册到 Polaris，供上游网关发现。
+
+| 参数              | 默认值                  | 说明                                           |
+|------------------|------------------------|------------------------------------------------|
+| `-namespace`     | `default`              | 目标服务命名空间                                |
+| `-service`       | `LaneEchoServer`       | 目标服务名                                     |
+| `-selfNamespace` | `default`              | 当前服务的 namespace                            |
+| `-selfService`   | `SimpleLaneEchoClient` | 当前服务名，用于 Polaris 注册和流量入口匹配       |
+| `-port`          | `19082`                | Consumer HTTP 监听端口（0 表示随机）             |
+| `-lane`          | `""`（基线）            | Simple Consumer 自身的泳道标签                  |
+| `-token`         | `""`                   | 服务鉴权 Token                                 |
+| `-debug`         | `false`                | 是否开启 Polaris SDK debug 日志                  |
+
+### Simple Gateway 参数
+
+Simple Gateway 基于 `GetOneInstance` 的简化网关实现，支持按 `/{targetService}/{path...}` 路径路由到下游服务，
+HTTP Header 会自动作为 Arguments 传入 SDK，供泳道路由的 TrafficMatchRule 做流量识别与染色。
+
+| 参数              | 默认值                        | 说明                              |
+|------------------|------------------------------|----------------------------------|
+| `-selfNamespace` | `default`                    | 网关自身的 namespace（用于泳道入口匹配）|
+| `-selfService`   | `LaneRouterGatewayService`   | 网关自身的服务名（泳道入口服务）      |
+| `-namespace`     | `default`                    | 目标服务的 namespace               |
+| `-port`          | `48096`                      | 网关 HTTP 监听端口                  |
+| `-debug`         | `false`                      | 是否开启 Polaris SDK debug 日志      |
+
+---
+
+## 测试脚本
+
+目录下提供了以下辅助脚本，用于自动化构建、启动、测试和清理：
+
+- [`lane-test.sh`](./lane-test.sh)：泳道路由端到端测试（4 种链路组合 × 6 类核心场景 + `baseLaneMode` / 泳道组剔除专项）
+- [`lane-warmup-test.sh`](./lane-warmup-test.sh)：泳道预热（Warmup）测试（预热早期 / 进行中 / 完成 / 基线隔离 / 混合隔离）
+- [`cleanup.sh`](./cleanup.sh)：残留进程清理
+
+> **完整测试方案（测试目标、前置条件、拓扑端口、用例矩阵、PASS/SKIP/FAIL 判定、排障指引）请见 👉 [test.md](./test.md)**
+
+两个测试脚本均支持统一的命令入口：
+
+```bash
+./lane-test.sh        <命令> [polaris地址]
+./lane-warmup-test.sh <命令> [polaris地址]
+
+# 命令: all | build | check | start | test | stop
+# 典型用法:
+#   ./lane-test.sh all 127.0.0.1
+#   ./lane-warmup-test.sh all 127.0.0.1
+```
+
+> **注意**：两个脚本使用相同的服务端口，**不可同时运行**；切换前请先 `stop` 或执行 `./cleanup.sh`。
+
+---
+
+### cleanup.sh — 进程清理
+
+清理泳道测试残留的 provider / consumer 进程，支持 `lane-test.sh` 和 `lane-warmup-test.sh` 启动的所有进程。
+
+```bash
+# 用法
+./cleanup.sh [选项]
+
+# 选项说明
+#   （无参数）     默认模式：先展示匹配的进程，确认后清理
+#   -f, --force   强制模式：直接清理，不需要确认
+#   --dry-run     仅展示匹配的进程，不执行清理
+#   -h, --help    显示帮助信息
+```
+
+**示例：**
+
+```bash
+# 交互式清理（先展示再确认）
+./cleanup.sh
+
+# 强制清理（CI 环境推荐）
+./cleanup.sh -f
+
+# 仅查看残留进程
+./cleanup.sh --dry-run
+```
+
+---
+
+## 日志与排错
+
+Polaris SDK 的日志按类别输出到 `$HOME/polaris/log/` 下的多个子目录，路由相关问题请优先查看路由日志：
+
+| 日志目录            | 内容                                              |
+|--------------------|--------------------------------------------------|
+| `base/`            | SDK 通用日志（初始化、配置加载等）                 |
+| `route/`           | **路由插件日志**（laneRouter、ruleBasedRouter 等） |
+| `network/`         | 与 Polaris 服务端交互的网络日志                    |
+| `stat/` `detect/`  | 统计 / 健康探测                                    |
+| `lossless/`        | 无损上下线                                         |
+
+排查泳道路由问题的常用操作：
+
+1. 通过 `-debug` 参数（gateway / consumer / provider / simple-consumer 均支持）开启 DEBUG 日志：
+   ```bash
+   ./bin -debug=true ...
+   ```
+2. 查看路由日志：
+   ```bash
+   tail -f ~/polaris/log/route/polaris-route.log
+   ```
+3. 关键字检索：
+   ```bash
+   grep -E '\[Router\]\[Lane\]' ~/polaris/log/route/polaris-route.log
+   ```

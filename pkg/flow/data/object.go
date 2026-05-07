@@ -138,6 +138,16 @@ func (br *BaseRequest) SetDstRoute(rule model.ServiceRule) {
 	// do nothing
 }
 
+// SetDstLane 设置泳道规则
+func (br *BaseRequest) SetDstLane(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (br *BaseRequest) SetSrcLane(rule model.ServiceRule) {
+	// do nothing
+}
+
 // SetDstNearbyRoute 设置就近路由规则
 func (br *BaseRequest) SetDstNearbyRoute(rule model.ServiceRule) {
 	// do nothing
@@ -232,6 +242,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if nil != srcService {
 		c.HasSrcService = true
@@ -240,6 +251,7 @@ func (c *CommonInstancesRequest) InitByGetOneRequest(request *model.GetOneInstan
 		c.RouteInfo.SourceService = srcService
 		if len(srcService.Namespace) > 0 && len(srcService.Service) > 0 {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
 		}
 	}
 	c.Criteria.HashKey = request.HashKey
@@ -289,6 +301,7 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = false
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
@@ -297,6 +310,7 @@ func (c *CommonInstancesRequest) InitByProcessRoutersRequest(
 		c.RouteInfo.SourceService = &srcService
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
 		}
 	}
 	c.CallResult.APIName = model.ApiProcessRouters
@@ -318,6 +332,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 	srcService := request.SourceService
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	if !srcService.IsEmpty() {
 		c.HasSrcService = true
@@ -326,6 +341,7 @@ func (c *CommonInstancesRequest) InitByGetMultiRequest(request *model.GetInstanc
 		c.RouteInfo.SourceService = srcService
 		if srcService.HasService() {
 			c.Trigger.EnableSrcRoute = true
+			c.Trigger.EnableSrcLane = true
 		}
 	}
 	c.CallResult.APIName = model.ApiGetInstances
@@ -356,15 +372,32 @@ func (c *CommonInstancesRequest) RefreshByRedirect(redirectedService *model.Serv
 	c.DstService.Service = redirectedService.Service
 	c.Trigger.EnableDstInstances = true
 	c.Trigger.EnableDstRoute = true
+	c.Trigger.EnableDstLane = true
 	c.Trigger.EnableNearbyRoute = true
 	c.RouteInfo.DestRouteRule = nil
+	c.RouteInfo.DestLaneRule = nil
 	c.DstInstances = nil
 }
 
 // BuildInstancesResponse 构建查询实例的应答
 func (c *CommonInstancesRequest) BuildInstancesResponse(dstService model.ServiceKey, cluster *model.Cluster,
 	instances []model.Instance, totalWeight int, svcInstances model.ServiceInstances) *model.InstancesResponse {
-	return buildInstancesResponse(c.response, dstService, cluster, instances, totalWeight, svcInstances)
+	resp := buildInstancesResponse(c.response, dstService, cluster, instances, totalWeight, svcInstances)
+	// 把路由链写入 RouteInfo.routeMetadata 的跨链路元数据 (如泳道路由的完整 stain label)
+	// 透出给业务调用方.对齐 polaris-java 的 PASS_THROUGH 语义.
+	//
+	// 不在链路里写入时始终把 RouteMetadata 置 nil,防止请求结构被业务复用或 response 字段
+	// 通过 embedded InstancesResponse 跨请求残留旧数据.
+	if srcMeta := c.RouteInfo.GetRouteMetadata(); len(srcMeta) > 0 {
+		dstMeta := make(map[string]string, len(srcMeta))
+		for k, v := range srcMeta {
+			dstMeta[k] = v
+		}
+		resp.RouteMetadata = dstMeta
+	} else {
+		resp.RouteMetadata = nil
+	}
+	return resp
 }
 
 // GetDstService 获取目标服务
@@ -390,6 +423,16 @@ func (c *CommonInstancesRequest) SetDstInstances(instances model.ServiceInstance
 // SetDstRoute 设置目标服务路由规则
 func (c *CommonInstancesRequest) SetDstRoute(rule model.ServiceRule) {
 	c.RouteInfo.DestRouteRule = rule
+}
+
+// SetDstLane 设置目标服务泳道规则
+func (c *CommonInstancesRequest) SetDstLane(rule model.ServiceRule) {
+	c.RouteInfo.DestLaneRule = rule
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (c *CommonInstancesRequest) SetSrcLane(rule model.ServiceRule) {
+	c.RouteInfo.SourceLaneRule = rule
 }
 
 // SetDstNearbyRoute 设置目标服务就近路由规则
@@ -672,6 +715,16 @@ func (cl *CommonRateLimitRequest) SetDstInstances(instances model.ServiceInstanc
 
 // SetDstRoute 设置目标服务路由规则
 func (cl *CommonRateLimitRequest) SetDstRoute(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetDstLane 设置目标服务泳道规则
+func (cl *CommonRateLimitRequest) SetDstLane(rule model.ServiceRule) {
+	// do nothing
+}
+
+// SetSrcLane 设置源服务泳道规则
+func (cl *CommonRateLimitRequest) SetSrcLane(rule model.ServiceRule) {
 	// do nothing
 }
 

@@ -16,6 +16,7 @@ style_tool/
 goimports-reviser
 
 .codebuddy/
+CODEBUDDY.md
 .claude/
 CLAUDE.md
 
@@ -32,3 +33,10 @@ CLAUDE.md
 /examples/**/cache/
 /examples/**/.build/
 /examples/**/.logs/
+
+# polaris-go example 编译产物：各 lane/route/... 子目录下 go build . 会产生与
+# 目录同名的可执行二进制（如 polaris-go-route-lane-gateway），这些都不应入库。
+/examples/**/polaris-go-*
+/examples/**/gateway
+/examples/**/simple-gateway
+/examples/**/simple-consumer

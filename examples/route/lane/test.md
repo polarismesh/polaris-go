@@ -1,0 +1,265 @@
+# 全链路灰度泳道测试方案
+
+本文档汇总 `examples/route/lane/` 目录下两个端到端测试脚本的**测试方案（目标、前置条件、拓扑、用例、校验点）**，便于在 Polaris 服务端 + polaris-go SDK 环境下做路由/预热回归验证。
+
+- 测试脚本：
+  - [lane-test.sh](./lane-test.sh)：**泳道路由**功能测试（baseline / gray 隔离、流量匹配 STRICT/PERMISSIVE、baseLaneMode、泳道组剔除等）
+  - [lane-warmup-test.sh](./lane-warmup-test.sh)：**泳道预热（Warmup）+ 百分比灰度（Percentage）**功能测试（按概率曲线灰度放量 + 按百分比切流）
+
+两个脚本使用相同端口段（`48095 / 19080-19091` 等），**不可同时运行**，需先 `stop` 或 `./cleanup.sh` 后再切换。
+
+---
+
+## 一、通用信息
+
+| 项 | 值 |
+| --- | --- |
+| 命名空间 | `default` |
+| 入口网关服务 | 主脚本：`LaneRouterGateway`；warmup 脚本：`LaneRouterGatewayService` |
+| Provider 服务 | `LaneEchoServer`；`baseLaneMode=1` 专项使用 `StableLaneEchoServer` |
+| Consumer 服务 | `LaneEchoClient` / `SimpleLaneEchoClient` |
+| 染色 Header（直接染色） | `service-lane: <laneGroup>/<laneRule>`（如 `lane-go-example/gray`、`lane-go-warmup/gray`） |
+| 流量匹配 Header | 主脚本：`user: gray` / `user: noexist` / `user: other`；六类维度规则守卫：`lane-test: <规则名>`；warmup 脚本：`warmup-user: gray` |
+| 支持的命令 | `all` / `build` / `check` / `start` / `test` / `stop` |
+| 典型启动 | `./lane-test.sh all 127.0.0.1`、`./lane-warmup-test.sh all 127.0.0.1` |
+
+通用流程：`构建二进制 → 校验 Polaris 泳道规则 → 启动服务 → 等待就绪 → 执行用例 → 汇总统计 → 停止服务`。
+
+---
+
+## 二、`lane-test.sh` —— 泳道路由测试方案
+
+### 2.1 测试目标
+验证 polaris-go SDK 的 `laneRouter` 在不同链路组合下对染色请求 / 基线请求的路由正确性，覆盖：
+1. 无 Header → 走 baseline
+2. `service-lane` 直接染色 → 走 gray 泳道
+3. 流量匹配规则 `STRICT` 模式命中染色
+4. 流量匹配规则 `PERMISSIVE` 模式回退基线
+5. 规则未命中 → 走 baseline
+6. 并发下 baseline 与 gray 路径相互隔离
+7. **六类匹配维度全覆盖**：`$method` / `Header` / `Query` / `Cookie` / `$path` / `$caller_ip`，验证 SDK `findTrafficValue` 7 类 SourceMatch 中的 6 类对外暴露维度（CALLER_METADATA 由 sourceService 元数据提供，已在染色路径覆盖）
+8. `baseLaneMode=ExcludeEnabledLaneInstance (=1)` 时 baseline 只走未启用泳道实例
+9. 服务不在泳道组内（破坏性）→ 仅走无标签实例
+
+### 2.2 前置条件（Polaris 控制台配置）
+- 泳道组：`lane-go-example`
+- 入口服务：`LaneRouterGateway / default`
+- 目标服务：`LaneEchoClient`、`SimpleLaneEchoClient`、`LaneEchoServer`、`StableLaneEchoServer`
+- 规则 `gray`：Header `user=gray` → `lane=gray`，匹配模式 `STRICT`，`enable=true`
+- 规则 `permissive`：Header `user=noexist` → `lane=noexist`（无实例），匹配模式 `PERMISSIVE`，`enable=true`
+- 规则 `strict-noexist`：Header `user=strict` → `lane=strict-noexist`（无实例），STRICT，期望命中即返回 HTTP 503
+- **六类匹配维度规则（全部 STRICT，染到 `lane=gray`，复用 provider-gray 实例）**：
+  - 规则 `method-post`：`METHOD=POST` AND `Header lane-test=method-post` → `lane=gray`
+  - 规则 `query-env`：`QUERY env=gray` AND `Header lane-test=query-env` → `lane=gray`
+  - 规则 `cookie-user`：`COOKIE user=gray` AND `Header lane-test=cookie-user` → `lane=gray`
+  - 规则 `path-gray`：`PATH = /LaneEchoClient/gray-path`（独占路径，无需守卫） → `lane=gray`
+  - 规则 `caller-ip-local`：`CALLER_IP EXACT 127.0.0.1` AND `Header lane-test=caller-ip-local` → `lane=gray`
+  - 规则 `caller-ip-not-zero`：`CALLER_IP NOT_EQUALS 0.0.0.0` AND `Header lane-test=caller-ip-not-zero` → `lane=gray`
+
+> 上述 6 条新规则由脚本 `create_full_lane_group()` / `add_rule_to_lane_group()` 自动创建，亦可手工在控制台配置。除 `path-gray` 外均叠加 `Header lane-test=<规则名>` 二级守卫，避免污染已有 baseline / permissive / isolation 用例。
+
+脚本中 `validate_lane_rules()` 会自动拉取并校验以上配置；若不满足则终止测试。
+
+### 2.3 拓扑与端口
+
+服务端口（来自脚本配置区）：
+
+| 角色 | base | gray / 其他 |
+| --- | --- | --- |
+| `gateway` | `:48095` | — |
+| `simple-gateway` | `:48096` | — |
+| `gateway-excl`（baseLaneMode=1 专用） | `:48097` | — |
+| `LaneEchoClient` | `:19080` | `:19081` |
+| `SimpleLaneEchoClient` | `:19082` | `:19083` |
+| `LaneEchoServer` | `:19090` | `:19091` |
+| `StableLaneEchoServer` | `:19092`（stable） | `:19093`（gray） |
+
+```
+                ┌───────────────────────────┐
+         HTTP   │ gateway        :48095     │ ┐
+请求 ─────────►│ simple-gateway :48096     │ │ consumer 层
+                │ gateway-excl   :48097     │ │ (base / gray)
+                └─────────┬─────────────────┘ │    :19080 / :19081
+                          ▼                     │ simple-consumer
+                ┌───────────────────────────┐  │    :19082 / :19083
+                │ LaneEchoClient           │◄─┘
+                │ SimpleLaneEchoClient     │
+                └─────────┬─────────────────┘
+                          ▼
+                ┌───────────────────────────┐
+                │ LaneEchoServer            │ :19090(base) / :19091(gray)
+                │ StableLaneEchoServer      │ :19092(stable) / :19093(gray)
+                └───────────────────────────┘
+```
+
+四条被测链路，编号与脚本 `log_title` 保持一致；其中 1.x / 2.x 两条入口链路在 6 个基础用例之外**额外执行 6 个六类匹配维度用例（1.7~1.12 / 2.7~2.12）**，3.x / 4.x 仅跑 6 个基础用例：
+
+| 链路编号 | 链路标签 | Gateway | Consumer | Provider | 用例数 |
+| --- | --- | --- | --- | --- | --- |
+| 1.x | 主链路 | `gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
+| 2.x | `[simple]` | `simple-gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
+| 3.x | `[gw→sc]` | `gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
+| 4.x | `[sg→sc]` | `simple-gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
+
+外加两个专项链路：
+- **用例 5.1**：`gateway-excl` → `StableLaneEchoServer`（脚本把 `polaris.yaml` 中 `baseLaneMode: 0` 替换为 `baseLaneMode: 1`）
+- **用例 6.1**：破坏性 —— 运行期调用 Polaris OpenAPI 把 `LaneEchoServer` 从泳道组 `destinations` 中移除，结束后自动恢复
+
+### 2.4 用例矩阵
+
+#### 2.4.1 基础 6 用例（每条链路各执行一次，编号为 `<链路>.<序号>`）
+
+| 序号 | 用例 | 请求条件 | 预期路由 | 关键校验点 |
+| --- | --- | --- | --- | --- |
+| `x.1` | 无 Header 基线 | 无染色 Header | 全链路 `lane=(baseline)` | 响应中 `lane=(baseline)` |
+| `x.2` | `service-lane` 直接染色 | `service-lane: lane-go-example/gray` | Provider 走 `:19091` `lane=gray` | 响应含 `lane=gray` 且端口匹配 |
+| `x.3` | 流量匹配 STRICT | `user: gray` | `lane=gray` | 必须命中 `gray` 实例；未命中即失败 |
+| `x.4` | 流量匹配 PERMISSIVE | `user: noexist`（目标 lane 无实例） | 回退 baseline | 响应 `lane=(baseline)` |
+| `x.5` | 未命中规则 | `user: other` | baseline | 响应 `lane=(baseline)` |
+| `x.6` | 泳道隔离并发 | 多轮交替发 baseline / gray 请求 | 两路径互不污染 | N 轮循环统计零泄漏 |
+
+> x ∈ {1, 2, 3, 4}，共 **24 条基础用例**。
+
+#### 2.4.2 六类匹配维度用例（仅 1.x / 2.x 两条入口链路）
+
+验证 gateway / simple-gateway 把 HTTP 请求中的 `$method / Header / Query / Cookie / $path / $caller_ip` 六类输入构造为 `model.Argument` 上报给 SDK，并能被 `TrafficMatchRule` 正确识别。
+
+| 序号 | 维度 | 请求条件 | 命中规则 | 关键校验点 |
+| --- | --- | --- | --- | --- |
+| `x.7`  | `$method`    | `-X POST` + `lane-test: method-post` | `method-post` | 响应含 `lane=gray` |
+| `x.8`  | `Query`      | `?env=gray` + `lane-test: query-env` | `query-env` | 响应含 `lane=gray` |
+| `x.9`  | `Cookie`     | `Cookie: user=gray` + `lane-test: cookie-user` | `cookie-user` | 响应含 `lane=gray` |
+| `x.10` | `$path`      | 访问路径 `/LaneEchoClient/gray-path`（无守卫） | `path-gray` | 响应含 `lane=gray`；下游 consumer 返回 404 是预期，不校验 status code |
+| `x.11` | `$caller_ip` (EXACT)      | 本地 curl + `lane-test: caller-ip-local` | `caller-ip-local` | 响应含 `lane=gray` |
+| `x.12` | `$caller_ip` (NOT_EQUALS) | 本地 curl + `lane-test: caller-ip-not-zero` | `caller-ip-not-zero` | 响应含 `lane=gray` |
+
+> x ∈ {1, 2}，共 **12 条维度用例**。`Header` 维度已由基础用例 `x.3 / x.4 / x.5`（`user=gray / noexist / other`）覆盖。
+
+#### 2.4.3 专项用例
+
+| 编号 | 用例 | 说明 | 关键校验点 |
+| --- | --- | --- | --- |
+| **5.1a** | `baseLaneMode=ExcludeEnabledLaneInstance`（无染色） | `gateway-excl` → `StableLaneEchoServer`（仅有 `stable` + `gray` 两种已打标签实例，**没有无标签实例**） | baseline 全部路由到 `lane=stable :19092`；不允许路由到启用集合里的 `gray`；出现负载均衡即失败 |
+| **5.1b** | `baseLaneMode=ExcludeEnabledLaneInstance`（染色） | 同上，带 `service-lane: lane-go-example/gray` | 染色请求正确路由到 `lane=gray :19093`，`baseLaneMode` 不影响染色路径 |
+| **6.1a** | 服务不在泳道组内（破坏性，染色请求） | 通过 OpenAPI 将 `LaneEchoServer` 从泳道组 `destinations` 中移除 | 染色请求 provider 全部路由到无标签 base 实例 `:19090`；默认模式下不得命中带标签实例 |
+| **6.1b** | 服务不在泳道组内（破坏性，无 Header） | 同上 | 无 Header 请求同样路由到 base 实例 `:19090` |
+| **6.1 SKIP** | Polaris 缓存传播超时 | 管理 API 已确认移除，但 SDK 本地缓存尚未刷新 | 判定为非 SDK 问题，标记为 SKIP 而非 FAIL |
+
+> 用例 6.1 结束时会把 `LaneEchoServer` 重新加回泳道组（兼容别名写回），避免影响后续运行。
+
+### 2.5 执行与结果
+- 日志：`./.logs/lane-test-<时间戳>.log`，同时各服务独立写 `./.logs/<role>.log`
+- 汇总：脚本末尾输出 `TOTAL_PASS / TOTAL_FAIL / TOTAL_COUNT`；任一 `fail` 即整体失败，退出码非 0
+
+---
+
+## 三、`lane-warmup-test.sh` —— 泳道预热 + 百分比灰度测试方案
+
+### 3.1 测试目标
+1. 验证 `laneRouter` 的 `WARMUP` 染色类型是否按以下公式做概率放量（用例 1-5）：
+
+```
+probability = pow(uptime / warmup_interval, curvature) * 100%
+uptime = now - etime        // etime 为规则最近一次启用时间
+当 uptime >= interval 时 probability = 100%
+```
+
+2. 验证 `laneRouter` 的 `PERCENTAGE` 百分比染色类型（用例 6-9），覆盖 `plugin/servicerouter/lane/lane_router.go:tryStainByPercentage` 的有效分支：
+   - `percent` 极小值（=1） → 期望 `gray% ≈ 1%`，验证概率抽样在低概率端的正确性；
+   - `percent` 中段（=50） → 期望 `gray% ≈ 50%`，验证常规概率抽样；
+   - `percent` 满值（=100）→ 完全染色（命中 `percent >= 100 → return true` 分支）；
+   - 以及基线请求在 PERCENTAGE 模式下不受染色概率影响。
+
+> **不验证 `percent=0`**：specification/lane.proto 中 `Percentage.percent` 是 proto3 裸 `int32 (json:"omitempty")`，零值在 JSON 序列化时被 omit，Polaris 服务端会以 `400103` 拒绝该请求；SDK 端 `percent <= 0 → return false` 这条分支因此外部不可达。
+
+通过统计响应中 `lane=gray` 的比例，验证两种染色类型各自的行为正确性。
+
+### 3.2 前置条件
+- 泳道组：`lane-go-warmup`（与 `lane-go-example` 互相隔离）
+- 入口服务：`LaneRouterGatewayService / default`
+- 目标服务：`LaneEchoServer`
+- 规则 `gray`：
+  - `default_label_value: gray`
+  - `traffic_gray.type: WARMUP`
+  - `traffic_gray.warmup_interval: 60`（建议 ≤ `MAX_WARMUP_WAIT=120` 的短区间，便于测试）
+  - `traffic_gray.curvature: 2`
+  - Header 匹配：**必须**使用 `warmup-user=gray`（避免与 `lane-go-example` 的 `user=gray` 冲突）
+  - `enable: true`
+
+脚本关键全局变量（见文件头部配置区）：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `WARMUP_INTERVAL` | `120` | 初始占位值，由 `validate_lane_rules()` 从 Polaris 规则覆盖为 `traffic_gray.warmup_interval` |
+| `WARMUP_CURVATURE` | `2` | 同上，覆盖为 `traffic_gray.curvature` |
+| `GRAY_ETIME` | `0` | 由 `get_gray_etime()` 从 OpenAPI 拉取 |
+| `MAX_WARMUP_WAIT` | `120` | 用例内等待 `uptime` 达到目标比例时的上限；超过则跳过采样点或整个用例 |
+
+`validate_lane_rules()` 会：
+1. 校验规则字段（`enable`、`type=WARMUP`、Header key = `warmup-user`、`curvature`、`warmup_interval`）；
+2. 在每轮测试前通过 `validate_rules_with_wait()` 做 `disable → enable` 以刷新 `etime`，并等待 SDK 缓存生效。
+
+### 3.3 拓扑与 Header
+```
+ HTTP 请求 ──►  gateway :48095
+                   │
+                   ▼
+              LaneEchoClient  (:19080 base / :19081 gray)
+                   │
+                   ▼
+              LaneEchoServer  (:19090 base / :19091 gray)
+
+直接染色 Header:      service-lane: lane-go-warmup/gray
+流量匹配 Header:      warmup-user: gray
+```
+
+### 3.4 用例矩阵
+
+| 编号 | 阶段 | 操作 | PASS 校验点 | SKIP 条件 | FAIL 条件 |
+| --- | --- | --- | --- | --- | --- |
+| 用例 1 预热早期 | 预热启用后极短时间内大量发送染色请求 | 用 `calc_warmup_probability(uptime, interval, curvature)` 计算理论值 | 实际 `gray%` ≤ 理论值 + tolerance | ① 无法获取有效 `GRAY_ETIME`；② `etime` 偏离 reset 时机 (`reset_drift` 过大) 表明重置未真正生效 | 实际 `gray%` 高于 `expected_prob + tolerance` |
+| 用例 2 预热进展 | 多次采样，记录 `(uptime, gray%)` | 从若干目标百分位（如 25/50/75%）采样 | `gray%` 随 `uptime` 单调递增（允许统计抖动；整体趋势递增即通过） | ① 无法读取 `etime`（Polaris 版本可能不支持该字段）；② 所有目标采样点的 `target_uptime` 都 > `MAX_WARMUP_WAIT` | 非递增或严重偏离理论曲线 |
+| 用例 3 预热完成 | 等待 `uptime ≥ warmup_interval` 后发送大批染色请求 | 统计 `gray%` | ≥ 90%（理想）；≥ 75% 视为基本符合预期 | 剩余等待时间 > `MAX_WARMUP_WAIT`（建议缩短 `warmup_interval`） | `gray%` < 75% |
+| 用例 4 基线不受预热影响 | 不带染色 Header 发送请求 | 统计 `baseline` / `gray` 计数 | 全部走 baseline（或零 `gray` 泄漏） | — | 任一无染色请求被错误路由到 gray |
+| 用例 5 混合隔离 | 染色 + 不染色请求多轮交替 | 分别统计两路结果 | 无染色请求**零泄漏**到 gray；染色请求按预热概率命中 gray（允许部分回退 baseline） | — | 任一无染色请求落到 gray（`baseline_leak > 0`） |
+| 用例 6 PERCENTAGE=1 | 通过管理 API 把 gray 规则切换为 `PERCENTAGE(percent=1)`，发送 300 个染色请求 | 实际 `gray%` ≤ 6%（N=300, p=0.01 的均值=3，3σ ≈ 5.2，留 6 作上限） | — | 管理 API 无权限或服务端拒绝（如 4xx） | `gray%` > 6% |
+| 用例 7 PERCENTAGE=50 | 切换为 `PERCENTAGE(percent=50)`，发送 200 个染色请求 | 实际 `gray%` ∈ `[35%, 65%]`（N=200, p=0.5 的 ±3σ ≈ ±10%，留 ±15% 容忍） | — | 管理 API 无权限 | `gray%` 超出 `[35%, 65%]` 区间 |
+| 用例 8 PERCENTAGE=100 | 切换为 `PERCENTAGE(percent=100)`，发送 50 个染色请求 | 实际 `gray%` ≥ 95%（理想）；≥ 85% 视为基本符合 | — | 管理 API 无权限 | `gray%` < 85% |
+| 用例 9 PERCENTAGE 模式基线零泄漏 | 保持 `PERCENTAGE(percent=100)`，发送 50 个**无染色 Header** 的基线请求 | `gray == 0`：染色概率只影响 matched 流量，不影响 unmatched 流量 | — | 管理 API 无权限 | 任一无染色请求落到 gray |
+
+> **用例 6-9 组收尾**：`run_all_tests` 在 4 个 PERCENTAGE 用例全部跑完后（或被 Ctrl-C 打断时通过 trap）自动调用 `restore_gray_rule_to_warmup`，把 gray 规则的 `traffic_gray` 还原为 WARMUP，使用 `validate_lane_rules` 从 Polaris 读取到的 `WARMUP_INTERVAL / WARMUP_CURVATURE`。
+>
+> **关于 percent=0 不可测**：`_set_gray_rule_traffic_gray` 在收到 4xx/5xx 错误码时会显式 `return 1`，让上层用例 FAIL 而不是静默继续；这是初次跑测发现 percent=0 被服务端拒绝（返回 `400103`）后加入的防御。
+
+### 3.5 辅助能力
+- `get_gray_etime()`：从 Polaris OpenAPI 读取 `gray` 规则的 `etime`，用于计算 `uptime`
+- `validate_rules_with_wait(rule_name)`：`disable → enable` 规则，并轮询等待 SDK 侧生效（避免缓存滞后）
+- `calc_warmup_probability(uptime, interval, curvature)`：Python 实现预热概率公式，作为实际比例的理论基线
+- `set_gray_rule_percentage(percent)` / `restore_gray_rule_to_warmup()`：用例 6-9 专用。通过 `PUT /naming/v1/lane/groups` 将 gray 规则的 `traffic_gray` 在 `PERCENTAGE` / `WARMUP` 两种模式间切换；切换后 sleep 3s 给 SDK 拉缓存
+- 当 `WARMUP_INTERVAL > MAX_WARMUP_WAIT` 时，脚本会在日志中提示「建议将 `warmup_interval` 设为 ≤`MAX_WARMUP_WAIT`s 以缩短测试耗时」
+
+### 3.6 执行与结果
+- 日志：`./.logs/lane-warmup-test-<时间戳>.log`
+- 汇总：统一输出 `TOTAL_PASS / TOTAL_FAIL / TOTAL_SKIP / TOTAL_COUNT`；SKIP 不计入 FAIL，便于 CI 中区分「环境约束」与「功能缺陷」
+
+---
+
+## 四、常见问题排查
+
+| 症状 | 可能原因 | 处置 |
+| --- | --- | --- |
+| `wait_for_services` 超时（当前上限 60s） | Polaris 尚未把 consumer / provider 注册信息推给 gateway；或端口被占用 | 查看 `./.logs/gateway.log`、`consumer.log`、`provider.log`；或先 `./cleanup.sh` |
+| `ErrCodeAPIInstanceNotFound: LaneEchoClient` | Provider/Consumer 进程未正常注册 | 确认三个 `main.go` 已构建并启动，确认 `polaris.yaml` 指向正确的 Polaris 地址 |
+| 规则校验失败（`gray 规则未启用` / Header Key 不符） | Polaris 控制台未按前置条件配置 | 按 2.2 / 3.2 节重新配置规则并 `enable` |
+| 两个脚本同时运行冲突 | 共用 `48095 / 19080~19091` 端口 | 使用前先运行对方的 `stop`，或执行 `./cleanup.sh` |
+| 用例 5.1 专项失败 | `gateway-excl/polaris.yaml` 未替换为 `baseLaneMode: 1` | 检查脚本生成的 `${gateway_excl_workdir}/polaris.yaml` |
+| 用例 6.1 标记为 SKIP | Polaris 服务端缓存传播超时，管理 API 已确认移除但 SDK 尚未感知 | 属于非 SDK 问题；可加大等待或手动重跑 |
+| warmup 比例明显偏高（用例 1） | 规则 `etime` 未刷新导致 `uptime` 被放大 | 确认 `validate_rules_with_wait` 成功执行；必要时手动在控制台 disable → enable |
+| warmup 用例 2/3 频繁 SKIP | `warmup_interval` 过大 > `MAX_WARMUP_WAIT` | 将规则里的 `warmup_interval` 调小（建议 ≤ 120s） |
+
+---
+
+## 五、清理
+
+- 两个脚本都提供 `stop` 子命令，按 `PID_FILE`（`.lane-test-pids` / `.lane-warmup-pids`）逐个杀掉进程
+- 兜底清理：`./cleanup.sh`（覆盖端口、残留进程、临时目录 `.build/.logs/.pids`）

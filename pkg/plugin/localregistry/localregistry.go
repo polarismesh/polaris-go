@@ -126,6 +126,10 @@ type RuleRegistry interface {
 	GetServiceRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
 	// LoadServiceRouteRule 非阻塞发起配置加载
 	LoadServiceRouteRule(key *model.ServiceKey) (*common.Notifier, error)
+	// GetServiceLaneRule 非阻塞获取泳道规则
+	GetServiceLaneRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
+	// LoadServiceLaneRule 非阻塞发起泳道规则加载
+	LoadServiceLaneRule(key *model.ServiceKey) (*common.Notifier, error)
 	// GetServiceNearByRouteRule 非阻塞获取就近路由信息
 	GetServiceNearByRouteRule(key *model.ServiceKey, includeCache bool) model.ServiceRule
 	// LoadServiceNearByRouteRule 非阻塞发起就近路由加载

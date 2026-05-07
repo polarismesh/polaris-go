@@ -20,6 +20,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/hashicorp/go-multierror"
 
@@ -28,9 +29,11 @@ import (
 
 // ServiceRouterConfigImpl 服务路由配置.
 type ServiceRouterConfigImpl struct {
+	// 服务路由责任链前置链，在主链之前执行（如泳道路由）
+	BeforeChain []string `yaml:"beforeChain" json:"beforeChain"`
 	// 服务路由责任链
 	Chain []string `yaml:"chain" json:"chain"`
-	// 服务路由责任链
+	// 服务路由责任链后置链
 	AfterChain []string `yaml:"afterChain" json:"afterChain"`
 	// 插件相关配置
 	Plugin PluginConfigs `yaml:"plugin" json:"plugin"`
@@ -38,6 +41,9 @@ type ServiceRouterConfigImpl struct {
 	PercentOfMinInstances *float64 `yaml:"percentOfMinInstances" json:"percentOfMinInstances"`
 	// 是否启用全死全活机制
 	EnableRecoverAll *bool `yaml:"enableRecoverAll" json:"enableRecoverAll"`
+	// chainWarnings 配置去重过程中累积的告警信息，由 deduplicateChains 填充，
+	// 由 FlushChainWarnings 在 SDK 日志系统就绪后消费。不参与 YAML 序列化。
+	chainWarnings []string `yaml:"-" json:"-"`
 }
 
 // GetNearbyConfig 获取就近路由配置.
@@ -48,6 +54,17 @@ func (s *ServiceRouterConfigImpl) GetNearbyConfig() NearbyConfig {
 		return nil
 	}
 	return cfgValue.(NearbyConfig)
+}
+
+// GetBeforeChain consumer.serviceRouter.beforeChain
+// 路由责任链前置路由配置.
+func (s *ServiceRouterConfigImpl) GetBeforeChain() []string {
+	return s.BeforeChain
+}
+
+// SetBeforeChain 设置路由责任链前置路由配置.
+func (s *ServiceRouterConfigImpl) SetBeforeChain(chain []string) {
+	s.BeforeChain = chain
 }
 
 // GetChain consumer.serviceRouter.filterChain
@@ -124,6 +141,11 @@ func (s *ServiceRouterConfigImpl) Verify() error {
 
 // SetDefault 设置ServiceRouterConfig配置的默认值.
 func (s *ServiceRouterConfigImpl) SetDefault() {
+	// 默认开启泳道路由。当服务端无泳道规则时，laneRouter.Enable() 返回 false，
+	// 不会执行实际过滤逻辑，性能开销可忽略。
+	if len(s.BeforeChain) == 0 {
+		s.BeforeChain = append(s.BeforeChain, DefaultServiceRouterLane)
+	}
 	if len(s.Chain) == 0 {
 		s.Chain = append(s.Chain, DefaultServiceRouterRuleBased)
 		s.Chain = append(s.Chain, DefaultServiceRouterNearbyBased)
@@ -131,6 +153,8 @@ func (s *ServiceRouterConfigImpl) SetDefault() {
 	if len(s.AfterChain) == 0 {
 		s.AfterChain = append(s.AfterChain, DefaultServiceRouterFilterOnly)
 	}
+	// 去重：同一个路由插件不能出现在多条链中，beforeChain 优先级最高
+	s.deduplicateChains()
 	if nil == s.PercentOfMinInstances {
 		s.PercentOfMinInstances = new(float64)
 		*(s.PercentOfMinInstances) = DefaultPercentOfMinInstances
@@ -140,6 +164,55 @@ func (s *ServiceRouterConfigImpl) SetDefault() {
 		*(s.EnableRecoverAll) = DefaultRecoverAllEnabled
 	}
 	s.Plugin.SetDefault(common.TypeServiceRouter)
+}
+
+// deduplicateChains 去重路由链配置：同一个路由插件不能同时出现在多条链中。
+// 优先级：beforeChain > chain > afterChain。
+// 低优先级链中的重复插件会被自动移除。
+func (s *ServiceRouterConfigImpl) deduplicateChains() {
+	seen := make(map[string]string) // plugin name → 所属链名
+	for _, name := range s.BeforeChain {
+		seen[name] = "beforeChain"
+	}
+	s.Chain = s.deduplicateSlice(s.Chain, seen, "chain")
+	s.AfterChain = s.deduplicateSlice(s.AfterChain, seen, "afterChain")
+}
+
+// deduplicateSlice 从 chain 中移除 seen 中已存在的插件，同时将 chain 中的插件加入 seen。
+// 注意：此函数在 SetDefault() 阶段调用，SDK 日志框架（pkg/log）可能尚未初始化。
+// 告警通过两条通道发出：
+//  1. 立即用标准库 log 输出到 stderr，保证即便 SDK 未启动也能被看到；
+//  2. 累积到 s.chainWarnings，待 SDK 日志系统就绪后由 FlushChainWarnings 补打一条，
+//     保证容器环境/日志聚合系统都能收到。
+func (s *ServiceRouterConfigImpl) deduplicateSlice(chain []string, seen map[string]string, chainName string) []string {
+	result := make([]string, 0, len(chain))
+	for _, name := range chain {
+		if existIn, ok := seen[name]; ok {
+			msg := fmt.Sprintf(
+				"serviceRouter: plugin %q is already in %s, removing from %s",
+				name, existIn, chainName)
+			log.Printf("[WARNING] %s", msg)
+			s.chainWarnings = append(s.chainWarnings, msg)
+			continue
+		}
+		seen[name] = chainName
+		result = append(result, name)
+	}
+	return result
+}
+
+// FlushChainWarnings 将 SetDefault 阶段累积的链配置告警输出到指定 logger，
+// 并清空内部缓冲。应在 SDK 日志系统就绪后调用一次。
+// logger 为 nil 时不输出但仍清空缓冲。
+func (s *ServiceRouterConfigImpl) FlushChainWarnings(logger interface {
+	Warnf(format string, args ...interface{})
+}) {
+	if logger != nil {
+		for _, msg := range s.chainWarnings {
+			logger.Warnf("[Config] %s", msg)
+		}
+	}
+	s.chainWarnings = nil
 }
 
 // Init 配置初始化.

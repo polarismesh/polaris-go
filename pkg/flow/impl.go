@@ -212,6 +212,12 @@ func (e *Engine) LoadFlowRouteChain() error {
 		return err
 	}
 
+	// SDK 日志系统已就绪，将 SetDefault 阶段累积的链配置告警补打一条到 baseLogger。
+	// 这样即便用户在容器里没重定向 stderr，告警也能经由 SDK 日志管道落盘。
+	if routerCfg, ok := e.configuration.GetConsumer().GetServiceRouter().(*config.ServiceRouterConfigImpl); ok {
+		routerCfg.FlushChainWarnings(e.logCtx.GetBaseLogger())
+	}
+
 	afterChain := e.configuration.GetConsumer().GetServiceRouter().GetAfterChain()
 	lastRouterName := config.DefaultServiceRouterFilterOnly
 	for i := range afterChain {

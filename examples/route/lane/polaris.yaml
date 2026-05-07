@@ -1,0 +1,25 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    # 远程 Polaris 服务端(跨公网/VPN)时,默认 500ms 连接超时容易在多个进程同时启动
+    # 时抖动失败。放宽到 3s,给 TCP 三次握手 + TLS(如开启)足够余量。
+    connectTimeout: 3s
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: push
+        address: ${POLARIS_SERVER}:9091
+        interval: 10s
+consumer:
+  serviceRouter:
+    # laneRouter 在 beforeChain 中默认启用，无需在 chain 中重复配置
+    plugin:
+      laneRouter:
+        # baseLaneMode 基线泳道模式：
+        #   0 = OnlyUntaggedInstance    只选取没有任何泳道标签的实例作为基线（默认）
+        #   1 = ExcludeEnabledLaneInstance  排除已启用泳道规则所关联的实例，其余实例作为基线
+        baseLaneMode: 0

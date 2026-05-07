@@ -200,14 +200,16 @@ func (r *ProcessRoutersRequest) convert() {
 		return
 	}
 
-	if len(r.SourceService.Metadata) == 0 {
-		r.SourceService.Metadata = map[string]string{}
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的同一张 map 引用
+	merged := make(map[string]string, len(r.SourceService.Metadata)+len(r.Arguments))
+	for k, v := range r.SourceService.Metadata {
+		merged[k] = v
 	}
-
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(r.SourceService.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // ProcessLoadBalanceRequest process load balancer to get the target instances

@@ -174,6 +174,54 @@ func getAndLoadCacheValues(registry localregistry.LocalRegistry,
 			notifiers = append(notifiers, NewSingleNotifyContext(dstRouterKey, notifier, logCtx))
 		}
 	}
+	if trigger.EnableDstLane {
+		laneRule := registry.GetServiceLaneRule(dstService, false)
+		if laneRule.IsInitialized() {
+			request.SetDstLane(laneRule)
+			trigger.EnableDstLane = false
+		}
+		if load && (laneRule.IsCacheLoaded() || !laneRule.IsInitialized()) {
+			dstLaneKey := &ContextKey{ServiceKey: dstService, Operation: keyDstLane}
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", dstLaneKey)
+			notifier, err := registry.LoadServiceLaneRule(dstService)
+			if err != nil {
+				return nil, err.(model.SDKError)
+			}
+			notifiers = append(notifiers, NewSingleNotifyContext(dstLaneKey, notifier, logCtx))
+		}
+	}
+	if trigger.EnableSrcLane {
+		// 同时拉取 caller 侧的泳道规则：Polaris Server naming cache 按 service 维度独立缓存，
+		// callee 侧 cache 可能滞后于 caller 侧。LaneRouter 合并两侧规则并以 caller 优先去重，
+		// 保证 caller 看到最新规则时可覆盖 callee 的过期缓存。对齐 polaris-java
+		// LaneUtils.fetchLaneRules 的 caller + callee 合并逻辑。
+		//
+		// 自调用短路：若 caller 与 callee 是同一服务，EnableDstLane 分支已处理相同 key，
+		// 这里再发起拉取会导致同一个 ServiceEventKey 被 Discover 二次请求（本地 registry 层面
+		// 通常会做幂等合并，但仍是无意义开销）。SourceLaneRule 保持 nil，lane_router 的
+		// getLaneGroups 在合并阶段会自动跳过，只读 dst 侧规则即可。
+		sameService := srcService != nil && dstService != nil &&
+			srcService.Namespace == dstService.Namespace && srcService.Service == dstService.Service
+		if sameService {
+			trigger.EnableSrcLane = false
+		}
+	}
+	if trigger.EnableSrcLane {
+		laneRule := registry.GetServiceLaneRule(srcService, false)
+		if laneRule.IsInitialized() {
+			request.SetSrcLane(laneRule)
+			trigger.EnableSrcLane = false
+		}
+		if load && (laneRule.IsCacheLoaded() || !laneRule.IsInitialized()) {
+			srcLaneKey := &ContextKey{ServiceKey: srcService, Operation: keySrcLane}
+			logCtx.GetBaseLogger().Debugf("value not initialized, scheduled context %s", srcLaneKey)
+			notifier, err := registry.LoadServiceLaneRule(srcService)
+			if err != nil {
+				return nil, err.(model.SDKError)
+			}
+			notifiers = append(notifiers, NewSingleNotifyContext(srcLaneKey, notifier, logCtx))
+		}
+	}
 	if trigger.EnableNearbyRoute {
 		nearbyRouteRule := registry.GetServiceNearByRouteRule(dstService, false)
 		if nearbyRouteRule.IsInitialized() {

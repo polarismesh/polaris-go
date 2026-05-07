@@ -13,7 +13,11 @@ global:
         interval: 10s
 consumer:
   serviceRouter:
+    # 本示例通过 GetAllInstances + 业务侧 metadata 过滤 + ProcessRouters
+    # 的手动三段式来演示元数据过滤，所以不启用 dstMetaRouter，
+    # 只保留规则路由以便演示剩余路由链的效果。
     chain:
-      # 启用元数据路由, 该配置使用元数据路由替代了默认开启的规则路由
-      # 一般不建议同时使用元数据路由和规则路由
-      - dstMetaRouter
+      - ruleBasedRouter
+    plugin:
+      ruleBasedRouter:
+        failoverType: all

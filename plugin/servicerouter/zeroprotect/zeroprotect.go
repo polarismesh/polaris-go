@@ -20,8 +20,6 @@ package zeroprotect
 import (
 	"strconv"
 
-	"go.uber.org/zap"
-
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -127,8 +125,8 @@ func (g *ZeroProtectFilter) doZeroProtect(curCluster *model.Cluster, withinClust
 	if len(zeroProtectIns) != 0 {
 		svcName := curCluster.GetClusters().GetServiceInstances().GetService()
 		nsName := curCluster.GetClusters().GetServiceInstances().GetNamespace()
-		g.logCtx.GetBaseLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect", svcName, nsName,
-			zap.Any("total", len(zeroProtectIns)), zap.Any("instances", zeroProtectIns))
+		g.logCtx.GetRouteLogger().Infof("[Router][ZeroProtect] namespace:%s service:%s zero protect, total:%d, instances:%v",
+			nsName, svcName, len(zeroProtectIns), zeroProtectIns)
 	}
 
 	finalCluster := model.NewServiceClusters(model.NewDefaultServiceInstancesWithRegistryValue(model.ServiceInfo{

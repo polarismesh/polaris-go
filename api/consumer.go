@@ -50,18 +50,22 @@ func (r *GetOneInstanceRequest) convert() {
 		return
 	}
 
-	serviceInfo := r.SourceService
-	if serviceInfo == nil {
-		r.SourceService = &model.ServiceInfo{
-			Metadata: map[string]string{},
-		}
-		serviceInfo = r.SourceService
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的同一张 map 引用
+	var srcMeta map[string]string
+	if r.SourceService != nil {
+		srcMeta = r.SourceService.Metadata
+	} else {
+		r.SourceService = &model.ServiceInfo{}
 	}
-
+	merged := make(map[string]string, len(srcMeta)+len(r.Arguments))
+	for k, v := range srcMeta {
+		merged[k] = v
+	}
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(serviceInfo.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // GetInstancesRequest 获取多个服务的请求对象
@@ -74,18 +78,22 @@ func (r *GetInstancesRequest) convert() {
 		return
 	}
 
-	serviceInfo := r.SourceService
-	if serviceInfo == nil {
-		r.SourceService = &model.ServiceInfo{
-			Metadata: map[string]string{},
-		}
-		serviceInfo = r.SourceService
+	// 将 Arguments 展开成 SourceService.Metadata, 供规则路由做源侧标签匹配.
+	// 重要: 不能直接在传入的 SourceService.Metadata 上原地 mutate, 否则会污染调用方持有的同一张 map 引用
+	var srcMeta map[string]string
+	if r.SourceService != nil {
+		srcMeta = r.SourceService.Metadata
+	} else {
+		r.SourceService = &model.ServiceInfo{}
 	}
-
+	merged := make(map[string]string, len(srcMeta)+len(r.Arguments))
+	for k, v := range srcMeta {
+		merged[k] = v
+	}
 	for i := range r.Arguments {
-		arg := r.Arguments[i]
-		arg.ToLabels(serviceInfo.Metadata)
+		r.Arguments[i].ToLabels(merged)
 	}
+	r.SourceService.Metadata = merged
 }
 
 // GetAllInstancesRequest 获取服务下所有实例的请求对象

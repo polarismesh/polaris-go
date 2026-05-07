@@ -56,9 +56,16 @@ func GetFilterInstances(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo
 	return instances, result.OutputCluster, nil, nil
 }
 
-// processServiceRouters 执行路由链
+// processServiceRouters 执行路由链.
+//
+// runFilterOnlyFallback 控制是否在链尾追加一次 FilterOnlyRouter 作为全死全活兜底:
+//   - 主链调用方应传 true, 与历史行为保持一致;
+//   - 前置链 (beforeChain) 调用方必须传 false, 否则 FilterOnly 在前置链尾部运行时
+//     会调用 SetIgnoreFilterOnlyOnEndChain(true), 导致上层 getServiceRoutedInstances
+//     误判"前置链已出最终结果"从而跳过主链 (ruleBasedRouter / nearbyBasedRouter /
+//     dstMetaRouter 等), 让用户侧看到"路由规则完全不生效"的 bug.
 func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
-	svcClusters model.ServiceClusters, cluster *model.Cluster) (*RouteResult, model.SDKError) {
+	svcClusters model.ServiceClusters, cluster *model.Cluster, runFilterOnlyFallback bool) (*RouteResult, model.SDKError) {
 	var result *RouteResult
 	var err error
 	logCtx := ctx.GetContextLogger()
@@ -111,7 +118,7 @@ func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeI
 				instances, result.Status.String())
 		}
 	}
-	if !routeInfo.ignoreFilterOnlyOnEndChain {
+	if runFilterOnlyFallback && !routeInfo.ignoreFilterOnlyOnEndChain {
 		// 需要执行一遍全死全活
 		if nil != result {
 			// 回收，下一步即将被新值替换
@@ -134,9 +141,42 @@ func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeI
 	return result, nil
 }
 
-// GetFilterCluster 根据服务理由链，过滤服务节点，返回对应的cluster
+// GetFilterCluster 根据服务路由链，过滤服务节点，返回对应的cluster.
+// 该入口用于主链场景, 会在链尾追加一次 FilterOnlyRouter 兜底, 保证全死全活语义.
+// 前置链(beforeChain)场景请使用 GetFilterClusterBefore, 避免 FilterOnly 抢占 ignoreFilterOnlyOnEndChain
+// 标记导致主链被跳过.
 func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
 	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
+	return getFilterClusterImpl(ctx, routers, routeInfo, svcClusters, nil, true)
+}
+
+// GetFilterClusterBefore 用于前置链(beforeChain)的路由链过滤.
+// 与 GetFilterCluster 的差别仅在于: 链尾不追加 FilterOnlyRouter 兜底.
+//
+// 前置链若在链尾跑 FilterOnly, FilterOnly.GetFilteredInstances 内部会调用
+// SetIgnoreFilterOnlyOnEndChain(true) (filteronly/router.go) 将 routeInfo 标记置位,
+// 上层 getServiceRoutedInstances 看到此位为 true 会误以为"前置链已产出最终实例集"
+// 从而整条主链被跳过 (ruleBasedRouter / nearbyBasedRouter / dstMetaRouter 都不会执行),
+// 导致规则路由/就近路由/元数据路由全部失效(#issue: beforeChain 启用 laneRouter 后的回归问题).
+func GetFilterClusterBefore(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+	svcClusters model.ServiceClusters) (*RouteResult, model.SDKError) {
+	return getFilterClusterImpl(ctx, routers, routeInfo, svcClusters, nil, false)
+}
+
+// GetFilterClusterWithin 在指定的初始 cluster 范围内执行路由链过滤。
+// withinCluster 为 nil 时自动创建新 cluster（等价于 GetFilterCluster）。
+// 用于将前置链的输出 cluster 作为主链的输入，实现 beforeChain → chain 的串联。
+func GetFilterClusterWithin(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+	svcClusters model.ServiceClusters, withinCluster *model.Cluster) (*RouteResult, model.SDKError) {
+	return getFilterClusterImpl(ctx, routers, routeInfo, svcClusters, withinCluster, true)
+}
+
+// getFilterClusterImpl 是 GetFilterCluster / GetFilterClusterWithin / GetFilterClusterBefore 的共同实现.
+// runFilterOnlyFallback 控制是否在主循环结束后追加一次 FilterOnlyRouter, 见
+// processServiceRouters 的说明.
+func getFilterClusterImpl(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *RouteInfo,
+	svcClusters model.ServiceClusters, withinCluster *model.Cluster,
+	runFilterOnlyFallback bool) (*RouteResult, model.SDKError) {
 	if err := routeInfo.Validate(); err != nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, err, "fail to validate routeInfo")
 	}
@@ -145,28 +185,28 @@ func GetFilterCluster(ctx sdk.ValueContext, routers []ServiceRouter, routeInfo *
 	routerCount := len(routers)
 	pluginsIf, _ := ctx.GetValue(sdk.ContextKeyPlugins)
 	plugins := pluginsIf.(plugin.Supplier)
-	cluster := model.NewCluster(svcClusters, nil)
+	cluster := withinCluster
+	if cluster == nil {
+		cluster = model.NewCluster(svcClusters, nil)
+	}
 	if routerCount > 0 {
 		if nil == routeInfo.chainEnables {
 			routeInfo.Init(plugins)
 		}
-		result, err = processServiceRouters(ctx, routers, routeInfo, svcClusters, cluster)
+		result, err = processServiceRouters(ctx, routers, routeInfo, svcClusters, cluster, runFilterOnlyFallback)
 		if err != nil {
 			return nil, err
 		}
 		if nil != result && nil != result.RedirectDestService {
-			// 重定向服务优先返回
 			return result, nil
 		}
 	} else {
-		// 没有路由规则，则返回全量服务实例
 		cluster.HasLimitedInstances = true
 	}
 	if nil == result {
 		result = PoolGetRouteResult(ctx)
 		result.OutputCluster = cluster
 	}
-	// 初始化集群缓存
 	result.OutputCluster.GetClusterValue()
 	if routerCount > 0 {
 		handlers := plugins.GetEventSubscribers(common.OnRoutedClusterReturned)

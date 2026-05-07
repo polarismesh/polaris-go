@@ -57,6 +57,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/canary"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/dstmeta"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/filteronly"
+	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/lane"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/nearbybase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/rulebase"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/setdivision"

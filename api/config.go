@@ -219,6 +219,13 @@ func checkLoggersDir() error {
 				fmt.Sprintf("fail to create network logger dir: %s", l.GetLogDir())))
 		}
 	}
+	if l, ok := log.GetRouteLogger().(log.DirLogger); ok && !l.IsLevelEnabled(log.NoneLog) {
+		err = model.EnsureAndVerifyDir(l.GetLogDir())
+		if err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create route logger dir: %s", l.GetLogDir())))
+		}
+	}
 	return errs
 }
 

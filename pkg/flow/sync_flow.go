@@ -226,12 +226,68 @@ func (e *Engine) reportCombinedErrs(apiRes *model.APICallResult, consumedTime ti
 	apiRes.RetStatus = origStatus
 }
 
-// getServiceRoutedInstances 过滤经过规则路由后的服务实例
+// getServiceRoutedInstances 依次执行 beforeChain 与主链(coreChain),产出最终实例集.
+//
+//	beforeChain  → 入口前置路由 (如泳道路由),可能直接重定向或把过滤后的 cluster 传给主链
+//	coreChain    → 业务主路由链 (规则/就近/元数据等),末尾由 FilterOnly 兜底全死全活
 func (e *Engine) getServiceRoutedInstances(
-	req *data.CommonInstancesRequest) (routeResult *servicerouter.RouteResult, err model.SDKError) {
-	var routerChain = e.resolveRouterChain(req)
-	return servicerouter.GetFilterCluster(e.globalCtx, routerChain.Chain, &req.RouteInfo,
-		req.DstInstances.GetServiceClusters())
+	req *data.CommonInstancesRequest,
+) (*servicerouter.RouteResult, model.SDKError) {
+	chain := e.resolveRouterChain(req)
+	clusters := req.DstInstances.GetServiceClusters()
+
+	// Step 1: beforeChain (可选). 没有 beforeChain 时直接走主链,保持与旧行为一致.
+	beforeResult, err := e.runBeforeChain(chain.BeforeChain, &req.RouteInfo, clusters)
+	if err != nil {
+		return nil, err
+	}
+	// 前置链产出终态 (重定向 / Cluster 语义主链无法承接) → 直接返回不进入主链.
+	if beforeResult != nil && isBeforeChainTerminal(beforeResult, &req.RouteInfo) {
+		return beforeResult, nil
+	}
+
+	// Step 2: coreChain. 根据 beforeChain 结果决定起始 cluster.
+	var withinCluster *model.Cluster
+	if beforeResult != nil {
+		if beforeResult.OutputCluster != nil {
+			withinCluster = beforeResult.OutputCluster
+		} else {
+			// 插件契约违约:记录并回退主链,避免整个请求失败.
+			e.logCtx.GetBaseLogger().Warnf(
+				"[Router] beforeChain returned nil OutputCluster (status=%s), falling back to main chain",
+				beforeResult.Status)
+		}
+		// OutputCluster 会被主链接管 (非 nil 时) 或直接丢弃 (nil 违约),外壳统一回收.
+		servicerouter.GetRouteResultPool().Put(beforeResult)
+	}
+	return servicerouter.GetFilterClusterWithin(
+		e.globalCtx, chain.Chain, &req.RouteInfo, clusters, withinCluster)
+}
+
+// runBeforeChain 执行前置链(可为空).空链返回 (nil, nil),与无前置链场景语义一致.
+func (e *Engine) runBeforeChain(
+	beforeChain []servicerouter.ServiceRouter,
+	routeInfo *servicerouter.RouteInfo,
+	clusters model.ServiceClusters,
+) (*servicerouter.RouteResult, model.SDKError) {
+	if len(beforeChain) == 0 {
+		return nil, nil
+	}
+	return servicerouter.GetFilterClusterBefore(e.globalCtx, beforeChain, routeInfo, clusters)
+}
+
+// isBeforeChainTerminal 判定前置链结果是否已经是最终态,无需再进入主链.
+// 两类短路:
+//  1. 显式 RedirectDestService (上层负责重定向重试, 不再路由).
+//  2. IgnoreFilterOnlyOnEndChain=true (泳道 routeToBaseline 的 NotContainMetaKey 语义
+//     或 STRICT 空 cluster,主链无法再过滤).
+//
+// 约定:前置链插件若想短路主链,必须调用 routeInfo.SetIgnoreFilterOnlyOnEndChain(true).
+func isBeforeChainTerminal(result *servicerouter.RouteResult, routeInfo *servicerouter.RouteInfo) bool {
+	if result.RedirectDestService != nil {
+		return true
+	}
+	return routeInfo.IsIgnoreFilterOnlyOnEndChain()
 }
 
 func (e *Engine) resolveRouterChain(req *data.CommonInstancesRequest) *servicerouter.RouterChain {

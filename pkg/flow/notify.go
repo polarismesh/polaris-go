@@ -32,6 +32,8 @@ import (
 const (
 	keySourceRoute        = "sourceRoute"
 	keyDstRoute           = "destinationRoute"
+	keyDstLane            = "destinationLane"
+	keySrcLane            = "sourceLane"
 	keyDstRateLimit       = "destinationRateLimit"
 	keyDstInstances       = "destinationInstances"
 	keyDstServices        = "destinationServices"
