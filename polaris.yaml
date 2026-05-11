@@ -350,6 +350,21 @@ provider:
     # 类型: duration
     # 默认值: 5s
     healthCheckInterval: 5s
+  # 服务鉴权配置
+  auth:
+    # 是否启用鉴权能力，默认关闭，对存量用户零开销
+    # 类型: bool
+    # 默认值: false
+    enable: false
+    # 鉴权插件链：按顺序执行，任一返回拒绝则短路返回 Forbidden
+    # 类型: list
+    # 范围: 已注册的鉴权插件名
+    # 默认值: 空列表
+    chain:
+      - blockAllowList
+    # 各鉴权插件的具体配置
+    plugin:
+      blockAllowList: {}
 # 配置中心默认配置
 config:
   # 类型转化缓存的key数量

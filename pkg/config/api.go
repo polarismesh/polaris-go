@@ -80,6 +80,8 @@ type ProviderConfig interface {
 	GetMinRegisterInterval() time.Duration
 	// GetLossless 获取无损上下线配置
 	GetLossless() LosslessConfig
+	// GetAuth 获取服务鉴权配置
+	GetAuth() AuthenticatorConfig
 }
 
 // ConfigFileConfig 配置中心的配置.

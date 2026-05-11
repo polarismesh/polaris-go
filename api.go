@@ -133,6 +133,23 @@ func NewQuotaRequest() QuotaRequest {
 	return &model.QuotaRequestImpl{}
 }
 
+// AuthenticateRequest 鉴权请求.
+type AuthenticateRequest api.AuthenticateRequest
+
+// AuthAPI 服务鉴权相关的 API 接口.
+type AuthAPI interface {
+	api.SDKOwner
+	// Authenticate 执行鉴权，按 provider.auth.chain 顺序调用各鉴权插件
+	Authenticate(request *AuthenticateRequest) (*model.AuthenticateResponse, error)
+	// Destroy 销毁 API，销毁后无法再进行调用
+	Destroy()
+}
+
+// NewAuthenticateRequest 创建鉴权请求
+func NewAuthenticateRequest() *AuthenticateRequest {
+	return &AuthenticateRequest{}
+}
+
 type GetConfigFileRequest api.GetConfigFileRequest
 type GetConfigGroupRequest api.GetConfigGroupRequest
 

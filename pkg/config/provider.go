@@ -33,6 +33,8 @@ type ProviderConfigImpl struct {
 	RateLimit *RateLimitConfigImpl `yaml:"rateLimit" json:"rateLimit"`
 	// 无损上下线配置
 	Lossless *LosslessConfigImpl `yaml:"lossless" json:"lossless"`
+	// 服务鉴权配置
+	Auth *AuthenticatorConfigImpl `yaml:"auth" json:"auth"`
 	// minimum interval between tow register operation
 	MinRgisterInterval time.Duration `yaml:"minRegisterInterval" json:"minRegisterInterval"`
 }
@@ -52,6 +54,11 @@ func (p *ProviderConfigImpl) GetLossless() LosslessConfig {
 	return p.Lossless
 }
 
+// GetAuth 获取服务鉴权配置
+func (p *ProviderConfigImpl) GetAuth() AuthenticatorConfig {
+	return p.Auth
+}
+
 // Verify 校验配置参数.
 func (p *ProviderConfigImpl) Verify() error {
 	if nil == p {
@@ -63,6 +70,9 @@ func (p *ProviderConfigImpl) Verify() error {
 		errs = multierror.Append(errs, err)
 	}
 	if err = p.Lossless.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
+	if err = p.Auth.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 	if p.MinRgisterInterval <= 0 {
@@ -84,6 +94,10 @@ func (p *ProviderConfigImpl) SetDefault() {
 		p.Lossless = &LosslessConfigImpl{}
 	}
 	p.Lossless.SetDefault()
+	if nil == p.Auth {
+		p.Auth = &AuthenticatorConfigImpl{}
+	}
+	p.Auth.SetDefault()
 }
 
 // Init 配置初始化.
@@ -92,4 +106,6 @@ func (p *ProviderConfigImpl) Init() {
 	p.RateLimit.Init()
 	p.Lossless = &LosslessConfigImpl{}
 	p.Lossless.Init()
+	p.Auth = &AuthenticatorConfigImpl{}
+	p.Auth.Init()
 }

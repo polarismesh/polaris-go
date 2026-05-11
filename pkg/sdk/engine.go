@@ -144,4 +144,6 @@ type Engine interface {
 	GetEventReportChain() interface{}
 	GetAdmin() Admin
 	GetRegisterState() RegisterState
+	// SyncAuthenticate 同步执行服务鉴权
+	SyncAuthenticate(req *model.AuthenticateRequest) (*model.AuthenticateResponse, error)
 }

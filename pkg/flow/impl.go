@@ -35,6 +35,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/authenticator"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -97,6 +98,8 @@ type Engine struct {
 	logCtx            *log.ContextLogger
 	// weightAdjuster .
 	weightAdjuster []weightadjuster.WeightAdjuster
+	// 鉴权插件链（按 chain 顺序），任一返回 Forbidden 即短路
+	authenticators []authenticator.Authenticator
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -201,6 +204,38 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始注册状态管理器
 	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval(), flowEngine.logCtx)
+
+	// 加载鉴权插件链：仅当 enable=true 且 chain 非空时加载，否则 authenticators 为空，
+	// SyncAuthenticate 将直接放行以保证零开销
+	if err = flowEngine.loadAuthenticators(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadAuthenticators 加载鉴权插件链
+func (e *Engine) loadAuthenticators() error {
+	authCfg := e.configuration.GetProvider().GetAuth()
+	if authCfg == nil || !authCfg.IsEnable() {
+		return nil
+	}
+	chain := authCfg.GetChain()
+	if len(chain) == 0 {
+		return nil
+	}
+	authenticators := make([]authenticator.Authenticator, 0, len(chain))
+	for _, name := range chain {
+		plug, err := e.plugins.GetPlugin(common.TypeAuthenticator, name)
+		if err != nil {
+			return fmt.Errorf("fail to load authenticator plugin %s: %w", name, err)
+		}
+		auth, ok := plug.(authenticator.Authenticator)
+		if !ok {
+			return fmt.Errorf("plugin %s is not an Authenticator", name)
+		}
+		authenticators = append(authenticators, auth)
+	}
+	e.authenticators = authenticators
 	return nil
 }
 
