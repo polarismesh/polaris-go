@@ -139,7 +139,7 @@ func (c *Connection) Release(opKey string) {
 	// 未在 DefaultServerServiceToConnectionControl 注册的 ClusterType（如 BuiltinCluster）
 	// 不应被当作短连接，否则其连接被 lazyClose 后会被 discover 的 clearSwitchedClient 当成
 	// "已切换" 立即关流，引发 grpc: the client connection is closing 之类的竞争错误。
-	if ctrl, ok := DefaultServerServiceToConnectionControl[c.ConnID.Service.ClusterType]; ok &&
+	if ctrl, ok := DefaultServerServiceToConnectionControl[c.Service.ClusterType]; ok &&
 		ctrl == ConnectionShort && IsAvailableConnection(c) {
 		c.lazyClose(false)
 	}
