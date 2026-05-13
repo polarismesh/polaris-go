@@ -35,7 +35,7 @@ const (
 	rejectInfo = "blocked by block-allow-list rule"
 )
 
-// Authenticate 黑白名单鉴权入口。规则获取失败或无规则时按通过处理（与 polaris-java 行为一致）。
+// Authenticate 黑白名单鉴权入口。规则获取失败或无规则时按通过处理
 func (p *BlockAllowListAuthenticator) Authenticate(info *authenticator.AuthInfo) *authenticator.AuthResult {
 	if info == nil {
 		return &authenticator.AuthResult{Code: authenticator.AuthResultOk}
@@ -78,7 +78,7 @@ func (p *BlockAllowListAuthenticator) getBlockAllowListRules(info *authenticator
 	return wrapper.Rules
 }
 
-// checkAllow 检查鉴权是否允许，与 polaris-java BlockAllowListAuthenticator.checkAllow 1:1 移植。
+// checkAllow 检查鉴权是否允许
 //  1. 全是白名单 → 任一匹配则通过；
 //  2. 全是黑名单 → 任一匹配则拒绝；
 //  3. 混合策略 → 任一白名单匹配则通过；都不匹配但存在白名单时拒绝。
@@ -154,7 +154,7 @@ func matchArguments(info *authenticator.AuthInfo, args []*apisecurity.BlockAllow
 }
 
 // getLabelValue 从 AuthInfo 中按 MatchArgument 类型取值。
-// 取值规则与 polaris-java 一致：HEADER/QUERY/CALLER_IP 来自请求消息（Arguments），
+// 取值规则：HEADER/QUERY/CALLER_IP 来自请求消息（Arguments），
 // CALLER_SERVICE 来自主调服务名，CALLER_METADATA 来自主调服务 Metadata，CUSTOM 优先取 Arguments，再退回 Metadata。
 func getLabelValue(info *authenticator.AuthInfo, arg *apisecurity.BlockAllowConfig_MatchArgument) string {
 	switch arg.GetType() {

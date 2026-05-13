@@ -158,6 +158,18 @@ global:
     # 事件上报插件链
     chain:
       - pushgateway
+  # 描述：客户端身份相关配置，用于在服务端识别和管理 SDK 客户端实例
+  client:
+    # 描述：客户端ID，用于唯一标识当前 SDK 客户端实例
+    # 类型：string
+    # 默认值：空字符串（由 SDK 自动生成）
+    id: ""
+    # 描述：客户端标签，附加在客户端上的自定义元数据，会随上报信息一并发送到服务端
+    # 类型：map[string]string
+    # 默认值：空 map
+    labels: {}
+      # key1: value1
+      # key2: value2
   # 描述：Admin相关的配置
   admin:
     # 描述：Admin的监听的IP

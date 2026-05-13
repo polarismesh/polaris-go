@@ -16,7 +16,7 @@
  */
 
 // Package authenticator 定义服务鉴权插件接口。
-// 对应 polaris-java 的 PluginTypes.AUTHENTICATOR，按 chain 顺序执行，
+// 按 chain 顺序执行，
 // 任一插件返回 Forbidden 即短路拒绝。
 package authenticator
 

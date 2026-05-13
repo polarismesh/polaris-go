@@ -15,8 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-// Package blockallowlist 提供基于黑白名单规则的服务鉴权插件实现，对应
-// polaris-java 的 BlockAllowListAuthenticator。
+// Package blockallowlist 提供基于黑白名单规则的服务鉴权插件实现
 package blockallowlist
 
 import (
