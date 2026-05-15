@@ -31,6 +31,7 @@ type ContextLogger struct {
 	eventLogger      Logger
 	losslessLogger   Logger
 	routeLogger      Logger
+	authLogger       Logger
 }
 
 // Init 获取基础日志记录器.
@@ -44,6 +45,7 @@ func (c *ContextLogger) Init() {
 	c.eventLogger = GetEventLogger()
 	c.losslessLogger = GetLosslessLogger()
 	c.routeLogger = GetRouteLogger()
+	c.authLogger = GetAuthLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -66,6 +68,7 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	c.eventLogger = LoggerWithFields(c.eventLogger, kvs...)
 	c.losslessLogger = LoggerWithFields(c.losslessLogger, kvs...)
 	c.routeLogger = LoggerWithFields(c.routeLogger, kvs...)
+	c.authLogger = LoggerWithFields(c.authLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -138,4 +141,12 @@ func (c *ContextLogger) GetRouteLogger() Logger {
 		return GetRouteLogger()
 	}
 	return c.routeLogger
+}
+
+// GetAuthLogger 获取服务鉴权日志记录器.
+func (c *ContextLogger) GetAuthLogger() Logger {
+	if c == nil {
+		return GetAuthLogger()
+	}
+	return c.authLogger
 }

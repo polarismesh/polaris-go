@@ -27,6 +27,7 @@ import (
 
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/authenticator"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 const (
@@ -94,9 +95,9 @@ func TestCheckAllow_EmptyRuleList_ShouldPass(t *testing.T) {
 	info := newTestAuthInfo(testPath)
 	rules := []*apisecurity.BlockAllowListRule{}
 
-	result := auth.checkAllow(info, rules)
+	allowed, _ := auth.checkAllow(info, rules)
 
-	assert.True(t, result)
+	assert.True(t, allowed)
 }
 
 // 2) 规则禁用（enable=false）→ 通过
@@ -107,9 +108,9 @@ func TestCheckAllow_DisabledRule_ShouldPass(t *testing.T) {
 		createBlockAllowListRule(false, testPath, apisecurity.BlockAllowConfig_ALLOW_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, _ := auth.checkAllow(info, rules)
 
-	assert.True(t, result)
+	assert.True(t, allowed)
 }
 
 // 3) 仅白名单且匹配 → 通过
@@ -120,12 +121,12 @@ func TestCheckAllow_OnlyAllowList_Match_ShouldPass(t *testing.T) {
 		createBlockAllowListRule(true, testPath, apisecurity.BlockAllowConfig_ALLOW_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, _ := auth.checkAllow(info, rules)
 
-	assert.True(t, result)
+	assert.True(t, allowed)
 }
 
-// 4) 仅黑名单且匹配 → 拒绝
+// 4) 仅黑名单且匹配 → 拒绝；reason 应指向命中的黑名单规则
 func TestCheckAllow_OnlyBlockList_Match_ShouldReject(t *testing.T) {
 	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
@@ -133,12 +134,18 @@ func TestCheckAllow_OnlyBlockList_Match_ShouldReject(t *testing.T) {
 		createBlockAllowListRule(true, testPath, apisecurity.BlockAllowConfig_BLOCK_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, reason := auth.checkAllow(info, rules)
 
-	assert.False(t, result)
+	assert.False(t, allowed)
+	assert.Equal(t, 0, reason.ruleIndex)
+	assert.Equal(t, 0, reason.cfgIndex)
+	assert.Equal(t, apisecurity.BlockAllowConfig_BLOCK_LIST, reason.policy)
+	assert.Contains(t, reason.summary, "BLOCK_LIST")
+	assert.Contains(t, reason.summary, "rule[0]")
 }
 
-// 5) 仅白名单但不匹配 → 拒绝（containsAllowList=true 时未匹配返回 false）
+// 5) 仅白名单但不匹配 → 拒绝（containsAllowList=true 时未匹配返回 false）；
+// 此时未命中任何规则，ruleIndex/cfgIndex 应为 -1，summary 说明兜底原因
 func TestCheckAllow_OnlyAllowList_NotMatch_ShouldReject(t *testing.T) {
 	auth := newTestAuthenticator()
 	info := newTestAuthInfo("/no-test")
@@ -146,9 +153,12 @@ func TestCheckAllow_OnlyAllowList_NotMatch_ShouldReject(t *testing.T) {
 		createBlockAllowListRule(true, testPath, apisecurity.BlockAllowConfig_ALLOW_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, reason := auth.checkAllow(info, rules)
 
-	assert.False(t, result)
+	assert.False(t, allowed)
+	assert.Equal(t, -1, reason.ruleIndex)
+	assert.Equal(t, -1, reason.cfgIndex)
+	assert.Contains(t, reason.summary, "no allow-list rule matched")
 }
 
 // 6) 仅黑名单但不匹配 → 通过
@@ -159,9 +169,9 @@ func TestCheckAllow_OnlyBlockList_NotMatch_ShouldPass(t *testing.T) {
 		createBlockAllowListRule(true, testPath, apisecurity.BlockAllowConfig_BLOCK_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, _ := auth.checkAllow(info, rules)
 
-	assert.True(t, result)
+	assert.True(t, allowed)
 }
 
 // 7) 混合：白名单匹配 + 黑名单不匹配 → 通过
@@ -173,12 +183,12 @@ func TestCheckAllow_AllowMatch_BlockNotMatch_ShouldPass(t *testing.T) {
 		createBlockAllowListRule(true, "/no-test", apisecurity.BlockAllowConfig_BLOCK_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, _ := auth.checkAllow(info, rules)
 
-	assert.True(t, result)
+	assert.True(t, allowed)
 }
 
-// 8) 混合：白名单不匹配 + 黑名单匹配 → 拒绝
+// 8) 混合：白名单不匹配 + 黑名单匹配 → 拒绝；reason 应指向第二条黑名单规则
 func TestCheckAllow_AllowNotMatch_BlockMatch_ShouldReject(t *testing.T) {
 	auth := newTestAuthenticator()
 	info := newTestAuthInfo("/no-test")
@@ -187,12 +197,14 @@ func TestCheckAllow_AllowNotMatch_BlockMatch_ShouldReject(t *testing.T) {
 		createBlockAllowListRule(true, "/no-test", apisecurity.BlockAllowConfig_BLOCK_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, reason := auth.checkAllow(info, rules)
 
-	assert.False(t, result)
+	assert.False(t, allowed)
+	assert.Equal(t, 1, reason.ruleIndex)
+	assert.Equal(t, apisecurity.BlockAllowConfig_BLOCK_LIST, reason.policy)
 }
 
-// 9) 混合：白名单和黑名单都不匹配 → 拒绝（因为存在白名单规则）
+// 9) 混合：白名单和黑名单都不匹配 → 拒绝（因为存在白名单规则）；reason 为兜底说明
 func TestCheckAllow_BothNotMatch_ShouldReject(t *testing.T) {
 	auth := newTestAuthenticator()
 	info := newTestAuthInfo("/no-no-test")
@@ -201,9 +213,11 @@ func TestCheckAllow_BothNotMatch_ShouldReject(t *testing.T) {
 		createBlockAllowListRule(true, "/no-test", apisecurity.BlockAllowConfig_BLOCK_LIST),
 	}
 
-	result := auth.checkAllow(info, rules)
+	allowed, reason := auth.checkAllow(info, rules)
 
-	assert.False(t, result)
+	assert.False(t, allowed)
+	assert.Equal(t, -1, reason.ruleIndex)
+	assert.Contains(t, reason.summary, "no allow-list rule matched")
 }
 
 // === 扩展：6 维 MatchArgument 取值测试 ===
@@ -221,26 +235,29 @@ func matchArgWithExact(typ apisecurity.BlockAllowConfig_MatchArgument_Type, key,
 }
 
 func TestGetLabelValue_Header(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.Arguments = []model.Argument{
 		model.BuildHeaderArgument("X-User-Id", "u123"),
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_HEADER, "X-User-Id", "u123")
 
-	assert.Equal(t, "u123", getLabelValue(info, arg))
+	assert.Equal(t, "u123", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_Query(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.Arguments = []model.Argument{
 		model.BuildQueryArgument("page", "10"),
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_QUERY, "page", "10")
 
-	assert.Equal(t, "10", getLabelValue(info, arg))
+	assert.Equal(t, "10", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_CallerService_Match(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.SourceService = &model.ServiceInfo{
 		Namespace: "ns-a",
@@ -248,10 +265,11 @@ func TestGetLabelValue_CallerService_Match(t *testing.T) {
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLER_SERVICE, "ns-a", "svc-a")
 
-	assert.Equal(t, "svc-a", getLabelValue(info, arg))
+	assert.Equal(t, "svc-a", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_CallerService_Wildcard(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.SourceService = &model.ServiceInfo{
 		Namespace: "any-ns",
@@ -259,20 +277,22 @@ func TestGetLabelValue_CallerService_Wildcard(t *testing.T) {
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLER_SERVICE, "*", "svc-x")
 
-	assert.Equal(t, "svc-x", getLabelValue(info, arg))
+	assert.Equal(t, "svc-x", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_CallerIP(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.Arguments = []model.Argument{
 		model.BuildCallerIPArgument("1.2.3.4"),
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLER_IP, "", "1.2.3.4")
 
-	assert.Equal(t, "1.2.3.4", getLabelValue(info, arg))
+	assert.Equal(t, "1.2.3.4", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_CallerMetadata(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.SourceService = &model.ServiceInfo{
 		Namespace: "ns",
@@ -283,20 +303,22 @@ func TestGetLabelValue_CallerMetadata(t *testing.T) {
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLER_METADATA, "env", "prod")
 
-	assert.Equal(t, "prod", getLabelValue(info, arg))
+	assert.Equal(t, "prod", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_Custom_FromArguments(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.Arguments = []model.Argument{
 		model.BuildCustomArgument("biz", "v1"),
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CUSTOM, "biz", "v1")
 
-	assert.Equal(t, "v1", getLabelValue(info, arg))
+	assert.Equal(t, "v1", auth.getLabelValue(info, arg))
 }
 
 func TestGetLabelValue_Custom_FallbackToMetadata(t *testing.T) {
+	auth := newTestAuthenticator()
 	info := newTestAuthInfo(testPath)
 	info.SourceService = &model.ServiceInfo{
 		Namespace: "ns",
@@ -305,7 +327,80 @@ func TestGetLabelValue_Custom_FallbackToMetadata(t *testing.T) {
 	}
 	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CUSTOM, "biz", "fallback")
 
-	assert.Equal(t, "fallback", getLabelValue(info, arg))
+	assert.Equal(t, "fallback", auth.getLabelValue(info, arg))
+}
+
+// === CALLEE_METADATA：从本端通过 Engine 缓存的实例 metadata 取值 ===
+
+// fakeEngineForCallee 仅实现 GetLocalInstanceMetadata，其它方法 panic 提示误用。
+// 鉴权 CALLEE_METADATA 取值只走 GetLocalInstanceMetadata，避免引入大量 mock 桩代码。
+type fakeEngineForCallee struct {
+	sdk.Engine // 嵌入 nil 接口，未实现的方法被调用时会 panic，能在测试中迅速暴露误用
+	data       map[string][]map[string]string
+}
+
+func (f *fakeEngineForCallee) GetLocalInstanceMetadata(namespace, service string) []map[string]string {
+	return f.data[namespace+"/"+service]
+}
+
+// TestGetLabelValue_CalleeMetadata_NoEngine engine 未注入时返回空
+func TestGetLabelValue_CalleeMetadata_NoEngine(t *testing.T) {
+	auth := newTestAuthenticator() // engine 字段为 nil
+	info := newTestAuthInfo(testPath)
+	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLEE_METADATA, "env", "prod")
+
+	assert.Equal(t, "", auth.getLabelValue(info, arg))
+}
+
+// TestGetLabelValue_CalleeMetadata_Hit 命中本端登记的 metadata
+func TestGetLabelValue_CalleeMetadata_Hit(t *testing.T) {
+	auth := newTestAuthenticator()
+	auth.engine = &fakeEngineForCallee{
+		data: map[string][]map[string]string{
+			testNamespace + "/" + testService: {
+				{"env": "prod", "az": "az1"},
+			},
+		},
+	}
+	info := newTestAuthInfo(testPath)
+	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLEE_METADATA, "env", "prod")
+
+	assert.Equal(t, "prod", auth.getLabelValue(info, arg))
+}
+
+// TestGetLabelValue_CalleeMetadata_MultiInstanceAnyHit 多实例下任一命中即返回
+func TestGetLabelValue_CalleeMetadata_MultiInstanceAnyHit(t *testing.T) {
+	auth := newTestAuthenticator()
+	auth.engine = &fakeEngineForCallee{
+		data: map[string][]map[string]string{
+			testNamespace + "/" + testService: {
+				{"role": "primary"}, // 第一个实例不含 env
+				{"env": "prod"},     // 第二个实例含目标 key
+				{"role": "secondary"},
+			},
+		},
+	}
+	info := newTestAuthInfo(testPath)
+	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLEE_METADATA, "env", "prod")
+
+	assert.Equal(t, "prod", auth.getLabelValue(info, arg))
+}
+
+// TestGetLabelValue_CalleeMetadata_KeyMissing 所有实例都不含目标 key 时返回空
+func TestGetLabelValue_CalleeMetadata_KeyMissing(t *testing.T) {
+	auth := newTestAuthenticator()
+	auth.engine = &fakeEngineForCallee{
+		data: map[string][]map[string]string{
+			testNamespace + "/" + testService: {
+				{"az": "az1"},
+				{"role": "primary"},
+			},
+		},
+	}
+	info := newTestAuthInfo(testPath)
+	arg := matchArgWithExact(apisecurity.BlockAllowConfig_MatchArgument_CALLEE_METADATA, "env", "prod")
+
+	assert.Equal(t, "", auth.getLabelValue(info, arg))
 }
 
 // === Authenticate 接口语义校验：未拉到规则时直接放行 ===

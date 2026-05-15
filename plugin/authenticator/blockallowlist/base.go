@@ -50,7 +50,11 @@ func (p *BlockAllowListAuthenticator) Name() string {
 func (p *BlockAllowListAuthenticator) Init(ctx *plugin.InitContext) error {
 	p.PluginBase = plugin.NewPluginBase(ctx)
 	p.pluginCtx = ctx
-	p.log = ctx.ValueCtx.GetContextLogger().GetBaseLogger()
+	// 使用独立的 AuthLogger，将鉴权相关日志输出到 ./polaris/log/auth/polaris-auth.log
+	p.log = ctx.ValueCtx.GetContextLogger().GetAuthLogger()
+	if p.log != nil {
+		p.log.Infof("%s plugin initialized: name=%s type=%v", logPrefix, PluginName, p.Type())
+	}
 	return nil
 }
 
@@ -58,10 +62,17 @@ func (p *BlockAllowListAuthenticator) Init(ctx *plugin.InitContext) error {
 // 用于按需调用 SyncGetServiceRule 拉取规则。实现 authenticator.EngineSetter 接口。
 func (p *BlockAllowListAuthenticator) SetEngine(engine sdk.Engine) {
 	p.engine = engine
+	if p.log != nil {
+		// engine 注入后插件才能真正干活，Info 级让运维确认这一时刻
+		p.log.Infof("%s engine injected, ready to authenticate", logPrefix)
+	}
 }
 
 // Destroy 销毁插件
 func (p *BlockAllowListAuthenticator) Destroy() error {
+	if p.log != nil {
+		p.log.Infof("%s plugin destroyed: name=%s", logPrefix, PluginName)
+	}
 	return nil
 }
 

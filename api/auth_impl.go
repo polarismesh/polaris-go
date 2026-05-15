@@ -40,7 +40,7 @@ func (c *authAPI) Authenticate(request *AuthenticateRequest) (*model.Authenticat
 	if request == nil {
 		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "AuthenticateRequest can not be nil")
 	}
-	if err := request.AuthenticateRequest.Validate(); err != nil {
+	if err := request.Validate(); err != nil {
 		return nil, err
 	}
 	return c.context.GetEngine().SyncAuthenticate(&request.AuthenticateRequest)

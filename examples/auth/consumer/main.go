@@ -31,19 +31,26 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
-	namespace string
-	service   string
-	port      int64
+	namespace     string
+	service       string
+	selfNamespace string
+	selfService   string
+	port          int64
+	debug         bool
 )
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
 	flag.StringVar(&service, "service", "AuthEchoServer", "service")
+	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
+	flag.StringVar(&selfService, "selfService", "AuthEchoClient", "selfService")
 	flag.Int64Var(&port, "port", 38080, "port")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisConsumer is a consumer of polaris
@@ -69,8 +76,8 @@ func (svr *PolarisConsumer) newRequestWithCallerHeader(method, url string) (*htt
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-Polaris-Caller-Namespace", svr.namespace)
-	req.Header.Set("X-Polaris-Caller-Service", svr.service)
+	req.Header.Set("X-Polaris-Caller-Namespace", selfNamespace)
+	req.Header.Set("X-Polaris-Caller-Service", selfService)
 	for k, v := range callerMetadata {
 		req.Header.Set("X-Caller-Meta-"+k, v)
 	}
@@ -226,7 +233,16 @@ func (svr *PolarisConsumer) runWebServer() {
 			return
 		}
 		log.Printf("[CALLEE] response body: bytes=%d body=%s", len(data), truncate(string(data), 512))
-		rw.WriteHeader(http.StatusOK)
+		// 透传 provider 的状态码（200 / 403 / 500 等），让上层调用方（curl/前端/网关）能区分
+		// "调用成功"与"被鉴权拒绝"等不同结果。同时透传 X-Auth-Result / X-Auth-Info 让外部
+		// 调试时能直接看到鉴权决策。
+		if v := resp.Header.Get("X-Auth-Result"); v != "" {
+			rw.Header().Set("X-Auth-Result", v)
+		}
+		if v := resp.Header.Get("X-Auth-Info"); v != "" {
+			rw.Header().Set("X-Auth-Info", v)
+		}
+		rw.WriteHeader(resp.StatusCode)
 		_, _ = rw.Write(data)
 	})
 
@@ -332,7 +348,16 @@ func (svr *PolarisConsumer) runWebServer() {
 			return
 		}
 		log.Printf("[CALLEE] response body: bytes=%d body=%s", len(data), truncate(string(data), 512))
-		rw.WriteHeader(http.StatusOK)
+		// 透传 provider 的状态码（200 / 403 / 500 等），让上层调用方（curl/前端/网关）能区分
+		// "调用成功"与"被鉴权拒绝"等不同结果。同时透传 X-Auth-Result / X-Auth-Info 让外部
+		// 调试时能直接看到鉴权决策。
+		if v := resp.Header.Get("X-Auth-Result"); v != "" {
+			rw.Header().Set("X-Auth-Result", v)
+		}
+		if v := resp.Header.Get("X-Auth-Info"); v != "" {
+			rw.Header().Set("X-Auth-Info", v)
+		}
+		rw.WriteHeader(resp.StatusCode)
 		_, _ = rw.Write(data)
 	})
 
@@ -354,6 +379,13 @@ func main() {
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件

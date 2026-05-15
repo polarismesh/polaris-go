@@ -30,15 +30,17 @@ import (
 	"syscall"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 var (
-	namespace string
-	service   string
-	token     string
-	port      int64
-	debugMode bool
+	namespace        string
+	service          string
+	token            string
+	port             int64
+	registerMetadata string
+	debug            bool
 )
 
 func initArgs() {
@@ -47,7 +49,35 @@ func initArgs() {
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
-	flag.BoolVar(&debugMode, "debug", false, "debug mode")
+	// registerMetadata 指定注册时上报到服务端的实例 metadata，格式 "k1=v1,k2=v2"。
+	// 这份 metadata 同时被 polaris-go SDK 登记到本端，用于鉴权 CALLEE_METADATA 维度取值。
+	flag.StringVar(&registerMetadata, "register-metadata", "", "register-time metadata, format: k1=v1,k2=v2")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
+}
+
+// parseRegisterMetadata 把 "k1=v1,k2=v2" 解析成 map；忽略空串、无 = 或空 key。
+func parseRegisterMetadata(raw string) map[string]string {
+	out := map[string]string{}
+	if raw == "" {
+		return out
+	}
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		idx := strings.Index(pair, "=")
+		if idx <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(pair[:idx])
+		v := strings.TrimSpace(pair[idx+1:])
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // PolarisProvider 鉴权示例 provider，先做服务注册，
@@ -149,12 +179,27 @@ func (svr *PolarisProvider) authenticate(r *http.Request) (*model.AuthenticateRe
 	if remoteIP := extractRemoteIP(r); remoteIP != "" {
 		req.AddArgument(model.BuildCallerIPArgument(remoteIP))
 	}
+	// 自定义流量标签：约定以 X-Custom-Arg-<Key>: <Value> 透传，用于 CUSTOM 维度匹配。
+	// Go http.Header 会 canonicalize，因此这里统一按 canonical 前缀识别，后缀转小写做 key。
+	for k, vs := range r.Header {
+		if !strings.HasPrefix(k, "X-Custom-Arg-") || len(vs) == 0 {
+			continue
+		}
+		argKey := strings.ToLower(k[len("X-Custom-Arg-"):])
+		if argKey == "" {
+			continue
+		}
+		req.AddArgument(model.BuildCustomArgument(argKey, vs[0]))
+	}
 
 	return svr.authAPI.Authenticate(req)
 }
 
 func (svr *PolarisProvider) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+	// echoHandler：响应所有非 /auth-info 的路径（如 /echo、/echo-allow-vip、/echo-callee-prod 等），
+	// 让 verify_auth.sh 可以用不同 path 访问同一 provider，配合服务端规则的 EXACT api.path
+	// 实现"同 service 下多条规则按 path 互不干扰"的复用模型。
+	echoHandler := func(rw http.ResponseWriter, r *http.Request) {
 		callerDesc := describeCaller(r)
 
 		// 1. 鉴权拦截
@@ -177,10 +222,14 @@ func (svr *PolarisProvider) runWebServer() {
 		// 2. 鉴权放行 → 业务逻辑
 		rw.Header().Set("X-Auth-Result", "ok")
 		rw.WriteHeader(http.StatusOK)
-		msg := fmt.Sprintf("Hello, I'm %s Provider, My host : %s:%d", svr.service, svr.host, svr.port)
+		msg := fmt.Sprintf("Hello, I'm %s Provider, My host : %s:%d, path: %s",
+			svr.service, svr.host, svr.port, r.URL.Path)
 		log.Printf("[ALLOW] caller=%s path=%s response=%s", callerDesc, r.URL.Path, msg)
 		_, _ = rw.Write([]byte(msg))
-	})
+	}
+	// "/" 作为兜底匹配，让所有 /echo / /echo-* 路径都进入 echoHandler；
+	// /auth-info 因为是精确注册，DefaultServeMux 会优先匹配它，不会进 echoHandler。
+	http.HandleFunc("/", echoHandler)
 
 	// 调试接口：返回当前服务的鉴权配置摘要（chain / enable），便于脚本/控制台核对
 	http.HandleFunc("/auth-info", func(rw http.ResponseWriter, r *http.Request) {
@@ -225,6 +274,11 @@ func (svr *PolarisProvider) registerService() {
 	registerRequest.Port = svr.port
 	registerRequest.ServiceToken = token
 	registerRequest.SetTTL(1)
+	// 注册带上 metadata 一方面让规则 CALLEE_METADATA 在服务端可见，
+	// 另一方面被 polaris-go SDK 登记到本端用于鉴权取值。
+	if md := parseRegisterMetadata(registerMetadata); len(md) > 0 {
+		registerRequest.Metadata = md
+	}
 	log.Printf("registerRequest: %+v", jsonStr(registerRequest))
 	resp, err := svr.provider.RegisterInstance(registerRequest)
 	if err != nil {
@@ -270,6 +324,13 @@ func main() {
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	provider, err := polaris.NewProviderAPI()
 	if err != nil {
