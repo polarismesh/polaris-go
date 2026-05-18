@@ -41,11 +41,6 @@ const (
 )
 
 // Authenticate 黑白名单鉴权入口。规则获取失败或无规则时按通过处理。
-//
-// 日志策略：
-//   - Info：仅在「拒绝」分支打 1 条审计日志（不打 Allow，避免日志爆量）；
-//   - Debug：详细的规则评估过程（getRules → checkAllow → matchMethod / matchArguments），
-//     生产环境默认关闭，调试时把 polaris.yaml 的 auth log level 切到 debug 即可看到。
 func (p *BlockAllowListAuthenticator) Authenticate(info *authenticator.AuthInfo) *authenticator.AuthResult {
 	if info == nil {
 		return &authenticator.AuthResult{Code: authenticator.AuthResultOk}
