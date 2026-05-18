@@ -346,7 +346,10 @@ func (e *Engine) currentPID() int32 {
 //
 // 日志策略（避免泄漏敏感字段）：
 //   - Info：打印 metadata 的 key 列表与 size，便于运维感知"什么 key 被注册了"，但拿不到 value
-//   - Debug：完整打印 metadata 的 key+value，需要排查时把 auth log level 切到 debug
+//   - Debug：完整打印 metadata 的 key+value，需要排查时把 base log level 切到 debug
+//
+// 这里走 baseLogger 而不是 authLogger：本函数在注册成功后调用，本质是 Provider 注册流程的
+// 一部分，与"鉴权决策"无关；放在 base 日志里和 Register 行为日志同源更利于运维定位。
 func (e *Engine) RegisterLocalInstanceMetadata(req *model.InstanceRegisterRequest, instanceID string) {
 	if req == nil || instanceID == "" || e.localMetadata == nil {
 		return
@@ -356,13 +359,13 @@ func (e *Engine) RegisterLocalInstanceMetadata(req *model.InstanceRegisterReques
 	if e.logCtx == nil {
 		return
 	}
-	authLogger := e.logCtx.GetAuthLogger()
-	authLogger.Infof(
+	baseLogger := e.logCtx.GetBaseLogger()
+	baseLogger.Infof(
 		"[LocalMetadata] register: namespace=%s service=%s pid=%d instanceID=%s host=%s port=%d metadata_size=%d metadata_keys=%v",
 		req.Namespace, req.Service, pid, instanceID, req.Host, req.Port,
 		len(req.Metadata), metadataKeys(req.Metadata))
-	if authLogger.IsLevelEnabled(log.DebugLog) {
-		authLogger.Debugf(
+	if baseLogger.IsLevelEnabled(log.DebugLog) {
+		baseLogger.Debugf(
 			"[LocalMetadata] register metadata detail: namespace=%s service=%s instanceID=%s metadata=%v",
 			req.Namespace, req.Service, instanceID, req.Metadata)
 	}
@@ -377,7 +380,9 @@ func (e *Engine) DeregisterLocalInstanceMetadata(req *model.InstanceDeRegisterRe
 	pid := e.currentPID()
 	e.localMetadata.Deregister(req.Namespace, req.Service, pid, req.InstanceID, req.Host, req.Port)
 	if e.logCtx != nil {
-		e.logCtx.GetAuthLogger().Infof(
+		// 与 RegisterLocalInstanceMetadata 同理：Deregister 行为属于注册流程的反向操作，
+		// 与鉴权无关，走 baseLogger
+		e.logCtx.GetBaseLogger().Infof(
 			"[LocalMetadata] deregister: namespace=%s service=%s pid=%d instanceID=%s host=%s port=%d",
 			req.Namespace, req.Service, pid, req.InstanceID, req.Host, req.Port)
 	}
