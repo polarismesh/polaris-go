@@ -24,8 +24,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -111,6 +113,8 @@ func (svr *PolarisProvider) authenticate(r *http.Request) (*model.AuthenticateRe
 	remoteIP := extractRemoteIP(r)
 	log.Printf("[CALLER] incoming request: remoteAddr=%s remoteIP=%s method=%s path=%s ua=%q referer=%q",
 		r.RemoteAddr, remoteIP, r.Method, r.URL.Path, r.Header.Get("User-Agent"), r.Header.Get("Referer"))
+	// 打印收到的全部请求头，便于端到端排查链路上 header 是否如期透传
+	log.Printf("[CALLER] incoming headers: %s", dumpHeaders(r.Header))
 
 	req := &polaris.AuthenticateRequest{}
 	req.Namespace = svr.namespace
@@ -142,10 +146,9 @@ func (svr *PolarisProvider) authenticate(r *http.Request) (*model.AuthenticateRe
 		log.Printf("[CALLER] caller service: <unknown> (X-Polaris-Caller-Service header not set)")
 	}
 
-	// 打印 query / cookie 概览，便于排查规则匹配问题
-	if q := r.URL.RawQuery; q != "" {
-		log.Printf("[CALLER] query: %s", q)
-	}
+	// 打印 query / cookie 概览，便于排查规则匹配问题。
+	// query 使用按 key 排序的单行 JSON，与 [CALLER] incoming headers 保持同一风格。
+	log.Printf("[CALLER] query: %s", dumpQuery(r.URL.Query()))
 	if cookies := r.Cookies(); len(cookies) > 0 {
 		cookieKV := make(map[string]string, len(cookies))
 		for _, c := range cookies {
@@ -397,4 +400,48 @@ func describeCaller(r *http.Request) string {
 func jsonStr(v interface{}) string {
 	str, _ := json.Marshal(v)
 	return string(str)
+}
+
+// dumpHeaders 把 http.Header 按 key 排序后序列化为单行 JSON，便于日志检索 / 与 consumer 侧对照。
+// 同名多值 header（如 Set-Cookie）以英文逗号拼接。
+func dumpHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = strings.Join(h.Values(k), ",")
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Sprintf("%+v", h)
+	}
+	return string(b)
+}
+
+// dumpQuery 把 URL query 参数按 key 排序后序列化为单行 JSON，与 dumpHeaders 同语义、同风格。
+// 同名多值参数（?a=1&a=2）以英文逗号拼接。
+func dumpQuery(q url.Values) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = strings.Join(q[k], ",")
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Sprintf("%+v", q)
+	}
+	return string(b)
 }

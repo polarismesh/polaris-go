@@ -27,6 +27,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -42,6 +44,7 @@ var (
 	selfService   string
 	port          int64
 	debug         bool
+	metadata      string
 )
 
 func initArgs() {
@@ -51,38 +54,114 @@ func initArgs() {
 	flag.StringVar(&selfService, "selfService", "AuthEchoClient", "selfService")
 	flag.Int64Var(&port, "port", 38080, "port")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
+	flag.StringVar(&metadata, "callerMetadata", "env=dev,version=1.0.0", "callerMetadata")
 }
 
 // PolarisConsumer is a consumer of polaris
 type PolarisConsumer struct {
-	consumer  polaris.ConsumerAPI
-	namespace string
-	service   string
-	webSvr    *http.Server
-}
-
-// callerMetadata 主调侧自带的元数据，会以 X-Caller-Meta-<Key>: <Value> 的形式透传给被调
-var callerMetadata = map[string]string{
-	"env":     "dev",
-	"version": "1.0.0",
+	consumer       polaris.ConsumerAPI
+	namespace      string
+	service        string
+	webSvr         *http.Server
+	callerMetadata map[string]string
 }
 
 // newRequestWithCallerHeader 构造一个携带主调身份信息的 HTTP 请求：
 //   - X-Polaris-Caller-Namespace: 主调命名空间
 //   - X-Polaris-Caller-Service:   主调服务名
 //   - X-Caller-Meta-<Key>:        主调元数据（可被 provider 用于鉴权 / 路由匹配）
-func (svr *PolarisConsumer) newRequestWithCallerHeader(method, url string) (*http.Request, error) {
+//
+// 同时会把 incoming（上游传入到本 consumer 的）请求头透传给下游 provider，
+// 但会跳过 hop-by-hop 头与 consumer 自身要写入的身份头，避免被上游伪造。
+// 当 incoming 为 nil 时，不做任何透传（保持向后兼容）。
+func (svr *PolarisConsumer) newRequestWithCallerHeader(method, url string, incoming *http.Request) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return nil, err
 	}
+	// 1) 先透传上游 header，便于链路追踪 / 业务 header 转发
+	if incoming != nil {
+		for k, vs := range incoming.Header {
+			if isHopByHopHeader(k) {
+				continue
+			}
+			if isConsumerOwnedHeader(k) {
+				// consumer 自己会重写这些 header，禁止被上游伪造
+				continue
+			}
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+	}
+	// 2) 再写入 consumer 自身的身份信息，覆盖上游同名 header
 	req.Header.Set("X-Polaris-Caller-Namespace", selfNamespace)
 	req.Header.Set("X-Polaris-Caller-Service", selfService)
-	for k, v := range callerMetadata {
+	// 删除可能从上游透传过来的旧 X-Caller-Meta-*，避免污染
+	for k := range req.Header {
+		if strings.HasPrefix(strings.ToLower(k), "x-caller-meta-") {
+			req.Header.Del(k)
+		}
+	}
+	for k, v := range svr.callerMetadata {
 		req.Header.Set("X-Caller-Meta-"+k, v)
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("polaris-go-consumer/%s/%s", svr.namespace, svr.service))
 	return req, nil
+}
+
+// hopByHopHeaders 是 RFC 7230 中定义的 hop-by-hop 头，转发时必须丢弃。
+// 参考： https://datatracker.ietf.org/doc/html/rfc7230#section-6.1
+var hopByHopHeaders = map[string]struct{}{
+	"connection":          {},
+	"proxy-connection":    {},
+	"keep-alive":          {},
+	"proxy-authenticate":  {},
+	"proxy-authorization": {},
+	"te":                  {},
+	"trailer":             {},
+	"transfer-encoding":   {},
+	"upgrade":             {},
+	// 下面这些不是严格意义上的 hop-by-hop，但同样不该原样透传
+	"host":           {},
+	"content-length": {},
+}
+
+func isHopByHopHeader(name string) bool {
+	_, ok := hopByHopHeaders[strings.ToLower(name)]
+	return ok
+}
+
+// isConsumerOwnedHeader 表示这些 header 由 consumer 自身写入，
+// 不允许从上游透传，避免身份伪造。
+func isConsumerOwnedHeader(name string) bool {
+	lower := strings.ToLower(name)
+	switch lower {
+	case "x-polaris-caller-namespace", "x-polaris-caller-service", "user-agent":
+		return true
+	}
+	return false
+}
+
+// dumpIncomingHeaders 把请求头按 key 排序后序列化为单行 JSON，便于日志检索。
+func dumpIncomingHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = strings.Join(h.Values(k), ",")
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Sprintf("%+v", h)
+	}
+	return string(b)
 }
 
 // Run starts the consumer
@@ -106,6 +185,7 @@ func (svr *PolarisConsumer) runWebServer() {
 	// 新增 API：支持通过请求体传入 namespace 和 service
 	http.HandleFunc("/echo-with-body", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("receive echo-with-body request from client:%s", r.RemoteAddr)
+		log.Printf("[CALLER] incoming headers from %s: %s", r.RemoteAddr, dumpIncomingHeaders(r.Header))
 
 		// 定义请求体结构
 		type EchoRequest struct {
@@ -158,17 +238,18 @@ func (svr *PolarisConsumer) runWebServer() {
 		targetURL := fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort())
 		log.Printf("[CALLEE] sending request: url=%s", targetURL)
 		start := time.Now()
-		providerReq, err := svr.newRequestWithCallerHeader(http.MethodGet, targetURL)
+		providerReq, err := svr.newRequestWithCallerHeader(http.MethodGet, targetURL, r)
 		if err != nil {
 			log.Printf("[CALLEE][error] build request fail : %s", err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] build request fail : %s", err)))
 			return
 		}
-		log.Printf("[CALLER] outgoing headers: callerNs=%q callerSvc=%q metadata=%s",
+		log.Printf("[CALLER] outgoing headers: callerNs=%q callerSvc=%q metadata=%s all=%s",
 			providerReq.Header.Get("X-Polaris-Caller-Namespace"),
 			providerReq.Header.Get("X-Polaris-Caller-Service"),
-			jsonStr(callerMetadata))
+			jsonStr(svr.callerMetadata),
+			dumpIncomingHeaders(providerReq.Header))
 		resp, err := http.DefaultClient.Do(providerReq)
 		if err != nil {
 			log.Printf("[CALLEE][error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
@@ -248,6 +329,7 @@ func (svr *PolarisConsumer) runWebServer() {
 
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("receive echo request from client:%s", r.RemoteAddr)
+		log.Printf("[CALLER] incoming headers from %s: %s", r.RemoteAddr, dumpIncomingHeaders(r.Header))
 		// DiscoverEchoServer
 		getOneRequest := &polaris.GetOneInstanceRequest{}
 		getOneRequest.Namespace = namespace
@@ -273,17 +355,18 @@ func (svr *PolarisConsumer) runWebServer() {
 		targetURL := fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort())
 		log.Printf("[CALLEE] sending request: url=%s", targetURL)
 		start := time.Now()
-		providerReq, err := svr.newRequestWithCallerHeader(http.MethodGet, targetURL)
+		providerReq, err := svr.newRequestWithCallerHeader(http.MethodGet, targetURL, r)
 		if err != nil {
 			log.Printf("[CALLEE][error] build request fail : %s", err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] build request fail : %s", err)))
 			return
 		}
-		log.Printf("[CALLER] outgoing headers: callerNs=%q callerSvc=%q metadata=%s",
+		log.Printf("[CALLER] outgoing headers: callerNs=%q callerSvc=%q metadata=%s all=%s",
 			providerReq.Header.Get("X-Polaris-Caller-Namespace"),
 			providerReq.Header.Get("X-Polaris-Caller-Service"),
-			jsonStr(callerMetadata))
+			jsonStr(svr.callerMetadata),
+			dumpIncomingHeaders(providerReq.Header))
 		resp, err := http.DefaultClient.Do(providerReq)
 		if err != nil {
 			log.Printf("[CALLEE][error] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
@@ -400,6 +483,8 @@ func main() {
 		consumer:  consumer,
 		namespace: namespace,
 		service:   service,
+		// callerMetadata 主调侧自带的元数据，会以 X-Caller-Meta-<Key>: <Value> 的形式透传给被调
+		callerMetadata: parseMetadata(metadata),
 	}
 
 	svr.Run()
@@ -423,4 +508,29 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max] + "...(truncated)"
+}
+
+// parseMetadata 把 "k1=v1,k2=v2" 解析成 map；忽略空串、无 = 或空 key。
+func parseMetadata(raw string) map[string]string {
+	out := map[string]string{}
+	if raw == "" {
+		return out
+	}
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		idx := strings.Index(pair, "=")
+		if idx <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(pair[:idx])
+		v := strings.TrimSpace(pair[idx+1:])
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
