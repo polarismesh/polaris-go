@@ -62,6 +62,8 @@ const (
 	TypeLossless Type = 0x1017
 	// TypeAdmin 管理接口扩展点
 	TypeAdmin Type = 0x1018
+	// TypeAuthenticator 服务鉴权扩展点
+	TypeAuthenticator Type = 0x1019
 )
 
 var typeToPresent = map[Type]string{
@@ -81,6 +83,7 @@ var typeToPresent = map[Type]string{
 	TypeEventReporter:    "eventReporter",
 	TypeLossless:         "lossless",
 	TypeAdmin:            "admin",
+	TypeAuthenticator:    "authenticator",
 }
 
 // ToString方法
@@ -239,4 +242,5 @@ var LoadedPluginTypes = []Type{
 	TypeConfigFilter,
 	TypeLossless,
 	TypeAdmin,
+	TypeAuthenticator,
 }

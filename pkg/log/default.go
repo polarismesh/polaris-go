@@ -39,6 +39,8 @@ const (
 	DefaultLosslessLogLevel = DefaultLogLevel
 	// DefaultRouteLogLevel 默认路由日志级别
 	DefaultRouteLogLevel = DefaultLogLevel
+	// DefaultAuthLogLevel 默认服务鉴权日志级别
+	DefaultAuthLogLevel = DefaultLogLevel
 	// 默认基础日志名
 	baseLoggerName = "base"
 	// 默认统计日志名
@@ -57,6 +59,8 @@ const (
 	losslessLoggerName = "lossless"
 	// 默认路由日志名
 	routeLoggerName = "route"
+	// 默认服务鉴权日志名
+	authLoggerName = "auth"
 )
 
 const (
@@ -88,6 +92,8 @@ const (
 	DefaultLosslessLogRotationPath = "/lossless/polaris-lossless.log"
 	// DefaultRouteLogRotationPath 默认路由日志滚动文件
 	DefaultRouteLogRotationPath = "/route/polaris-route.log"
+	// DefaultAuthLogRotationPath 默认服务鉴权日志滚动文件
+	DefaultAuthLogRotationPath = "/auth/polaris-auth.log"
 	// DefaultBaseLogRotationFile 默认基础日志滚动文件全路径
 	DefaultBaseLogRotationFile = DefaultLogRotationRootDir + DefaultBaseLogRotationPath
 	// DefaultStatLogRotationFile 默认统计日志滚动文件全路径
@@ -106,4 +112,6 @@ const (
 	DefaultLosslessLogRotationFile = DefaultLogRotationRootDir + DefaultLosslessLogRotationPath
 	// DefaultRouteLogRotationFile 默认路由日志滚动文件全路径
 	DefaultRouteLogRotationFile = DefaultLogRotationRootDir + DefaultRouteLogRotationPath
+	// DefaultAuthLogRotationFile 默认服务鉴权日志滚动文件全路径
+	DefaultAuthLogRotationFile = DefaultLogRotationRootDir + DefaultAuthLogRotationPath
 )

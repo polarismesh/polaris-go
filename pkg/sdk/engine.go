@@ -144,4 +144,16 @@ type Engine interface {
 	GetEventReportChain() interface{}
 	GetAdmin() Admin
 	GetRegisterState() RegisterState
+	// SyncAuthenticate 同步执行服务鉴权
+	SyncAuthenticate(req *model.AuthenticateRequest) (*model.AuthenticateResponse, error)
+	// RegisterLocalInstanceMetadata 在本地登记一次成功的注册请求对应的实例 metadata。
+	// 由 SyncRegister/doSyncRegister 在成功分支回调，供本端鉴权流程查询被调侧实例 metadata 使用。
+	// 内部按 (Namespace, Service, SDK PID, InstanceID) 维度去重并覆盖。
+	RegisterLocalInstanceMetadata(req *model.InstanceRegisterRequest, instanceID string)
+	// DeregisterLocalInstanceMetadata 在本地移除一次反注册请求对应的实例 metadata 记录。
+	// 由 SyncDeregister 在成功分支回调。当请求未携带 InstanceID 时，按当前进程 PID 与 host:port 精确匹配。
+	DeregisterLocalInstanceMetadata(req *model.InstanceDeRegisterRequest)
+	// GetLocalInstanceMetadata 获取本端 (namespace, service) 已注册实例的 metadata 副本列表。
+	// 返回的 map 列表为浅拷贝，调用方可安全读取。
+	GetLocalInstanceMetadata(namespace, service string) []map[string]string
 }

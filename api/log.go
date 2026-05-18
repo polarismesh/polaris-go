@@ -67,6 +67,8 @@ const (
 	DefaultLosslessLogLevel = log.DefaultLosslessLogLevel
 	// DefaultRouteLogLevel 默认路由日志级别
 	DefaultRouteLogLevel = log.DefaultRouteLogLevel
+	// DefaultAuthLogLevel 默认服务鉴权日志级别
+	DefaultAuthLogLevel = log.DefaultAuthLogLevel
 )
 
 // SetBaseLogger 设置基础日志对象
@@ -149,6 +151,16 @@ func GetRouteLogger() Logger {
 	return log.GetRouteLogger()
 }
 
+// SetAuthLogger 设置服务鉴权日志对象
+func SetAuthLogger(logger Logger) {
+	log.SetAuthLogger(logger)
+}
+
+// GetAuthLogger 获取服务鉴权日志对象
+func GetAuthLogger() Logger {
+	return log.GetAuthLogger()
+}
+
 // ConfigLoggers 全局配置日志对象
 func ConfigLoggers(logDir string, logLevel int) error {
 	var err error
@@ -178,6 +190,9 @@ func ConfigLoggers(logDir string, logLevel int) error {
 	}
 	if err = ConfigRouteLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigRouteLogger: %v", err)
+	}
+	if err = ConfigAuthLogger(logDir, logLevel); err != nil {
+		return fmt.Errorf("fail to ConfigAuthLogger: %v", err)
 	}
 	return nil
 }
@@ -236,6 +251,12 @@ func ConfigRouteLogger(logDir string, logLevel int) error {
 	return log.ConfigRouteLogger(log.DefaultLogger, option)
 }
 
+// ConfigAuthLogger 配置服务鉴权日志对象
+func ConfigAuthLogger(logDir string, logLevel int) error {
+	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultAuthLogRotationPath), logLevel)
+	return log.ConfigAuthLogger(log.DefaultLogger, option)
+}
+
 // SetLoggersLevel 设置所有日志级别
 func SetLoggersLevel(loglevel int) error {
 	var err error
@@ -274,6 +295,10 @@ func SetLoggersLevel(loglevel int) error {
 	logErr = log.GetRouteLogger().SetLogLevel(loglevel)
 	if nil != logErr {
 		err = multierror.Append(err, multierror.Prefix(err, "fail to set route logLevel"))
+	}
+	logErr = log.GetAuthLogger().SetLogLevel(loglevel)
+	if nil != logErr {
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set auth logLevel"))
 	}
 	return err
 }
@@ -334,6 +359,12 @@ func SetLoggersDir(logDir string) error {
 	if err = log.ConfigRouteLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default route logger with logDir %s", logDir)))
+	}
+	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultAuthLogRotationPath),
+		DefaultAuthLogLevel)
+	if err = log.ConfigAuthLogger(log.DefaultLogger, option); err != nil {
+		errs = multierror.Append(errs, multierror.Prefix(err,
+			fmt.Sprintf("fail to create default auth logger with logDir %s", logDir)))
 	}
 	return errs
 }

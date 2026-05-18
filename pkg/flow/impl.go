@@ -35,6 +35,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
+	"github.com/polarismesh/polaris-go/pkg/plugin/authenticator"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -97,6 +98,10 @@ type Engine struct {
 	logCtx            *log.ContextLogger
 	// weightAdjuster .
 	weightAdjuster []weightadjuster.WeightAdjuster
+	// 鉴权插件链（按 chain 顺序），任一返回 Forbidden 即短路
+	authenticators []authenticator.Authenticator
+	// 本端已注册实例的 metadata 表，用于鉴权 CALLEE_METADATA 取值
+	localMetadata *localMetadataStore
 }
 
 // InitFlowEngine 初始化flowEngine实例
@@ -160,6 +165,8 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	}
 	// 加载全局上下文
 	flowEngine.globalCtx = globalCtx
+	// 初始化本端实例 metadata 表（按 SDKContext 维度隔离）
+	flowEngine.localMetadata = newLocalMetadataStore()
 	// 初始化限流缓存
 	flowEngine.flowQuotaAssistant = &quota.FlowQuotaAssistant{}
 	if err = flowEngine.flowQuotaAssistant.Init(flowEngine, flowEngine.configuration, flowEngine.plugins); err != nil {
@@ -201,6 +208,38 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 
 	// 初始注册状态管理器
 	flowEngine.registerStates = registerstate.NewRegisterStateManager(flowEngine.configuration.GetProvider().GetMinRegisterInterval(), flowEngine.logCtx)
+
+	// 加载鉴权插件链：仅当 enable=true 且 chain 非空时加载，否则 authenticators 为空，
+	// SyncAuthenticate 将直接放行以保证零开销
+	if err = flowEngine.loadAuthenticators(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadAuthenticators 加载鉴权插件链
+func (e *Engine) loadAuthenticators() error {
+	authCfg := e.configuration.GetProvider().GetAuth()
+	if authCfg == nil || !authCfg.IsEnable() {
+		return nil
+	}
+	chain := authCfg.GetChain()
+	if len(chain) == 0 {
+		return nil
+	}
+	authenticators := make([]authenticator.Authenticator, 0, len(chain))
+	for _, name := range chain {
+		plug, err := e.plugins.GetPlugin(common.TypeAuthenticator, name)
+		if err != nil {
+			return fmt.Errorf("fail to load authenticator plugin %s: %w", name, err)
+		}
+		auth, ok := plug.(authenticator.Authenticator)
+		if !ok {
+			return fmt.Errorf("plugin %s is not an Authenticator", name)
+		}
+		authenticators = append(authenticators, auth)
+	}
+	e.authenticators = authenticators
 	return nil
 }
 
@@ -284,6 +323,90 @@ func (e *Engine) CircuitBreakerFlow() *CircuitBreakerFlow {
 
 func (e *Engine) GetRegisterState() sdk.RegisterState {
 	return e.registerStates
+}
+
+// currentPID 取当前 SDKContext 的 PID（来自 SDKToken）。当 globalCtx 不可用时退回 0。
+func (e *Engine) currentPID() int32 {
+	if e.globalCtx == nil {
+		return 0
+	}
+	v, ok := e.globalCtx.GetValue(sdk.ContextKeyToken)
+	if !ok {
+		return 0
+	}
+	token, ok := v.(sdk.SDKToken)
+	if !ok {
+		return 0
+	}
+	return token.PID
+}
+
+// RegisterLocalInstanceMetadata 在本地登记实例 metadata，供本端鉴权 CALLEE_METADATA 取值。
+// 由 doSyncRegister 在成功分支回调；req/instanceID 任一为空则忽略。
+//
+// 日志策略（避免泄漏敏感字段）：
+//   - Info：打印 metadata 的 key 列表与 size，便于运维感知"什么 key 被注册了"，但拿不到 value
+//   - Debug：完整打印 metadata 的 key+value，需要排查时把 base log level 切到 debug
+//
+// 这里走 baseLogger 而不是 authLogger：本函数在注册成功后调用，本质是 Provider 注册流程的
+// 一部分，与"鉴权决策"无关；放在 base 日志里和 Register 行为日志同源更利于运维定位。
+func (e *Engine) RegisterLocalInstanceMetadata(req *model.InstanceRegisterRequest, instanceID string) {
+	if req == nil || instanceID == "" || e.localMetadata == nil {
+		return
+	}
+	pid := e.currentPID()
+	e.localMetadata.Register(req.Namespace, req.Service, pid, instanceID, req.Host, req.Port, req.Metadata)
+	if e.logCtx == nil {
+		return
+	}
+	baseLogger := e.logCtx.GetBaseLogger()
+	baseLogger.Infof(
+		"[LocalMetadata] register: namespace=%s service=%s pid=%d instanceID=%s host=%s port=%d metadata_size=%d metadata_keys=%v",
+		req.Namespace, req.Service, pid, instanceID, req.Host, req.Port,
+		len(req.Metadata), metadataKeys(req.Metadata))
+	if baseLogger.IsLevelEnabled(log.DebugLog) {
+		baseLogger.Debugf(
+			"[LocalMetadata] register metadata detail: namespace=%s service=%s instanceID=%s metadata=%v",
+			req.Namespace, req.Service, instanceID, req.Metadata)
+	}
+}
+
+// DeregisterLocalInstanceMetadata 在本地移除实例 metadata 记录。
+// 由 SyncDeregister 在成功分支回调；req 为空则忽略。
+func (e *Engine) DeregisterLocalInstanceMetadata(req *model.InstanceDeRegisterRequest) {
+	if req == nil || e.localMetadata == nil {
+		return
+	}
+	pid := e.currentPID()
+	e.localMetadata.Deregister(req.Namespace, req.Service, pid, req.InstanceID, req.Host, req.Port)
+	if e.logCtx != nil {
+		// 与 RegisterLocalInstanceMetadata 同理：Deregister 行为属于注册流程的反向操作，
+		// 与鉴权无关，走 baseLogger
+		e.logCtx.GetBaseLogger().Infof(
+			"[LocalMetadata] deregister: namespace=%s service=%s pid=%d instanceID=%s host=%s port=%d",
+			req.Namespace, req.Service, pid, req.InstanceID, req.Host, req.Port)
+	}
+}
+
+// metadataKeys 返回 metadata 的 key 列表（不含 value），用于敏感场景下的脱敏审计日志。
+// 顺序不稳定（map 迭代序），但运维场景看 key 集合即可，不要求顺序。
+func metadataKeys(m map[string]string) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// GetLocalInstanceMetadata 返回 (namespace, service) 下所有已注册实例的 metadata 副本。
+func (e *Engine) GetLocalInstanceMetadata(namespace, service string) []map[string]string {
+	if e.localMetadata == nil {
+		return nil
+	}
+	return e.localMetadata.Get(namespace, service)
 }
 
 // GetEventReportChain 获取事件上报插件链

@@ -19,6 +19,7 @@ package register
 
 import (
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/admin"
+	_ "github.com/polarismesh/polaris-go/pkg/plugin/authenticator"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/circuitbreaker"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configconnector"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
@@ -34,6 +35,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
 	_ "github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 	_ "github.com/polarismesh/polaris-go/plugin/admin/httpServer"
+	_ "github.com/polarismesh/polaris-go/plugin/authenticator/blockallowlist"
 	_ "github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite"
 	_ "github.com/polarismesh/polaris-go/plugin/configconnector/polaris"
 	_ "github.com/polarismesh/polaris-go/plugin/configfilter/crypto"

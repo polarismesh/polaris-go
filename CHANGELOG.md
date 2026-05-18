@@ -50,6 +50,18 @@
   泳道组共存时的歧义。对齐 polaris-java `MessageMetadataContainer` +
   `TransitiveType.PASS_THROUGH` 的语义。
 
+#### 服务鉴权（Authenticator）
+
+- **`plugin/authenticator/blockallowlist`**：新增黑白名单鉴权插件，对齐
+  polaris-java `BlockAllowListAuthenticator` 的 `checkAllow` 9 条语义
+  （仅白名单/仅黑名单/混合策略），支持 `HEADER` / `QUERY` / `CALLER_SERVICE` /
+  `CALLER_IP` / `CALLER_METADATA` / `CUSTOM` 六维 `MatchArgument` 匹配。
+- **`AuthAPI` + 5 个工厂函数**：新增顶层入口 `NewAuthAPI` /
+  `NewAuthAPIByConfig` / `NewAuthAPIByContext` / `NewAuthAPIByFile` /
+  `NewAuthAPIByAddress`，对应 `AuthenticateRequest` / `AuthenticateResponse`。
+- **`provider.auth` 配置段**：`enable` + `chain` + `plugin` 三字段，默认
+  `enable=false`，未启用时 `SyncAuthenticate` 直接放行，对存量用户零开销。
+
 #### 日志体系
 
 - 新增三个独立日志通道：

@@ -1,0 +1,15 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+    connectTimeout: 3s
+# 被调方配置
+provider:
+  # 服务鉴权配置：默认开启，由 verify_auth.sh 各用例切换
+  auth:
+    # 是否启用鉴权能力（false 则 SyncAuthenticate 直接放行，零开销）
+    enable: true
+    # 鉴权插件链：按顺序执行，任一返回 Forbidden 即短路拒绝
+    chain:
+      - blockAllowList

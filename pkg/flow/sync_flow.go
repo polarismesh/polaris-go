@@ -450,7 +450,11 @@ func (e *Engine) doSyncRegister(instance *model.InstanceRegisterRequest, header 
 		return nil, err
 	}
 	apiCallResult.SetSuccess(consumeTime)
-	return resp.(*model.InstanceRegisterResponse), nil
+	registerResp := resp.(*model.InstanceRegisterResponse)
+	// 注册成功后登记本端实例 metadata，供后续 SyncAuthenticate 在 CALLEE_METADATA
+	// 分支查询使用。失败路径不写入。
+	e.RegisterLocalInstanceMetadata(instance, registerResp.InstanceID)
+	return registerResp, nil
 }
 
 // SyncDeregister 同步进行服务反注册
@@ -480,6 +484,8 @@ func (e *Engine) SyncDeregister(instance *model.InstanceDeRegisterRequest) error
 		apiCallResult.SetFail(model.GetErrorCodeFromError(err), consumeTime)
 	} else {
 		apiCallResult.SetSuccess(consumeTime)
+		// 反注册成功后清理本端实例 metadata 记录
+		e.DeregisterLocalInstanceMetadata(instance)
 		e.reportEvent(event.GetInstanceEvent(event.InstanceThreadEnd, instance))
 		log.GetBaseLogger().Infof("SyncDeregister success----->")
 	}

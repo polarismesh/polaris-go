@@ -157,6 +157,8 @@ const (
 	DefaultConfigFilterEnabled bool = true
 	// DefaultLosslessEnabled 默认启用无损上下线
 	DefaultLosslessEnabled = false
+	// DefaultAuthenticatorEnabled 默认是否启用鉴权
+	DefaultAuthenticatorEnabled = false
 )
 
 // defaultBuiltinServerPort 默认埋点server的端口，与上面的IP一一对应.
@@ -258,6 +260,9 @@ const (
 	DefaultLosslessHealthCheckInterval = 5 * time.Second
 	// DefaultLosslessStrategy 默认无损上线延迟策略为时长延迟策略
 	DefaultLosslessStrategy = model.LosslessDelayRegisterStrategyDelayByTime
+
+	// DefaultAuthenticatorBlockAllowList 默认黑白名单鉴权插件名
+	DefaultAuthenticatorBlockAllowList = "blockAllowList"
 )
 
 // 默认的就近路由配置.

@@ -149,6 +149,8 @@ const (
 	LosslessLogger
 	// RouteLogger 路由日志对象
 	RouteLogger
+	// AuthLogger 服务鉴权日志对象
+	AuthLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -201,6 +203,11 @@ func (c *container) SetLosslessLogger(logger Logger) {
 // SetRouteLogger 设置路由日志对象
 func (c *container) SetRouteLogger(logger Logger) {
 	c.loggers[RouteLogger].Store(&logger)
+}
+
+// SetAuthLogger 设置服务鉴权日志对象
+func (c *container) SetAuthLogger(logger Logger) {
+	c.loggers[AuthLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -284,6 +291,15 @@ func (c *container) GetRouteLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetAuthLogger 获取服务鉴权日志对象
+func (c *container) GetAuthLogger() Logger {
+	value := c.loggers[AuthLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -327,6 +343,11 @@ func SetLosslessLogger(logger Logger) {
 // SetRouteLogger 全局设置路由日志对象
 func SetRouteLogger(logger Logger) {
 	logContainer.SetRouteLogger(logger)
+}
+
+// SetAuthLogger 全局设置服务鉴权日志对象
+func SetAuthLogger(logger Logger) {
+	logContainer.SetAuthLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -377,6 +398,11 @@ func GetLosslessLogger() Logger {
 // GetRouteLogger 获取全局路由日志对象
 func GetRouteLogger() Logger {
 	return logContainer.GetRouteLogger()
+}
+
+// GetAuthLogger 获取全局服务鉴权日志对象
+func GetAuthLogger() Logger {
+	return logContainer.GetAuthLogger()
 }
 
 // Options defines the set of options for component logging package.
@@ -499,6 +525,10 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default route logger %s", name)))
 		}
+		if err = ConfigDefaultAuthLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default auth logger %s", name)))
+		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
@@ -613,6 +643,16 @@ func ConfigRouteLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigAuthLogger 配置服务鉴权日志器
+func ConfigAuthLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, authLoggerName, options, DefaultAuthLogLevel)
+	if err != nil {
+		return err
+	}
+	SetAuthLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -674,4 +714,10 @@ func ConfigDefaultLosslessLogger(pluginName string) error {
 func ConfigDefaultRouteLogger(pluginName string) error {
 	return ConfigRouteLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultRouteLogRotationFile, DefaultRouteLogLevel))
+}
+
+// ConfigDefaultAuthLogger 配置默认的服务鉴权日志器
+func ConfigDefaultAuthLogger(pluginName string) error {
+	return ConfigAuthLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultAuthLogRotationFile, DefaultAuthLogLevel))
 }
