@@ -61,11 +61,8 @@ func (p *BlockAllowListAuthenticator) Authenticate(info *authenticator.AuthInfo)
 	}
 	allowed, reason := p.checkAllow(info, rules)
 	if !allowed {
-		// 拒绝是审计场景：每次都打 Info，包含足够的上下文以便定位"为什么这个调用被拒"。
-		// reason.summary 携带具体命中的规则名/cfg 下标或"白名单全不命中"等明确原因，
-		// 让运维仅凭单行 Info 日志就能定位问题，无需切到 Debug 级别重启。
-		if p.log != nil {
-			p.log.Infof("%s deny: namespace=%s service=%s method=%s path=%s protocol=%s "+
+		if p.log != nil && p.log.IsLevelEnabled(log.DebugLog) {
+			p.log.Debugf("%s deny: namespace=%s service=%s method=%s path=%s protocol=%s "+
 				"caller=%s/%s reason=%s: %s",
 				logPrefix, info.Namespace, info.Service, info.Method, info.Path, info.Protocol,
 				sourceNamespace(info), sourceService(info), rejectInfo, reason.summary)
