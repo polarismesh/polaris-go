@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-ratelimit-provider
+module github.com/polarismesh/polaris-go-ratelimit-provider-concurrency
 
 go 1.24
 

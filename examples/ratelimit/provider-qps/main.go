@@ -18,13 +18,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +36,68 @@ import (
 	"github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
+
+// newReqID 生成 8 字符请求 ID，用于串起同一次请求的多条日志.
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// formatHeaders 把 http.Header 压缩为单行字符串.
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(h[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// formatQuery 把 query 参数压缩为单行字符串.
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(q[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// logIncomingRequest 单行打印收到的请求：方法/URL/query/headers/body，都带 reqID 前缀.
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(), formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印自身回给上游 client 的响应.
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
+}
 
 var (
 	namespace string
@@ -42,7 +108,7 @@ var (
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "RateLimitEchoServer", "service")
+	flag.StringVar(&service, "service", "QpsRatelimitEchoServer", "service")
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
@@ -72,7 +138,8 @@ func (svr *PolarisProvider) Run() {
 
 func (svr *PolarisProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("receive echo request from client:%s", r.RemoteAddr)
+		reqID := newReqID()
+		logIncomingRequest(reqID, r, "/echo")
 		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
 		quotaReq.SetMethod("/echo")
 		headers := convertHeaders(r.Header)
@@ -82,35 +149,38 @@ func (svr *PolarisProvider) runWebServer() {
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)
 
-		log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
-			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 		start := time.Now()
 		resp, err := svr.limiter.GetQuota(quotaReq)
 		if err != nil {
+			body := fmt.Sprintf("[error] fail to GetQuota, err is %v", err)
+			log.Printf("[%s] [error] fail to GetQuota: %v", reqID, err)
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
+			_, _ = rw.Write([]byte(body))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 			return
 		}
-		log.Printf("[info] %s get quota resp : code=%d, info=%s", time.Since(start).String(), resp.Get().Code, resp.Get().Info)
-
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
-			return
-		}
+		defer resp.Release()
+		log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
+			reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
+			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
 		if resp.Get().Code != model.QuotaResultOk {
+			body := http.StatusText(http.StatusTooManyRequests)
 			rw.WriteHeader(http.StatusTooManyRequests)
-			_, _ = rw.Write([]byte(http.StatusText(http.StatusTooManyRequests)))
+			_, _ = rw.Write([]byte(body))
+			logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
 			return
 		}
 
+		body := fmt.Sprintf("Hello, I'm QpsRatelimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm RateLimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		_, _ = rw.Write([]byte(body))
+		logReply(reqID, r.RemoteAddr, http.StatusOK, body)
 	})
 
 	http.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("receive health request from client:%s", r.RemoteAddr)
+		reqID := newReqID()
+		logIncomingRequest(reqID, r, "/health")
 		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
 		quotaReq.SetMethod("/health")
 		headers := convertHeaders(r.Header)
@@ -120,31 +190,33 @@ func (svr *PolarisProvider) runWebServer() {
 		quotaReq.SetNamespace(namespace)
 		quotaReq.SetService(service)
 
-		log.Printf("[info] get quota req : ns=%s, svc=%s, method=%v, labels=%v",
-			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 		start := time.Now()
 		resp, err := svr.limiter.GetQuota(quotaReq)
 		if err != nil {
+			body := fmt.Sprintf("[error] fail to GetQuota, err is %v", err)
+			log.Printf("[%s] [error] fail to GetQuota: %v", reqID, err)
 			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
+			_, _ = rw.Write([]byte(body))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 			return
 		}
-		log.Printf("[info] %s get quota resp : code=%d, info=%s", time.Since(start).String(), resp.Get().Code, resp.Get().Info)
-
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to GetQuota, err is %v", err)))
-			return
-		}
+		defer resp.Release()
+		log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
+			reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
+			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
 		if resp.Get().Code != model.QuotaResultOk {
+			body := http.StatusText(http.StatusTooManyRequests)
 			rw.WriteHeader(http.StatusTooManyRequests)
-			_, _ = rw.Write([]byte(http.StatusText(http.StatusTooManyRequests)))
+			_, _ = rw.Write([]byte(body))
+			logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
 			return
 		}
 
+		body := fmt.Sprintf("Hello, I'm QpsRatelimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)
 		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(fmt.Sprintf("Hello, I'm RateLimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)))
+		_, _ = rw.Write([]byte(body))
+		logReply(reqID, r.RemoteAddr, http.StatusOK, body)
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))

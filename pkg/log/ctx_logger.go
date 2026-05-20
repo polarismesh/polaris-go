@@ -32,6 +32,7 @@ type ContextLogger struct {
 	losslessLogger   Logger
 	routeLogger      Logger
 	authLogger       Logger
+	rateLimitLogger  Logger
 }
 
 // Init 获取基础日志记录器.
@@ -46,6 +47,7 @@ func (c *ContextLogger) Init() {
 	c.losslessLogger = GetLosslessLogger()
 	c.routeLogger = GetRouteLogger()
 	c.authLogger = GetAuthLogger()
+	c.rateLimitLogger = GetRateLimitLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -69,6 +71,7 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	c.losslessLogger = LoggerWithFields(c.losslessLogger, kvs...)
 	c.routeLogger = LoggerWithFields(c.routeLogger, kvs...)
 	c.authLogger = LoggerWithFields(c.authLogger, kvs...)
+	c.rateLimitLogger = LoggerWithFields(c.rateLimitLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -149,4 +152,12 @@ func (c *ContextLogger) GetAuthLogger() Logger {
 		return GetAuthLogger()
 	}
 	return c.authLogger
+}
+
+// GetRateLimitLogger 获取限流日志记录器.
+func (c *ContextLogger) GetRateLimitLogger() Logger {
+	if c == nil {
+		return GetRateLimitLogger()
+	}
+	return c.rateLimitLogger
 }

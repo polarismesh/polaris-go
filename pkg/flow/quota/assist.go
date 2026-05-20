@@ -259,20 +259,31 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		return model.QuotaFutureWithResponse(resp), nil
 	}
 	var maxWaitMs int64 = 0
+	var allReleaseFuncs []func()
 	for _, window := range windows {
 		window.Init()
 		quotaResult := window.AllocateQuota(commonRequest)
 		if quotaResult.Code == model.QuotaResultLimited {
+			// 被限流，归还前面已分配的并发配额，避免泄漏
+			for _, fn := range allReleaseFuncs {
+				fn()
+			}
 			return model.QuotaFutureWithResponse(quotaResult), nil
 		}
 		if quotaResult.WaitMs > maxWaitMs {
 			maxWaitMs = quotaResult.WaitMs
 		}
+		// 收集 release 回调（QPS 限流场景为空，并发数限流场景为 -1 计数器的回调）
+		allReleaseFuncs = append(allReleaseFuncs, quotaResult.GetReleaseFuncs()...)
 	}
-	return model.QuotaFutureWithResponse(&model.QuotaResponse{
+	finalResp := &model.QuotaResponse{
 		Code:   model.QuotaResultOk,
 		WaitMs: maxWaitMs,
-	}), nil
+	}
+	for _, fn := range allReleaseFuncs {
+		finalResp.AddRelease(fn)
+	}
+	return model.QuotaFutureWithResponse(finalResp), nil
 }
 
 // lookupRateLimitWindow 计算限流窗口
@@ -324,13 +335,13 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 	case apimodel.MatchString_REGEX:
 		regexObj, err := ruleCache.GetRegexMatcher(matchValue)
 		if nil != err {
-			logCtx.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetRateLimitLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
 		m, err := regexObj.FindStringMatch(value)
 		if err != nil {
-			logCtx.GetBaseLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetRateLimitLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
@@ -382,7 +393,8 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraf
 			// 规则被停用
 			continue
 		}
-		if len(rule.Amounts) == 0 {
+		// 兼容并发数限流规则：Amounts 为空但 ConcurrencyAmount 有效也视为有效规则
+		if len(rule.Amounts) == 0 && rule.GetConcurrencyAmount() == nil {
 			continue
 		}
 		methodMatcher := rule.Method

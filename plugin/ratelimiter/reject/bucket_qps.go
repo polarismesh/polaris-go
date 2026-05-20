@@ -161,14 +161,14 @@ func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas ratelimiter.RemoteQuo
 			// 当前周期没有更新，则重置当前周期配额，避免出现时间周期开始时候的误限
 			remoteQuotas.ServerTimeMilli = curStartTimeMilli
 			remoteQuotas.Left = tokenBucket.GetRuleTotal()
-			r.logCtx.GetBaseLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
+			r.logCtx.GetRateLimitLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft is %d, "+
 				"reset to %d", clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli,
 				remoteStartTimeMilli, durationMilli, remoteLeft, remoteQuotas.Left)
 		} else {
 			tokenBucket.UpdateRemoteClientCount(remoteQuotas)
 			// 不在一个时间段内，丢弃
-			r.logCtx.GetBaseLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
+			r.logCtx.GetRateLimitLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft %d",
 				clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli, remoteStartTimeMilli,
 				durationMilli, remoteLeft)
@@ -312,7 +312,7 @@ func (t *TokenBucket) updateRemoteClientCount(remoteQuotas ratelimiter.RemoteQuo
 		}
 		lastClientCount = atomic.SwapUint32(&t.instanceCount, curClientCount)
 		if lastClientCount != curClientCount {
-			t.logCtx.GetBaseLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
+			t.logCtx.GetRateLimitLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
 				lastClientCount, curClientCount, t.windowKey)
 		}
 		atomic.StoreInt64(&t.lastRemoteClientUpdateMilli, remoteQuotas.ServerTimeMilli)

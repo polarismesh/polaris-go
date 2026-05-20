@@ -164,6 +164,21 @@ type QuotaResponse struct {
 	Info string
 	// 需要等待的时间段
 	WaitMs int64
+	// releaseFunc release回调链，仅用于并发数限流场景，由 Bucket 在 GetQuota 通过时注入
+	releaseFunc []func()
+}
+
+// AddRelease 注册释放回调，并发数限流场景下由 Bucket 注入，请求完成后由 QuotaFutureImpl.Release 触发执行.
+func (q *QuotaResponse) AddRelease(fn func()) {
+	if fn == nil {
+		return
+	}
+	q.releaseFunc = append(q.releaseFunc, fn)
+}
+
+// GetReleaseFuncs 获取已注册的 release 回调列表，仅供框架内部合并多 window 的回调使用.
+func (q *QuotaResponse) GetReleaseFuncs() []func() {
+	return q.releaseFunc
 }
 
 // QuotaFutureImpl 异步获取配额的future.
@@ -205,7 +220,16 @@ func (q *QuotaFutureImpl) Get() *QuotaResponse {
 }
 
 // Release 释放资源，仅用于并发数限流的场景.
+// 调用方在请求完成后必须调用此方法归还并发配额；对 QPS 限流场景为空操作.
+// 重复调用安全：首次执行后清空回调链，后续调用不会引起计数错乱.
 func (q *QuotaFutureImpl) Release() {
+	if q.resp == nil || len(q.resp.releaseFunc) == 0 {
+		return
+	}
+	for _, fn := range q.resp.releaseFunc {
+		fn()
+	}
+	q.resp.releaseFunc = nil
 }
 
 const (

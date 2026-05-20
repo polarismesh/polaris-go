@@ -739,7 +739,7 @@ func (a *asyncRateLimitConnector) startClearTask() {
 		case <-ticker.C:
 			a.clearCounterSet()
 		case <-a.stopChan:
-			a.logCtx.GetBaseLogger().Infof("[RateLimit] stop clear task")
+			a.logCtx.GetRateLimitLogger().Infof("[RateLimit] stop clear task")
 			return
 		}
 	}
@@ -763,7 +763,7 @@ func (a *asyncRateLimitConnector) clearCounterSet() {
 			delete(a.streams, *counterSet.HostIdentifier)
 			a.mutex.Unlock()
 			counterSet.closeConnection()
-			a.logCtx.GetBaseLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
+			a.logCtx.GetRateLimitLogger().Infof("[RateLimit]stream %s expired", *counterSet.HostIdentifier)
 		}
 	}
 }

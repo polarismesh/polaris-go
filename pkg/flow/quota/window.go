@@ -157,7 +157,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	if !window.Expired(nowMilli) {
 		return false
 	}
-	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
+	rs.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
 		window.uniqueKey, nowMilli, model.ToMilliSeconds(window.expireDuration))
 	revision := window.Rule.GetRevision().GetValue()
 	container := rs.windowByRule[revision]
@@ -240,13 +240,13 @@ func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEve
 func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	container := rs.windowByRule[revision]
 	delete(rs.windowByRule, revision)
-	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]container %s has deleted", revision)
+	rs.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]container %s has deleted", revision)
 	if nil == container {
 		return
 	}
 	if nil != container.MainWindow {
 		rs.deleteWindow(container.MainWindow)
-		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetRateLimitLogger().Infof(
 			"[RateLimit]container main window %s has deleted", container.MainWindow.uniqueKey)
 	}
 	if len(container.WindowByLabel) == 0 {
@@ -254,7 +254,7 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	}
 	for _, window := range container.WindowByLabel {
 		rs.deleteWindow(window)
-		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetRateLimitLogger().Infof(
 			"[RateLimit]container spread window %s has deleted", window.uniqueKey)
 	}
 }
@@ -390,13 +390,14 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *apitraffic.Rule,
 	window.uniqueKey, window.hashValue = window.buildQuotaHashValue()
 	window.Rule = rule
 	window.expireDuration = getExpireDuration(rule)
-	if rule.GetType() == apitraffic.Rule_GLOBAL {
+	// 并发数限流为纯本地模式，不需要远程集群信息；只有 GLOBAL 类型的 QPS 规则才填充 remoteCluster
+	if rule.GetResource() != apitraffic.Rule_CONCURRENCY && rule.GetType() == apitraffic.Rule_GLOBAL {
 		window.remoteCluster.Namespace = windowSet.flowAssistant.remoteNamespace
 		window.remoteCluster.Service = windowSet.flowAssistant.remoteService
 	}
 	window.syncParam.ControlParam = commonRequest.ControlParam
 
-	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, rule.GetAction().GetValue())
+	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, resolveRateLimiterName(rule))
 	// 初始化流量整形窗口
 	window.trafficShapingBucket = window.rateLimiter.InitQuota(
 		&ratelimiter.InitCriteria{DstRule: rule, WindowKey: window.uniqueKey})
@@ -431,12 +432,17 @@ func (r *RateLimitWindow) toServerTimeMilli(timeMilli int64) int64 {
 func (r *RateLimitWindow) UpdateTimeDiff(timeDiff int64) {
 	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
 	if lastTimeDiff != timeDiff {
-		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
+		r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
 	}
 }
 
 // buildRemoteConfigMode 构建限流模式及集群
 func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *apitraffic.Rule) {
+	// 并发数限流强制走本地模式，无视 Rule.Type / Cluster 配置，避免发起远程 init/acquire
+	if rule.GetResource() == apitraffic.Rule_CONCURRENCY {
+		r.configMode = model.ConfigQuotaLocalMode
+		return
+	}
 	// 解析限流集群配置
 	if rule.GetType() == apitraffic.Rule_LOCAL {
 		r.configMode = model.ConfigQuotaLocalMode
@@ -467,6 +473,17 @@ func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 	uniqueKey := builder.String()
 	value, _ := model.HashStr(uniqueKey)
 	return uniqueKey, value
+}
+
+// resolveRateLimiterName 根据规则解析应该使用的限流插件名.
+// 对齐 polaris-java RateLimitExtension.getRateLimiterName 的语义：
+//   - Rule.Resource == CONCURRENCY 时强制走并发数限流插件，无视 Rule.Action
+//   - 否则使用 Rule.Action 指定的插件（QPS 限流：reject / unirate / ...）
+func resolveRateLimiterName(rule *apitraffic.Rule) string {
+	if rule.GetResource() == apitraffic.Rule_CONCURRENCY {
+		return config.DefaultConcurrencyRateLimiter
+	}
+	return rule.GetAction().GetValue()
 }
 
 // createBehavior 根据限流行为名获取限流算法插件
