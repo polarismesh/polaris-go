@@ -42,6 +42,9 @@ const (
 	Disabled = "rateLimit disabled"
 	// RuleNotExists is a constant for rules not exist.
 	RuleNotExists = "quota rule not exists"
+	// QuotaGranted 命中规则并放行；与 Disabled / RuleNotExists 一起构成 OK 路径下的三态语义.
+	// 让运维 / E2E 排查时能从 QuotaResponse.Info 直接区分"无规则放过"与"命中规则放过".
+	QuotaGranted = "quota granted"
 )
 
 // FlowQuotaAssistant 限额流程的辅助类
@@ -278,6 +281,7 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 	}
 	finalResp := &model.QuotaResponse{
 		Code:   model.QuotaResultOk,
+		Info:   QuotaGranted,
 		WaitMs: maxWaitMs,
 	}
 	for _, fn := range allReleaseFuncs {

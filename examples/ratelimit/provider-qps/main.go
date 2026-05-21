@@ -182,8 +182,10 @@ func (svr *PolarisProvider) handleQuota(rw http.ResponseWriter, r *http.Request,
 		return
 	}
 	defer resp.Release()
-	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
-		reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
+	// waitMs 仅 unirate 在排队 200 时返回非 0 值（SDK 已自行 sleep 完才返回，业务侧不需要再 wait）；
+	// reject / concurrency 永远是 0，打印出来便于跨插件对照排查.
+	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d | quota_req: ns=%s svc=%s method=%v labels=%v",
+		reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info, resp.Get().WaitMs,
 		quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
 	if resp.Get().Code != model.QuotaResultOk {

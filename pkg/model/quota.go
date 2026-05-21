@@ -211,11 +211,16 @@ func (q *QuotaFutureImpl) GetImmediately() *QuotaResponse {
 }
 
 // Get 获取分配结果.
+//
+// 当 resp.WaitMs > 0（unirate 排队场景）时，本方法会先阻塞等待 deadlineCtx 超时（等价于 sleep waitMs），
+// 然后返回原始 resp——业务侧无需再次 sleep，直接处理后续逻辑即可.
+//
+// 返回的 resp.WaitMs 保留实际等待过的毫秒数（仅用于观测 / 上报指标），不再被清零；
+// 业务侧不要把它当作"还需等待"的剩余时间再次 sleep——SDK 已经替你等过了.
 func (q *QuotaFutureImpl) Get() *QuotaResponse {
 	if nil != q.deadlineCtx {
 		<-q.deadlineCtx.Done()
 	}
-	q.resp.WaitMs = 0
 	return q.resp
 }
 

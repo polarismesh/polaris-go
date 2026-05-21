@@ -82,6 +82,10 @@ func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config, logCtx *
 	for _, a := range bucket.rule.Amounts {
 		if a.MaxAmount.GetValue() == 0 {
 			bucket.rejectAll = true
+			// 提前记下 duration，让 getQuota 的 info 字符串能输出 "<resource>:0/<duration>" 而不是 "0/0s"
+			if d, derr := pb.ConvertDuration(a.ValidDuration); derr == nil {
+				bucket.effectiveDuration = d
+			}
 			// rule.amount=0 等价于"全部拒绝"，多半是控制面误配；用 warn 让运维能看见，
 			// 与 reject_concurrency 对 maxAmount<=0 的 warn 处理保持一致.
 			logCtx.GetRateLimitLogger().Warnf(
@@ -141,7 +145,9 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 		}
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
-			Info: "uniRate RateLimiter: reject for zero rule amount",
+			// info 协议格式 "<resource>:0/<duration>"，明确表达"该规则零配额"；
+			// duration 在 createLeakyBucket 处理 amount==0 时已写入 effectiveDuration（见上方逻辑）.
+			Info: fmt.Sprintf("%s:0/%s", l.rule.GetResource().String(), l.effectiveDuration),
 		}
 	}
 	// 需要多久产生这么请求的配额
@@ -187,9 +193,6 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 	}
 	// 如果等待时间超过配置的上限，那么拒绝
 	// 归还等待间隔
-	info := fmt.Sprintf(
-		"uniRate RateLimiter: queueing time %d exceed maxQueuingTime %s",
-		time.Duration(waitDuration), time.Duration(waitDuration))
 	atomic.AddInt64(&l.lastGrantTime, 0-costDuration)
 	if logger.IsLevelEnabled(log.DebugLog) {
 		logger.Debugf("%s limited rule[%s] reason=queueTimeout waitMs=%d maxQueuingMs=%d",
@@ -197,7 +200,8 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 	}
 	return &model.QuotaResponse{
 		Code: model.QuotaResultLimited,
-		Info: info,
+		// info 协议格式 "<resource>:<amount>/<duration>"，例如 "QPS:4/2s"，直接还原规则阈值，
+		Info: fmt.Sprintf("%s:%d/%s", l.rule.GetResource().String(), l.effectiveAmount, l.effectiveDuration),
 	}
 }
 

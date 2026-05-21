@@ -163,8 +163,9 @@ func (svr *PolarisProvider) applyLimit(reqID string, rw http.ResponseWriter, r *
 		return nil
 	}
 	resp := future.Get()
-	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
-		reqID, time.Since(start).String(), resp.Code, resp.Info,
+	// waitMs 仅 unirate 排队场景非 0；并发数限流永远 0，但保留打印做跨插件对照.
+	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d | quota_req: ns=%s svc=%s method=%v labels=%v",
+		reqID, time.Since(start).String(), resp.Code, resp.Info, resp.WaitMs,
 		quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
 	if resp.Code != model.QuotaResultOk {

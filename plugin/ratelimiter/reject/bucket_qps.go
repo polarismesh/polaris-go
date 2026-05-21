@@ -194,8 +194,11 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 				tokenBucket.validDurationMilli, left,
 			)
 		}
+		// info 字段格式 "<resource>:<amount>/<duration>"，例如 "QPS:10/1s"，
+		windowDur := time.Duration(tokenBucket.validDurationMilli) * time.Millisecond
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
+			Info: fmt.Sprintf("%s:%d/%s", r.rule.GetResource().String(), tokenBucket.ruleTokenAmount, windowDur),
 		}
 	}
 	// 记录分配的配额
