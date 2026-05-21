@@ -8,11 +8,14 @@
 
 | 类型 | 资源 (`Rule.Resource`) + 策略 | 阈值字段 | 关键 API | 示例 provider |
 | --- | --- | --- | --- | --- |
-| **请求数限流（QPS）- reject** | `QPS` + `action=reject` | `Rule.Amounts[*].MaxAmount + ValidDuration` | `LimitAPI.GetQuota` | `provider-qps` |
-| **请求数限流（QPS）- unirate** | `QPS` + `action=unirate` | `Rule.Amounts[*]` + `max_queue_delay` | `LimitAPI.GetQuota`（SDK 内部排队等待） | `provider-qps`（同二进制，--service 切换） |
+| **请求数限流（QPS）- reject** | `QPS` + `action=REJECT` | `Rule.Amounts[*].MaxAmount + ValidDuration` | `LimitAPI.GetQuota` | `provider-qps` |
+| **请求数限流（QPS）- unirate** | `QPS` + `action=UNIRATE` | `Rule.Amounts[*]` + `max_queue_delay` | `LimitAPI.GetQuota`（SDK 内部排队等待） | `provider-qps`（同二进制，--service 切换） |
 | **并发数限流（CONCURRENCY）** | `CONCURRENCY` | `Rule.ConcurrencyAmount.MaxAmount` | `LimitAPI.GetQuota` + **必须 `defer future.Release()`** | `provider-concurrency` |
+| **多维匹配（AND）** | 任一资源类型 + `Rule.Arguments[*]` | HEADER / QUERY / METHOD / CALLER_SERVICE / CALLER_IP / CALLER_METADATA | `quotaReq.AddArgument(model.BuildXxxArgument(...))` | `provider-qps` + consumer `--caller-*` 注入 |
 
 > **reject vs unirate**：reject 超出阈值立即返回 429；unirate 超出速率的请求会被 SDK 排队等待（仍返回 200，但耗时被拉长），仅当排队超过 `max_queue_delay` 才拒绝。
+>
+> **多维匹配**：规则的 `arguments` 之间是 AND 关系，6 类维度全命中才生效；演示见 `verify_ratelimit.sh` 用例 4.x。
 >
 > 并发数限流由 `concurrency` 插件实现（`plugin/ratelimiter/reject_concurrency`），是**纯本地模式**，
 > 不依赖远程限流服务器；即便规则下发为 `Type=GLOBAL` 也会被框架强制按本地处理。

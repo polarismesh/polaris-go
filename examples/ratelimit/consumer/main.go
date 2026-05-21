@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -87,7 +88,20 @@ var (
 	service   string
 	token     string
 	port      int64
+
+	// 主调身份相关 flag——consumer 转发请求时把这些值注入 X-Polaris-Caller-* header，
+	// provider 据此在 LimitAPI.GetQuota 前还原 CALLER_SERVICE / CALLER_IP / CALLER_METADATA 三类匹配维度.
+	callerService     string
+	callerIP          string
+	callerMetadataRaw stringSliceFlag // 多次出现：--caller-metadata k1=v1 --caller-metadata k2=v2
+	debug             bool
 )
+
+// stringSliceFlag 支持同一 flag 多次出现并累积到切片，例如 --caller-metadata key=value 可以传多次.
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
@@ -96,6 +110,12 @@ func initArgs() {
 	// consumer 自身不直接使用 token；鉴权由 polaris.yaml 中的 token 字段（受 ${POLARIS_TOKEN} 占位符控制）传给 SDK.
 	flag.StringVar(&token, "token", "", "token (only used for CLI compatibility)")
 	flag.Int64Var(&port, "port", 18080, "port")
+
+	// 主调身份相关：默认空表示不注入对应 header（provider 端跳过该维度）
+	flag.StringVar(&callerService, "caller-service", "", "主调服务名，注入 X-Polaris-Caller-Service header")
+	flag.StringVar(&callerIP, "caller-ip", "", "主调 IP，注入 X-Polaris-Caller-IP header；为空时取本机出口 IP")
+	flag.Var(&callerMetadataRaw, "caller-metadata", "主调实例元数据（k=v 形式，可多次指定），注入 X-Polaris-Caller-Metadata-{k}: v header")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisConsumer is a consumer of polaris
@@ -215,6 +235,9 @@ func (svr *PolarisConsumer) forwardToProvider(rw http.ResponseWriter, r *http.Re
 	}
 	// 透传请求头
 	req.Header = r.Header.Clone()
+	// 注入主调身份 header，让 provider 能据此还原 CALLER_SERVICE/CALLER_IP/CALLER_METADATA 维度.
+	// 用户传 --caller-* 才注入；不传则保持原 header 透传（让 SDK 走默认行为）.
+	injectCallerHeaders(req.Header)
 	log.Printf("[%s] ==> forward to provider: %s %s", reqID, r.Method, targetURL)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -290,12 +313,46 @@ func (svr *PolarisConsumer) forwardToProvider(rw http.ResponseWriter, r *http.Re
 	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, r.RemoteAddr, resp.StatusCode, string(data))
 }
 
+// injectCallerHeaders 把 --caller-service/--caller-ip/--caller-metadata 参数注入 X-Polaris-Caller-* header.
+// provider 端会在调用 LimitAPI.GetQuota 前解析这三组 header，分别还原为 CALLER_SERVICE / CALLER_IP / CALLER_METADATA 维度.
+//
+// Header 命名约定：
+//   - X-Polaris-Caller-Service          : 主调服务名（CallerService 维度）
+//   - X-Polaris-Caller-IP               : 主调 IP   （CallerIP 维度）
+//   - X-Polaris-Caller-Metadata-<key>   : 主调元数据（CallerMetadata 维度）；每个 key 一个 header
+//
+// 不传 flag 时不写任何 X-Polaris-* header，保留对原始请求 header 的透传不动.
+func injectCallerHeaders(h http.Header) {
+	if callerService != "" {
+		h.Set("X-Polaris-Caller-Service", callerService)
+	}
+	if callerIP != "" {
+		h.Set("X-Polaris-Caller-IP", callerIP)
+	}
+	for _, kv := range callerMetadataRaw {
+		idx := strings.Index(kv, "=")
+		if idx <= 0 {
+			continue
+		}
+		k, v := kv[:idx], kv[idx+1:]
+		h.Set("X-Polaris-Caller-Metadata-"+k, v)
+	}
+}
+
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件

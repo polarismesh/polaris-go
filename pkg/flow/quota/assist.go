@@ -472,7 +472,8 @@ func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *apitraffic.Rul
 
 func getLabelValue(matchArgument *apitraffic.MatchArgument, stringStringMap map[string]string) (string, bool) {
 	switch matchArgument.GetType() {
-	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY,
+		apitraffic.MatchArgument_CALLER_SERVICE, apitraffic.MatchArgument_CALLER_METADATA:
 		value, ok := stringStringMap[matchArgument.GetKey()]
 		return value, ok
 	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
@@ -492,7 +493,8 @@ func getLabelValue(matchArgument *apitraffic.MatchArgument, stringStringMap map[
 
 func getLabelEntry(matchArgument *apitraffic.MatchArgument, labelValue string) string {
 	switch matchArgument.GetType() {
-	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY,
+		apitraffic.MatchArgument_CALLER_SERVICE, apitraffic.MatchArgument_CALLER_METADATA:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + matchArgument.GetKey() + config.DefaultMapKeyValueSeparator + labelValue
 	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + labelValue

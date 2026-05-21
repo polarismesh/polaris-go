@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -104,6 +105,7 @@ var (
 	service   string
 	token     string
 	port      int64
+	debug     bool
 )
 
 func initArgs() {
@@ -112,6 +114,7 @@ func initArgs() {
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisProvider implements the Provider interface.
@@ -137,87 +140,14 @@ func (svr *PolarisProvider) Run() {
 }
 
 func (svr *PolarisProvider) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		reqID := newReqID()
-		logIncomingRequest(reqID, r, "/echo")
-		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
-		quotaReq.SetMethod("/echo")
-		headers := convertHeaders(r.Header)
-		for k, v := range headers {
-			quotaReq.AddArgument(model.BuildHeaderArgument(strings.ToLower(k), v))
-		}
-		quotaReq.SetNamespace(namespace)
-		quotaReq.SetService(service)
-
-		start := time.Now()
-		resp, err := svr.limiter.GetQuota(quotaReq)
-		if err != nil {
-			body := fmt.Sprintf("[error] fail to GetQuota, err is %v", err)
-			log.Printf("[%s] [error] fail to GetQuota: %v", reqID, err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(body))
-			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
-			return
-		}
-		defer resp.Release()
-		log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
-			reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
-			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
-
-		if resp.Get().Code != model.QuotaResultOk {
-			body := http.StatusText(http.StatusTooManyRequests)
-			rw.WriteHeader(http.StatusTooManyRequests)
-			_, _ = rw.Write([]byte(body))
-			logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
-			return
-		}
-
-		body := fmt.Sprintf("Hello, I'm QpsRatelimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(body))
-		logReply(reqID, r.RemoteAddr, http.StatusOK, body)
-	})
-
-	http.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
-		reqID := newReqID()
-		logIncomingRequest(reqID, r, "/health")
-		quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
-		quotaReq.SetMethod("/health")
-		headers := convertHeaders(r.Header)
-		for k, v := range headers {
-			quotaReq.AddArgument(model.BuildHeaderArgument(strings.ToLower(k), v))
-		}
-		quotaReq.SetNamespace(namespace)
-		quotaReq.SetService(service)
-
-		start := time.Now()
-		resp, err := svr.limiter.GetQuota(quotaReq)
-		if err != nil {
-			body := fmt.Sprintf("[error] fail to GetQuota, err is %v", err)
-			log.Printf("[%s] [error] fail to GetQuota: %v", reqID, err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(body))
-			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
-			return
-		}
-		defer resp.Release()
-		log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
-			reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
-			quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
-
-		if resp.Get().Code != model.QuotaResultOk {
-			body := http.StatusText(http.StatusTooManyRequests)
-			rw.WriteHeader(http.StatusTooManyRequests)
-			_, _ = rw.Write([]byte(body))
-			logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
-			return
-		}
-
-		body := fmt.Sprintf("Hello, I'm QpsRatelimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(body))
-		logReply(reqID, r.RemoteAddr, http.StatusOK, body)
-	})
+	// /echo + /health 共用同一套限流处理：构建 quotaReq → GetQuota → 处理结果.
+	// 抽 helper 后，新增匹配维度（如 path / caller-*）只需改一处 buildQuotaRequest.
+	for _, p := range []string{"/echo", "/health"} {
+		path := p
+		http.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
+			svr.handleQuota(rw, r, path)
+		})
+	}
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
@@ -232,6 +162,42 @@ func (svr *PolarisProvider) runWebServer() {
 			log.Fatalf("[ERROR]fail to run webServer, err is %v", err)
 		}
 	}()
+}
+
+// handleQuota 处理一次限流判定 + 业务返回；适用于 /echo 和 /health（路径不同，但限流逻辑一致）.
+func (svr *PolarisProvider) handleQuota(rw http.ResponseWriter, r *http.Request, method string) {
+	reqID := newReqID()
+	logIncomingRequest(reqID, r, method)
+
+	quotaReq := buildQuotaRequest(r, namespace, service, method)
+
+	start := time.Now()
+	resp, err := svr.limiter.GetQuota(quotaReq)
+	if err != nil {
+		body := fmt.Sprintf("[error] fail to GetQuota, err is %v", err)
+		log.Printf("[%s] [error] fail to GetQuota: %v", reqID, err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+		return
+	}
+	defer resp.Release()
+	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s | quota_req: ns=%s svc=%s method=%v labels=%v",
+		reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info,
+		quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
+
+	if resp.Get().Code != model.QuotaResultOk {
+		body := http.StatusText(http.StatusTooManyRequests)
+		rw.WriteHeader(http.StatusTooManyRequests)
+		_, _ = rw.Write([]byte(body))
+		logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
+		return
+	}
+
+	body := fmt.Sprintf("Hello, I'm QpsRatelimitEchoServer Provider, My host : %s:%d", svr.host, svr.port)
+	rw.WriteHeader(http.StatusOK)
+	_, _ = rw.Write([]byte(body))
+	logReply(reqID, r.RemoteAddr, http.StatusOK, body)
 }
 
 func (svr *PolarisProvider) registerService() {
@@ -278,11 +244,19 @@ func (svr *PolarisProvider) runMainLoop() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	provider, err := polaris.NewProviderAPI()
 	// 或者使用以下方法,则不需要创建配置文件
@@ -330,4 +304,107 @@ func convertHeaders(header map[string][]string) map[string]string {
 		meta[strings.ToLower(k)] = v[0]
 	}
 	return meta
+}
+
+// X-Polaris-Caller-* header 命名前缀；与 consumer 端的 injectCallerHeaders 一一对应.
+const (
+	headerCallerService    = "X-Polaris-Caller-Service"
+	headerCallerIP         = "X-Polaris-Caller-IP"
+	headerCallerMetaPrefix = "X-Polaris-Caller-Metadata-" // 后接 key
+)
+
+// buildQuotaRequest 把 HTTP 请求的所有可匹配维度塞进 quota 请求，让 polaris 限流规则能命中：
+//
+//   - METHOD          : 请求 path（quotaReq.SetMethod / SDK 内部按 ArgumentTypeMethod 转 MatchArgument_METHOD）
+//   - HEADER          : 所有请求头（X-Polaris-Caller-* 系列除外，避免污染 HEADER 维度）
+//   - QUERY           : URL 查询参数
+//   - CALLER_SERVICE  : X-Polaris-Caller-Service header
+//   - CALLER_IP       : X-Polaris-Caller-IP header
+//   - CALLER_METADATA : X-Polaris-Caller-Metadata-<key> header
+//
+// polaris 规则的多个 arguments 之间是 AND 关系——任一维度不匹配就跳过该规则.
+func buildQuotaRequest(r *http.Request, ns, svc, method string) *model.QuotaRequestImpl {
+	quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
+	quotaReq.SetNamespace(ns)
+	quotaReq.SetService(svc)
+	quotaReq.SetMethod(method)
+
+	// HEADER：跳过 X-Polaris-Caller-* 系列，避免它们既被当 caller 维度又被当 header 维度
+	for k, v := range r.Header {
+		if len(v) == 0 {
+			continue
+		}
+		lk := strings.ToLower(k)
+		if strings.HasPrefix(strings.ToLower(k), strings.ToLower("X-Polaris-Caller")) {
+			continue
+		}
+		quotaReq.AddArgument(model.BuildHeaderArgument(lk, v[0]))
+	}
+
+	// QUERY
+	for k, v := range r.URL.Query() {
+		if len(v) == 0 {
+			continue
+		}
+		quotaReq.AddArgument(model.BuildQueryArgument(k, v[0]))
+	}
+
+	// CALLER_SERVICE：约定 header value 形如 "ns/svc"（兼容缺省 ns 时只填 svc）
+	if cs := r.Header.Get(headerCallerService); cs != "" {
+		ns, svcName := splitCallerService(cs)
+		quotaReq.AddArgument(model.BuildCallerServiceArgument(ns, svcName))
+	}
+
+	// CALLER_IP：优先取 header；缺省时回落到 r.RemoteAddr 的 IP 部分
+	if cip := r.Header.Get(headerCallerIP); cip != "" {
+		quotaReq.AddArgument(model.BuildCallerIPArgument(cip))
+	} else if remoteIP := stripPort(r.RemoteAddr); remoteIP != "" {
+		quotaReq.AddArgument(model.BuildCallerIPArgument(remoteIP))
+	}
+
+	// CALLER_METADATA：所有 X-Polaris-Caller-Metadata-<key> header 拆解出来
+	for k, v := range r.Header {
+		if len(v) == 0 {
+			continue
+		}
+		// http.Header 会规范化为 X-Polaris-Caller-Metadata-Xxx；按规范化前缀做大小写无关比较
+		if !strings.EqualFold(k[:min(len(k), len(headerCallerMetaPrefix))], headerCallerMetaPrefix) {
+			continue
+		}
+		metaKey := k[len(headerCallerMetaPrefix):]
+		if metaKey == "" {
+			continue
+		}
+		// 统一小写：HTTP header key 经 net/http 规范化后会变 Title-Case（如 "Env"），
+		// 而限流规则里通常按小写键写（如 "env"）；这里 lower-case 让两侧对齐，避免大小写不匹配漏匹配.
+		quotaReq.AddArgument(model.BuildCallerMetadataArgument(strings.ToLower(metaKey), v[0]))
+	}
+
+	return quotaReq
+}
+
+// splitCallerService 解析 "ns/svc" 形式；缺省 ns 时返回 ("", svc).
+func splitCallerService(value string) (ns, svc string) {
+	if i := strings.Index(value, "/"); i > 0 {
+		return value[:i], value[i+1:]
+	}
+	return "", value
+}
+
+// stripPort 从 "ip:port" 形式提取 ip；纯 ip 则原样返回；解析失败返回空串.
+func stripPort(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	if i := strings.LastIndex(addr, ":"); i > 0 {
+		return addr[:i]
+	}
+	return addr
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

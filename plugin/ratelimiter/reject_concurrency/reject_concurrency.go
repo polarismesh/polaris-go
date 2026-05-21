@@ -64,7 +64,7 @@ func (g *RateLimiterRejectConcurrency) IsEnable(cfg config.Configuration) bool {
 // InitQuota 初始化并创建并发数限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterRejectConcurrency) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
-	return NewConcurrencyQuotaBucket(criteria.DstRule, g.logCtx)
+	return NewConcurrencyQuotaBucket(criteria.DstRule, criteria.WindowKey, g.logCtx)
 }
 
 // init 注册插件

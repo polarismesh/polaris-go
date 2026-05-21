@@ -49,7 +49,9 @@ type ConcurrencyQuotaBucket struct {
 
 // NewConcurrencyQuotaBucket 根据规则创建并发数限流桶.
 // logCtx 必须非 nil；与项目内 reject/router 等插件保持一致，不在桶内做 nil 防御.
-func NewConcurrencyQuotaBucket(rule *apitraffic.Rule, logCtx *log.ContextLogger) *ConcurrencyQuotaBucket {
+// windowKey 来自 ratelimiter.InitCriteria.WindowKey，格式 "{Service}#{Namespace}[#{Labels}]"，
+// 由 pkg/flow/quota/window.go::buildQuotaHashValue 生成；仅用于日志可读性，便于跨日志（cache/window/bucket）串联.
+func NewConcurrencyQuotaBucket(rule *apitraffic.Rule, windowKey string, logCtx *log.ContextLogger) *ConcurrencyQuotaBucket {
 	rawAmount := rule.GetConcurrencyAmount().GetMaxAmount()
 	maxAmount := int64(rawAmount)
 	bucket := &ConcurrencyQuotaBucket{
@@ -61,14 +63,13 @@ func NewConcurrencyQuotaBucket(rule *apitraffic.Rule, logCtx *log.ContextLogger)
 		// 此时往往是控制面规则配置错误，需要让运维侧能看到这条信号 -> Warn 级别.
 		maxAmount = 1
 		logCtx.GetRateLimitLogger().Warnf(
-			"%s invalid concurrencyAmount.maxAmount=%d for rule[%s], fallback to 1",
-			logTag, rawAmount, ruleID(rule))
+			"%s invalid concurrencyAmount.maxAmount=%d for windowKey=%q rule[%s], fallback to 1",
+			logTag, rawAmount, windowKey, ruleID(rule))
 	}
 	bucket.maxAmount = maxAmount
 	logCtx.GetRateLimitLogger().Infof(
-		"%s created bucket for rule[%s] service=%s/%s method=%s maxAmount=%d",
-		logTag, ruleID(rule),
-		rule.GetNamespace().GetValue(), rule.GetService().GetValue(),
+		"%s created bucket windowKey=%q rule[%s] method=%s maxAmount=%d",
+		logTag, windowKey, ruleID(rule),
 		rule.GetMethod().GetValue().GetValue(),
 		maxAmount,
 	)

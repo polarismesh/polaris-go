@@ -642,6 +642,8 @@ func toSpecArgument(i int) apitraffic.MatchArgument_Type {
 		return apitraffic.MatchArgument_METHOD
 	case model.ArgumentTypeQuery:
 		return apitraffic.MatchArgument_QUERY
+	case model.ArgumentTypeCallerMetadata:
+		return apitraffic.MatchArgument_CALLER_METADATA
 	default:
 		return apitraffic.MatchArgument_CUSTOM
 	}

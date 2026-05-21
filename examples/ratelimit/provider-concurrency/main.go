@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -112,6 +113,7 @@ var (
 	service   string
 	token     string
 	port      int64
+	debug     bool
 )
 
 func initArgs() {
@@ -120,6 +122,7 @@ func initArgs() {
 	// 当北极星开启鉴权时，需要配置此参数完成相关的权限检查
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisProvider 演示并发数限流场景下的 provider 实现.
@@ -147,14 +150,7 @@ func (svr *PolarisProvider) Run() {
 // applyLimit 调用限流 API 获取配额；若通过返回 future（必须由调用方 defer future.Release()），
 // 若被限流返回 nil 并已经写好响应.
 func (svr *PolarisProvider) applyLimit(reqID string, rw http.ResponseWriter, r *http.Request, method string) polaris.QuotaFuture {
-	quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
-	quotaReq.SetMethod(method)
-	headers := convertHeaders(r.Header)
-	for k, v := range headers {
-		quotaReq.AddArgument(model.BuildHeaderArgument(strings.ToLower(k), v))
-	}
-	quotaReq.SetNamespace(namespace)
-	quotaReq.SetService(service)
+	quotaReq := buildQuotaRequest(r, namespace, service, method)
 
 	start := time.Now()
 	future, err := svr.limiter.GetQuota(quotaReq)
@@ -278,11 +274,19 @@ func (svr *PolarisProvider) runMainLoop() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	provider, err := polaris.NewProviderAPI()
 
@@ -328,6 +332,86 @@ func convertHeaders(header map[string][]string) map[string]string {
 		meta[strings.ToLower(k)] = v[0]
 	}
 	return meta
+}
+
+// X-Polaris-Caller-* header 命名前缀；与 consumer 端 injectCallerHeaders 一一对应.
+const (
+	headerCallerService    = "X-Polaris-Caller-Service"
+	headerCallerIP         = "X-Polaris-Caller-IP"
+	headerCallerMetaPrefix = "X-Polaris-Caller-Metadata-"
+)
+
+// buildQuotaRequest 把 HTTP 请求的所有可匹配维度塞进 quota 请求.
+// 详细说明见 provider-qps/main.go::buildQuotaRequest（两边维度集合一致）.
+func buildQuotaRequest(r *http.Request, ns, svc, method string) *model.QuotaRequestImpl {
+	quotaReq := polaris.NewQuotaRequest().(*model.QuotaRequestImpl)
+	quotaReq.SetNamespace(ns)
+	quotaReq.SetService(svc)
+	quotaReq.SetMethod(method)
+
+	for k, v := range r.Header {
+		if len(v) == 0 {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(k), strings.ToLower("X-Polaris-Caller")) {
+			continue
+		}
+		quotaReq.AddArgument(model.BuildHeaderArgument(strings.ToLower(k), v[0]))
+	}
+	for k, v := range r.URL.Query() {
+		if len(v) == 0 {
+			continue
+		}
+		quotaReq.AddArgument(model.BuildQueryArgument(k, v[0]))
+	}
+	if cs := r.Header.Get(headerCallerService); cs != "" {
+		ns2, svcName := splitCallerService(cs)
+		quotaReq.AddArgument(model.BuildCallerServiceArgument(ns2, svcName))
+	}
+	if cip := r.Header.Get(headerCallerIP); cip != "" {
+		quotaReq.AddArgument(model.BuildCallerIPArgument(cip))
+	} else if remoteIP := stripPort(r.RemoteAddr); remoteIP != "" {
+		quotaReq.AddArgument(model.BuildCallerIPArgument(remoteIP))
+	}
+	for k, v := range r.Header {
+		if len(v) == 0 {
+			continue
+		}
+		if !strings.EqualFold(k[:minInt(len(k), len(headerCallerMetaPrefix))], headerCallerMetaPrefix) {
+			continue
+		}
+		metaKey := k[len(headerCallerMetaPrefix):]
+		if metaKey == "" {
+			continue
+		}
+		// HTTP header key 经规范化后会变 Title-Case，规则里按小写键写，这里 lower-case 对齐.
+		quotaReq.AddArgument(model.BuildCallerMetadataArgument(strings.ToLower(metaKey), v[0]))
+	}
+	return quotaReq
+}
+
+func splitCallerService(value string) (ns, svc string) {
+	if i := strings.Index(value, "/"); i > 0 {
+		return value[:i], value[i+1:]
+	}
+	return "", value
+}
+
+func stripPort(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	if i := strings.LastIndex(addr, ":"); i > 0 {
+		return addr[:i]
+	}
+	return addr
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // parseInt 将字符串解析为整数；解析失败时返回 fallback.

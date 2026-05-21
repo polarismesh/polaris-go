@@ -25,10 +25,25 @@ import (
 
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
 
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
+
+// logTag unirate 插件限流日志统一前缀；与 reject/reject_concurrency 形成对照.
+const logTag = "[RateLimit][Unirate]"
+
+// ruleID 返回规则的标识，仅用于日志可读性（与同包其他实现保持独立）.
+func ruleID(rule *apitraffic.Rule) string {
+	if rule == nil {
+		return ""
+	}
+	if id := rule.GetId().GetValue(); id != "" {
+		return id
+	}
+	return rule.GetName().GetValue()
+}
 
 // LeakyBucket 远程配额分配的算法桶
 type LeakyBucket struct {
@@ -47,10 +62,13 @@ type LeakyBucket struct {
 	maxQueuingDuration int64
 	// 是不是有amount为0
 	rejectAll bool
+	// logCtx 上下文 logger，由插件 Init 阶段透传；不应为 nil（与 reject/reject_concurrency 一致）.
+	// 直接调用 logCtx.GetRateLimitLogger().Xxxf 以保证 zap.AddCallerSkip 假设的栈深度成立.
+	logCtx *log.ContextLogger
 }
 
-func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config) *LeakyBucket {
-	bucket := &LeakyBucket{}
+func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config, logCtx *log.ContextLogger) *LeakyBucket {
+	bucket := &LeakyBucket{logCtx: logCtx}
 	bucket.rule = criteria.DstRule
 
 	instCount := 1
@@ -64,6 +82,11 @@ func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config) *LeakyBu
 	for _, a := range bucket.rule.Amounts {
 		if a.MaxAmount.GetValue() == 0 {
 			bucket.rejectAll = true
+			// rule.amount=0 等价于"全部拒绝"，多半是控制面误配；用 warn 让运维能看见，
+			// 与 reject_concurrency 对 maxAmount<=0 的 warn 处理保持一致.
+			logCtx.GetRateLimitLogger().Warnf(
+				"%s created bucket windowKey=%q rule[%s] rejectAll=true (amount=0, all requests will be rejected)",
+				logTag, criteria.WindowKey, ruleID(bucket.rule))
 			return bucket
 		}
 		duration, _ := pb.ConvertDuration(a.ValidDuration)
@@ -95,11 +118,27 @@ func createLeakyBucket(criteria *ratelimiter.InitCriteria, cfg *Config) *LeakyBu
 		effectiveRate *= float64(instCount)
 	}
 	bucket.effectiveRate = int64(math.Round(effectiveRate))
+	// bucket 生命周期开端用 info 输出一条（与 reject/reject_concurrency 对齐）.
+	// windowKey 格式 = "{Service}#{Namespace}[#{Labels}]"，已覆盖 service/namespace/labels；
+	// method 与等效阈值（amount/duration/rate/maxQueueing）单独列出便于阅读.
+	logCtx.GetRateLimitLogger().Infof(
+		"%s created bucket windowKey=%q rule[%s] method=%s type=%s effectiveAmount=%d effectiveDuration=%s effectiveRate=%dms maxQueuingDuration=%dms",
+		logTag, criteria.WindowKey, ruleID(bucket.rule),
+		bucket.rule.GetMethod().GetValue().GetValue(),
+		bucket.rule.GetType().String(),
+		bucket.effectiveAmount, bucket.effectiveDuration,
+		bucket.effectiveRate, bucket.maxQueuingDuration,
+	)
 	return bucket
 }
 
 func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
+	logger := l.logCtx.GetRateLimitLogger()
 	if l.rejectAll {
+		if logger.IsLevelEnabled(log.DebugLog) {
+			logger.Debugf("%s limited rule[%s] reason=rejectAll",
+				logTag, ruleID(l.rule))
+		}
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
 			Info: "uniRate RateLimiter: reject for zero rule amount",
@@ -126,6 +165,10 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 	}
 
 	if waitDuration == 0 {
+		if logger.IsLevelEnabled(log.DebugLog) {
+			logger.Debugf("%s passed rule[%s] waitMs=0 (no queueing)",
+				logTag, ruleID(l.rule))
+		}
 		return &model.QuotaResponse{
 			Code: model.QuotaResultOk,
 			Info: "uniRate RateLimiter: grant quota",
@@ -133,7 +176,10 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 	}
 	// 如果等待时间在上限之内，那么放通
 	if waitDuration <= l.maxQueuingDuration {
-		// log.Printf("grant quota, waitDuration %v", waitDuration)
+		if logger.IsLevelEnabled(log.DebugLog) {
+			logger.Debugf("%s queued rule[%s] waitMs=%d maxQueuingMs=%d",
+				logTag, ruleID(l.rule), waitDuration, l.maxQueuingDuration)
+		}
 		return &model.QuotaResponse{
 			Code:   model.QuotaResultOk,
 			WaitMs: waitDuration,
@@ -145,6 +191,10 @@ func (l *LeakyBucket) allocateQuota() *model.QuotaResponse {
 		"uniRate RateLimiter: queueing time %d exceed maxQueuingTime %s",
 		time.Duration(waitDuration), time.Duration(waitDuration))
 	atomic.AddInt64(&l.lastGrantTime, 0-costDuration)
+	if logger.IsLevelEnabled(log.DebugLog) {
+		logger.Debugf("%s limited rule[%s] reason=queueTimeout waitMs=%d maxQueuingMs=%d",
+			logTag, ruleID(l.rule), waitDuration, l.maxQueuingDuration)
+	}
 	return &model.QuotaResponse{
 		Code: model.QuotaResultLimited,
 		Info: info,

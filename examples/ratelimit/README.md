@@ -8,11 +8,14 @@ Polaris supports rate limiting on different request sources and system resources
 
 | Type | Resource (`Rule.Resource`) + action | Threshold | Key API | Sample provider |
 | --- | --- | --- | --- | --- |
-| **QPS limiting - reject** | `QPS` + `action=reject` | `Rule.Amounts[*].MaxAmount + ValidDuration` | `LimitAPI.GetQuota` (immediately rejects on excess) | `provider-qps` |
-| **QPS limiting - unirate** | `QPS` + `action=unirate` | `Rule.Amounts[*]` + `max_queue_delay` | `LimitAPI.GetQuota` (SDK queues the request and waits) | `provider-qps` (same binary, switched via `--service`) |
+| **QPS limiting - reject** | `QPS` + `action=REJECT` | `Rule.Amounts[*].MaxAmount + ValidDuration` | `LimitAPI.GetQuota` (immediately rejects on excess) | `provider-qps` |
+| **QPS limiting - unirate** | `QPS` + `action=UNIRATE` | `Rule.Amounts[*]` + `max_queue_delay` | `LimitAPI.GetQuota` (SDK queues the request and waits) | `provider-qps` (same binary, switched via `--service`) |
 | **Concurrency limiting** | `CONCURRENCY` | `Rule.ConcurrencyAmount.MaxAmount` | `LimitAPI.GetQuota` + **`defer future.Release()`** | `provider-concurrency` |
+| **Multi-dimensional match (AND)** | any resource + `Rule.Arguments[*]` | HEADER / QUERY / METHOD / CALLER_SERVICE / CALLER_IP / CALLER_METADATA | `quotaReq.AddArgument(model.BuildXxxArgument(...))` | `provider-qps` + consumer `--caller-*` injection |
 
 > **reject vs unirate**: `reject` returns HTTP 429 immediately when the QPS threshold is exceeded; `unirate` instead **queues** excess requests inside the SDK (`QuotaFutureImpl.Get()` sleeps until the next quota tick) and only returns limited (HTTP 429) when the queueing delay exceeds `max_queue_delay`.
+>
+> **Multi-dimensional match**: rule `arguments` are joined with AND semantics; the rule fires only when all configured dimensions match. See `verify_ratelimit.sh` cases 4.x.
 >
 > Concurrency limiting is implemented by the `concurrency` plugin (`plugin/ratelimiter/reject_concurrency`).
 > It is **node-local only**: even when the rule is pushed with `Type=GLOBAL`, the SDK forces it into local mode.

@@ -19,6 +19,7 @@ package unirate
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -28,7 +29,8 @@ import (
 // RateLimiterUniformRate 基于匀速排队策略的限流控制器
 type RateLimiterUniformRate struct {
 	*plugin.PluginBase
-	cfg *Config
+	cfg    *Config
+	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
@@ -44,6 +46,7 @@ func (g *RateLimiterUniformRate) Name() string {
 // Init 初始化插件
 func (g *RateLimiterUniformRate) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
+	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	cfgValue := ctx.Config.GetProvider().GetRateLimit().GetPluginConfig(g.Name())
 	if cfgValue != nil {
 		g.cfg = cfgValue.(*Config)
@@ -64,7 +67,7 @@ func (g *RateLimiterUniformRate) IsEnable(cfg config.Configuration) bool {
 // InitQuota 初始化并创建限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
 func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
-	return createLeakyBucket(criteria, g.cfg)
+	return createLeakyBucket(criteria, g.cfg, g.logCtx)
 }
 
 // init 注册插件

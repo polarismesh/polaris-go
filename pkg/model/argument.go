@@ -31,27 +31,33 @@ const (
 	ArgumentTypeCallerIP
 	ArgumentTypePath
 	ArgumentTypeCookie
+	// ArgumentTypeCallerMetadata 主调实例的元数据（label 形式 key/value）；
+	// 与 CallerService（被调方接收到的"主调服务名"）相对应——后者标识"哪个服务"，前者标识"哪个具体实例的属性"，
+	// 例如 region=cn-east、env=prod 等.
+	ArgumentTypeCallerMetadata
 )
 
 var argumentTypeToName = map[int]string{
-	ArgumentTypeCustom:        "CUSTOM",
-	ArgumentTypeMethod:        "METHOD",
-	ArgumentTypeHeader:        "HEADER",
-	ArgumentTypeQuery:         "QUERY",
-	ArgumentTypeCallerService: "CALLER_SERVICE",
-	ArgumentTypeCallerIP:      "CALLER_IP",
-	ArgumentTypePath:          "PATH",
-	ArgumentTypeCookie:        "COOKIE",
+	ArgumentTypeCustom:         "CUSTOM",
+	ArgumentTypeMethod:         "METHOD",
+	ArgumentTypeHeader:         "HEADER",
+	ArgumentTypeQuery:          "QUERY",
+	ArgumentTypeCallerService:  "CALLER_SERVICE",
+	ArgumentTypeCallerIP:       "CALLER_IP",
+	ArgumentTypePath:           "PATH",
+	ArgumentTypeCookie:         "COOKIE",
+	ArgumentTypeCallerMetadata: "CALLER_METADATA",
 }
 
 const (
-	LabelKeyMethod        = "$method"
-	LabelKeyHeader        = "$header."
-	LabelKeyQuery         = "$query."
-	LabelKeyCallerService = "$caller_service."
-	LabelKeyCallerIp      = "$caller_ip"
-	LabelKeyPath          = "$Path"
-	LabelKeyCookie        = "$cookie."
+	LabelKeyMethod         = "$method"
+	LabelKeyHeader         = "$header."
+	LabelKeyQuery          = "$query."
+	LabelKeyCallerService  = "$caller_service."
+	LabelKeyCallerIp       = "$caller_ip"
+	LabelKeyPath           = "$Path"
+	LabelKeyCookie         = "$cookie."
+	LabelKeyCallerMetadata = "$caller_metadata."
 )
 
 // Argument 限流/路由参数
@@ -140,6 +146,16 @@ func BuildCookieArgument(key, value string) Argument {
 	}
 }
 
+// BuildCallerMetadataArgument 构造主调实例元数据维度的参数（如 region=cn-east、env=prod）.
+// 与 CallerService（主调服务身份）相对，CallerMetadata 表示"主调实例的标签".
+func BuildCallerMetadataArgument(key string, value string) Argument {
+	return Argument{
+		argumentType: ArgumentTypeCallerMetadata,
+		key:          key,
+		value:        value,
+	}
+}
+
 func BuildArgumentFromLabel(labelKey string, labelValue string) Argument {
 	if labelKey == LabelKeyMethod {
 		return BuildMethodArgument(labelValue)
@@ -162,6 +178,9 @@ func BuildArgumentFromLabel(labelKey string, labelValue string) Argument {
 	if strings.HasPrefix(labelKey, LabelKeyCookie) {
 		return BuildCookieArgument(labelKey[len(LabelKeyCookie):], labelValue)
 	}
+	if strings.HasPrefix(labelKey, LabelKeyCallerMetadata) {
+		return BuildCallerMetadataArgument(labelKey[len(LabelKeyCallerMetadata):], labelValue)
+	}
 	return BuildCustomArgument(labelKey, labelValue)
 }
 
@@ -183,5 +202,7 @@ func (a Argument) ToLabels(labels map[string]string) {
 		labels[LabelKeyPath] = a.value
 	case ArgumentTypeCookie:
 		labels[LabelKeyCookie+a.key] = a.value
+	case ArgumentTypeCallerMetadata:
+		labels[LabelKeyCallerMetadata+a.key] = a.value
 	}
 }

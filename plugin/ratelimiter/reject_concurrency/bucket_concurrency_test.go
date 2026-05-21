@@ -70,7 +70,7 @@ func noopCtx() *log.ContextLogger {
 func TestNewConcurrencyQuotaBucket_NormalAmount_ShouldUseRuleValue(t *testing.T) {
 	// 测试场景：正常 MaxAmount 应直接使用规则配置值
 	rule := buildConcurrencyRule(10)
-	bucket := NewConcurrencyQuotaBucket(rule, noopCtx())
+	bucket := NewConcurrencyQuotaBucket(rule, "test-svc#default", noopCtx())
 
 	assert.Equal(t, int64(10), bucket.maxAmount)
 	assert.Equal(t, int64(0), atomic.LoadInt64(&bucket.currentCount))
@@ -79,14 +79,14 @@ func TestNewConcurrencyQuotaBucket_NormalAmount_ShouldUseRuleValue(t *testing.T)
 func TestNewConcurrencyQuotaBucket_ZeroMaxAmount_ShouldFallbackToOne(t *testing.T) {
 	// 测试场景：MaxAmount = 0 时应保底为 1，避免无限放通
 	rule := buildConcurrencyRule(0)
-	bucket := NewConcurrencyQuotaBucket(rule, noopCtx())
+	bucket := NewConcurrencyQuotaBucket(rule, "test-svc#default", noopCtx())
 
 	assert.Equal(t, int64(1), bucket.maxAmount)
 }
 
 func TestConcurrencyQuotaBucket_GetQuota_BelowLimit_ShouldPass(t *testing.T) {
 	// 测试场景：并发数未达上限时请求应通过并注入 release 回调
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), "test-svc#default", noopCtx())
 
 	resp := bucket.GetQuota(0, 1)
 
@@ -97,7 +97,7 @@ func TestConcurrencyQuotaBucket_GetQuota_BelowLimit_ShouldPass(t *testing.T) {
 
 func TestConcurrencyQuotaBucket_GetQuota_ExceedLimit_ShouldLimitedAndRollback(t *testing.T) {
 	// 测试场景：达到并发上限后新请求应被限流，且计数应回退（不超过 maxAmount）
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), "test-svc#default", noopCtx())
 
 	first := bucket.GetQuota(0, 1)
 	second := bucket.GetQuota(0, 1)
@@ -113,7 +113,7 @@ func TestConcurrencyQuotaBucket_GetQuota_ExceedLimit_ShouldLimitedAndRollback(t 
 
 func TestConcurrencyQuotaBucket_Release_ShouldDecrementCount(t *testing.T) {
 	// 测试场景：通过 QuotaFutureImpl.Release() 触发回调后应归还配额，新请求可继续通过
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(1), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(1), "test-svc#default", noopCtx())
 
 	resp := bucket.GetQuota(0, 1)
 	assert.Equal(t, model.QuotaResultOk, resp.Code)
@@ -135,7 +135,7 @@ func TestConcurrencyQuotaBucket_Release_ShouldDecrementCount(t *testing.T) {
 
 func TestConcurrencyQuotaBucket_Release_DuplicateCall_ShouldBeIdempotent(t *testing.T) {
 	// 测试场景：重复调用 Release 不应导致计数器异常（首次执行后回调链清空）
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(2), "test-svc#default", noopCtx())
 	resp := bucket.GetQuota(0, 1)
 	assert.Equal(t, int64(1), atomic.LoadInt64(&bucket.currentCount))
 
@@ -152,7 +152,7 @@ func TestConcurrencyQuotaBucket_GetQuota_ConcurrentAccess_ShouldNotExceedLimit(t
 	// 测试场景：高并发下计数器不会出现竞态，最终成功数等于上限
 	const maxAmount = uint32(50)
 	const goroutines = 200
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(maxAmount), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(maxAmount), "test-svc#default", noopCtx())
 
 	var wg sync.WaitGroup
 	var passCount int64
@@ -180,7 +180,7 @@ func TestConcurrencyQuotaBucket_GetQuota_ConcurrentAccess_ShouldNotExceedLimit(t
 
 func TestConcurrencyQuotaBucket_GetAmountInfos_ShouldReturnMaxAmount(t *testing.T) {
 	// 测试场景：GetAmountInfos 应返回与规则一致的配额信息
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(8), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(8), "test-svc#default", noopCtx())
 
 	infos := bucket.GetAmountInfos()
 	assert.Len(t, infos, 1)
@@ -190,7 +190,7 @@ func TestConcurrencyQuotaBucket_GetAmountInfos_ShouldReturnMaxAmount(t *testing.
 
 func TestConcurrencyQuotaBucket_OnRemoteUpdate_ShouldBeNoop(t *testing.T) {
 	// 测试场景：并发数限流为本地模式，OnRemoteUpdate 应为空操作不影响计数
-	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(5), noopCtx())
+	bucket := NewConcurrencyQuotaBucket(buildConcurrencyRule(5), "test-svc#default", noopCtx())
 	resp := bucket.GetQuota(0, 1)
 	assert.Equal(t, model.QuotaResultOk, resp.Code)
 
