@@ -144,14 +144,13 @@ func (svr *PolarisConsumer) Run() {
 }
 
 func (svr *PolarisConsumer) runWebServer() {
-	// /echo /health /slow 三个 path 共用同一套"服务发现 + HTTP 转发"逻辑.
-	// 透传 provider 返回的状态码（包含 429），让上游 curl 能直接看到限流效果.
-	for _, path := range []string{"/echo", "/health", "/slow"} {
-		method := path
-		http.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
-			svr.forwardToProvider(rw, r, method)
-		})
-	}
+	// 用 catch-all "/" 处理任意路径：
+	//   1) /echo、/health、/slow 等固定路径仍正常转发到 provider
+	//   2) /users/<id>/orders 等动态路径同样可达，配合 provider 的 catch-all + 规则的 REGEX method 验证 regex_combine
+	// 透传 provider 返回的状态码（包含 429）和 path，让上游 curl 看到完整链路.
+	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		svr.forwardToProvider(rw, r, r.URL.Path)
+	})
 
 	log.Printf("start run web server, port : %d", port)
 

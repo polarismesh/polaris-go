@@ -140,14 +140,13 @@ func (svr *PolarisProvider) Run() {
 }
 
 func (svr *PolarisProvider) runWebServer() {
-	// /echo + /health 共用同一套限流处理：构建 quotaReq → GetQuota → 处理结果.
-	// 抽 helper 后，新增匹配维度（如 path / caller-*）只需改一处 buildQuotaRequest.
-	for _, p := range []string{"/echo", "/health"} {
-		path := p
-		http.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
-			svr.handleQuota(rw, r, path)
-		})
-	}
+	// 用 catch-all "/" 处理任意路径：
+	//   1) /echo、/health 等固定路径仍按原规则匹配（method 用 EXACT 时只命中精确路径）
+	//   2) /users/<id>/orders 这类路径同样能进 handleQuota，配合 method 用 REGEX 的规则可以验证 regex_combine 行为
+	// quotaReq 里把 r.URL.Path 作为 method 字段传给 SDK；SDK 的 lookupRules 自己按 method 字段做 EXACT/REGEX 匹配.
+	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		svr.handleQuota(rw, r, r.URL.Path)
+	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {

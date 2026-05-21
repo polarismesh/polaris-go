@@ -44,9 +44,10 @@ chmod +x verify_ratelimit.sh cleanup.sh
 | QPS unirate | `127.0.0.1:18182` | `127.0.0.1:18192` | `UnirateRatelimitEchoServer` | 用例 2.x |
 | 并发数 | `127.0.0.1:18181` | `127.0.0.1:18191` | `ConcurrencyEchoServer` | 用例 3.x |
 | 自定义匹配 | `127.0.0.1:18183` | `127.0.0.1:18193` | `CustomMatchEchoServer` | 用例 4.x（多维 AND） |
+| regex_combine | `127.0.0.1:18184` | `127.0.0.1:18194` | `RegexCombineEchoServer` | 用例 5.x（合并阈值开关） |
 | 命名空间 | `default` | | | |
 
-> 端口选自 `18180-18193` 段，避开 `examples/route` 占用的 `18080-18099` 区间。
+> 端口选自 `18180-18194` 段，避开 `examples/route` 占用的 `18080-18099` 区间。
 > consumer 实例与 provider 实例一一对应：`consumer --service` 指向同一个服务，由 SDK 服务发现路由到对应 provider。
 > 自定义匹配用例的 consumer 额外通过 `--caller-service / --caller-ip / --caller-metadata` flag 注入主调身份 header.
 
@@ -125,6 +126,26 @@ chmod +x verify_ratelimit.sh cleanup.sh
 | CALLER_SERVICE | consumer `--caller-service=default/CustomCallerService` → 注入 `X-Polaris-Caller-Service` header → provider 解析 |
 | CALLER_IP | consumer `--caller-ip=10.0.0.1` → 注入 `X-Polaris-Caller-IP` header → provider 解析 |
 | CALLER_METADATA | consumer `--caller-metadata=env=prod` → 注入 `X-Polaris-Caller-Metadata-env` header → provider 解析 |
+
+### QPS 规则 - regex_combine 开关（`ratelimit-e2e-regex-combine-rule`）
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `name` | `ratelimit-e2e-regex-combine-rule` | 规则名 |
+| `service` / `namespace` | `RegexCombineEchoServer` / `default` | 与其他规则用不同服务 |
+| `resource` | `QPS` | reject 策略 |
+| `type` | `LOCAL` | |
+| `method` | **REGEX `/users/.*/orders`** | 正则匹配，多条实际 path 都命中 |
+| `amounts` | 1 条：`maxAmount=4 / 1s` | |
+| `action` | `REJECT` | |
+| `regex_combine` | **首次创建为 `false`；用例 5.2 通过 PUT 翻为 `true`** | 合并阈值开关 |
+
+**配置效果（脚本会动态翻转测试）**：
+
+- `regex_combine=false`（默认 / 5.1）：每条命中 REGEX 的实际 path（如 `/users/100/orders`、`/users/200/orders`）拥有**独立 token bucket**，各自独享 `4/1s`
+- `regex_combine=true`（5.2 翻转后）：所有命中 REGEX 的 path **共享同一 token bucket**，合计 `4/1s`
+
+5.2 结束后脚本自动把 `regex_combine` 翻回 `false`，让规则状态干净。
 
 ## 用例编号
 
@@ -232,6 +253,26 @@ chmod +x verify_ratelimit.sh cleanup.sh
 | 原理 | 自定义匹配规则底层走 QPS reject 限流，按时间窗口计数；新窗口配额清零后，命中规则的请求继续按 `2/1s` 限流。与用例 1.2/2.3/3.2 形成完整对照：**每种限流方案都覆盖"新窗口再次生效"语义** |
 | 预期 | `429 ≥ 2`，无非 200/429 状态码 |
 | 判定 | `429 ≥ 2 && other == 0` → PASS（验证规则在新窗口持续生效，不会"用一次就废"） |
+
+### [用例 5.1] regex_combine=false 多 path 各自独享配额
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 并发向 `http://127.0.0.1:18194/users/100/orders` 和 `http://127.0.0.1:18194/users/200/orders` 各发 5 次 GET（共 10 次），规则 method 为 REGEX `/users/.*/orders` |
+| 原理 | `regex_combine=false`（默认）时，SDK 用"实际请求 path"作为 token bucket 维度——`/users/100/orders` 与 `/users/200/orders` 落到不同 bucket，各自独享 `4/1s` 阈值；每条路径理论限 `5-4=1` 个 |
+| 预期 | 两条 path 各 通过 ≈4 / 限流 ≈1，总 `429 ≥ 2`、`200 ≤ 10`；脚本判定下界容忍跨 2 窗口 |
+| 判定 | `limited ≥ 2 && ok ≤ 10 && other == 0` → PASS（验证默认行为不会合并阈值） |
+
+### [用例 5.2] regex_combine=true 多 path 共享同一阈值（合并阈值生效）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 通过 PUT `/naming/v1/ratelimits` 翻转 `regex_combine=true`，等 SDK 拉新规则（3s）后重复 5.1 的并发请求 |
+| 原理 | `regex_combine=true` 时，SDK 改用"规则配置的 REGEX 字符串"作为 bucket 维度——所有命中 `/users/.*/orders` 的请求落到同一个 bucket，**合计共享** `4/1s`；总放过 ≈4，限流 ≈6 |
+| 预期 | 总 `200 ≈ 4`、`429 ≈ 6`；与 5.1 形成强对比（5.1 通过数 ≈8、5.2 通过数 ≈4） |
+| 判定 | `limited ≥ total - 2*MAX_AMOUNT && ok ≤ 2*MAX_AMOUNT && other == 0` → PASS（具体：`limited ≥ 2 && ok ≤ 8`） |
+
+> **核心对比**：5.1 / 5.2 用同样的请求量、同样的规则阈值，唯一变化是 `regex_combine` 字段。两者通过数差异（8 vs 4）直观证明合并阈值的语义。脚本在 5.2 结束后会自动 PUT 把 `regex_combine` 翻回 `false`，让规则恢复初始状态，避免下次跑 5.1 时偏差。
 
 ## 判定与汇总
 

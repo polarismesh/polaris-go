@@ -26,6 +26,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
+	"github.com/polarismesh/polaris-go/plugin/ratelimiter/common"
 )
 
 // logTag 限流日志统一前缀，便于日志检索过滤.
@@ -64,14 +65,15 @@ func NewConcurrencyQuotaBucket(rule *apitraffic.Rule, windowKey string, logCtx *
 		maxAmount = 1
 		logCtx.GetRateLimitLogger().Warnf(
 			"%s invalid concurrencyAmount.maxAmount=%d for windowKey=%q rule[%s], fallback to 1",
-			logTag, rawAmount, windowKey, ruleID(rule))
+			logTag, rawAmount, windowKey, common.RuleID(rule))
 	}
 	bucket.maxAmount = maxAmount
 	logCtx.GetRateLimitLogger().Infof(
-		"%s created bucket windowKey=%q rule[%s] method=%s maxAmount=%d",
-		logTag, windowKey, ruleID(rule),
+		"%s created bucket windowKey=%q rule[%s] method=%s maxAmount=%d %s",
+		logTag, windowKey, common.RuleID(rule),
 		rule.GetMethod().GetValue().GetValue(),
 		maxAmount,
+		common.FormatRuleSummary(rule),
 	)
 	return bucket
 }
@@ -88,7 +90,7 @@ func (c *ConcurrencyQuotaBucket) GetQuota(curTimeMs int64, token uint32) *model.
 		now := atomic.AddInt64(&c.currentCount, -1)
 		if logger.IsLevelEnabled(log.DebugLog) {
 			logger.Debugf("%s limited rule[%s] current=%d/%d (rolled back to %d)",
-				logTag, ruleID(c.rule), current, c.maxAmount, now)
+				logTag, common.RuleID(c.rule), current, c.maxAmount, now)
 		}
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
@@ -97,7 +99,7 @@ func (c *ConcurrencyQuotaBucket) GetQuota(curTimeMs int64, token uint32) *model.
 	}
 	if logger.IsLevelEnabled(log.DebugLog) {
 		logger.Debugf("%s passed rule[%s] current=%d/%d",
-			logTag, ruleID(c.rule), current, c.maxAmount)
+			logTag, common.RuleID(c.rule), current, c.maxAmount)
 	}
 	// 通过，返回 OK 并注入 release 回调，由上层在请求完成后归还配额
 	resp := &model.QuotaResponse{
@@ -115,7 +117,7 @@ func (c *ConcurrencyQuotaBucket) releaseQuota() {
 	logger := c.logCtx.GetRateLimitLogger()
 	if logger.IsLevelEnabled(log.DebugLog) {
 		logger.Debugf("%s released rule[%s] current=%d/%d",
-			logTag, ruleID(c.rule), now, c.maxAmount)
+			logTag, common.RuleID(c.rule), now, c.maxAmount)
 	}
 }
 
@@ -145,12 +147,4 @@ func (c *ConcurrencyQuotaBucket) GetAmountInfos() []ratelimiter.AmountInfo {
 			MaxAmount:     uint32(c.maxAmount),
 		},
 	}
-}
-
-// ruleID 返回规则的标识（id 优先，缺失时 fallback 到 name），仅用于日志可读性.
-func ruleID(rule *apitraffic.Rule) string {
-	if id := rule.GetId().GetValue(); id != "" {
-		return id
-	}
-	return rule.GetName().GetValue()
 }

@@ -39,18 +39,6 @@ import (
 // logTag reject 插件限流日志统一前缀，便于日志检索过滤；与 reject_concurrency 形成对照.
 const logTag = "[RateLimit][Reject]"
 
-// ruleID 返回规则的标识（id 优先，缺失时 fallback 到 name），仅用于日志可读性；
-// 与 reject_concurrency.ruleID 同义，独立定义避免跨包依赖.
-func ruleID(rule *apitraffic.Rule) string {
-	if rule == nil {
-		return ""
-	}
-	if id := rule.GetId().GetValue(); id != "" {
-		return id
-	}
-	return rule.GetName().GetValue()
-}
-
 // NewRemoteAwareQpsBucket 创建QPS远程限流窗口
 func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *log.ContextLogger) *RemoteAwareQpsBucket {
 	raqb := &RemoteAwareQpsBucket{
@@ -73,11 +61,12 @@ func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *log.Con
 	logger := logCtx.GetRateLimitLogger()
 	rule := criteria.DstRule
 	logger.Infof(
-		"%s created bucket windowKey=%q rule[%s] method=%s type=%s amounts=%s",
-		logTag, criteria.WindowKey, ruleID(rule),
+		"%s created bucket windowKey=%q rule[%s] method=%s type=%s amounts=%s %s",
+		logTag, criteria.WindowKey, common.RuleID(rule),
 		rule.GetMethod().GetValue().GetValue(),
 		rule.GetType().String(),
 		formatAmounts(raqb.tokenBuckets),
+		common.FormatRuleSummary(rule),
 	)
 	return raqb
 }
@@ -190,7 +179,7 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 		if logger.IsLevelEnabled(log.DebugLog) {
 			logger.Debugf(
 				"%s limited rule[%s] windowKey=%s mode=%s stopIndex=%d duration=%dms left=%d",
-				logTag, ruleID(r.rule), r.uniqueKey, mode, stopIndex,
+				logTag, common.RuleID(r.rule), r.uniqueKey, mode, stopIndex,
 				tokenBucket.validDurationMilli, left,
 			)
 		}
@@ -209,7 +198,7 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 	}
 	if logger.IsLevelEnabled(log.DebugLog) {
 		logger.Debugf("%s passed rule[%s] windowKey=%s mode=%s",
-			logTag, ruleID(r.rule), r.uniqueKey, mode)
+			logTag, common.RuleID(r.rule), r.uniqueKey, mode)
 	}
 	return &model.QuotaResponse{
 		Code: model.QuotaResultOk,
