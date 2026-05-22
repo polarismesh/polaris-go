@@ -45,9 +45,10 @@ chmod +x verify_ratelimit.sh cleanup.sh
 | 并发数 | `127.0.0.1:18181` | `127.0.0.1:18191` | `ConcurrencyEchoServer` | 用例 3.x |
 | 自定义匹配 | `127.0.0.1:18183` | `127.0.0.1:18193` | `CustomMatchEchoServer` | 用例 4.x（多维 AND） |
 | regex_combine | `127.0.0.1:18184` | `127.0.0.1:18194` | `RegexCombineEchoServer` | 用例 5.x（合并阈值开关） |
+| GLOBAL 分布式 | `127.0.0.1:18185` (A) `127.0.0.1:18186` (B) `127.0.0.1:18187` (failover) | `127.0.0.1:18195` `127.0.0.1:18197`(failover) | `GlobalRatelimitEchoServer` | 用例 6.x（远端配额，多实例共享，远端降级）|
 | 命名空间 | `default` | | | |
 
-> 端口选自 `18180-18194` 段，避开 `examples/route` 占用的 `18080-18099` 区间。
+> 端口选自 `18180-18197` 段，避开 `examples/route` 占用的 `18080-18099` 区间。
 > consumer 实例与 provider 实例一一对应：`consumer --service` 指向同一个服务，由 SDK 服务发现路由到对应 provider。
 > 自定义匹配用例的 consumer 额外通过 `--caller-service / --caller-ip / --caller-metadata` flag 注入主调身份 header.
 
@@ -146,6 +147,33 @@ chmod +x verify_ratelimit.sh cleanup.sh
 - `regex_combine=true`（5.2 翻转后）：所有命中 REGEX 的 path **共享同一 token bucket**，合计 `4/1s`
 
 5.2 结束后脚本自动把 `regex_combine` 翻回 `false`，让规则状态干净。
+
+### QPS 规则 - 分布式集群限流（`ratelimit-e2e-global-rule`）
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `name` | `ratelimit-e2e-global-rule` | 规则名 |
+| `service` / `namespace` | `GlobalRatelimitEchoServer` / `default` | 与其他规则用不同服务 |
+| `resource` | `QPS` | reject 策略 |
+| `type` | **`GLOBAL`** | **关键差异**：触发 SDK 走远端配额（asyncRateLimitConnector → polaris.limiter） |
+| `method` | EXACT `/echo` | |
+| `amounts` | 1 条：`maxAmount=4 / 1s` | |
+| `action` | `REJECT` | |
+| `failover` | `FAILOVER_LOCAL` | 远端不可达时退化为本地限流，避免"远端拉不到→全放通"误判 |
+| 远端集群 | 默认 `Polaris/polaris.limiter`，可由 `--limiter-namespace` / `--limiter-service` 覆盖 | SDK yaml `provider.limiterNamespace/limiterService` 配置；服务端必须有 `polaris-limiter` 进程注册到指定服务下 |
+
+**配置效果**：
+
+- 与所有 `LOCAL` 规则的核心差异：`LOCAL` 时每个 SDK 实例**各自独享** `4/1s`（多实例时合计 = N×4 个能过），`GLOBAL` 时全集群**合计仅** `4/1s`
+- 测试链路：consumer 通过 polaris 服务发现把请求负载到 provider A/B 两个实例，两边的 SDK 都通过 gRPC 异步上报与拉取同一份配额
+- 失败兜底：如果 polaris.limiter 不可达，`FAILOVER_LOCAL` 让规则退化成本地限流——这种情况下 6.3 的"多实例共享"语义无法验证，会判 FAIL
+
+**远端 limiter 不可达时的本地替代方案**：
+
+当云端 `Polaris/polaris.limiter` 实例的注册 IP 在客户端不可达（例如本地 macOS 跑、limiter 实例是云端内网 IP），有两种解法：
+
+1. 本地起一份 `polaris-limiter`（[release 包](https://github.com/polarismesh/polaris-limiter/releases)），在 polaris-limiter.yaml 把 `register-server.namespace`/`service-name` 设为一个独立服务名（如 `Polaris/polaris.limiter.local`），让它注册到云端 polaris 注册中心；
+2. 跑脚本时加 `--limiter-service polaris.limiter.local` 覆盖默认值，6.x 的 SDK 就会路由到本地 limiter，避开不可达的云端实例。
 
 ## 用例编号
 
@@ -273,6 +301,68 @@ chmod +x verify_ratelimit.sh cleanup.sh
 | 判定 | `limited ≥ total - 2*MAX_AMOUNT && ok ≤ 2*MAX_AMOUNT && other == 0` → PASS（具体：`limited ≥ 2 && ok ≤ 8`） |
 
 > **核心对比**：5.1 / 5.2 用同样的请求量、同样的规则阈值，唯一变化是 `regex_combine` 字段。两者通过数差异（8 vs 4）直观证明合并阈值的语义。脚本在 5.2 结束后会自动 PUT 把 `regex_combine` 翻回 `false`，让规则恢复初始状态，避免下次跑 5.1 时偏差。
+
+### [用例 6.0] polaris.limiter 探测（前置条件）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | GET `/naming/v1/instances?service=polaris.limiter&namespace=Polaris` 检查是否有 healthy + 非 isolate 的实例 |
+| 原理 | GLOBAL 规则要求 SDK 与 polaris.limiter 通过 gRPC 同步配额；服务下没有可用实例时整段 6.x 测试无效 |
+| 预期 | 至少一条健康实例 |
+| 判定 | 有实例 → PASS（继续 6.1～6.5）；无实例 → SKIP（不计入失败，整段 6.x 跳过） |
+
+### [用例 6.1] GLOBAL 多窗口聚合触发限流
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 启动 1 consumer + 2 provider 实例（A/B），**连续 4 个 1s 窗口**，每窗口经 consumer 并发突发 8 次（共 32 次） |
+| 原理 | `type=GLOBAL` 走远端配额；多窗口聚合避开"远端异步上报让单窗口偶发 ok>阈值"的边界抖动——单窗口看会抖，4 窗口聚合后必然稳定 |
+| 预期 | 4 窗口合计 `limited ≥ 4`（每窗口至少 1 限流） |
+| 判定 | `total limited ≥ 4 && other == 0` → PASS |
+
+### [用例 6.2] GLOBAL 新窗口仍能触发限流（与 1.2 单机版对照）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 等过 1 个窗口让 6.1 留下的状态消散，再次连续 4 个窗口并发突发 8 次 |
+| 原理 | 验证 GLOBAL 规则不是"用一次就废"——远端 limiter 按窗口重置配额、SDK 每个窗口重新拉取，规则**持续生效** |
+| 预期 | 与 6.1 一致：`limited ≥ 4` |
+| 判定 | `total limited ≥ 4 && other == 0` → PASS |
+
+### [用例 6.3] GLOBAL 多实例共享配额（核心语义）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 直接打 A/B 两个 provider 端口（绕开 consumer 负载均衡随机性），**连续 4 个窗口**，每窗口同时打 A:18185 并发 5 + B:18186 并发 5（每窗口共 10 次，合计 40 次） |
+| 原理 | 两实例的 SDK 都向同一个 polaris.limiter 拉配额；GLOBAL 行为下**合计**仅 `4/窗口` 阈值；如果错认成 LOCAL，两实例各独享 → 每窗口 ok=8（合 32），与 GLOBAL 形成强对比 |
+| 预期 | 4 窗口合计 `ok ≤ 4*(MAX+2) = 24`、`limited ≥ 4` |
+| 判定 | `total limited ≥ 4 && total ok ≤ 24 && other == 0` → PASS |
+
+> **核心对比**：6.3 与 1.1（LOCAL）形成对比。如果 GLOBAL 真的接通了，**2 个 SDK 实例 40 个请求合计也只有 ≈16 能过**（4 窗口 × 4 阈值）——这是分布式限流相对单机限流的核心增量。
+>
+> 失败排查：如果 `ok > 24`，多半是 polaris.limiter 不可达，FAILOVER_LOCAL 让规则退化为本地限流（每个实例独享 4 → 共 32 能过）；检查 provider SDK 日志 `polaris/log/network/` 下是否有连接到 `polaris.limiter` 的失败记录。
+
+### [用例 6.4] GLOBAL + regex_combine：远端配额下多 path 共享（对照 5.2 单机版）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 通过 PUT 把 5.x 的 regex 规则切换到 `type=GLOBAL` + `regex_combine=true`，等 5s 让 SDK 拉新规则后，**连续 4 个窗口**直接打 5.x 的 regex provider:18184 两条 path（每条并发 5） |
+| 原理 | 规则切到 GLOBAL+regex_combine=true：两条命中同一 REGEX 的 path 共享同一远端 windowKey；阈值 `4/1s` 是全集群（含两 path）合计配额。这是 5.2 的分布式版 |
+| 预期 | 4 窗口合计 `ok ≤ 4*(MAX+2) = 24`、`limited ≥ 4` |
+| 判定 | `total limited ≥ 4 && total ok ≤ 24 && other == 0` → PASS |
+| 前提 | **必须先跑过 5.x**（即没用 `--skip regex`）—— 6.4 复用 5.x 的 regex provider 实例。如果 5.x 被跳过，6.4 自动 SKIP |
+
+> **收尾**：6.4 结束后会自动 PUT 把 regex 规则翻回 `LOCAL+regex_combine=false`，让 5.x 下次跑保持初始状态。
+
+### [用例 6.5] 远端不可达降级到本地（FAILOVER_LOCAL）
+
+| 项 | 内容 |
+| --- | --- |
+| 操作 | 临时把 `POLARIS_LIMITER_SVC` 设为不存在的服务名 `ratelimit-e2e-nonexistent-limiter` → 启动新 provider+consumer → 连续 4 个窗口并发突发 8 次 |
+| 原理 | SDK 服务发现拉不到 limiter 实例 → asyncRateLimitConnector 持续不可达 → bucket 命中 remoteExpired → 规则 failover=FAILOVER_LOCAL → 走 RemoteToLocal 路径，按本地配额限流（不再走远端）。验证降级路径不会全放通也不会 panic |
+| 预期 | 4 窗口合计 `limited ≥ 4`（每窗口至少 1 限流，证明本地配额生效） |
+| 判定 | `total limited ≥ 4 && other == 0` → PASS |
+| 实现 | provider-qps/polaris.yaml 把 `limiterNamespace`/`limiterService` 改成 `${POLARIS_LIMITER_NS}`/`${POLARIS_LIMITER_SVC}` 占位，脚本启动 binary 时通过 env 注入；正常用例用 `Polaris/polaris.limiter`，6.5 单独覆盖为不存在的服务名 |
 
 ## 判定与汇总
 

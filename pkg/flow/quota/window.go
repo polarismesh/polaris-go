@@ -351,6 +351,30 @@ type RateLimitWindow struct {
 	status int64
 	// 与服务端的时间差
 	timeDiff int64
+	// remoteErrLogLastNano 同类"远端不可达"错误最近一次打 Errorf 的时间戳；
+	// 用于配合 remoteErrLogIntervalNano 做日志限频，避免 ticker（10ms）×多窗口 把 ratelimit log 刷爆
+	// （FAILOVER_LOCAL 场景下远端拉不到是预期内的退化，不应每 10ms 一行 Errorf）.
+	remoteErrLogLastNano int64
+	// remoteErrLogSuppressedCount 限频期间被压制的同类错误次数；解除压制时一并打出来作为提示.
+	remoteErrLogSuppressedCount int64
+}
+
+// remoteErrLogIntervalNano 同一窗口同类远端错误日志的最小输出间隔（5s）；
+// 选 5s 是平衡：足以让"持续不可达"周期性提醒一次，又不会刷屏；与 ticker 10ms 周期形成 500:1 的衰减.
+const remoteErrLogIntervalNano = int64(5 * time.Second)
+
+// shouldLogRemoteErr 判断当前窗口是否应该打这次远端错误：首次必打；后续 5s 内只累计计数返回 false；
+// 5s 后再打一次，并把累计 suppressed 数量包在错误信息里。返回 (是否打印, 累计被压制次数).
+func (r *RateLimitWindow) shouldLogRemoteErr(nowNano int64) (bool, int64) {
+	last := atomic.LoadInt64(&r.remoteErrLogLastNano)
+	if last == 0 || nowNano-last >= remoteErrLogIntervalNano {
+		if atomic.CompareAndSwapInt64(&r.remoteErrLogLastNano, last, nowNano) {
+			return true, atomic.SwapInt64(&r.remoteErrLogSuppressedCount, 0)
+		}
+		// 竞争失败回退到累计路径
+	}
+	atomic.AddInt64(&r.remoteErrLogSuppressedCount, 1)
+	return false, 0
 }
 
 // 超过多长时间后进行淘汰，淘汰后需要重新init

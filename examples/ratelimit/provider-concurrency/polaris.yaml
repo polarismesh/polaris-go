@@ -6,5 +6,7 @@ global:
 provider:
   rateLimit:
     enable: true
-  limiterNamespace: Polaris
-  limiterService: polaris.limiter
+    # 与 provider-qps 保持一致：limiter 字段嵌套在 rateLimit: 下，由脚本通过 env 注入.
+    # concurrency 限流是纯本地模式，实际不依赖远端 limiter，这里保持配置形态一致即可.
+    limiterNamespace: ${POLARIS_LIMITER_NS}
+    limiterService: ${POLARIS_LIMITER_SVC}
