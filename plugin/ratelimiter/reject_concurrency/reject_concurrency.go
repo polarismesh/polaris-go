@@ -17,7 +17,7 @@
 
 // Package reject_concurrency 提供并发数限流插件，对齐 polaris-java 的 RejectConcurrencyRateLimiter.
 // 该插件在 Rule.Resource == CONCURRENCY 时被框架选用，纯本地模式，无远程同步依赖。
-package reject_concurrency
+package rejectconcurrency
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"

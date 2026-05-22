@@ -117,7 +117,7 @@ func unifiedRules(inRules []*apitraffic.Rule) []*apitraffic.Rule {
 					Type:  apitraffic.MatchArgument_METHOD,
 					Value: labelValue,
 				})
-			} else if labelKey == model.LabelKeyCallerIp {
+			} else if labelKey == model.LabelKeyCallerIP {
 				matchArguments = append(matchArguments, &apitraffic.MatchArgument{
 					Type:  apitraffic.MatchArgument_CALLER_IP,
 					Value: labelValue,

@@ -54,10 +54,14 @@ const (
 	LabelKeyHeader         = "$header."
 	LabelKeyQuery          = "$query."
 	LabelKeyCallerService  = "$caller_service."
-	LabelKeyCallerIp       = "$caller_ip"
+	LabelKeyCallerIP       = "$caller_ip"
 	LabelKeyPath           = "$Path"
 	LabelKeyCookie         = "$cookie."
 	LabelKeyCallerMetadata = "$caller_metadata."
+
+	// LabelKeyCallerIp Deprecated: 命名不符合 Go 规范（IP 应大写），保留为 LabelKeyCallerIP 的别名以兼容外部依赖；
+	// 新代码请使用 LabelKeyCallerIP.
+	LabelKeyCallerIp = LabelKeyCallerIP //nolint:staticcheck
 )
 
 // Argument 限流/路由参数
@@ -160,7 +164,7 @@ func BuildArgumentFromLabel(labelKey string, labelValue string) Argument {
 	if labelKey == LabelKeyMethod {
 		return BuildMethodArgument(labelValue)
 	}
-	if labelKey == LabelKeyCallerIp {
+	if labelKey == LabelKeyCallerIP {
 		return BuildCallerIPArgument(labelValue)
 	}
 	if labelKey == LabelKeyPath {
@@ -189,7 +193,7 @@ func (a Argument) ToLabels(labels map[string]string) {
 	case ArgumentTypeMethod:
 		labels[LabelKeyMethod] = a.value
 	case ArgumentTypeCallerIP:
-		labels[LabelKeyCallerIp] = a.value
+		labels[LabelKeyCallerIP] = a.value
 	case ArgumentTypeHeader:
 		labels[LabelKeyHeader+a.key] = a.value
 	case ArgumentTypeQuery:

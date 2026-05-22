@@ -182,7 +182,7 @@ func findTrafficValue(arg *apitraffic.SourceMatch, sourceService model.ServiceMe
 	case apitraffic.SourceMatch_METHOD:
 		return lookup(model.LabelKeyMethod)
 	case apitraffic.SourceMatch_CALLER_IP:
-		return lookup(model.LabelKeyCallerIp)
+		return lookup(model.LabelKeyCallerIP)
 	case apitraffic.SourceMatch_PATH:
 		return lookup(model.LabelKeyPath)
 	case apitraffic.SourceMatch_CUSTOM:

@@ -112,7 +112,7 @@ func TestFindTrafficValue_SixDimensions(t *testing.T) {
 		},
 		{
 			name:     "CALLER_IP hits $caller_ip",
-			metadata: map[string]string{model.LabelKeyCallerIp: "10.0.0.1"},
+			metadata: map[string]string{model.LabelKeyCallerIP: "10.0.0.1"},
 			arg:      buildSourceMatch(apitraffic.SourceMatch_CALLER_IP, "", "10.0.0.1"),
 			expect:   "10.0.0.1",
 		},
