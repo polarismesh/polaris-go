@@ -34,8 +34,20 @@ func (r *RateLimitWindow) DoAsyncRemoteInit() error {
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
 	if err != nil {
-		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf("fail to call RateLimitService.GetMessageSender, service %s, error is %s",
-			r.remoteCluster, err)
+		// 限频：FAILOVER_LOCAL 场景下远端拉不到是设计内的退化路径；
+		// ticker 每 10ms 触发一次，不限频会让 ratelimit log 在几秒内被刷爆（500+条/min），淹没真正的限流判定行.
+		// 首次必打，之后 5s 一条；累计被压制的次数一并报告，便于排查时知道仍然在反复重试.
+		if shouldLog, suppressed := r.shouldLogRemoteErr(time.Now().UnixNano()); shouldLog {
+			if suppressed > 0 {
+				r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Errorf(
+					"fail to call RateLimitService.GetMessageSender, service %s, error is %s (suppressed %d similar errors in last %s)",
+					r.remoteCluster, err, suppressed, time.Duration(remoteErrLogIntervalNano))
+			} else {
+				r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Errorf(
+					"fail to call RateLimitService.GetMessageSender, service %s, error is %s",
+					r.remoteCluster, err)
+			}
+		}
 		return err
 	}
 	timeDiff := sender.AdjustTime()
@@ -53,9 +65,19 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	}
 	sender, err := r.AsyncRateLimitConnector().GetMessageSender(r.remoteCluster, r.hashValue)
 	if err != nil {
-		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf(
-			"fail to call RateLimitService.GetMessageSender, service %s, error is %s",
-			r.remoteCluster, err)
+		// 与 DoAsyncRemoteInit 共用同一个限频窗口（共享 r.remoteErrLogLastNano），
+		// 避免两个调用点交替打日志破坏限频效果.
+		if shouldLog, suppressed := r.shouldLogRemoteErr(time.Now().UnixNano()); shouldLog {
+			if suppressed > 0 {
+				r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Errorf(
+					"fail to call RateLimitService.GetMessageSender, service %s, error is %s (suppressed %d similar errors in last %s)",
+					r.remoteCluster, err, suppressed, time.Duration(remoteErrLogIntervalNano))
+			} else {
+				r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Errorf(
+					"fail to call RateLimitService.GetMessageSender, service %s, error is %s",
+					r.remoteCluster, err)
+			}
+		}
 		return err
 	}
 	if !sender.HasInitialized(r.SvcKey, r.Labels) {
@@ -69,7 +91,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 	request := r.acquireRequest()
 	err = sender.SendReportRequest(request)
 	if err != nil {
-		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Errorf(
+		r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Errorf(
 			"fail to call RateLimitService.Acquire, service %s, labels %s, error is %s",
 			r.SvcKey, r.Labels, err)
 		return err
@@ -80,7 +102,7 @@ func (r *RateLimitWindow) DoAsyncRemoteAcquire() error {
 // OnInitResponse 应答回调函数
 func (r *RateLimitWindow) OnInitResponse(counter *slimiter.QuotaCounter, duration time.Duration, srvTimeMilli int64) {
 	r.SetStatus(Initialized)
-	r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
+	r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]window %s changed to initialized", r.uniqueKey)
 	r.trafficShapingBucket.OnRemoteUpdate(ratelimiter.RemoteQuotaResult{
 		Left:            counter.GetLeft(),
 		ClientCount:     counter.GetClientCount(),

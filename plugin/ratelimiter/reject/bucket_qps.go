@@ -18,8 +18,10 @@
 package reject
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,19 +36,51 @@ import (
 	"github.com/polarismesh/polaris-go/plugin/ratelimiter/common"
 )
 
+// logTag reject 插件限流日志统一前缀，便于日志检索过滤；与 reject_concurrency 形成对照.
+const logTag = "[RateLimit][Reject]"
+
 // NewRemoteAwareQpsBucket 创建QPS远程限流窗口
 func NewRemoteAwareQpsBucket(criteria *ratelimiter.InitCriteria, logCtx *log.ContextLogger) *RemoteAwareQpsBucket {
 	raqb := &RemoteAwareQpsBucket{
 		uniqueKey:      criteria.WindowKey,
 		identifierPool: &sync.Pool{},
 		logCtx:         logCtx,
+		rule:           criteria.DstRule,
 	}
 	raqb.tokenBuckets = initTokenBuckets(criteria.DstRule, criteria.WindowKey, logCtx)
 	raqb.tokenBucketMap = make(map[int64]*TokenBucket, len(raqb.tokenBuckets))
 	for _, tokenBucket := range raqb.tokenBuckets {
 		raqb.tokenBucketMap[tokenBucket.validDurationMilli] = tokenBucket
 	}
+	// bucket 生命周期开端用 info 输出一条，与 reject_concurrency 对齐：
+	// 一个 (windowKey, ruleId) 仅在首次/规则变更时创建，频率低、对排查"规则下发但未生效"类问题最有价值，
+	// 因此用 info 级别确保默认日志级别下也能看到.
+	//
+	// windowKey 格式 = "{Service}#{Namespace}[#{Labels}]" （由 pkg/flow/quota/window.go::buildQuotaHashValue 生成），
+	// 已经覆盖 service/namespace/labels 三段，这里不再重复打印；method 与 amounts (Amount/Duration 序列) 单独列出便于阅读.
+	logger := logCtx.GetRateLimitLogger()
+	rule := criteria.DstRule
+	logger.Infof(
+		"%s created bucket windowKey=%q rule[%s] method=%s type=%s amounts=%s %s",
+		logTag, criteria.WindowKey, common.RuleID(rule),
+		rule.GetMethod().GetValue().GetValue(),
+		rule.GetType().String(),
+		formatAmounts(raqb.tokenBuckets),
+		common.FormatRuleSummary(rule),
+	)
 	return raqb
+}
+
+// formatAmounts 把令牌桶序列格式化为 "[N1/D1ms,N2/D2ms]" 形式，便于 info 日志一行展示规则阈值.
+func formatAmounts(buckets TokenBuckets) string {
+	if len(buckets) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(buckets))
+	for _, b := range buckets {
+		parts = append(parts, fmt.Sprintf("%d/%dms", b.ruleTokenAmount, b.validDurationMilli))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
 }
 
 // RemoteAwareQpsBucket 远程配额分配的算法桶
@@ -60,6 +94,8 @@ type RemoteAwareQpsBucket struct {
 	// 存放[]UpdateIdentifier数据
 	identifierPool *sync.Pool
 	logCtx         *log.ContextLogger
+	// rule 关联的限流规则，仅用于日志可读性
+	rule *apitraffic.Rule
 }
 
 const (
@@ -86,6 +122,23 @@ const (
 	Local
 )
 
+// String 返回 TokenBucketMode 的可读字符串表示，便于日志排查；
+// 未知枚举值统一回退为 "Unknown(<int>)" 以保留原始信息.
+func (m TokenBucketMode) String() string {
+	switch m {
+	case Unknown:
+		return "Unknown"
+	case Remote:
+		return "Remote"
+	case RemoteToLocal:
+		return "RemoteToLocal"
+	case Local:
+		return "Local"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(m))
+	}
+}
+
 // Allocate 执行配额分配操作
 func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.QuotaResponse {
 	if len(r.tokenBuckets) == 0 {
@@ -108,6 +161,7 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 		}
 	}
 	usedRemoteQuota := mode == Remote
+	logger := r.logCtx.GetRateLimitLogger()
 	// 有一个扣除不成功，则进行限流
 	if stopIndex >= 0 {
 		// 出现了限流
@@ -121,8 +175,19 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 			tokenBucket := r.tokenBuckets[i]
 			tokenBucket.GiveBackToken(&identifiers[i], tokenPerAlloc, mode)
 		}
+		// 限流也是热路径（高 QPS 场景下被拒请求可能数倍于通过），先做 IsLevelEnabled 闸门
+		if logger.IsLevelEnabled(log.DebugLog) {
+			logger.Debugf(
+				"%s limited rule[%s] windowKey=%s mode=%s stopIndex=%d duration=%dms left=%d",
+				logTag, common.RuleID(r.rule), r.uniqueKey, mode, stopIndex,
+				tokenBucket.validDurationMilli, left,
+			)
+		}
+		// info 字段格式 "<resource>:<amount>/<duration>"，例如 "QPS:10/1s"，
+		windowDur := time.Duration(tokenBucket.validDurationMilli) * time.Millisecond
 		return &model.QuotaResponse{
 			Code: model.QuotaResultLimited,
+			Info: fmt.Sprintf("%s:%d/%s", r.rule.GetResource().String(), tokenBucket.ruleTokenAmount, windowDur),
 		}
 	}
 	// 记录分配的配额
@@ -130,6 +195,10 @@ func (r *RemoteAwareQpsBucket) Allocate(curTimeMs int64, token uint32) *model.Qu
 		if usedRemoteQuota {
 			tokenBucket.ConfirmPassed(token, curTimeMs)
 		}
+	}
+	if logger.IsLevelEnabled(log.DebugLog) {
+		logger.Debugf("%s passed rule[%s] windowKey=%s mode=%s",
+			logTag, common.RuleID(r.rule), r.uniqueKey, mode)
 	}
 	return &model.QuotaResponse{
 		Code: model.QuotaResultOk,
@@ -161,14 +230,14 @@ func (r *RemoteAwareQpsBucket) SetRemoteQuota(remoteQuotas ratelimiter.RemoteQuo
 			// 当前周期没有更新，则重置当前周期配额，避免出现时间周期开始时候的误限
 			remoteQuotas.ServerTimeMilli = curStartTimeMilli
 			remoteQuotas.Left = tokenBucket.GetRuleTotal()
-			r.logCtx.GetBaseLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
+			r.logCtx.GetRateLimitLogger().Warnf("[RateLimit]reset remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft is %d, "+
 				"reset to %d", clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli,
 				remoteStartTimeMilli, durationMilli, remoteLeft, remoteQuotas.Left)
 		} else {
 			tokenBucket.UpdateRemoteClientCount(remoteQuotas)
 			// 不在一个时间段内，丢弃
-			r.logCtx.GetBaseLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
+			r.logCtx.GetRateLimitLogger().Warnf("[RateLimit]Drop remote quota, clientTime %d, "+
 				"curTimeMilli %d(startMilli %d), remoteTimeMilli %d(startMilli %d), interval %d, remoteLeft %d",
 				clientTime, remoteQuotas.ClientTimeMilli, curStartTimeMilli, remoteQuotas.ServerTimeMilli, remoteStartTimeMilli,
 				durationMilli, remoteLeft)
@@ -312,7 +381,7 @@ func (t *TokenBucket) updateRemoteClientCount(remoteQuotas ratelimiter.RemoteQuo
 		}
 		lastClientCount = atomic.SwapUint32(&t.instanceCount, curClientCount)
 		if lastClientCount != curClientCount {
-			t.logCtx.GetBaseLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
+			t.logCtx.GetRateLimitLogger().Infof("[RateLimit]clientCount change from %d to %d, windowKey %s\n",
 				lastClientCount, curClientCount, t.windowKey)
 		}
 		atomic.StoreInt64(&t.lastRemoteClientUpdateMilli, remoteQuotas.ServerTimeMilli)

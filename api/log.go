@@ -69,6 +69,8 @@ const (
 	DefaultRouteLogLevel = log.DefaultRouteLogLevel
 	// DefaultAuthLogLevel 默认服务鉴权日志级别
 	DefaultAuthLogLevel = log.DefaultAuthLogLevel
+	// DefaultRateLimitLogLevel 默认限流日志级别
+	DefaultRateLimitLogLevel = log.DefaultRateLimitLogLevel
 )
 
 // SetBaseLogger 设置基础日志对象
@@ -161,6 +163,16 @@ func GetAuthLogger() Logger {
 	return log.GetAuthLogger()
 }
 
+// SetRateLimitLogger 设置限流日志对象
+func SetRateLimitLogger(logger Logger) {
+	log.SetRateLimitLogger(logger)
+}
+
+// GetRateLimitLogger 获取限流日志对象
+func GetRateLimitLogger() Logger {
+	return log.GetRateLimitLogger()
+}
+
 // ConfigLoggers 全局配置日志对象
 func ConfigLoggers(logDir string, logLevel int) error {
 	var err error
@@ -193,6 +205,9 @@ func ConfigLoggers(logDir string, logLevel int) error {
 	}
 	if err = ConfigAuthLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigAuthLogger: %v", err)
+	}
+	if err = ConfigRateLimitLogger(logDir, logLevel); err != nil {
+		return fmt.Errorf("fail to ConfigRateLimitLogger: %v", err)
 	}
 	return nil
 }
@@ -257,6 +272,12 @@ func ConfigAuthLogger(logDir string, logLevel int) error {
 	return log.ConfigAuthLogger(log.DefaultLogger, option)
 }
 
+// ConfigRateLimitLogger 配置限流日志对象
+func ConfigRateLimitLogger(logDir string, logLevel int) error {
+	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultRateLimitLogRotationPath), logLevel)
+	return log.ConfigRateLimitLogger(log.DefaultLogger, option)
+}
+
 // SetLoggersLevel 设置所有日志级别
 func SetLoggersLevel(loglevel int) error {
 	var err error
@@ -299,6 +320,10 @@ func SetLoggersLevel(loglevel int) error {
 	logErr = log.GetAuthLogger().SetLogLevel(loglevel)
 	if nil != logErr {
 		err = multierror.Append(err, multierror.Prefix(err, "fail to set auth logLevel"))
+	}
+	logErr = log.GetRateLimitLogger().SetLogLevel(loglevel)
+	if nil != logErr {
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set ratelimit logLevel"))
 	}
 	return err
 }
@@ -365,6 +390,12 @@ func SetLoggersDir(logDir string) error {
 	if err = log.ConfigAuthLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default auth logger with logDir %s", logDir)))
+	}
+	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultRateLimitLogRotationPath),
+		DefaultRateLimitLogLevel)
+	if err = log.ConfigRateLimitLogger(log.DefaultLogger, option); err != nil {
+		errs = multierror.Append(errs, multierror.Prefix(err,
+			fmt.Sprintf("fail to create default ratelimit logger with logDir %s", logDir)))
 	}
 	return errs
 }

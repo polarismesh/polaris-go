@@ -41,6 +41,8 @@ const (
 	DefaultRouteLogLevel = DefaultLogLevel
 	// DefaultAuthLogLevel 默认服务鉴权日志级别
 	DefaultAuthLogLevel = DefaultLogLevel
+	// DefaultRateLimitLogLevel 默认限流日志级别
+	DefaultRateLimitLogLevel = DefaultLogLevel
 	// 默认基础日志名
 	baseLoggerName = "base"
 	// 默认统计日志名
@@ -61,6 +63,8 @@ const (
 	routeLoggerName = "route"
 	// 默认服务鉴权日志名
 	authLoggerName = "auth"
+	// 默认限流日志名
+	rateLimitLoggerName = "ratelimit"
 )
 
 const (
@@ -94,6 +98,8 @@ const (
 	DefaultRouteLogRotationPath = "/route/polaris-route.log"
 	// DefaultAuthLogRotationPath 默认服务鉴权日志滚动文件
 	DefaultAuthLogRotationPath = "/auth/polaris-auth.log"
+	// DefaultRateLimitLogRotationPath 默认限流日志滚动文件
+	DefaultRateLimitLogRotationPath = "/ratelimit/polaris-ratelimit.log"
 	// DefaultBaseLogRotationFile 默认基础日志滚动文件全路径
 	DefaultBaseLogRotationFile = DefaultLogRotationRootDir + DefaultBaseLogRotationPath
 	// DefaultStatLogRotationFile 默认统计日志滚动文件全路径
@@ -114,4 +120,6 @@ const (
 	DefaultRouteLogRotationFile = DefaultLogRotationRootDir + DefaultRouteLogRotationPath
 	// DefaultAuthLogRotationFile 默认服务鉴权日志滚动文件全路径
 	DefaultAuthLogRotationFile = DefaultLogRotationRootDir + DefaultAuthLogRotationPath
+	// DefaultRateLimitLogRotationFile 默认限流日志滚动文件全路径
+	DefaultRateLimitLogRotationFile = DefaultLogRotationRootDir + DefaultRateLimitLogRotationPath
 )

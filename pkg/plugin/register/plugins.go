@@ -54,6 +54,7 @@ import (
 	_ "github.com/polarismesh/polaris-go/plugin/lossless/losslessController"
 	_ "github.com/polarismesh/polaris-go/plugin/metrics/prometheus"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/reject"
+	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/reject_concurrency"
 	_ "github.com/polarismesh/polaris-go/plugin/ratelimiter/unirate"
 	_ "github.com/polarismesh/polaris-go/plugin/serverconnector/grpc"
 	_ "github.com/polarismesh/polaris-go/plugin/servicerouter/canary"

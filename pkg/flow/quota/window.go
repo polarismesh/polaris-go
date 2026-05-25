@@ -157,7 +157,7 @@ func (rs *RateLimitWindowSet) OnWindowExpired(nowMilli int64, window *RateLimitW
 	if !window.Expired(nowMilli) {
 		return false
 	}
-	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
+	rs.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]window expired, key=%s, nowMilli=%d, expireDuration=%d",
 		window.uniqueKey, nowMilli, model.ToMilliSeconds(window.expireDuration))
 	revision := window.Rule.GetRevision().GetValue()
 	container := rs.windowByRule[revision]
@@ -240,13 +240,13 @@ func (rs *RateLimitWindowSet) OnServiceUpdated(svcEventObject *common.ServiceEve
 func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	container := rs.windowByRule[revision]
 	delete(rs.windowByRule, revision)
-	rs.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]container %s has deleted", revision)
+	rs.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]container %s has deleted", revision)
 	if nil == container {
 		return
 	}
 	if nil != container.MainWindow {
 		rs.deleteWindow(container.MainWindow)
-		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetRateLimitLogger().Infof(
 			"[RateLimit]container main window %s has deleted", container.MainWindow.uniqueKey)
 	}
 	if len(container.WindowByLabel) == 0 {
@@ -254,7 +254,7 @@ func (rs *RateLimitWindowSet) deleteContainer(revision string) {
 	}
 	for _, window := range container.WindowByLabel {
 		rs.deleteWindow(window)
-		rs.flowAssistant.logCtx.GetBaseLogger().Infof(
+		rs.flowAssistant.logCtx.GetRateLimitLogger().Infof(
 			"[RateLimit]container spread window %s has deleted", window.uniqueKey)
 	}
 }
@@ -351,6 +351,30 @@ type RateLimitWindow struct {
 	status int64
 	// 与服务端的时间差
 	timeDiff int64
+	// remoteErrLogLastNano 同类"远端不可达"错误最近一次打 Errorf 的时间戳；
+	// 用于配合 remoteErrLogIntervalNano 做日志限频，避免 ticker（10ms）×多窗口 把 ratelimit log 刷爆
+	// （FAILOVER_LOCAL 场景下远端拉不到是预期内的退化，不应每 10ms 一行 Errorf）.
+	remoteErrLogLastNano int64
+	// remoteErrLogSuppressedCount 限频期间被压制的同类错误次数；解除压制时一并打出来作为提示.
+	remoteErrLogSuppressedCount int64
+}
+
+// remoteErrLogIntervalNano 同一窗口同类远端错误日志的最小输出间隔（5s）；
+// 选 5s 是平衡：足以让"持续不可达"周期性提醒一次，又不会刷屏；与 ticker 10ms 周期形成 500:1 的衰减.
+const remoteErrLogIntervalNano = int64(5 * time.Second)
+
+// shouldLogRemoteErr 判断当前窗口是否应该打这次远端错误：首次必打；后续 5s 内只累计计数返回 false；
+// 5s 后再打一次，并把累计 suppressed 数量包在错误信息里。返回 (是否打印, 累计被压制次数).
+func (r *RateLimitWindow) shouldLogRemoteErr(nowNano int64) (bool, int64) {
+	last := atomic.LoadInt64(&r.remoteErrLogLastNano)
+	if last == 0 || nowNano-last >= remoteErrLogIntervalNano {
+		if atomic.CompareAndSwapInt64(&r.remoteErrLogLastNano, last, nowNano) {
+			return true, atomic.SwapInt64(&r.remoteErrLogSuppressedCount, 0)
+		}
+		// 竞争失败回退到累计路径
+	}
+	atomic.AddInt64(&r.remoteErrLogSuppressedCount, 1)
+	return false, 0
 }
 
 // 超过多长时间后进行淘汰，淘汰后需要重新init
@@ -390,13 +414,14 @@ func NewRateLimitWindow(windowSet *RateLimitWindowSet, rule *apitraffic.Rule,
 	window.uniqueKey, window.hashValue = window.buildQuotaHashValue()
 	window.Rule = rule
 	window.expireDuration = getExpireDuration(rule)
-	if rule.GetType() == apitraffic.Rule_GLOBAL {
+	// 并发数限流为纯本地模式，不需要远程集群信息；只有 GLOBAL 类型的 QPS 规则才填充 remoteCluster
+	if rule.GetResource() != apitraffic.Rule_CONCURRENCY && rule.GetType() == apitraffic.Rule_GLOBAL {
 		window.remoteCluster.Namespace = windowSet.flowAssistant.remoteNamespace
 		window.remoteCluster.Service = windowSet.flowAssistant.remoteService
 	}
 	window.syncParam.ControlParam = commonRequest.ControlParam
 
-	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, rule.GetAction().GetValue())
+	window.rateLimiter = createBehavior(windowSet.flowAssistant.supplier, resolveRateLimiterName(rule))
 	// 初始化流量整形窗口
 	window.trafficShapingBucket = window.rateLimiter.InitQuota(
 		&ratelimiter.InitCriteria{DstRule: rule, WindowKey: window.uniqueKey})
@@ -431,12 +456,17 @@ func (r *RateLimitWindow) toServerTimeMilli(timeMilli int64) int64 {
 func (r *RateLimitWindow) UpdateTimeDiff(timeDiff int64) {
 	lastTimeDiff := atomic.SwapInt64(&r.timeDiff, timeDiff)
 	if lastTimeDiff != timeDiff {
-		r.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
+		r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit] bucket %s has updated timeDiff to %d", r.uniqueKey, timeDiff)
 	}
 }
 
 // buildRemoteConfigMode 构建限流模式及集群
 func (r *RateLimitWindow) buildRemoteConfigMode(windowSet *RateLimitWindowSet, rule *apitraffic.Rule) {
+	// 并发数限流强制走本地模式，无视 Rule.Type / Cluster 配置，避免发起远程 init/acquire
+	if rule.GetResource() == apitraffic.Rule_CONCURRENCY {
+		r.configMode = model.ConfigQuotaLocalMode
+		return
+	}
 	// 解析限流集群配置
 	if rule.GetType() == apitraffic.Rule_LOCAL {
 		r.configMode = model.ConfigQuotaLocalMode
@@ -467,6 +497,17 @@ func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 	uniqueKey := builder.String()
 	value, _ := model.HashStr(uniqueKey)
 	return uniqueKey, value
+}
+
+// resolveRateLimiterName 根据规则解析应该使用的限流插件名.
+// 选择规则：
+//   - Rule.Resource == CONCURRENCY 时强制走并发数限流插件，无视 Rule.Action
+//   - 否则使用 Rule.Action 指定的插件（QPS 限流：reject / unirate / ...）
+func resolveRateLimiterName(rule *apitraffic.Rule) string {
+	if rule.GetResource() == apitraffic.Rule_CONCURRENCY {
+		return config.DefaultConcurrencyRateLimiter
+	}
+	return rule.GetAction().GetValue()
 }
 
 // createBehavior 根据限流行为名获取限流算法插件

@@ -342,6 +342,46 @@ consumer:
       - warmup
 # 被调方配置
 provider:
+  # 限流配置
+  rateLimit:
+    # 描述：是否启用限流能力
+    # 类型：bool
+    # 默认值：true（DefaultRateLimitEnable）
+    enable: true
+    # 描述：本地最多缓存的限流窗口数量；超出后旧窗口会被淘汰，避免无限增长
+    # 类型：int
+    # 默认值：20000（MaxRateLimitWindowSize）
+    maxWindowSize: 20000
+    # 描述：限流窗口超时清理周期；空闲超过该周期的窗口会被回收
+    # 类型：duration
+    # 格式：^\d+(ms|s|m|h)$
+    # 默认值：1m（DefaultRateLimitPurgeInterval）
+    purgeInterval: 1m
+    # 描述：远程限流（type=GLOBAL）所对接的限流服务命名空间
+    # 类型：string
+    # 默认值：Polaris（DefaultLimiterNamespace）
+    limiterNamespace: Polaris
+    # 描述：远程限流（type=GLOBAL）所对接的限流服务名
+    # 类型：string
+    # 默认值：polaris.limiter（DefaultLimiterService）
+    # 注意：禁止使用 polaris.metric（ForbidServerMetricService），SDK 会拒绝该服务名
+    limiterService: polaris.limiter
+    # 描述：限流插件配置；不同 rule.action 会路由到不同插件
+    #   - reject       : 漏桶/令牌桶拒绝型 QPS 限流（rule.resource=QPS && action=reject）
+    #   - unirate      : 匀速排队 QPS 限流（rule.action=unirate），支持最大排队时间
+    #   - concurrency  : 并发数限流（rule.resource=CONCURRENCY），纯本地原子计数
+    plugin:
+      # 匀速排队限流器配置
+      unirate:
+        # 描述：请求被排队等待时的最大允许排队时长；超出则直接拒绝
+        # 当 rule.maxQueueDelay 为 0 时回退到该值；rule 上配置非 0 则以 rule 为准
+        # 类型：duration
+        # 格式：^\d+(ms|s|m|h)$
+        # 默认值：1s（unirate.defaultMaxQueuingTime）
+        maxQueuingTime: 1s
+      # reject / concurrency 当前没有暴露 yaml 字段，使用插件内默认行为即可
+      # reject: {}
+      # concurrency: {}
   # 无损上下线配置
   lossless:
     # 是否启用无损上下线, 默认为false

@@ -15,7 +15,12 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package unirate
+// Package rejectconcurrency 提供并发数限流插件，实现纯本地的并发计数语义。
+// 当限流规则 Rule.Resource == CONCURRENCY 时由框架选用本插件，无远程同步依赖。
+//
+// 目录名 reject_concurrency 带下划线（与同目录下的 reject、unirate 模块命名风格保持一致），
+// 但 Go 包名不允许下划线，故包名收敛为 rejectconcurrency.
+package rejectconcurrency
 
 import (
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -26,51 +31,46 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 )
 
-// RateLimiterUniformRate 基于匀速排队策略的限流控制器
-type RateLimiterUniformRate struct {
+// RateLimiterRejectConcurrency 基于本地并发数计数的限流控制器
+type RateLimiterRejectConcurrency struct {
 	*plugin.PluginBase
-	cfg    *Config
 	logCtx *log.ContextLogger
 }
 
 // Type 插件类型
-func (g *RateLimiterUniformRate) Type() common.Type {
+func (g *RateLimiterRejectConcurrency) Type() common.Type {
 	return common.TypeRateLimiter
 }
 
 // Name 插件名，一个类型下插件名唯一
-func (g *RateLimiterUniformRate) Name() string {
-	return config.DefaultUniformRateLimiter
+func (g *RateLimiterRejectConcurrency) Name() string {
+	return config.DefaultConcurrencyRateLimiter
 }
 
 // Init 初始化插件
-func (g *RateLimiterUniformRate) Init(ctx *plugin.InitContext) error {
+func (g *RateLimiterRejectConcurrency) Init(ctx *plugin.InitContext) error {
 	g.PluginBase = plugin.NewPluginBase(ctx)
 	g.logCtx = ctx.ValueCtx.GetContextLogger()
-	cfgValue := ctx.Config.GetProvider().GetRateLimit().GetPluginConfig(g.Name())
-	if cfgValue != nil {
-		g.cfg = cfgValue.(*Config)
-	}
 	return nil
 }
 
 // Destroy 销毁插件，可用于释放资源
-func (g *RateLimiterUniformRate) Destroy() error {
+func (g *RateLimiterRejectConcurrency) Destroy() error {
 	return nil
 }
 
 // IsEnable enable ?
-func (g *RateLimiterUniformRate) IsEnable(cfg config.Configuration) bool {
+func (g *RateLimiterRejectConcurrency) IsEnable(cfg config.Configuration) bool {
 	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
-// InitQuota 初始化并创建限流窗口
+// InitQuota 初始化并创建并发数限流窗口
 // 主流程会在首次调用，以及规则对象变更的时候，调用该方法
-func (g *RateLimiterUniformRate) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
-	return createLeakyBucket(criteria, g.cfg, g.logCtx)
+func (g *RateLimiterRejectConcurrency) InitQuota(criteria *ratelimiter.InitCriteria) ratelimiter.QuotaBucket {
+	return NewConcurrencyQuotaBucket(criteria.DstRule, criteria.WindowKey, g.logCtx)
 }
 
 // init 注册插件
 func init() {
-	plugin.RegisterConfigurablePlugin(&RateLimiterUniformRate{}, &Config{})
+	plugin.RegisterPlugin(&RateLimiterRejectConcurrency{})
 }

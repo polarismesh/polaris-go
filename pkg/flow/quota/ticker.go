@@ -70,7 +70,7 @@ func (r *RemoteQuotaCallBack) Process(
 	rateLimitWindow.WindowSet.PurgeWindows(nowMilli)
 	// 规则变更触发的删除
 	if rateLimitWindow.GetStatus() == Deleted {
-		rateLimitWindow.WindowSet.flowAssistant.logCtx.GetBaseLogger().Infof("[RateLimit]window %s deleted, start terminate task", taskKey.(string))
+		rateLimitWindow.WindowSet.flowAssistant.logCtx.GetRateLimitLogger().Infof("[RateLimit]window %s deleted, start terminate task", taskKey.(string))
 		return model.TERMINATE
 	}
 	// 状态机

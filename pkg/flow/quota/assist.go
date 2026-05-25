@@ -42,6 +42,9 @@ const (
 	Disabled = "rateLimit disabled"
 	// RuleNotExists is a constant for rules not exist.
 	RuleNotExists = "quota rule not exists"
+	// QuotaGranted 命中规则并放行；与 Disabled / RuleNotExists 一起构成 OK 路径下的三态语义.
+	// 让运维 / E2E 排查时能从 QuotaResponse.Info 直接区分"无规则放过"与"命中规则放过".
+	QuotaGranted = "quota granted"
 )
 
 // FlowQuotaAssistant 限额流程的辅助类
@@ -259,20 +262,32 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		return model.QuotaFutureWithResponse(resp), nil
 	}
 	var maxWaitMs int64 = 0
+	var allReleaseFuncs []func()
 	for _, window := range windows {
 		window.Init()
 		quotaResult := window.AllocateQuota(commonRequest)
 		if quotaResult.Code == model.QuotaResultLimited {
+			// 被限流，归还前面已分配的并发配额，避免泄漏
+			for _, fn := range allReleaseFuncs {
+				fn()
+			}
 			return model.QuotaFutureWithResponse(quotaResult), nil
 		}
 		if quotaResult.WaitMs > maxWaitMs {
 			maxWaitMs = quotaResult.WaitMs
 		}
+		// 收集 release 回调（QPS 限流场景为空，并发数限流场景为 -1 计数器的回调）
+		allReleaseFuncs = append(allReleaseFuncs, quotaResult.GetReleaseFuncs()...)
 	}
-	return model.QuotaFutureWithResponse(&model.QuotaResponse{
+	finalResp := &model.QuotaResponse{
 		Code:   model.QuotaResultOk,
+		Info:   QuotaGranted,
 		WaitMs: maxWaitMs,
-	}), nil
+	}
+	for _, fn := range allReleaseFuncs {
+		finalResp.AddRelease(fn)
+	}
+	return model.QuotaFutureWithResponse(finalResp), nil
 }
 
 // lookupRateLimitWindow 计算限流窗口
@@ -324,13 +339,13 @@ func matchStringValue(matchString *apimodel.MatchString, value string, ruleCache
 	case apimodel.MatchString_REGEX:
 		regexObj, err := ruleCache.GetRegexMatcher(matchValue)
 		if nil != err {
-			logCtx.GetBaseLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetRateLimitLogger().Errorf("regex compile error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
 		m, err := regexObj.FindStringMatch(value)
 		if err != nil {
-			logCtx.GetBaseLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
+			logCtx.GetRateLimitLogger().Errorf("regex match error. ruleMetaValueStr: %s, value: %s, errors: %s",
 				matchValue, value, err)
 			return false
 		}
@@ -382,7 +397,8 @@ func lookupRules(svcRule model.ServiceRule, method string, arguments map[apitraf
 			// 规则被停用
 			continue
 		}
-		if len(rule.Amounts) == 0 {
+		// 兼容并发数限流规则：Amounts 为空但 ConcurrencyAmount 有效也视为有效规则
+		if len(rule.Amounts) == 0 && rule.GetConcurrencyAmount() == nil {
 			continue
 		}
 		methodMatcher := rule.Method
@@ -460,7 +476,8 @@ func FormatLabelToStr(request *data.CommonRateLimitRequest, rule *apitraffic.Rul
 
 func getLabelValue(matchArgument *apitraffic.MatchArgument, stringStringMap map[string]string) (string, bool) {
 	switch matchArgument.GetType() {
-	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY,
+		apitraffic.MatchArgument_CALLER_SERVICE, apitraffic.MatchArgument_CALLER_METADATA:
 		value, ok := stringStringMap[matchArgument.GetKey()]
 		return value, ok
 	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
@@ -480,7 +497,8 @@ func getLabelValue(matchArgument *apitraffic.MatchArgument, stringStringMap map[
 
 func getLabelEntry(matchArgument *apitraffic.MatchArgument, labelValue string) string {
 	switch matchArgument.GetType() {
-	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY, apitraffic.MatchArgument_CALLER_SERVICE:
+	case apitraffic.MatchArgument_CUSTOM, apitraffic.MatchArgument_HEADER, apitraffic.MatchArgument_QUERY,
+		apitraffic.MatchArgument_CALLER_SERVICE, apitraffic.MatchArgument_CALLER_METADATA:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + matchArgument.GetKey() + config.DefaultMapKeyValueSeparator + labelValue
 	case apitraffic.MatchArgument_METHOD, apitraffic.MatchArgument_CALLER_IP:
 		return matchArgument.GetType().String() + config.DefaultMapKeyValueSeparator + labelValue

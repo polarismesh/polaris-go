@@ -151,6 +151,8 @@ const (
 	RouteLogger
 	// AuthLogger 服务鉴权日志对象
 	AuthLogger
+	// RateLimitLogger 限流日志对象
+	RateLimitLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -208,6 +210,11 @@ func (c *container) SetRouteLogger(logger Logger) {
 // SetAuthLogger 设置服务鉴权日志对象
 func (c *container) SetAuthLogger(logger Logger) {
 	c.loggers[AuthLogger].Store(&logger)
+}
+
+// SetRateLimitLogger 设置限流日志对象
+func (c *container) SetRateLimitLogger(logger Logger) {
+	c.loggers[RateLimitLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -300,6 +307,15 @@ func (c *container) GetAuthLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetRateLimitLogger 获取限流日志对象
+func (c *container) GetRateLimitLogger() Logger {
+	value := c.loggers[RateLimitLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -348,6 +364,11 @@ func SetRouteLogger(logger Logger) {
 // SetAuthLogger 全局设置服务鉴权日志对象
 func SetAuthLogger(logger Logger) {
 	logContainer.SetAuthLogger(logger)
+}
+
+// SetRateLimitLogger 全局设置限流日志对象
+func SetRateLimitLogger(logger Logger) {
+	logContainer.SetRateLimitLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -403,6 +424,11 @@ func GetRouteLogger() Logger {
 // GetAuthLogger 获取全局服务鉴权日志对象
 func GetAuthLogger() Logger {
 	return logContainer.GetAuthLogger()
+}
+
+// GetRateLimitLogger 获取全局限流日志对象
+func GetRateLimitLogger() Logger {
+	return logContainer.GetRateLimitLogger()
 }
 
 // Options defines the set of options for component logging package.
@@ -529,6 +555,10 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default auth logger %s", name)))
 		}
+		if err = ConfigDefaultRateLimitLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default ratelimit logger %s", name)))
+		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
 		}
@@ -653,6 +683,16 @@ func ConfigAuthLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigRateLimitLogger 配置限流日志器
+func ConfigRateLimitLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, rateLimitLoggerName, options, DefaultRateLimitLogLevel)
+	if err != nil {
+		return err
+	}
+	SetRateLimitLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -720,4 +760,10 @@ func ConfigDefaultRouteLogger(pluginName string) error {
 func ConfigDefaultAuthLogger(pluginName string) error {
 	return ConfigAuthLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultAuthLogRotationFile, DefaultAuthLogLevel))
+}
+
+// ConfigDefaultRateLimitLogger 配置默认的限流日志器
+func ConfigDefaultRateLimitLogger(pluginName string) error {
+	return ConfigRateLimitLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultRateLimitLogRotationFile, DefaultRateLimitLogLevel))
 }

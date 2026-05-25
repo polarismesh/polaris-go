@@ -225,6 +225,9 @@ const (
 
 	// DefaultRejectRateLimiter 默认的reject限流器.
 	DefaultRejectRateLimiter = "reject"
+	// DefaultConcurrencyRateLimiter 默认的并发数限流器名称.
+	// 框架在 Rule.Resource == CONCURRENCY 时强制选用此插件，无视 Rule.Action 字段.
+	DefaultConcurrencyRateLimiter = "concurrency"
 	// DefaultWarmUpRateLimiter 默认warmup限流器.
 	DefaultWarmUpRateLimiter = "warmUp"
 	// DefaultUniformRateLimiter 默认的匀速限流器.

@@ -1,0 +1,15 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    token: ${POLARIS_TOKEN}
+provider:
+  rateLimit:
+    enable: true
+    # limiterNamespace / limiterService 必须**嵌套在 rateLimit:** 下（属于 RateLimitConfigImpl 字段，
+    # 不是 ProviderConfigImpl 的）；用 ${...} env 占位让 6.5（远端降级）能在不改 yaml 的前提下
+    # 把 limiter 服务名临时切到不存在的服务名触发 SDK 退化路径；脚本启动 binary 时 export 这两个变量.
+    # 历史上这两行错位写在 provider 顶层导致字段被忽略、SDK 只能用默认值 Polaris/polaris.limiter，
+    # 结果 --limiter-service 永远不生效；现已修正.
+    limiterNamespace: ${POLARIS_LIMITER_NS}
+    limiterService: ${POLARIS_LIMITER_SVC}

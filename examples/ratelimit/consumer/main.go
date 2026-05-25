@@ -18,31 +18,104 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
+	mrand "math/rand"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
+
+// newReqID 生成一个 8 字符的请求 ID，用于把同一次请求的多条日志串起来.
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// formatHeaders 把 http.Header 压缩成单行字符串，避免多行打印交织.
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(h[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// formatQuery 把 query 参数压缩成单行字符串.
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(q[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
 
 var (
 	namespace string
 	service   string
+	token     string
 	port      int64
+
+	// 主调身份相关 flag——consumer 转发请求时把这些值注入 X-Polaris-Caller-* header，
+	// provider 据此在 LimitAPI.GetQuota 前还原 CALLER_SERVICE / CALLER_IP / CALLER_METADATA 三类匹配维度.
+	callerService     string
+	callerIP          string
+	callerMetadataRaw stringSliceFlag // 多次出现：--caller-metadata k1=v1 --caller-metadata k2=v2
+	debug             bool
 )
+
+// stringSliceFlag 支持同一 flag 多次出现并累积到切片，例如 --caller-metadata key=value 可以传多次.
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 
 func initArgs() {
 	flag.StringVar(&namespace, "namespace", "default", "namespace")
-	flag.StringVar(&service, "service", "RateLimitEchoServer", "service")
+	flag.StringVar(&service, "service", "QpsRatelimitEchoServer", "service")
+	// token 参数仅为兼容 verify_ratelimit.sh 的统一调用约定（与 provider-* 对齐），
+	// consumer 自身不直接使用 token；鉴权由 polaris.yaml 中的 token 字段（受 ${POLARIS_TOKEN} 占位符控制）传给 SDK.
+	flag.StringVar(&token, "token", "", "token (only used for CLI compatibility)")
 	flag.Int64Var(&port, "port", 18080, "port")
+
+	// 主调身份相关：默认空表示不注入对应 header（provider 端跳过该维度）
+	flag.StringVar(&callerService, "caller-service", "", "主调服务名，注入 X-Polaris-Caller-Service header")
+	flag.StringVar(&callerIP, "caller-ip", "", "主调 IP，注入 X-Polaris-Caller-IP header；为空时取本机出口 IP")
+	flag.Var(&callerMetadataRaw, "caller-metadata", "主调实例元数据（k=v 形式，可多次指定），注入 X-Polaris-Caller-Metadata-{k}: v header")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisConsumer is a consumer of polaris
@@ -71,160 +144,12 @@ func (svr *PolarisConsumer) Run() {
 }
 
 func (svr *PolarisConsumer) runWebServer() {
-	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("receive echo request from client:%s", r.RemoteAddr)
-		// DiscoverEchoServer
-		getOneRequest := &polaris.GetOneInstanceRequest{}
-		getOneRequest.Namespace = namespace
-		getOneRequest.Service = service
-		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
-		if err != nil {
-			log.Printf("[error] fail to getOneInstance, err is %v", err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)))
-			return
-		}
-		instance := oneInstResp.GetInstance()
-		if nil != instance {
-			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-		}
-
-		start := time.Now()
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
-		req.Header = r.Header
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
-			delay := time.Since(start)
-
-			ret := &polaris.ServiceCallResult{
-				ServiceCallResult: model.ServiceCallResult{
-					EmptyInstanceGauge: model.EmptyInstanceGauge{},
-					CalledInstance:     instance,
-					Method:             "/echo",
-					RetStatus:          model.RetFail,
-				},
-			}
-			ret.SetRetCode(int32(http.StatusInternalServerError))
-			ret.SetDelay(delay)
-			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
-				log.Printf("do report service call result : %+v", err)
-			}
-			return
-		}
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
-		delay := time.Since(start)
-
-		ret := &polaris.ServiceCallResult{
-			ServiceCallResult: model.ServiceCallResult{
-				EmptyInstanceGauge: model.EmptyInstanceGauge{},
-				CalledInstance:     instance,
-				Method:             "/echo",
-				RetStatus:          model.RetSuccess,
-			},
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			ret.RetStatus = model.RetFlowControl
-		}
-		ret.SetDelay(delay)
-		ret.SetRetCode(int32(resp.StatusCode))
-		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
-			log.Printf("do report service call result : %+v", err)
-		}
-
-		defer resp.Body.Close()
-
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-			return
-		}
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write(data)
-	})
-
-	http.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("receive health request from client:%s", r.RemoteAddr)
-		// DiscoverEchoServer
-		getOneRequest := &polaris.GetOneInstanceRequest{}
-		getOneRequest.Namespace = namespace
-		getOneRequest.Service = service
-		oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
-		if err != nil {
-			log.Printf("[error] fail to getOneInstance, err is %v", err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)))
-			return
-		}
-		instance := oneInstResp.GetInstance()
-		if nil != instance {
-			log.Printf("instance getOneInstance is %s:%d", instance.GetHost(), instance.GetPort())
-		}
-
-		start := time.Now()
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
-		req.Header = r.Header
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Printf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[errot] send request to %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
-			delay := time.Since(start)
-
-			ret := &polaris.ServiceCallResult{
-				ServiceCallResult: model.ServiceCallResult{
-					EmptyInstanceGauge: model.EmptyInstanceGauge{},
-					CalledInstance:     instance,
-					Method:             "/health",
-					RetStatus:          model.RetFail,
-				},
-			}
-			ret.SetRetCode(int32(http.StatusInternalServerError))
-			ret.SetDelay(delay)
-			if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
-				log.Printf("do report service call result : %+v", err)
-			}
-			return
-		}
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
-		delay := time.Since(start)
-
-		ret := &polaris.ServiceCallResult{
-			ServiceCallResult: model.ServiceCallResult{
-				EmptyInstanceGauge: model.EmptyInstanceGauge{},
-				CalledInstance:     instance,
-				Method:             "/health",
-				RetStatus:          model.RetSuccess,
-			},
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			ret.RetStatus = model.RetFlowControl
-		}
-		ret.SetDelay(delay)
-		ret.SetRetCode(int32(resp.StatusCode))
-		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
-			log.Printf("do report service call result : %+v", err)
-		}
-
-		defer resp.Body.Close()
-
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)))
-			return
-		}
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write(data)
+	// 用 catch-all "/" 处理任意路径：
+	//   1) /echo、/health、/slow 等固定路径仍正常转发到 provider
+	//   2) /users/<id>/orders 等动态路径同样可达，配合 provider 的 catch-all + 规则的 REGEX method 验证 regex_combine
+	// 透传 provider 返回的状态码（包含 429）和 path，让上游 curl 看到完整链路.
+	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		svr.forwardToProvider(rw, r, r.URL.Path)
 	})
 
 	log.Printf("start run web server, port : %d", port)
@@ -236,12 +161,197 @@ func (svr *PolarisConsumer) runWebServer() {
 	}
 }
 
+// forwardToProvider 用 polaris 服务发现选实例，按相同 path（含 query string）转发 HTTP 请求.
+// 关键点：**透传** provider 的状态码（特别是 429），上游 curl 才能看到真实限流结果.
+func (svr *PolarisConsumer) forwardToProvider(rw http.ResponseWriter, r *http.Request, method string) {
+	// 为本次请求生成唯一 ID，所有日志带 [reqID] 前缀，便于在并发场景下用 grep 串起整条调用链
+	reqID := newReqID()
+
+	// 读取请求 body（GET 一般无 body，但保持兼容 POST/PUT 等方法）
+	var bodyBytes []byte
+	if r.Body != nil {
+		var readErr error
+		bodyBytes, readErr = ioutil.ReadAll(r.Body)
+		if readErr != nil {
+			body := fmt.Sprintf("[error] read request body fail: %v", readErr)
+			log.Printf("[%s] [error] read request body fail: %v", reqID, readErr)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(body))
+			log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+			return
+		}
+		_ = r.Body.Close()
+	}
+
+	// 单行汇总"收到的请求"：方法 + URL + query + headers + body
+	log.Printf("[%s] <<< recv from %s | method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, r.Method, r.URL.String(), formatQuery(r.URL.Query()), formatHeaders(r.Header), string(bodyBytes))
+
+	getOneRequest := &polaris.GetOneInstanceRequest{}
+	getOneRequest.Namespace = namespace
+	getOneRequest.Service = service
+	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
+	if err != nil {
+		body := fmt.Sprintf("[error] fail to getOneInstance, err is %v", err)
+		log.Printf("[%s] [error] fail to getOneInstance, err is %v", reqID, err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+		return
+	}
+	instance := oneInstResp.GetInstance()
+	if instance == nil {
+		log.Printf("[%s] [error] no available instance for service %s", reqID, service)
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = rw.Write([]byte("no available instance"))
+		log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusServiceUnavailable, "no available instance")
+		return
+	}
+	log.Printf("[%s] picked instance %s:%d", reqID, instance.GetHost(), instance.GetPort())
+
+	// 拼接目标 URL，保留请求原始 path + query string（让 /slow?ms=1500 能透传）
+	rawQuery := ""
+	if r.URL.RawQuery != "" {
+		rawQuery = "?" + r.URL.RawQuery
+	}
+	targetURL := fmt.Sprintf("http://%s:%d%s%s",
+		instance.GetHost(), instance.GetPort(), r.URL.Path, rawQuery)
+
+	start := time.Now()
+	// 透传：使用原始请求方法 + 原始 body
+	var reqBody io.Reader
+	if len(bodyBytes) > 0 {
+		reqBody = bytes.NewReader(bodyBytes)
+	}
+	req, err := http.NewRequest(r.Method, targetURL, reqBody)
+	if err != nil {
+		body := fmt.Sprintf("[error] new request fail: %v", err)
+		log.Printf("[%s] [error] new request fail: %v", reqID, err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+		return
+	}
+	// 透传请求头
+	req.Header = r.Header.Clone()
+	// 注入主调身份 header，让 provider 能据此还原 CALLER_SERVICE/CALLER_IP/CALLER_METADATA 维度.
+	// 用户传 --caller-* 才注入；不传则保持原 header 透传（让 SDK 走默认行为）.
+	injectCallerHeaders(req.Header)
+	log.Printf("[%s] ==> forward to provider: %s %s", reqID, r.Method, targetURL)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		body := fmt.Sprintf("[error] send request to %s fail: %v", targetURL, err)
+		log.Printf("[%s] [error] send request to %s fail: %v", reqID, targetURL, err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+
+		time.Sleep(time.Millisecond * time.Duration(mrand.Intn(10)))
+		delay := time.Since(start)
+		ret := &polaris.ServiceCallResult{
+			ServiceCallResult: model.ServiceCallResult{
+				EmptyInstanceGauge: model.EmptyInstanceGauge{},
+				CalledInstance:     instance,
+				Method:             method,
+				RetStatus:          model.RetFail,
+			},
+		}
+		ret.SetRetCode(int32(http.StatusInternalServerError))
+		ret.SetDelay(delay)
+		if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+			log.Printf("do report service call result : %+v", err)
+		}
+		return
+	}
+	defer resp.Body.Close()
+
+	delay := time.Since(start)
+
+	ret := &polaris.ServiceCallResult{
+		ServiceCallResult: model.ServiceCallResult{
+			EmptyInstanceGauge: model.EmptyInstanceGauge{},
+			CalledInstance:     instance,
+			Method:             method,
+			RetStatus:          model.RetSuccess,
+		},
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		ret.RetStatus = model.RetFlowControl
+	}
+	ret.SetDelay(delay)
+	ret.SetRetCode(int32(resp.StatusCode))
+	if err := svr.consumer.UpdateServiceCallResult(ret); err != nil {
+		log.Printf("do report service call result : %+v", err)
+	}
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		body := fmt.Sprintf("[error] read resp fail: %v", err)
+		log.Printf("[%s] [error] read resp from %s fail: %v", reqID, targetURL, err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		log.Printf("[%s] >>> reply to client %s: status=%d, body=%s", reqID, r.RemoteAddr, http.StatusInternalServerError, body)
+		return
+	}
+
+	// 单行汇总"收到的 provider 响应"：状态码 + 耗时 + 响应头 + body
+	log.Printf("[%s] <== recv from provider | status=%d cost=%v headers=%s body=%s",
+		reqID, resp.StatusCode, delay, formatHeaders(resp.Header), string(data))
+
+	// 透传 provider 响应头给上游 client（保持 Content-Type 等关键字段一致）
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			rw.Header().Add(k, v)
+		}
+	}
+	// 透传 provider 状态码 + body，让 curl 能直接看到限流（429）
+	rw.WriteHeader(resp.StatusCode)
+	_, _ = rw.Write(data)
+
+	// 单行汇总"自身回给上游 client 的响应"
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, r.RemoteAddr, resp.StatusCode, string(data))
+}
+
+// injectCallerHeaders 把 --caller-service/--caller-ip/--caller-metadata 参数注入 X-Polaris-Caller-* header.
+// provider 端会在调用 LimitAPI.GetQuota 前解析这三组 header，分别还原为 CALLER_SERVICE / CALLER_IP / CALLER_METADATA 维度.
+//
+// Header 命名约定：
+//   - X-Polaris-Caller-Service          : 主调服务名（CallerService 维度）
+//   - X-Polaris-Caller-IP               : 主调 IP   （CallerIP 维度）
+//   - X-Polaris-Caller-Metadata-<key>   : 主调元数据（CallerMetadata 维度）；每个 key 一个 header
+//
+// 不传 flag 时不写任何 X-Polaris-* header，保留对原始请求 header 的透传不动.
+func injectCallerHeaders(h http.Header) {
+	if callerService != "" {
+		h.Set("X-Polaris-Caller-Service", callerService)
+	}
+	if callerIP != "" {
+		h.Set("X-Polaris-Caller-IP", callerIP)
+	}
+	for _, kv := range callerMetadataRaw {
+		idx := strings.Index(kv, "=")
+		if idx <= 0 {
+			continue
+		}
+		k, v := kv[:idx], kv[idx+1:]
+		h.Set("X-Polaris-Caller-Metadata-"+k, v)
+	}
+}
+
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
+	}
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
 	}
 	consumer, err := polaris.NewConsumerAPI()
 	// 或者使用以下方法,则不需要创建配置文件

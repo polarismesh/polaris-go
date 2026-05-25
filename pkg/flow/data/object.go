@@ -384,7 +384,7 @@ func (c *CommonInstancesRequest) BuildInstancesResponse(dstService model.Service
 	instances []model.Instance, totalWeight int, svcInstances model.ServiceInstances) *model.InstancesResponse {
 	resp := buildInstancesResponse(c.response, dstService, cluster, instances, totalWeight, svcInstances)
 	// 把路由链写入 RouteInfo.routeMetadata 的跨链路元数据 (如泳道路由的完整 stain label)
-	// 透出给业务调用方.对齐 polaris-java 的 PASS_THROUGH 语义.
+	// 透出给业务调用方，实现 PASS_THROUGH 语义.
 	//
 	// 不在链路里写入时始终把 RouteMetadata 置 nil,防止请求结构被业务复用或 response 字段
 	// 通过 embedded InstancesResponse 跨请求残留旧数据.
@@ -642,6 +642,8 @@ func toSpecArgument(i int) apitraffic.MatchArgument_Type {
 		return apitraffic.MatchArgument_METHOD
 	case model.ArgumentTypeQuery:
 		return apitraffic.MatchArgument_QUERY
+	case model.ArgumentTypeCallerMetadata:
+		return apitraffic.MatchArgument_CALLER_METADATA
 	default:
 		return apitraffic.MatchArgument_CUSTOM
 	}
