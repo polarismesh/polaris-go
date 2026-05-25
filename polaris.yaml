@@ -369,7 +369,7 @@ provider:
     # 描述：限流插件配置；不同 rule.action 会路由到不同插件
     #   - reject       : 漏桶/令牌桶拒绝型 QPS 限流（rule.resource=QPS && action=reject）
     #   - unirate      : 匀速排队 QPS 限流（rule.action=unirate），支持最大排队时间
-    #   - concurrency  : 并发数限流（rule.resource=CONCURRENCY），对齐 polaris-java RejectConcurrencyRateLimiter
+    #   - concurrency  : 并发数限流（rule.resource=CONCURRENCY），纯本地原子计数
     plugin:
       # 匀速排队限流器配置
       unirate:

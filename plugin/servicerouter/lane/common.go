@@ -144,10 +144,8 @@ func matchSelectorLabels(labels map[string]*apimodel.MatchString, metadata map[s
 
 // findTrafficValue 根据 SourceMatch 类型从调用方元数据中提取流量值.
 //
-// 与 polaris-java LaneUtils.findTrafficValue (polaris-plugins/polaris-plugins-router/
-// router-lane/src/main/java/com/tencent/polaris/plugins/router/lane/LaneUtils.java) 保持
-// 相同的 7 类匹配维度: HEADER / CUSTOM / METHOD / CALLER_IP / COOKIE / QUERY / PATH,
-// 外加 Go 特有的 CALLER_METADATA (从 SourceService.Metadata 直接取 arg.Key).
+// 支持 7 类匹配维度: HEADER / CUSTOM / METHOD / CALLER_IP / COOKIE / QUERY / PATH,
+// 外加 CALLER_METADATA (从 SourceService.Metadata 直接取 arg.Key).
 //
 // 查询策略:
 //

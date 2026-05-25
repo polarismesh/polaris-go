@@ -32,7 +32,7 @@ import (
 // logTag 限流日志统一前缀，便于日志检索过滤.
 const logTag = "[RateLimit][Concurrency]"
 
-// ConcurrencyQuotaBucket 并发数限流桶，纯本地模式，对齐 polaris-java 的 ConcurrencyQuotaBucket.
+// ConcurrencyQuotaBucket 并发数限流桶，纯本地模式，实现并发计数语义。
 // 通过 atomic 原子计数器维护当前并发数，请求进入时 +1 检查上限，超限则立即 -1 回退；
 // 请求通过后由调用方在 finally / defer 中调用 Release 归还配额。
 type ConcurrencyQuotaBucket struct {

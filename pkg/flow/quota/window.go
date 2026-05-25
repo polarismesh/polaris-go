@@ -500,7 +500,7 @@ func (r *RateLimitWindow) buildQuotaHashValue() (string, uint64) {
 }
 
 // resolveRateLimiterName 根据规则解析应该使用的限流插件名.
-// 对齐 polaris-java RateLimitExtension.getRateLimiterName 的语义：
+// 选择规则：
 //   - Rule.Resource == CONCURRENCY 时强制走并发数限流插件，无视 Rule.Action
 //   - 否则使用 Rule.Action 指定的插件（QPS 限流：reject / unirate / ...）
 func resolveRateLimiterName(rule *apitraffic.Rule) string {

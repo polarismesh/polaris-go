@@ -15,10 +15,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-// Package rejectconcurrency 提供并发数限流插件，对齐 polaris-java 的 RejectConcurrencyRateLimiter.
-// 该插件在 Rule.Resource == CONCURRENCY 时被框架选用，纯本地模式，无远程同步依赖。
+// Package rejectconcurrency 提供并发数限流插件，实现纯本地的并发计数语义。
+// 当限流规则 Rule.Resource == CONCURRENCY 时由框架选用本插件，无远程同步依赖。
 //
-// 目录名沿用 polaris-java 模块 ratelimiter-reject-concurrency 的命名习惯（带下划线），
+// 目录名 reject_concurrency 带下划线（与同目录下的 reject、unirate 模块命名风格保持一致），
 // 但 Go 包名不允许下划线，故包名收敛为 rejectconcurrency.
 package rejectconcurrency
 

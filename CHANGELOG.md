@@ -10,8 +10,8 @@
 
 #### 限流（Rate Limiting）
 
-- **`plugin/ratelimiter/reject_concurrency`**：新增并发数限流插件，对齐
-  polaris-java `ConcurrencyQuotaBucket`。规则 `resource=CONCURRENCY` 时由
+- **`plugin/ratelimiter/reject_concurrency`**：新增并发数限流插件，纯本地原子
+  计数实现。规则 `resource=CONCURRENCY` 时由
   `pkg/flow/quota/window.go::resolveRateLimiterName` 强制路由到该插件，
   不受 `Rule.Action` 影响；`maxAmount<=0` 时保底为 1 并打印 Warn。
 - **`QuotaResponse.AddRelease` 回调链**：合并多 window 的 release 函数后由

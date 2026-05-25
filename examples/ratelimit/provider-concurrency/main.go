@@ -101,7 +101,7 @@ func logReply(reqID, remoteAddr string, status int, body string) {
 	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
 }
 
-// 演示并发数限流的 provider，对齐 polaris-java 的并发数限流用法。
+// 演示并发数限流的 provider 用法。
 //
 // 与 provider-qps 的关键差异：
 //   1. 注册的服务名为 ConcurrencyEchoServer，避免和原 QPS 限流 demo 冲突
