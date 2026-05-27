@@ -1,0 +1,9 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+config:
+  configConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8093
+    token: ${POLARIS_TOKEN}
