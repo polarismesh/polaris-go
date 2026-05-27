@@ -789,6 +789,10 @@ type RateLimitGauge struct {
 	Arguments []Argument
 	Result    QuotaResultCode
 	RuleName  string
+	// Labels 限流参数维度的格式化标签字符串，由 sync_flow.formatArgumentsToLabels 生成。
+	// 形如 TYPE:key:value|TYPE:key:value，用于上报到 Prometheus 等监控指标的 caller_labels label。
+	// 当请求未携带 Arguments 时为空串。
+	Labels string
 }
 
 // CircuitBreakGauge Circuit Break Gauge

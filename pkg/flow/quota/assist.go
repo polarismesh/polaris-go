@@ -267,6 +267,10 @@ func (f *FlowQuotaAssistant) GetQuota(commonRequest *data.CommonRateLimitRequest
 		window.Init()
 		quotaResult := window.AllocateQuota(commonRequest)
 		if quotaResult.Code == model.QuotaResultLimited {
+			// 限流场景下填充命中的规则信息，业务侧可读取 CustomResponse 等字段。
+			// 不在 bucket.GetQuota 内部写入 ActiveRule，是为了让 bucket 层只关注令牌计算，
+			// 规则元信息由 Window 持有、由这里的统一编排路径注入。
+			quotaResult.ActiveRule = window.Rule
 			// 被限流，归还前面已分配的并发配额，避免泄漏
 			for _, fn := range allReleaseFuncs {
 				fn()
