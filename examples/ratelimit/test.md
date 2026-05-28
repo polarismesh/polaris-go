@@ -109,9 +109,23 @@ global:
   eventReporter:
     enable: true
     chain: [pushgateway]
+    plugin:
+      pushgateway:
+        address: "${POLARIS_EVENT_ADDR}"  # 占位符，未设置时走服务发现
 ```
 
-限流状态切换（UNLIMITED↔LIMITED）时 SDK 自动构造 `RateLimitStart` / `RateLimitEnd` 事件并 POST 到 `Polaris/polaris.pushgateway`。
+限流状态切换（UNLIMITED↔LIMITED）时 SDK 自动构造 `RateLimitStart` / `RateLimitEnd` 事件并 POST 到：
+- `${POLARIS_EVENT_ADDR}` 设置时 → 直接发到该地址（用例 9.1/9.2 指向本地 mock server）
+- 未设置时 → 服务发现 `Polaris/polaris.pushgateway`（用例 9.3 走真实链路）
+
+**关键流程**（`plugin/events/pushgateway/reporter.go`）：
+
+1. `ReportEvent` 入队 `reqChan`（容量 513）
+2. 后台 goroutine 每秒 flush 一次（`time.Ticker(1s)`）或队列满立即 flush
+3. Flush 失败（`SyncGetOneInstance` 拿不到实例 / HTTP timeout）→ **整个 batch 丢弃**，无缓存重试
+4. Provider 进程退出时 SDK `Destroy()` 触发同步 flush，把队列残留事件发出（最多 3 次重试）
+
+⚠️ 本地开发环境下 `polaris.pushgateway` 实例的注册 IP 可能是云端内网（如 30.x.x.x），客户端不可达时大量 batch 会被丢弃；用例 9.1/9.2 通过 mock server 规避这个问题，9.3 用于真实链路演示。
 
 ---
 
@@ -411,18 +425,35 @@ curl → consumer:18191/slow?ms=N → provider:18181/slow (sleep N ms, defer fut
 
 | 项 | 内容 |
 |-----|------|
-| 操作 | 等 1 窗口 → 再连续 4 窗口并发 8 次 |
-| 预期 | `limited ≥ 4` |
-| 判定 | 同 6.1 |
+| 操作 | 等 1 窗口（让 limiter quota 自然重置）→ 再连续 4 窗口并发 8 次 |
+| 原理 | 验证规则不是"用一次就废"，sleep 后 limiter quota 重置，前 1~2 窗口 burst 全过，后续窗口必触发限流 |
+| 预期 | `limited ≥ 2`（4 窗口里至少 2 个事件证明规则未静音）|
+| 判定 | `limited ≥ 2 && other == 0 && SDK 日志含 type=GLOBAL` → PASS |
+| 备注 | 阈值从原 `limited ≥ 4`（每窗口至少 1）放宽到 `limited ≥ 2`（4 窗口里至少 2），容忍前期 burst |
 
 ### 用例 6.3 — 多实例共享配额（核心语义）
 
 | 项 | 内容 |
 |-----|------|
-| 操作 | 直接打 A:18185 并发 5 + B:18186 并发 5，连续 4 窗口（共 40 次） |
-| 预期 | GLOBAL 合计仅 4/窗口 → `ok ≤ 24`、`limited ≥ 4` |
-| 判定 | `ok ≤ 24 && limited ≥ 4 && other == 0` → PASS |
-| 备注 | 若 `ok > 24`，说明退化为 LOCAL，检查 polaris.limiter 连通性 |
+| 操作 | 直接打 A:18185 并发 5 + B:18186 并发 5，连续 **8 窗口**（共 80 次） |
+| 原理 | 分布式限流"先消费后结算"：每个 SDK 实例本地 atomic 扣减 tokenLeft，异步上报 limiter；多实例并发时各自基于过期视图放行 → 单窗口短暂超 1~3 倍阈值（**polaris-limiter 服务端 stat 日志亲自记录** passed=8~12 而 threshold=4）|
+| 预期 | GLOBAL：`ok ≤ 60`（LOCAL 下界 64 - MAX=4，留余量）、`limited ≥ 8` |
+| 反例 | LOCAL 退化：`ok = 8*2*MAX = 64`（确定值），明显高于 GLOBAL 实测的 30~56 |
+| 判定 | `ok ≤ 60 && limited ≥ 8 && other == 0 && SDK 日志含 type=GLOBAL` → PASS |
+| 二次校验 | grep `provider-qps-global-{a,b}/polaris/log/ratelimit/polaris-ratelimit.log` 中的 `type=GLOBAL` 行（INFO 级别，无需 --debug），结构性证明规则按 GLOBAL 加载 |
+| 备注 | `ok ≥ 64`：完全退化为 LOCAL，几乎可断定 polaris.limiter 没真正接入；`60 < ok < 64`：灰区，limiter 推送延迟过大 |
+| 设计依据 | 不再要求 `ok ≤ N*MAX`（严格上界），因为分布式限流允许预消费导致瞬时超限；改为"GLOBAL 至少节省 MAX 个请求 + 日志结构校验"双重判定 |
+
+### 用例 6.3.5 — GLOBAL 稳态精准验证（对照 6.3 的 burst 场景）
+
+| 项 | 内容 |
+|-----|------|
+| 操作 | 两实例并发，但实例内**串行** + 每个请求间隔 60ms（每实例 8 次请求 ≈ 480ms ≈ 3 个窗口） |
+| 原理 | 60ms 间隔 > SDK acquire 周期（30~50ms）> limiter push 延迟，每发 1 个请求 SDK 都有时间上报 used + 接收 push，**burst 几乎为 0** |
+| 预期 | 稳态 ok ≤ 16（≈ 3*MAX + 1*MAX burst）、limited ≥ 3 |
+| 判定 | `ok ≤ 16 && limited ≥ 3 && other == 0` → PASS（数值精度高于 6.3） |
+| 与 6.3 对比 | 6.3 测**burst 容忍**（必然超限，宽松判定）；6.3.5 测**稳态精准**（请求间隔贴合同步周期，严格判定） |
+| 失败诊断 | `ok ≥ 21`：远端配额完全未节流；`16 < ok < 21`：limiter 同步异常 |
 
 ### 用例 6.4 — GLOBAL + regex_combine 共享
 
@@ -505,29 +536,44 @@ curl → consumer:18191/slow?ms=N → provider:18181/slow (sleep N ms, defer fut
 
 ### 规则
 
-复用 `ratelimit-e2e-qps-rule`（QPS LOCAL，maxAmount=2/1s，作用于 `QpsRatelimitEchoServer` 的 `/echo`）
+| 字段 | 值 |
+|------|-----|
+| name | `ratelimit-e2e-metrics-rule` |
+| service / namespace | `MetricsRatelimitEchoServer` / `default` |
+| resource | `QPS` |
+| type | `LOCAL` |
+| method | EXACT `/echo` |
+| amounts | `maxAmount=2 / validDuration=1s` |
+| action | `REJECT` |
+
+> **专用服务名 `MetricsRatelimitEchoServer`**：与 1.x（`QpsRatelimitEchoServer`）等用例隔离，让 consumer 服务发现只能命中本用例启动的那一个 provider 实例，不会被 LB 分散到其他用例的同服务 provider 上。
 
 ### 启动服务
 
 | 角色 | 源码 | 端口 | metrics 端口 |
 |------|------|------|-------------|
 | provider | `provider-qps` | 18200 | **28200** |
+| consumer | `consumer` | 18201 | —（push 模式） |
 
-> **不启动 consumer**。请求直接发到 provider，绕过服务发现 LB，确保所有请求命中同一实例。
+### 请求链路
+
+```
+curl → consumer:18201/echo → (polaris 服务发现) → provider:18200/echo → LimitAPI.GetQuota
+```
 
 ### 用例 8.1 — /metrics 指标存在性 + 数值校验
 
 | 项 | 内容 |
 |-----|------|
-| 操作 | 直接向 `http://127.0.0.1:18200/echo` 发 6 次请求 → 等 30s 聚合 → curl `http://127.0.0.1:28200/metrics` |
+| 操作 | 经 consumer:18201 串行 6 次 GET `/echo` → 等聚合 → curl `http://127.0.0.1:28200/metrics` |
 | 断言 1 | `/metrics` 端口可达（HTTP 200） |
 | 断言 2 | `ratelimit_rq_total` / `ratelimit_rq_pass` / `ratelimit_rq_limit` 三个指标存在 |
-| 断言 3 | label 包含 `callee_namespace` / `callee_service` / `callee_method` / `rule_name` |
-| 断言 4 | `pass > 0` 且 `limit > 0` |
+| 断言 3 | label 包含 `callee_namespace` / `callee_service`（**值精确匹配 `MetricsRatelimitEchoServer`**） / `callee_method` / `rule_name` |
+| 断言 4 | `pass > 0` 且 `limit > 0`（阈值 2/1s → pass≈2 limit≈4） |
 | 断言 5 | `total == pass + limit` |
 | 判定 | 5 个断言全 PASS → PASS |
 
-**为什么绕过 consumer？** consumer 通过 polaris 服务发现会把请求负载均衡到所有 `QpsRatelimitEchoServer` 实例（含其他用例启动的），导致本 provider 只看到部分数据。直接发到 provider:18200 确保 6 次请求（阈值 2/1s → pass≈2 limit≈4）全部记录在同一实例。
+**为什么使用独立服务名？** 用 `MetricsRatelimitEchoServer` 而非复用 `QpsRatelimitEchoServer`，可以让 consumer 的服务发现只能拉到本用例的一个 provider 实例（同服务下只有一个 provider）。否则 consumer 会通过 LB 把请求分散到 1.x 等用例残留的同服务 provider 上，导致本 provider 的 /metrics 只能看到部分数据，limit 维度容易为 0。这种设计让 8.x 既能验证完整的 `curl → consumer → provider` 链路，又能保证监控数据完整聚合在一个实例。
 
 **metrics 时间语义**：Prometheus pull 模式下指标不带时间戳；聚合周期 30s 内的 ReportStat 数据刷入 registry，连续 60s 无新数据后 GC 清除。脚本控制了"先发请求 → 再抓 /metrics"的时序，数据必然属于那 6 次请求。
 
@@ -543,14 +589,18 @@ curl → consumer:18191/slow?ms=N → provider:18181/slow (sleep N ms, defer fut
 
 | 角色 | 源码/工具 | 端口 | 说明 |
 |------|-----------|------|------|
-| mock event server | `mock_event_server.py` | 19090 | 模拟 pushgateway，捕获事件到 JSON 文件 |
-| provider | `provider-qps` | 18202 | `POLARIS_EVENT_ADDR=127.0.0.1:19090` |
+| mock event server | `mock_event_server.py` | 19090 | 模拟 pushgateway，捕获事件到 JSON 文件（用例 9.1/9.2 使用） |
+| provider (mock) | `provider-qps` | 18202 | 用例 9.1/9.2 用，POLARIS_EVENT_ADDR=127.0.0.1:19090 |
+| provider (remote) | `provider-qps` | 18203 | 用例 9.3 用，**不**设 POLARIS_EVENT_ADDR → 走服务发现到真实 polaris.pushgateway |
 
 ### 配置
 
-provider 的 `polaris.yaml` 中 pushgateway 插件配置了 `address: "${POLARIS_EVENT_ADDR}"`：
-- 设置时（如用例 9.x）→ SDK 直接 POST 事件到 mock server
-- 未设置时 → 走 polaris 服务发现（`Polaris/polaris.pushgateway`），保持其他用例行为不变
+provider 的 `polaris.yaml` 中 `eventReporter.enable: true`，pushgateway 插件 `address: "${POLARIS_EVENT_ADDR}"`：
+
+| 环境变量 | 设置 | 行为 |
+|----------|------|------|
+| `POLARIS_EVENT_ADDR=127.0.0.1:19090` | 用例 9.1/9.2 | SDK 直接 POST 到 mock server，绕过服务发现 |
+| `POLARIS_EVENT_ADDR=`（空串） | 用例 9.3 | SDK 走服务发现拉 `Polaris/polaris.pushgateway` 实例，推到真实云端 |
 
 ### 事件触发原理
 
@@ -582,6 +632,18 @@ provider 的 `polaris.yaml` 中 pushgateway 插件配置了 `address: "${POLARIS
 | 断言 | `captured_events.json` 中存在 `event_name=RateLimitEnd` 且 `rule_name=ratelimit-e2e-qps-rule` |
 | 判定 | 事件存在且字段匹配 → PASS |
 
+### 用例 9.3 — 远程 pushgateway 事件推送（不 mock）
+
+| 项 | 内容 |
+|-----|------|
+| 目的 | 与 9.1/9.2 互补：让 SDK 走服务发现真实推送到云端 pushgateway，便于在 `/data/pushgateway-data/polaris-client-event.log` 看到本次测试产生的事件，做端到端对账 |
+| 操作 | provider:18203 发 6 次请求触发限流 → 等 2s → 发 1 次触发恢复 → 等 4s 让 SDK flush |
+| 必过断言 | SDK 端 `polaris/log/event/polaris-event.log` 中观察到至少 1 条 `ReportEvent called.*RateLimitStart` 和 1 条 `ReportEvent called.*RateLimitEnd` |
+| 告知信息 | grep 同一日志的 `request success` 与 `request failed` 行数：成功表示远程 pushgateway 收到事件；失败（本地 macOS 常见）只打印告知，不影响判定 |
+| 判定 | SDK 端触发了 ReportEvent → PASS（即使 Flush 失败也判 PASS，因为这是环境问题非代码问题） |
+
+> **设计权衡**：9.3 不强制要求事件到达远程，因为 `polaris.pushgateway` 实例的注册 IP 在客户端通常是云端内网不可达。如果运行环境（如同一 K8s 集群内）实际能连通，PASS 描述会显示"Flush 成功 N 次"，可登录云端 pushgateway 查看事件日志。
+
 ---
 
 ## 判定与汇总
@@ -607,7 +669,7 @@ provider 的 `polaris.yaml` 中 pushgateway 插件配置了 `address: "${POLARIS
 | 6.3 `ok > 24` | polaris.limiter 不可达 → FAILOVER_LOCAL 退化为各自独享 |
 | 7.1 status=200 | 窗口跨秒（已用合并策略修复）；或规则不存在 |
 | 8.1 `callee_namespace=""` | label supplier 误用 `EmptyInstanceGauge.GetNamespace()`（已修复为 `val.Namespace`） |
-| 8.1 `limit=0` | 请求被 LB 分散（已修复为直接发 provider） |
+| 8.1 `limit=0` | 请求被 LB 分散到其他用例的同服务 provider（已修复为独立服务名 `MetricsRatelimitEchoServer`） |
 | 8.1 端口不可达 | 需至少一次 GetQuota 调用后 SDK 才 prepare registry |
 
 调用 `--keep` 保留进程和日志便于排查；`./cleanup.sh -f` 一键清理。
