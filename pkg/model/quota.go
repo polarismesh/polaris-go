@@ -167,7 +167,7 @@ type QuotaResponse struct {
 	WaitMs int64
 	// ActiveRule 命中的限流规则；仅在 Code == QuotaResultLimited 时填充。
 	// 通过 GetActiveRule().GetCustomResponse().GetBody() 可以读取规则中配置的自定义返回内容；
-	// 也可通过 GetActiveRuleName() / GetActiveRuleId() 获取规则元信息，便于业务侧自定义返回。
+	// 也可通过 GetActiveRuleName() / GetActiveRuleID() 获取规则元信息，便于业务侧自定义返回。
 	ActiveRule *apitraffic.Rule
 	// releaseFunc release回调链，仅用于并发数限流场景，由 Bucket 在 GetQuota 通过时注入
 	releaseFunc []func()
@@ -191,9 +191,9 @@ func (q *QuotaResponse) GetActiveRuleName() string {
 	return q.ActiveRule.GetName().GetValue()
 }
 
-// GetActiveRuleId 获取本次限流命中规则的 ID；非限流场景或规则无 ID 时返回空串。
+// GetActiveRuleID 获取本次限流命中规则的 ID；非限流场景或规则无 ID 时返回空串。
 // receiver 或 ActiveRule 为 nil 时安全返回空串。
-func (q *QuotaResponse) GetActiveRuleId() string {
+func (q *QuotaResponse) GetActiveRuleID() string {
 	if q == nil || q.ActiveRule == nil {
 		return ""
 	}

@@ -32,7 +32,7 @@ func TestQuotaResponse_GetActiveRule_NilReceiver(t *testing.T) {
 	var resp *QuotaResponse
 	assert.Nil(t, resp.GetActiveRule(), "nil receiver 应安全返回 nil")
 	assert.Equal(t, "", resp.GetActiveRuleName(), "nil receiver 的 RuleName 应为空串")
-	assert.Equal(t, "", resp.GetActiveRuleId(), "nil receiver 的 RuleId 应为空串")
+	assert.Equal(t, "", resp.GetActiveRuleID(), "nil receiver 的 RuleID 应为空串")
 }
 
 // TestQuotaResponse_GetActiveRule_PassResultNoRule 验证非限流场景下 ActiveRule 默认为 nil。
@@ -42,7 +42,7 @@ func TestQuotaResponse_GetActiveRule_PassResultNoRule(t *testing.T) {
 	resp := &QuotaResponse{Code: QuotaResultOk}
 	assert.Nil(t, resp.GetActiveRule(), "非限流时 ActiveRule 应为 nil")
 	assert.Equal(t, "", resp.GetActiveRuleName())
-	assert.Equal(t, "", resp.GetActiveRuleId())
+	assert.Equal(t, "", resp.GetActiveRuleID())
 }
 
 // TestQuotaResponse_GetActiveRule_LimitedHasRule 验证限流场景下 ActiveRule 字段被正确读取。
@@ -69,7 +69,7 @@ func TestQuotaResponse_GetActiveRule_LimitedHasRule(t *testing.T) {
 	assert.NotNil(t, got, "限流时 ActiveRule 应非 nil")
 	assert.Same(t, rule, got, "返回的应是同一指针")
 	assert.Equal(t, "demo-rule", resp.GetActiveRuleName())
-	assert.Equal(t, "rule-id-001", resp.GetActiveRuleId())
+	assert.Equal(t, "rule-id-001", resp.GetActiveRuleID())
 	assert.Equal(t, "customBody", got.GetCustomResponse().GetBody(),
 		"业务侧链式调用应能取到 CustomResponse.body")
 }

@@ -192,7 +192,7 @@ func (svr *PolarisProvider) handleQuota(rw http.ResponseWriter, r *http.Request,
 	// 通过新 GetActiveRule API 取出命中的规则；非限流时为 nil，业务侧需 nil 判断.
 	activeRule := quotaResp.GetActiveRule()
 	ruleName := quotaResp.GetActiveRuleName()
-	ruleID := quotaResp.GetActiveRuleId()
+	ruleID := quotaResp.GetActiveRuleID()
 	customBody := ""
 	resourceType := ""
 	if activeRule != nil {

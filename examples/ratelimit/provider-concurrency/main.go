@@ -171,7 +171,7 @@ func (svr *PolarisProvider) applyLimit(reqID string, rw http.ResponseWriter, r *
 	// 通过新 GetActiveRule API 取出命中的规则；非限流时为 nil，需要做 nil 判断.
 	activeRule := resp.GetActiveRule()
 	ruleName := resp.GetActiveRuleName()
-	ruleID := resp.GetActiveRuleId()
+	ruleID := resp.GetActiveRuleID()
 	customBody := ""
 	resourceType := ""
 	if activeRule != nil {
