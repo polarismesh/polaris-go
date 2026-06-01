@@ -149,6 +149,11 @@ func (svr *PolarisProvider) Run() {
 
 // applyLimit 调用限流 API 获取配额；若通过返回 future（必须由调用方 defer future.Release()），
 // 若被限流返回 nil 并已经写好响应.
+//
+// 此函数同时演示限流增强三件套（与 provider-qps 行为一致）：
+//  1. ActiveRule 自定义返回：限流时优先用 future.Get().GetActiveRule().GetCustomResponse().GetBody().
+//  2. 限流事件上报：状态切换时 SDK 自动上报 RateLimitStart / RateLimitEnd 到 EventReporter 链.
+//  3. 限流监控指标：reportRateLimitGauge 自动补全 Method / RuleName / Labels 维度.
 func (svr *PolarisProvider) applyLimit(reqID string, rw http.ResponseWriter, r *http.Request, method string) polaris.QuotaFuture {
 	quotaReq := buildQuotaRequest(r, namespace, service, method)
 
@@ -163,13 +168,41 @@ func (svr *PolarisProvider) applyLimit(reqID string, rw http.ResponseWriter, r *
 		return nil
 	}
 	resp := future.Get()
+	// 通过新 GetActiveRule API 取出命中的规则；非限流时为 nil，需要做 nil 判断.
+	activeRule := resp.GetActiveRule()
+	ruleName := resp.GetActiveRuleName()
+	ruleID := resp.GetActiveRuleID()
+	customBody := ""
+	resourceType := ""
+	if activeRule != nil {
+		if cr := activeRule.GetCustomResponse(); cr != nil {
+			customBody = cr.GetBody()
+		}
+		resourceType = activeRule.GetResource().String()
+	}
 	// waitMs 仅 unirate 排队场景非 0；并发数限流永远 0，但保留打印做跨插件对照.
-	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d | quota_req: ns=%s svc=%s method=%v labels=%v",
+	// rule_name / rule_id / resource_type / custom_body_len 仅限流时有值，便于和事件 / 监控指标对账.
+	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d "+
+		"rule_name=%q rule_id=%q resource_type=%q custom_body_len=%d | "+
+		"quota_req: ns=%s svc=%s method=%v labels=%v",
 		reqID, time.Since(start).String(), resp.Code, resp.Info, resp.WaitMs,
+		ruleName, ruleID, resourceType, len(customBody),
 		quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
 	if resp.Code != model.QuotaResultOk {
-		body := http.StatusText(http.StatusTooManyRequests)
+		// 限流场景：优先返回规则配置的 CustomResponse.body，便于运维在控制台调整文案.
+		body := customBody
+		if body == "" {
+			body = http.StatusText(http.StatusTooManyRequests)
+		}
+		// 写头前过滤 CR/LF 等控制字符做防御性处理，避免恶意规则名造成 header injection；
+		// 详见 provider-qps/main.go::sanitizeHeaderValue 的同名实现说明.
+		if v := sanitizeHeaderValue(ruleName); v != "" {
+			rw.Header().Set("X-Polaris-RateLimit-Rule", v)
+		}
+		if v := sanitizeHeaderValue(resourceType); v != "" {
+			rw.Header().Set("X-Polaris-RateLimit-Resource", v)
+		}
 		rw.WriteHeader(http.StatusTooManyRequests)
 		_, _ = rw.Write([]byte(body))
 		logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
@@ -423,6 +456,19 @@ func parseInt(s string, fallback int) int {
 	v, err := strconv.Atoi(s)
 	if err != nil || v < 0 {
 		return fallback
+	}
+	return v
+}
+
+// sanitizeHeaderValue 过滤掉 CR / LF / NUL 等可能用于 header injection 的控制字符；
+// 规则名 / 资源类型理论上是控制台受控字段，但 demo 作为用户复制参考的样板，提供显式校验的写法更稳妥.
+// 输入空串或仅含控制字符时返回空串；调用方据此跳过 Set 头.
+func sanitizeHeaderValue(v string) string {
+	if v == "" {
+		return ""
+	}
+	if strings.ContainsAny(v, "\r\n\x00") {
+		return ""
 	}
 	return v
 }

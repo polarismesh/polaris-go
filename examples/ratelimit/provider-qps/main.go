@@ -164,6 +164,13 @@ func (svr *PolarisProvider) runWebServer() {
 }
 
 // handleQuota 处理一次限流判定 + 业务返回；适用于 /echo 和 /health（路径不同，但限流逻辑一致）.
+//
+// 此函数同时演示限流增强三件套：
+//  1. ActiveRule 自定义返回：被限流时优先用 resp.GetActiveRule().GetCustomResponse().GetBody() 作为响应体.
+//  2. 限流事件上报：状态发生 UNLIMITED↔LIMITED 切换时 SDK 会自动上报 RateLimitStart / RateLimitEnd
+//     事件到 EventReporter 链（pushgateway 等），无需在业务代码中显式触发.
+//  3. 限流监控指标：reportRateLimitGauge 自动补全 Method / RuleName / Labels 维度，
+//     在 Prometheus /metrics 端点可看到 ratelimit_rq_total{method,rule_name,caller_labels,...}.
 func (svr *PolarisProvider) handleQuota(rw http.ResponseWriter, r *http.Request, method string) {
 	reqID := newReqID()
 	logIncomingRequest(reqID, r, method)
@@ -181,14 +188,46 @@ func (svr *PolarisProvider) handleQuota(rw http.ResponseWriter, r *http.Request,
 		return
 	}
 	defer resp.Release()
+	quotaResp := resp.Get()
+	// 通过新 GetActiveRule API 取出命中的规则；非限流时为 nil，业务侧需 nil 判断.
+	activeRule := quotaResp.GetActiveRule()
+	ruleName := quotaResp.GetActiveRuleName()
+	ruleID := quotaResp.GetActiveRuleID()
+	customBody := ""
+	resourceType := ""
+	if activeRule != nil {
+		if cr := activeRule.GetCustomResponse(); cr != nil {
+			customBody = cr.GetBody()
+		}
+		resourceType = activeRule.GetResource().String()
+	}
 	// waitMs 仅 unirate 在排队 200 时返回非 0 值（SDK 已自行 sleep 完才返回，业务侧不需要再 wait）；
 	// reject / concurrency 永远是 0，打印出来便于跨插件对照排查.
-	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d | quota_req: ns=%s svc=%s method=%v labels=%v",
-		reqID, time.Since(start).String(), resp.Get().Code, resp.Get().Info, resp.Get().WaitMs,
+	// rule_name / rule_id / resource_type / custom_body 仅限流时有值，便于同时对照监控指标与事件.
+	log.Printf("[%s] limiter resp | cost=%s code=%d info=%s waitMs=%d "+
+		"rule_name=%q rule_id=%q resource_type=%q custom_body_len=%d | "+
+		"quota_req: ns=%s svc=%s method=%v labels=%v",
+		reqID, time.Since(start).String(), quotaResp.Code, quotaResp.Info, quotaResp.WaitMs,
+		ruleName, ruleID, resourceType, len(customBody),
 		quotaReq.GetNamespace(), quotaReq.GetService(), quotaReq.GetMethod(), quotaReq.GetLabels())
 
-	if resp.Get().Code != model.QuotaResultOk {
-		body := http.StatusText(http.StatusTooManyRequests)
+	if quotaResp.Code != model.QuotaResultOk {
+		// 限流场景：优先返回规则配置的 CustomResponse.body，缺省时回落到默认文案.
+		// 这样用户可以直接在 polaris 控制台修改规则的 customResponse.body，无需重启 provider 即可看到效果.
+		body := customBody
+		if body == "" {
+			body = http.StatusText(http.StatusTooManyRequests)
+		}
+		// 把命中的规则名 / 资源类型放到响应头，方便上游 curl 或测试脚本一眼看清是哪条规则触发的限流.
+		// 写入前用 sanitizeHeaderValue 过滤 CR/LF 等控制字符做防御性处理：
+		// 虽然规则名由 polaris 控制台下发，路径相对可信，net/http 自身也会拒绝带 \r\n 的 header value，
+		// 但 demo 作为用户复制参考的样板，写出"显式校验后再 Set"的写法更稳妥.
+		if v := sanitizeHeaderValue(ruleName); v != "" {
+			rw.Header().Set("X-Polaris-RateLimit-Rule", v)
+		}
+		if v := sanitizeHeaderValue(resourceType); v != "" {
+			rw.Header().Set("X-Polaris-RateLimit-Resource", v)
+		}
 		rw.WriteHeader(http.StatusTooManyRequests)
 		_, _ = rw.Write([]byte(body))
 		logReply(reqID, r.RemoteAddr, http.StatusTooManyRequests, body)
@@ -330,13 +369,18 @@ func buildQuotaRequest(r *http.Request, ns, svc, method string) *model.QuotaRequ
 	quotaReq.SetService(svc)
 	quotaReq.SetMethod(method)
 
-	// HEADER：跳过 X-Polaris-Caller-* 系列，避免它们既被当 caller 维度又被当 header 维度
+	// HEADER：跳过 X-Polaris-Caller-* 系列，避免它们既被当 caller 维度又被当 header 维度；
+	// 同时跳过 HTTP 客户端自动附带的通用 header（如 accept、user-agent 等），这些无业务语义，
+	// 传给 SDK 只会干扰限流规则匹配.
 	for k, v := range r.Header {
 		if len(v) == 0 {
 			continue
 		}
 		lk := strings.ToLower(k)
-		if strings.HasPrefix(strings.ToLower(k), strings.ToLower("X-Polaris-Caller")) {
+		if strings.HasPrefix(lk, strings.ToLower("X-Polaris-Caller")) {
+			continue
+		}
+		if isIgnoredHeader(lk) {
 			continue
 		}
 		quotaReq.AddArgument(model.BuildHeaderArgument(lk, v[0]))
@@ -401,6 +445,39 @@ func stripPort(addr string) string {
 		return addr[:i]
 	}
 	return addr
+}
+
+// sanitizeHeaderValue 过滤掉 CR / LF / NUL 等可能用于 header injection 的控制字符；
+// 规则名 / 资源类型理论上是控制台受控字段，但 demo 作为用户复制参考的样板，提供显式校验的写法更稳妥.
+// 输入空串或仅含控制字符时返回空串；调用方据此跳过 Set 头.
+func sanitizeHeaderValue(v string) string {
+	if v == "" {
+		return ""
+	}
+	if strings.ContainsAny(v, "\r\n\x00") {
+		// 含禁用字符直接丢弃，不做半截转义——避免暴露不完整的规则名误导排查
+		return ""
+	}
+	return v
+}
+
+// ignoredHeaders 列出 HTTP 客户端自动附带的通用 header（小写）；
+// 这些 header 无业务语义，不应作为限流匹配维度传给 SDK.
+var ignoredHeaders = map[string]struct{}{
+	"accept":          {},
+	"accept-encoding": {},
+	"accept-language": {},
+	"user-agent":      {},
+	"connection":      {},
+	"host":            {},
+	"content-length":  {},
+	"content-type":    {},
+}
+
+// isIgnoredHeader 判断给定的小写 header key 是否属于应跳过的通用 HTTP header.
+func isIgnoredHeader(lowerKey string) bool {
+	_, ok := ignoredHeaders[lowerKey]
+	return ok
 }
 
 func min(a, b int) int {

@@ -409,6 +409,7 @@ github.com/polarismesh/polaris-go v1.7.1-0.20260306034000-560ea3ca2dfe h1:XddovA
 github.com/polarismesh/polaris-go v1.7.1-0.20260306034000-560ea3ca2dfe/go.mod h1:vR+aN7rFk6gN2cwntY0aJtnlfpVYnKO65JyCOzMcvYA=
 github.com/polarismesh/specification v1.8.0-alpha.1 h1:pUn+1KS757SCxX7c95eDwt9okGTZsKPDKjruytmPYZQ=
 github.com/polarismesh/specification v1.8.0-alpha.1/go.mod h1:rDvMMtl5qebPmqiBLNa5Ps0XtwkP31ZLirbH4kXA0YU=
+github.com/polarismesh/specification v1.8.0/go.mod h1:Gb9OLXOELG4VwhxPh4DK6C0C3Z7FFYCmVkTW/d6+kvM=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=
 github.com/prometheus/client_golang v1.7.1/go.mod h1:PY5Wy2awLA44sXw4AOSfFBetzPP4j5+D6mVACh+pe2M=

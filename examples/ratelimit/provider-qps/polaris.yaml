@@ -3,6 +3,33 @@ global:
     addresses:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
+  # 监控指标上报：pull 模式 → provider 自身暴露 /metrics 端口，由 prometheus server 主动抓取.
+  # metricPort 使用环境变量 ${POLARIS_METRICS_PORT}：
+  #   - verify_ratelimit.sh 为每个 provider 实例自动分配不同端口（业务端口 + 10000），避免多实例端口冲突
+  #   - 环境变量未设置时展开为空串 → SDK SetDefault() 回退到默认值 28080（手动 make run 时的行为）
+  # 这样 verify_ratelimit.sh 可以 curl http://127.0.0.1:<metrics_port>/metrics 验证
+  # ratelimit_rq_total{callee_namespace,callee_service,callee_method,caller_labels,rule_name,...} 六维度指标.
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricHost: 127.0.0.1
+        metricPort: "${POLARIS_METRICS_PORT}"
+  # 限流事件上报：状态切换（UNLIMITED↔LIMITED）时 SDK 自动构造 RateLimitStart / RateLimitEnd 事件，
+  # 经 pushgateway 插件 POST 到 polaris.pushgateway 服务的 /polaris/client/events 接口.
+  # 默认 SDK 行为是 disable（DefaultEventReporterEnabled=false），demo 显式开启便于观测.
+  # 不配 address 时，pushgateway 插件会通过 polaris 服务发现拉 ${namespaceName}/${serviceName} 实例
+  # （默认 Polaris/polaris.pushgateway，由腾讯云商业版自动注册）.
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+    plugin:
+      pushgateway:
+        address: "${POLARIS_EVENT_ADDR}"
 provider:
   rateLimit:
     enable: true

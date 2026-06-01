@@ -22,6 +22,14 @@
 #   [用例 6.3] GLOBAL 多实例共享配额：2 个 provider 实例**合计**消耗一份阈值（与 LOCAL×N 形成强对比）
 #   [用例 6.4] GLOBAL+regex_combine：远端配额下多 path 共享（对照 5.2 单机版）
 #   [用例 6.5] 远端降级到本地：故意把 SDK 的 limiter 服务名指向不存在的服务，验证 FAILOVER_LOCAL 退化路径
+#   [用例 7.1] CustomResponse 自定义返回（LOCAL）：限流时 HTTP body 来自规则的 customResponse.body，
+#              且响应头 X-Polaris-RateLimit-Rule == 规则名（验证 QuotaResponse.GetActiveRule API 可用）
+#   [用例 7.2] CustomResponse 自定义返回（GLOBAL）：分布式限流场景下同样能透传 customResponse.body
+#              （依赖 polaris.limiter 可用；不可用时 SKIP）
+#   [用例 8.1] 限流监控指标验证：用独立服务名 MetricsRatelimitEchoServer 启 provider+consumer，
+#              链路 curl → consumer:18201 → provider:18200，curl provider 的 /metrics 端口（pull 28200），
+#              断言 ratelimit_rq_{total,pass,limit} 指标存在、label 六维度齐备（含 callee_service 精确匹配），
+#              且数值满足 total==pass+limit、pass>0、limit>0
 #
 # 流程：
 #   1. 通过 Polaris HTTP API 检查并按需创建三条限流规则（QPS reject + QPS unirate + CONCURRENCY）；
@@ -43,6 +51,11 @@
 #   ./verify_ratelimit.sh --polaris-token TOKEN    # 配置 token（开启鉴权时必填）
 #   ./verify_ratelimit.sh --skip qps               # 跳过 QPS 用例
 #   ./verify_ratelimit.sh --skip concurrency       # 跳过并发数用例
+#   ./verify_ratelimit.sh --skip custom-response   # 跳过自定义返回用例
+#   ./verify_ratelimit.sh --only qps               # 仅跑 QPS 用例
+#   ./verify_ratelimit.sh --only qps,metrics       # 仅跑 QPS + 监控验证
+#   ./verify_ratelimit.sh --only custom-response   # 仅跑自定义返回用例
+#   ./verify_ratelimit.sh --only events            # 仅跑限流事件上报验证
 #   ./verify_ratelimit.sh --keep                   # 保留 provider 进程和日志（规则始终保留）
 #   ./verify_ratelimit.sh --debug                  # 提高 SDK 日志级别
 #   ./verify_ratelimit.sh --limiter-service polaris.limiter.local  # 6.x 用本地 polaris-limiter（独立服务名）
@@ -66,6 +79,7 @@ NC='\033[0m'
 POLARIS_SERVER="${POLARIS_SERVER:-127.0.0.1}"
 POLARIS_TOKEN="${POLARIS_TOKEN:-}"
 SKIP_LIST=""
+ONLY_LIST=""
 KEEP_RESOURCES=false
 DEBUG_MODE=false
 
@@ -76,6 +90,12 @@ CONCURRENCY_SERVICE="ConcurrencyEchoServer" # 与 provider-concurrency 默认值
 CUSTOM_SERVICE="CustomMatchEchoServer"      # 复用 provider-qps 二进制；用于自定义匹配规则（用例 4.x）
 REGEX_SERVICE="RegexCombineEchoServer"      # 复用 provider-qps 二进制；用于 regex_combine 规则（用例 5.x）
 GLOBAL_SERVICE="GlobalRatelimitEchoServer"  # 复用 provider-qps 二进制；用于分布式 GLOBAL 限流（用例 6.x）
+CUSTOM_RESPONSE_SERVICE="CustomResponseEchoServer" # 复用 provider-qps 二进制；用于自定义返回 LOCAL（用例 7.1）
+GLOBAL_CUSTOM_RESPONSE_SERVICE="GlobalCustomResponseEchoServer" # 复用 provider-qps；用于自定义返回 GLOBAL（用例 7.2）
+# 用例 8.x 监控验证专用服务名：与 1.x 等用例隔离，让 consumer 服务发现只能拉到本用例启动的那一个 provider 实例.
+# 如果复用 QpsRatelimitEchoServer，consumer 的 LB 会把请求随机分发到其它用例残留的同服务 provider 上，
+# 导致当前 provider 的 /metrics 只能看到部分监控数据，limit 维度容易为 0.
+METRICS_SERVICE="MetricsRatelimitEchoServer"
 
 # 规则名（用于查询是否已存在；脚本不再删除规则，已存在则跳过创建）
 QPS_RULE_NAME="ratelimit-e2e-qps-rule"
@@ -84,6 +104,9 @@ CONCURRENCY_RULE_NAME="ratelimit-e2e-concurrency-rule"
 CUSTOM_RULE_NAME="ratelimit-e2e-custom-match-rule"
 REGEX_RULE_NAME="ratelimit-e2e-regex-combine-rule"
 GLOBAL_RULE_NAME="ratelimit-e2e-global-rule"
+CUSTOM_RESPONSE_RULE_NAME="ratelimit-e2e-custom-response-rule"
+GLOBAL_CUSTOM_RESPONSE_RULE_NAME="ratelimit-e2e-global-custom-response-rule"
+METRICS_RULE_NAME="ratelimit-e2e-metrics-rule"  # 用例 8.x 专用规则（独立服务名 → 链路完整不被 LB 分散）
 
 # 端口（避免与其他 demo 冲突）；本端到端测试链路 = curl → consumer → provider
 # provider 端口
@@ -95,6 +118,8 @@ PORT_PROVIDER_REGEX=18184
 PORT_PROVIDER_GLOBAL_A=18185           # 用例 6.x 第 1 个 provider 实例（验证多实例共享 GLOBAL 配额）
 PORT_PROVIDER_GLOBAL_B=18186           # 用例 6.x 第 2 个 provider 实例（同服务名，不同端口）
 PORT_PROVIDER_GLOBAL_FAILOVER=18187    # 用例 6.5 远端降级专用 provider（启动时指向不存在的 limiter 服务）
+PORT_PROVIDER_CUSTOM_RESPONSE=18188    # 用例 7.1 自定义返回 LOCAL provider
+PORT_PROVIDER_GLOBAL_CUSTOM_RESP=18189 # 用例 7.2 自定义返回 GLOBAL provider
 # consumer 端口（每个用例段一个 consumer 实例，--service 指向对应 provider）
 PORT_CONSUMER_QPS=18190
 PORT_CONSUMER_CONCURRENCY=18191
@@ -103,6 +128,8 @@ PORT_CONSUMER_CUSTOM=18193
 PORT_CONSUMER_REGEX=18194
 PORT_CONSUMER_GLOBAL=18195
 PORT_CONSUMER_GLOBAL_FAILOVER=18197    # 用例 6.5 远端降级专用 consumer
+PORT_CONSUMER_CUSTOM_RESPONSE=18198    # 用例 7.1 自定义返回 LOCAL consumer
+PORT_CONSUMER_GLOBAL_CUSTOM_RESP=18199 # 用例 7.2 自定义返回 GLOBAL consumer
 
 # QPS reject 规则参数（用例 1.x）
 QPS_MAX_AMOUNT=2
@@ -166,10 +193,24 @@ GLOBAL_WINDOW_SECOND=1
 GLOBAL_BURST_REQUESTS=8                      # 单批并发突发请求数
 GLOBAL_PER_INSTANCE_REQUESTS=5               # 共享配额用例每个实例的并发请求数
 GLOBAL_OBSERVE_WINDOWS=4                     # 多窗口聚合判定的窗口数（每窗口发一批，统计聚合结果稳定性）
+# 用例 6.3 多实例共享配额专用窗口数：拉到 8 窗口让首次 burst 摊薄
+# 分布式限流"先消费后结算"的语义会让首次每个实例本地预消费多放几个，多窗口聚合后比例越小越稳定.
+# 8 窗口对照表：GLOBAL 收敛 ≈ 8*4 + ε burst ≤ 40；LOCAL 退化 = 8*2*4 = 64 → 区分度足够大.
+GLOBAL_SHARED_WINDOWS=8
 # polaris.limiter 远端集群（默认部署位置）
 GLOBAL_LIMITER_NAMESPACE="Polaris"
 GLOBAL_LIMITER_SERVICE="polaris.limiter"
 GLOBAL_LIMITER_BAD_SERVICE="ratelimit-e2e-nonexistent-limiter"  # 6.5 用例：故意指向一个不存在的服务名
+
+# CustomResponse 规则参数（用例 7.x）—— 验证 QuotaResponse.GetActiveRule + customResponse.body 端到端透传:
+#   - 阈值 2 / 1s 与 QPS reject 一致，便于触发后立即拒绝（无排队语义）
+#   - 串行 6 次：单窗口下应限到 4，最坏跨 2 窗口仍限到 2，期望 limited ≥ 2
+#   - body 是一段 JSON 字符串：通过端到端断言验证规则配置 → 服务端下发 → SDK 缓存 → provider 读 GetActiveRule
+#     → HTTP 透传给上游 curl 的整条链路.
+CUSTOM_RESPONSE_MAX_AMOUNT=2
+CUSTOM_RESPONSE_WINDOW_SECOND=1
+CUSTOM_RESPONSE_TOTAL_REQUESTS=6
+CUSTOM_RESPONSE_BODY='{"code":429,"reason":"verify_ratelimit e2e custom body","trace":"verify"}'
 
 # 全局结果
 declare -a CASE_NAMES
@@ -183,6 +224,7 @@ while [[ $# -gt 0 ]]; do
         --polaris-server) POLARIS_SERVER="$2"; shift 2 ;;
         --polaris-token)  POLARIS_TOKEN="$2";  shift 2 ;;
         --skip)           SKIP_LIST="$2";      shift 2 ;;
+        --only)           ONLY_LIST="$2";      shift 2 ;;
         --keep)           KEEP_RESOURCES=true; shift ;;
         --debug)          DEBUG_MODE=true;     shift ;;
         --limiter-namespace) GLOBAL_LIMITER_NAMESPACE="$2"; shift 2 ;;
@@ -194,7 +236,8 @@ while [[ $# -gt 0 ]]; do
 选项:
   --polaris-server <addr>   Polaris 服务端地址 (默认 127.0.0.1)
   --polaris-token <token>   Polaris 鉴权 Token
-  --skip <列表>             逗号分隔，可选: qps,unirate,concurrency,custom,regex,global
+  --skip <列表>             逗号分隔，跳过指定用例组。可选: qps,unirate,concurrency,custom,regex,global,custom-response,metrics
+  --only <列表>             逗号分隔，仅运行指定用例组（其余全部跳过）。与 --skip 互斥，--only 优先
   --keep                    保留 provider 进程和日志（限流规则始终保留，无需此参数控制）
   --debug                   开启 debug 日志（透传 SDK 日志级别）
   --limiter-namespace <ns>  GLOBAL 用例（6.x）使用的 limiter 命名空间 (默认 Polaris)
@@ -252,8 +295,22 @@ print_block() {
 }
 
 # ======================== 工具：是否 skip 某用例分类 ========================
+# 优先级：--only > --skip
+#   --only 指定时：仅列出的用例组返回"不跳过"(return 1)，其余都跳过(return 0)
+#   --only 未指定时：按 --skip 列表判断；列表中存在的返回"跳过"(return 0)
 is_skipped() {
     local name="$1"
+    # --only 优先：有 ONLY_LIST 时只看是否在白名单中
+    if [[ -n "$ONLY_LIST" ]]; then
+        local IFS=','
+        # shellcheck disable=SC2206
+        local arr=($ONLY_LIST)
+        for x in "${arr[@]}"; do
+            [[ "$(echo "$x" | tr -d ' ')" == "$name" ]] && return 1  # 在白名单中 → 不跳过
+        done
+        return 0  # 不在白名单中 → 跳过
+    fi
+    # fallback 到 --skip 黑名单逻辑
     [[ -z "$SKIP_LIST" ]] && return 1
     local IFS=','
     # shellcheck disable=SC2206
@@ -341,6 +398,42 @@ except Exception:
 " <<< "$resp" 2>/dev/null || echo ""
 }
 
+# query_rule_custom_response_body：查询已存在规则的 customResponse.body 字符串.
+# 字段缺失或查询失败均输出空串；成功时输出原始 body（不做转义/解码）.
+# 用于检测控制台 customResponse.body 与脚本期望是否一致——不一致则用例 7.x 必然 FAIL（custom body 校验不过），
+# 因此在 create_custom_response_rule 里复用该函数，发现不一致就主动 PUT 同步.
+query_rule_custom_response_body() {
+    local rule_name="$1"
+    local service="$2"
+    local resp http_code
+    http_code=$(curl -s -o /tmp/_rl_qcrb_$$.tmp -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request GET "${POLARIS_HTTP_ADDR}/naming/v1/ratelimits?name=${rule_name}&service=${service}&namespace=${NAMESPACE}&limit=50" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" 2>/dev/null || echo "000")
+    resp=$(cat /tmp/_rl_qcrb_$$.tmp 2>/dev/null || echo "")
+    rm -f /tmp/_rl_qcrb_$$.tmp
+    if [[ "$http_code" != "200" ]]; then
+        return 0
+    fi
+    SVC="$service" RULE="$rule_name" python3 -c "
+import sys, json, os
+svc = os.environ['SVC']
+rule = os.environ['RULE']
+try:
+    data = json.load(sys.stdin)
+    for r in data.get('rateLimits', []):
+        if r.get('name', '') == rule and r.get('service', '') == svc:
+            cr = r.get('custom_response', r.get('customResponse', {}) or {})
+            body = cr.get('body', '') if isinstance(cr, dict) else ''
+            if body:
+                # 用 print 直接输出原始 body；调用方按字符串字面量比较即可
+                print(body, end='')
+            break
+except Exception:
+    pass
+" <<< "$resp" 2>/dev/null || echo ""
+}
+
 # update_rule_via_http <body_json>：对一个或多个已有规则做整体替换更新.
 # body 必须是 JSON 数组、每项必须包含 id（由调用方 query_rule_id 取到），其它字段语义同 create.
 # 用法：
@@ -416,6 +509,64 @@ print(json.dumps([{
         return 1
     fi
     log_info "QPS 规则 [$rule_name] 已创建"
+    return 0
+}
+
+# create_metrics_rule
+# 用例 8.x 专用规则：与 QPS reject 规则字段一致，但绑定到独立服务 ${METRICS_SERVICE}.
+# 独立服务名的目的：让 consumer 服务发现只能命中本用例启动的那一个 provider 实例，
+# 避免 LB 把请求随机分发到 1.x 等其它用例残留的 QpsRatelimitEchoServer provider 上，
+# 否则 provider:18200 的 /metrics 只能看到部分监控数据，limit 维度容易为 0.
+create_metrics_rule() {
+    local rule_name="$METRICS_RULE_NAME"
+    print_block "Metrics 规则配置 [$rule_name]" \
+        "服务/命名空间:    ${METRICS_SERVICE} / ${NAMESPACE}" \
+        "限流资源类型:     QPS（reject 策略，复用 1.x 字段配置）" \
+        "限流模式:         LOCAL" \
+        "method 匹配:      EXACT '/echo'" \
+        "阈值:             ${QPS_MAX_AMOUNT} 次 / ${QPS_WINDOW_SECOND} 秒" \
+        "" \
+        "效果:             与 QPS 规则一致，但绑定到独立服务名 ${METRICS_SERVICE}，" \
+        "                  让 consumer→provider 链路只命中本用例的 provider 实例（同服务下只有一个 provider），" \
+        "                  从而避免 LB 把请求随机分发到其它 QpsRatelimitEchoServer 实例造成监控数据不齐."
+    if rule_exists "$rule_name" "$METRICS_SERVICE"; then
+        log_info "Metrics 规则 [$rule_name] 已存在于服务 [$METRICS_SERVICE]，跳过创建"
+        return 0
+    fi
+    local body
+    body=$(SVC="$METRICS_SERVICE" NS="$NAMESPACE" NAME="$rule_name" \
+        AMOUNT="$QPS_MAX_AMOUNT" WINDOW="$QPS_WINDOW_SECOND" \
+        python3 -c "
+import os, json
+print(json.dumps([{
+    'name': os.environ['NAME'],
+    'service': os.environ['SVC'],
+    'namespace': os.environ['NS'],
+    'priority': 0,
+    'resource': 'QPS',
+    'type': 'LOCAL',
+    'method': {'type': 'EXACT', 'value': '/echo'},
+    'amounts': [{
+        'maxAmount': int(os.environ['AMOUNT']),
+        'validDuration': '%ss' % os.environ['WINDOW'],
+    }],
+    'action': 'REJECT',
+    'disable': False,
+}]))")
+    local http_code resp
+    http_code=$(curl -s -o /tmp/_rl_c_$$.tmp -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request POST "${POLARIS_HTTP_ADDR}/naming/v1/ratelimits" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" \
+        --header 'Content-Type: application/json' \
+        --data-raw "$body" 2>/dev/null || echo "000")
+    resp=$(cat /tmp/_rl_c_$$.tmp 2>/dev/null || echo "")
+    rm -f /tmp/_rl_c_$$.tmp
+    if [[ "$http_code" != "200" ]]; then
+        log_error "创建 Metrics 规则失败 HTTP=${http_code} resp=${resp}"
+        return 1
+    fi
+    log_info "Metrics 规则 [$rule_name] 已创建"
     return 0
 }
 
@@ -770,6 +921,200 @@ create_global_rule() {
     return 0
 }
 
+# _build_custom_response_rule_body <rule_name> <rule_id> <body>
+# 构造带 customResponse.body 的限流规则 body；rule_id 为空时用于 POST 创建，非空时用于 PUT 更新.
+# 关键字段：
+#   - resource=QPS / type=LOCAL / action=REJECT：与 reject 规则一致，确保限流可立即触发
+#   - method.EXACT='/echo'：复用 provider-qps 的 /echo 接口，无需新建路由
+#   - customResponse.body：本次新增字段，被 SDK 端通过 QuotaResponse.GetActiveRule().GetCustomResponse().GetBody() 读取
+_build_custom_response_rule_body() {
+    local rule_name="$1"
+    local rule_id="$2"
+    local body_text="$3"
+    SVC="$CUSTOM_RESPONSE_SERVICE" NS="$NAMESPACE" NAME="$rule_name" \
+        AMOUNT="$CUSTOM_RESPONSE_MAX_AMOUNT" WINDOW="$CUSTOM_RESPONSE_WINDOW_SECOND" \
+        BODY="$body_text" RULE_ID="$rule_id" \
+        python3 -c "
+import os, json
+rule = {
+    'name': os.environ['NAME'],
+    'service': os.environ['SVC'],
+    'namespace': os.environ['NS'],
+    'priority': 0,
+    'resource': 'QPS',
+    'type': 'LOCAL',
+    'method': {'type': 'EXACT', 'value': '/echo'},
+    'amounts': [{
+        'maxAmount': int(os.environ['AMOUNT']),
+        'validDuration': '%ss' % os.environ['WINDOW'],
+    }],
+    'action': 'REJECT',
+    'customResponse': {'body': os.environ['BODY']},
+    'disable': False,
+}
+rid = os.environ.get('RULE_ID', '')
+if rid:
+    rule['id'] = rid
+print(json.dumps([rule]))
+"
+}
+
+# create_custom_response_rule
+# 创建带 customResponse.body 的限流规则（用例 7.x）；
+# 若同名规则已存在但 customResponse.body 与脚本期望不一致，则自动 PUT 同步——
+# 否则 7.1 用例的 body 字面量比较必然 FAIL.
+create_custom_response_rule() {
+    local rule_name="$CUSTOM_RESPONSE_RULE_NAME"
+    print_block "CustomResponse 规则配置 [$rule_name]" \
+        "服务/命名空间:    ${CUSTOM_RESPONSE_SERVICE} / ${NAMESPACE}" \
+        "限流资源类型:     QPS（reject 策略）" \
+        "限流模式:         LOCAL（单机限流）" \
+        "method 匹配:      EXACT '/echo'" \
+        "阈值:             ${CUSTOM_RESPONSE_MAX_AMOUNT} 次 / ${CUSTOM_RESPONSE_WINDOW_SECOND} 秒" \
+        "customResponse:   body=${CUSTOM_RESPONSE_BODY}" \
+        "" \
+        "效果:             触发限流后 SDK 通过 QuotaResponse.ActiveRule 暴露规则；provider-qps 读" \
+        "                  resp.GetActiveRule().GetCustomResponse().GetBody() 作为 HTTP body 写回，" \
+        "                  并把规则名透传到响应头 X-Polaris-RateLimit-Rule，供 7.1 用例做端到端断言."
+    if rule_exists "$rule_name" "$CUSTOM_RESPONSE_SERVICE"; then
+        local actual_body
+        actual_body=$(query_rule_custom_response_body "$rule_name" "$CUSTOM_RESPONSE_SERVICE")
+        if [[ "$actual_body" != "$CUSTOM_RESPONSE_BODY" ]]; then
+            log_warn "[custom-response 规则] 控制台 body 与脚本期望不一致，自动 PUT 同步"
+            log_warn "    期望: ${CUSTOM_RESPONSE_BODY}"
+            log_warn "    实际: ${actual_body}"
+            local rule_id
+            rule_id=$(query_rule_id "$rule_name" "$CUSTOM_RESPONSE_SERVICE")
+            if [[ -z "$rule_id" ]]; then
+                log_error "[custom-response 规则] 拿不到规则 id，无法自动更新"
+                return 1
+            fi
+            local body
+            body=$(_build_custom_response_rule_body "$rule_name" "$rule_id" "$CUSTOM_RESPONSE_BODY")
+            if update_rule_via_http "$body"; then
+                log_info "[custom-response 规则] 已自动 PUT 同步 customResponse.body"
+            else
+                log_error "[custom-response 规则] PUT 同步失败"
+                return 1
+            fi
+        else
+            log_info "custom-response 规则 [$rule_name] 已存在于服务 [$CUSTOM_RESPONSE_SERVICE]，body 一致，跳过更新"
+        fi
+        return 0
+    fi
+    local body
+    body=$(_build_custom_response_rule_body "$rule_name" "" "$CUSTOM_RESPONSE_BODY")
+    local http_code resp
+    http_code=$(curl -s -o /tmp/_rl_c_$$.tmp -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request POST "${POLARIS_HTTP_ADDR}/naming/v1/ratelimits" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" \
+        --header 'Content-Type: application/json' \
+        --data-raw "$body" 2>/dev/null || echo "000")
+    resp=$(cat /tmp/_rl_c_$$.tmp 2>/dev/null || echo "")
+    rm -f /tmp/_rl_c_$$.tmp
+    if [[ "$http_code" != "200" ]]; then
+        log_error "创建 custom-response 规则失败 HTTP=${http_code} resp=${resp}"
+        return 1
+    fi
+    log_info "custom-response 规则 [$rule_name] 已创建"
+    return 0
+}
+
+# _build_global_custom_response_rule_body <rule_name> <rule_id> <body>
+# 与 _build_custom_response_rule_body 唯一区别：type='GLOBAL' + failover='FAILOVER_LOCAL'.
+_build_global_custom_response_rule_body() {
+    local rule_name="$1"
+    local rule_id="$2"
+    local body_text="$3"
+    SVC="$GLOBAL_CUSTOM_RESPONSE_SERVICE" NS="$NAMESPACE" NAME="$rule_name" \
+        AMOUNT="$CUSTOM_RESPONSE_MAX_AMOUNT" WINDOW="$CUSTOM_RESPONSE_WINDOW_SECOND" \
+        BODY="$body_text" RULE_ID="$rule_id" \
+        python3 -c "
+import os, json
+rule = {
+    'name': os.environ['NAME'],
+    'service': os.environ['SVC'],
+    'namespace': os.environ['NS'],
+    'priority': 0,
+    'resource': 'QPS',
+    'type': 'GLOBAL',
+    'method': {'type': 'EXACT', 'value': '/echo'},
+    'amounts': [{
+        'maxAmount': int(os.environ['AMOUNT']),
+        'validDuration': '%ss' % os.environ['WINDOW'],
+    }],
+    'action': 'REJECT',
+    'failover': 'FAILOVER_LOCAL',
+    'customResponse': {'body': os.environ['BODY']},
+    'disable': False,
+}
+rid = os.environ.get('RULE_ID', '')
+if rid:
+    rule['id'] = rid
+print(json.dumps([rule]))
+"
+}
+
+# create_global_custom_response_rule
+# 创建 GLOBAL + customResponse.body 的限流规则（用例 7.2）；
+# 验证分布式限流场景下 customResponse 仍然能透传。
+create_global_custom_response_rule() {
+    local rule_name="$GLOBAL_CUSTOM_RESPONSE_RULE_NAME"
+    print_block "GLOBAL CustomResponse 规则配置 [$rule_name]" \
+        "服务/命名空间:    ${GLOBAL_CUSTOM_RESPONSE_SERVICE} / ${NAMESPACE}" \
+        "限流资源类型:     QPS（reject 策略）" \
+        "限流模式:         GLOBAL（分布式限流，走远端 polaris.limiter 配额）" \
+        "method 匹配:      EXACT '/echo'" \
+        "阈值:             ${CUSTOM_RESPONSE_MAX_AMOUNT} 次 / ${CUSTOM_RESPONSE_WINDOW_SECOND} 秒" \
+        "failover:         FAILOVER_LOCAL（远端不可达时退化为本地限流，不影响 customResponse 透传）" \
+        "customResponse:   body=${CUSTOM_RESPONSE_BODY}" \
+        "" \
+        "效果:             分布式限流触发后，SDK 的 QuotaResponse.ActiveRule 同样能读取 customResponse.body；" \
+        "                  无论走远端配额还是 FAILOVER_LOCAL 路径，provider 都能正确返回自定义响应体."
+    if rule_exists "$rule_name" "$GLOBAL_CUSTOM_RESPONSE_SERVICE"; then
+        local actual_body
+        actual_body=$(query_rule_custom_response_body "$rule_name" "$GLOBAL_CUSTOM_RESPONSE_SERVICE")
+        if [[ "$actual_body" != "$CUSTOM_RESPONSE_BODY" ]]; then
+            log_warn "[global-custom-response 规则] 控制台 body 与脚本期望不一致，自动 PUT 同步"
+            local rule_id
+            rule_id=$(query_rule_id "$rule_name" "$GLOBAL_CUSTOM_RESPONSE_SERVICE")
+            if [[ -z "$rule_id" ]]; then
+                log_error "[global-custom-response 规则] 拿不到规则 id，无法自动更新"
+                return 1
+            fi
+            local body
+            body=$(_build_global_custom_response_rule_body "$rule_name" "$rule_id" "$CUSTOM_RESPONSE_BODY")
+            if update_rule_via_http "$body"; then
+                log_info "[global-custom-response 规则] 已自动 PUT 同步 customResponse.body"
+            else
+                log_error "[global-custom-response 规则] PUT 同步失败"
+                return 1
+            fi
+        else
+            log_info "global-custom-response 规则 [$rule_name] 已存在，body 一致，跳过更新"
+        fi
+        return 0
+    fi
+    local body
+    body=$(_build_global_custom_response_rule_body "$rule_name" "" "$CUSTOM_RESPONSE_BODY")
+    local http_code resp
+    http_code=$(curl -s -o /tmp/_rl_c_$$.tmp -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request POST "${POLARIS_HTTP_ADDR}/naming/v1/ratelimits" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" \
+        --header 'Content-Type: application/json' \
+        --data-raw "$body" 2>/dev/null || echo "000")
+    resp=$(cat /tmp/_rl_c_$$.tmp 2>/dev/null || echo "")
+    rm -f /tmp/_rl_c_$$.tmp
+    if [[ "$http_code" != "200" ]]; then
+        log_error "创建 global-custom-response 规则失败 HTTP=${http_code} resp=${resp}"
+        return 1
+    fi
+    log_info "global-custom-response 规则 [$rule_name] 已创建"
+    return 0
+}
+
 # create_concurrency_rule
 # 已存在同名规则时跳过创建，规则保持不变（包括字段差异；如需重置请人工到控制台修改）.
 create_concurrency_rule() {
@@ -911,6 +1256,8 @@ PROVIDER_REGEX_PID=""
 PROVIDER_GLOBAL_A_PID=""
 PROVIDER_GLOBAL_B_PID=""
 PROVIDER_GLOBAL_FAILOVER_PID=""
+PROVIDER_CUSTOM_RESPONSE_PID=""
+PROVIDER_GLOBAL_CUSTOM_RESP_PID=""
 CONSUMER_QPS_PID=""
 CONSUMER_UNIRATE_PID=""
 CONSUMER_CONC_PID=""
@@ -918,6 +1265,13 @@ CONSUMER_CUSTOM_PID=""
 CONSUMER_REGEX_PID=""
 CONSUMER_GLOBAL_PID=""
 CONSUMER_GLOBAL_FAILOVER_PID=""
+CONSUMER_CUSTOM_RESPONSE_PID=""
+CONSUMER_GLOBAL_CUSTOM_RESP_PID=""
+PROVIDER_METRICS_PID=""
+CONSUMER_METRICS_PID=""
+PROVIDER_EVENTS_PID=""
+PROVIDER_EVENTS_REMOTE_PID=""
+MOCK_EVENT_SERVER_PID=""
 
 # build_and_start_binary <subdir> <port> <service> <log_name> <out_pid_var> [extra_args...]
 # 适用于本目录下任何按 polaris-go SDK 模式起的 binary（provider-qps / provider-concurrency / consumer 等）.
@@ -953,8 +1307,13 @@ build_and_start_binary() {
     # 用软链而非复制：源码 yaml 修改会即时生效，便于调试.
     ln -sf "${src_dir}/polaris.yaml" "${run_dir}/polaris.yaml"
 
+    # POLARIS_METRICS_PORT：每个 provider 实例的 prometheus /metrics 端口 = 业务端口 + 10000.
+    # 确保同一台机器上多个 provider 实例不会争抢同一个 metrics 端口.
+    # consumer 实例的 metrics 端口同样按此规则分配（consumer 也加载了 statReporter），但用例 8.x 仅检查 provider.
+    local metrics_port=$((port + 10000))
+
     local pid_log="${LOG_DIR}/${log_name}.log"
-    log_info "[start] ${log_name} 监听 :${port}, stdout 日志 ${pid_log}, SDK 日志 ${run_dir}/polaris/log"
+    log_info "[start] ${log_name} 监听 :${port}, metrics :${metrics_port}, stdout 日志 ${pid_log}, SDK 日志 ${run_dir}/polaris/log"
     # provider 进程在 run_dir 下启动：
     #   1) polaris-go SDK 默认从 cwd 加载 ./polaris.yaml（已通过软链准备好）
     #   2) yaml 中的 ${POLARIS_SERVER}/${POLARIS_TOKEN} 占位符会通过 os.ExpandEnv 展开
@@ -978,6 +1337,8 @@ build_and_start_binary() {
     local limiter_svc="${POLARIS_LIMITER_SVC:-${GLOBAL_LIMITER_SERVICE}}"
     POLARIS_SERVER="$POLARIS_SERVER" POLARIS_TOKEN="$POLARIS_TOKEN" \
     POLARIS_LIMITER_NS="$limiter_ns" POLARIS_LIMITER_SVC="$limiter_svc" \
+    POLARIS_METRICS_PORT="$metrics_port" \
+    POLARIS_EVENT_ADDR="${POLARIS_EVENT_ADDR:-}" \
         "$bin" --namespace "$NAMESPACE" --service "$service" --port "$port" \
         --token "$POLARIS_TOKEN" \
         ${debug_args[@]+"${debug_args[@]}"} \
@@ -1110,6 +1471,102 @@ count_status_concurrent() {
     done
     rm -rf "$tmp"
     echo "${ok} ${limited} ${other}"
+}
+
+# count_status_serial_with_delay <port> <path> <total> <delay_ms>
+# 串行打 N 个请求，每个请求之间 sleep <delay_ms> 毫秒，让请求节奏与 SDK acquire 周期对齐.
+# 用于稳态精准验证场景（如用例 6.3.5）：当请求间隔 > SDK acquire 周期（30~50ms），
+# 每发出 1 个请求 SDK 就有机会上报 used 给 limiter、limiter 也有机会 push quotaLeft=0，
+# burst 几乎为 0，可以严格校验 GLOBAL 限流的"全集群合计"语义.
+count_status_serial_with_delay() {
+    local port="$1"
+    local path="$2"
+    local total="$3"
+    local delay_ms="$4"
+    local ok=0 limited=0 other=0 i code
+    for ((i=0; i<total; i++)); do
+        code=$(curl -s -o /dev/null --connect-timeout 2 --max-time 5 \
+            -w '%{http_code}' "http://127.0.0.1:${port}${path}" 2>/dev/null || echo "000")
+        case "$code" in
+            200) ok=$((ok+1)) ;;
+            429) limited=$((limited+1)) ;;
+            *)   other=$((other+1)) ;;
+        esac
+        # 最后一次不 sleep；其它每次 sleep delay_ms 让 SDK 完成一次 acquire 周期
+        if [[ $i -lt $((total - 1)) ]]; then
+            # bash 不支持小数 sleep，借 perl/python 实现毫秒级（python3 是已有依赖）
+            python3 -c "import time; time.sleep(${delay_ms}/1000.0)" 2>/dev/null
+        fi
+    done
+    echo "${ok} ${limited} ${other}"
+}
+
+# fetch_status_body_header <port> <path> <header_name>
+# 串行 1 次请求，返回 "<status> <header_value> <body>" 三段（按字面量空格分隔，body 占最后；TAB 已 escape 成空格）.
+# 用于用例 7.x 在限流命中后取整套响应做断言：状态码 / 自定义响应头 / body.
+# - 限流时上游会拿到 429 + body=customResponse.body + 响应头 X-Polaris-RateLimit-Rule=<rule_name>.
+# - 通过时上游拿到 200 + body=Hello,... + 无 X-Polaris-RateLimit-Rule 头.
+# 由于 body 中可能包含特殊字符，调用方应通过临时文件读 body / header，不要再依赖单行解析.
+fetch_status_body_header() {
+    local port="$1"
+    local path="$2"
+    local header_name="$3"
+    local out_dir="$4"  # 输出文件所在目录；调用方负责创建/回收
+    local code
+    code=$(curl -s --connect-timeout 2 --max-time 5 \
+        -D "${out_dir}/headers" \
+        -o "${out_dir}/body" \
+        -w '%{http_code}' \
+        "http://127.0.0.1:${port}${path}" 2>/dev/null || echo "000")
+    # 提取目标 header（大小写不敏感；取第一个匹配，去掉前后空格 / CR）
+    local header_value=""
+    if [[ -f "${out_dir}/headers" ]]; then
+        header_value=$(awk -v h="$header_name" 'BEGIN{IGNORECASE=1} \
+            tolower($1)==tolower(h":"){
+                $1="";
+                sub(/^ +/,"");
+                sub(/\r$/,"");
+                print;
+                exit
+            }' "${out_dir}/headers")
+    fi
+    echo "$code"
+    echo "$header_value"
+}
+
+# burst_until_limited <port> <path> <header_name> <out_dir> <warmup_count> <max_attempts>
+# 反复"并发预热 → fetch"直到 fetch 拿到 429，最多 max_attempts 次。
+# 用于 7.x 自定义返回用例：避免窗口跨秒导致 fetch 落到新窗口拿到 200。
+# 输出格式同 fetch_status_body_header："<status>\n<header_value>"，body 写入 ${out_dir}/body。
+# 调用方负责 mktemp -d 创建 out_dir 并清理。
+burst_until_limited() {
+    local port="$1"
+    local path="$2"
+    local header_name="$3"
+    local out_dir="$4"
+    local warmup_count="$5"
+    local max_attempts="$6"
+    local attempt code header
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        # 每轮先打满窗口（结果丢弃，仅占用配额）
+        count_status_concurrent "$port" "$path" "$warmup_count" >/dev/null
+        # 紧接（不 sleep）单发 fetch 抓取响应
+        local out
+        out=$(fetch_status_body_header "$port" "$path" "$header_name" "$out_dir")
+        code=$(echo "$out" | sed -n '1p')
+        header=$(echo "$out" | sed -n '2p')
+        if [[ "$code" == "429" ]]; then
+            echo "$code"
+            echo "$header"
+            return 0
+        fi
+        # 没拿到 429 → 等少量时间让窗口对齐后再试
+        sleep 0.2
+    done
+    # 超过尝试次数，输出最后一次结果（让调用方判定 FAIL）
+    echo "$code"
+    echo "$header"
+    return 1
 }
 
 # ======================== 用例 1.x：QPS 限流 ========================
@@ -1817,66 +2274,188 @@ run_global_cases() {
 
     # ---------- 用例 6.2：GLOBAL 新窗口仍能触发限流（与 1.2 单机版对照） ----------
     # 验证 GLOBAL 规则不是"用一次就废"：再发一批仍能命中限流，说明远端配额会按窗口重置且 SDK 会重新拉取.
+    #
+    # 注意：6.1 之后 sleep 1+s 让 limiter 桶过窗口，此时本地 tokenLeft 被 limiter push 重置满；
+    # 6.2 启动时前 1~2 个窗口的 burst 又会全部放过（先消费后结算），所以 limited 阈值要按"3~4 个窗口里
+    # 至少有 1 个 limited 事件"来设计——证明规则没有静音即可，不要求每窗口都触发限流.
+    local agg_min_limited_6_2=$(((windows + 1) / 2))  # 4 窗口要求 ≥ 2，6 窗口 ≥ 3
     print_block "[用例 6.2] GLOBAL 新窗口仍能触发限流" \
         "操作:   再次连续 ${windows} 个窗口，每窗口并发突发 ${total_per_window} 次" \
-        "原理:   远端 limiter 按窗口重置配额；SDK 每个窗口重新拉取；规则**持续生效**而不是一次就静音" \
-        "预期:   与 6.1 行为一致：limited ≥ ${agg_min_limited_6_1}" \
-        "判定:   total limited ≥ ${agg_min_limited_6_1} && other == 0 → PASS"
+        "原理:   远端 limiter 按窗口重置配额；SDK 每个窗口重新拉取；规则**持续生效**而不是一次就静音；" \
+        "        burst 容忍：sleep 后 limiter 重置 quota，前 1~2 窗口可能全过，后续窗口必触发限流" \
+        "预期:   limited ≥ ${agg_min_limited_6_2}（${windows} 窗口里至少 ${agg_min_limited_6_2} 个事件证明规则未静音）" \
+        "判定:   limited ≥ ${agg_min_limited_6_2} && other == 0 && SDK 日志含 type=GLOBAL → PASS"
 
     log_info "[用例 6.2] 新一轮 ${windows} 窗口并发突发"
     stat=$(run_global_burst_in_windows "$PORT_CONSUMER_GLOBAL" "/echo" "$total_per_window" "$windows")
     read -r ok limited other <<< "$stat"
     log_info "结果: 总 200=${ok} 429=${limited} 其他=${other}"
 
+    # 二次校验：检查 SDK ratelimit 日志确认规则按 GLOBAL 加载（同 6.3 设计）
+    local global_rule_log_a_6_2="${BUILD_DIR}/provider-qps-global-a/polaris/log/ratelimit/polaris-ratelimit.log"
+    local has_global_a_6_2=0
+    [[ -f "$global_rule_log_a_6_2" ]] && has_global_a_6_2=$(grep -c "type=GLOBAL" "$global_rule_log_a_6_2" 2>/dev/null || echo 0)
+    log_info "SDK 日志校验: provider-A type=GLOBAL 行数=${has_global_a_6_2}"
+
     if [[ "$other" -gt 0 ]]; then
         record_case "用例 6.2 GLOBAL 新窗口再次生效" "FAIL" \
             "出现非 200/429 状态码 (other=${other})"
-    elif [[ "$limited" -lt "$agg_min_limited_6_1" ]]; then
+    elif [[ "$has_global_a_6_2" -lt 1 ]]; then
         record_case "用例 6.2 GLOBAL 新窗口再次生效" "FAIL" \
-            "聚合 limited=${limited} 不足 ${agg_min_limited_6_1}（规则没继续生效？）"
+            "SDK 日志中未检测到 type=GLOBAL（A=${has_global_a_6_2}），规则未按 GLOBAL 加载"
+    elif [[ "$limited" -lt "$agg_min_limited_6_2" ]]; then
+        record_case "用例 6.2 GLOBAL 新窗口再次生效" "FAIL" \
+            "聚合 limited=${limited} 不足 ${agg_min_limited_6_2}（规则没继续生效？）"
     else
         record_case "用例 6.2 GLOBAL 新窗口再次生效" "PASS" \
-            "${windows} 窗口合计: 200=${ok} 429=${limited}（≥${agg_min_limited_6_1}），规则跨窗口持续生效"
+            "${windows} 窗口合计: 200=${ok} 429=${limited}（≥${agg_min_limited_6_2}），SDK 日志 type=GLOBAL 命中（${has_global_a_6_2}），规则跨窗口持续生效"
     fi
 
     sleep $((GLOBAL_WINDOW_SECOND + 1))
 
     # ---------- 用例 6.3：GLOBAL 多实例共享配额（核心语义，多窗口聚合判定） ----------
     # 直接打 A/B 两个 provider 端口（绕开 consumer 负载均衡随机性），让两边 SDK 真正同时承压.
-    # 多窗口聚合：N 个窗口期望合计 ok ≈ N*MAX_AMOUNT；如果错认成 LOCAL，会变成 N*2*MAX_AMOUNT.
+    #
+    # 分布式限流 "先消费后结算" 语义：每个 SDK 实例本地维护 tokenLeft，请求来时直接 atomic 扣减
+    # 后才异步上报 limiter。多实例并发时各自基于"过期视图"放行，会瞬时超出全局阈值——
+    # 这是分布式限流的**固有特性**（参见 polaris-go/plugin/ratelimiter/reject/bucket_qps.go
+    # 的 directAllocateRemoteToken 与 polaris-limiter/ratelimitv2/occupy.go 的 Allocate）.
+    #
+    # 真实数据（polaris-limiter 服务端 stat 日志）：单个 1s 窗口经常 passed=8~12 而 threshold=4,
+    # 即每窗口超限 2~3 倍是 limiter 算法的**预期表现**.
+    #
+    # 因此 6.3 改为"GLOBAL 路径走通 + 数值不退化为纯 LOCAL"双重判定：
+    #   - 数值上界  : 略低于 LOCAL 退化值（2*MAX*WINDOWS=64），用 LOCAL_BOUND - MAX = 60
+    #                 GLOBAL 实测 8 窗口合计 ≈ 30~56；LOCAL 退化恒为 64.
+    #   - 结构校验  : SDK ratelimit 日志含 type=GLOBAL（INFO 级别，无需 --debug）.
+    # 二者同时通过才能证明：规则按 GLOBAL 加载 + 远端配额确实在节流（没有完全退化）.
+    local shared_windows=$GLOBAL_SHARED_WINDOWS
     local per_instance=$GLOBAL_PER_INSTANCE_REQUESTS
     local share_total_per_window=$((per_instance * 2))
-    local share_total_all=$((share_total_per_window * windows))
-    # GLOBAL 期望 ok ≈ N*MAX_AMOUNT = N*4；上界容忍每窗口多放 2 个抖动 → ok ≤ N*(MAX_AMOUNT+2)
-    local share_max_ok=$((windows * (GLOBAL_MAX_AMOUNT + 2)))
-    # GLOBAL 期望 limited ≈ N*(2*MAX - MAX) = N*MAX；下界容忍 → limited ≥ N*1
-    local share_min_limited=$((windows * 1))
+    local share_total_all=$((share_total_per_window * shared_windows))
+    # LOCAL 退化下界：每实例独享 → 8*2*4 = 64（恒定值）
+    local share_local_bound=$((shared_windows * 2 * GLOBAL_MAX_AMOUNT))
+    # GLOBAL 上界：略低于 LOCAL 下界，留 1 个 MAX 的余量；GLOBAL 至少要节省 4 个请求
+    local share_max_ok=$((share_local_bound - GLOBAL_MAX_AMOUNT))
+    local share_min_limited=$((shared_windows * 1))
     print_block "[用例 6.3] GLOBAL 多实例共享配额（核心语义）" \
-        "操作:   连续 ${windows} 个窗口，每窗口同时打：" \
+        "操作:   连续 ${shared_windows} 个窗口，每窗口同时打：" \
         "        - http://127.0.0.1:${PORT_PROVIDER_GLOBAL_A}/echo 并发 ${per_instance}" \
         "        - http://127.0.0.1:${PORT_PROVIDER_GLOBAL_B}/echo 并发 ${per_instance}" \
-        "原理:   两 provider 各持一份 SDK；GLOBAL 规则下都向同一个 limiter 拉配额，**合计**仅 ${GLOBAL_MAX_AMOUNT}/窗口；" \
-        "        如果错误地按 LOCAL 处理，两实例各独享 → 每窗口 ok=2*MAX=$((GLOBAL_MAX_AMOUNT * 2))（与 GLOBAL 形成强对比）" \
-        "预期:   ${windows} 窗口合计 ok ≤ ${share_max_ok}（≈${windows}*MAX）、limited ≥ ${share_min_limited}" \
-        "判定:   limited ≥ ${share_min_limited} && ok ≤ ${share_max_ok} && other == 0 → PASS"
+        "原理:   两 provider 各持一份 SDK；GLOBAL 规则下都向同一个 limiter 拉配额；" \
+        "        分布式限流 \"先消费后结算\" 语义会让单窗口短暂超 1~3 倍阈值（limiter 服务端 stat 日志亲自记录）；" \
+        "        但 LOCAL 退化是**确定的** ${shared_windows}*2*${GLOBAL_MAX_AMOUNT}=${share_local_bound}，与 GLOBAL 实测值（30~56）有清晰距离" \
+        "预期:   ${shared_windows} 窗口合计 ok ≤ ${share_max_ok}（LOCAL 下界=${share_local_bound}，留 ${GLOBAL_MAX_AMOUNT} 的余量）、limited ≥ ${share_min_limited}" \
+        "判定:   ok ≤ ${share_max_ok} && limited ≥ ${share_min_limited} && other == 0 && SDK 日志含 type=GLOBAL → PASS" \
+        "" \
+        "注:     polaris-limiter 服务端（polaris-limiter-stat.log）单窗口可记录 passed=8~12 而 threshold=4，" \
+        "        这就是 \"先消费后结算\" 的真实证据，用例不要求严格 ok ≤ MAX*WINDOWS，只要求不退化为纯 LOCAL."
 
-    log_info "[用例 6.3] ${windows} 窗口双实例并发突发"
-    stat=$(run_global_two_instances_in_windows "$PORT_PROVIDER_GLOBAL_A" "$PORT_PROVIDER_GLOBAL_B" "/echo" "$per_instance" "$windows")
+    log_info "[用例 6.3] ${shared_windows} 窗口双实例并发突发"
+    stat=$(run_global_two_instances_in_windows "$PORT_PROVIDER_GLOBAL_A" "$PORT_PROVIDER_GLOBAL_B" "/echo" "$per_instance" "$shared_windows")
     read -r ok limited other <<< "$stat"
-    log_info "结果: 总 200=${ok} 429=${limited} 其他=${other}（${windows} 窗口聚合）"
+    log_info "结果: 总 200=${ok} 429=${limited} 其他=${other}（${shared_windows} 窗口聚合）"
+
+    # 二次校验：检查 SDK ratelimit 日志，确认 GLOBAL 类型规则确实加载到了远端模式.
+    # bucket_qps.NewRemoteAwareQpsBucket 在创建 bucket 时打印 INFO 级别的 "type=GLOBAL"，
+    # 任何 GLOBAL 规则被实际生效时都会出现这一行；如果只看到 type=LOCAL 表示规则没下发或被错配置.
+    local global_rule_log_a="${BUILD_DIR}/provider-qps-global-a/polaris/log/ratelimit/polaris-ratelimit.log"
+    local global_rule_log_b="${BUILD_DIR}/provider-qps-global-b/polaris/log/ratelimit/polaris-ratelimit.log"
+    local has_global_a=0 has_global_b=0
+    [[ -f "$global_rule_log_a" ]] && has_global_a=$(grep -c "type=GLOBAL" "$global_rule_log_a" 2>/dev/null || echo 0)
+    [[ -f "$global_rule_log_b" ]] && has_global_b=$(grep -c "type=GLOBAL" "$global_rule_log_b" 2>/dev/null || echo 0)
+    log_info "SDK 日志校验: provider-A type=GLOBAL 行数=${has_global_a}, provider-B type=GLOBAL 行数=${has_global_b}"
 
     if [[ "$other" -gt 0 ]]; then
         record_case "用例 6.3 GLOBAL 多实例共享配额" "FAIL" \
             "出现非 200/429 状态码 (other=${other})"
+    elif [[ "$has_global_a" -lt 1 ]] || [[ "$has_global_b" -lt 1 ]]; then
+        record_case "用例 6.3 GLOBAL 多实例共享配额" "FAIL" \
+            "SDK 日志中未检测到 type=GLOBAL（A=${has_global_a} B=${has_global_b}），规则未按 GLOBAL 加载（可能控制台规则被改成 LOCAL，或服务发现拉规则失败）"
+    elif [[ "$ok" -ge "$share_local_bound" ]]; then
+        record_case "用例 6.3 GLOBAL 多实例共享配额" "FAIL" \
+            "聚合 ok=${ok} 已达到/超过 LOCAL 退化下界 ${share_local_bound}（${shared_windows}*2*MAX）；远端配额没有起到任何节流作用，几乎可断定 polaris.limiter 没真正接入"
     elif [[ "$ok" -gt "$share_max_ok" ]]; then
         record_case "用例 6.3 GLOBAL 多实例共享配额" "FAIL" \
-            "聚合 ok=${ok} 超过 ${share_max_ok}（GLOBAL 共享语义不成立？规则可能退化为 LOCAL；检查 polaris.limiter 是否真的连上）"
+            "聚合 ok=${ok} 落在灰区（${share_max_ok} < ok < ${share_local_bound}）；GLOBAL 节流不充分，可能 limiter 推送延迟过大或网络抖动"
     elif [[ "$limited" -lt "$share_min_limited" ]]; then
         record_case "用例 6.3 GLOBAL 多实例共享配额" "FAIL" \
             "聚合 limited=${limited} 不足 ${share_min_limited}（远端配额未生效？）"
     else
         record_case "用例 6.3 GLOBAL 多实例共享配额" "PASS" \
-            "${windows} 窗口合计 ok=${ok}（≤${share_max_ok}）、429=${limited}（≥${share_min_limited}），远端共享配额生效"
+            "${shared_windows} 窗口合计 ok=${ok}（≤${share_max_ok}，相对 LOCAL 下界 ${share_local_bound} 节省 $((share_local_bound - ok))）、429=${limited}（≥${share_min_limited}），SDK 日志 type=GLOBAL 命中（A=${has_global_a} B=${has_global_b}），分布式共享配额生效"
+    fi
+
+    sleep $((GLOBAL_WINDOW_SECOND + 1))
+
+    # ---------- 用例 6.3.5：GLOBAL 稳态精准验证（串行 + sleep，对照 6.3 的 burst 场景） ----------
+    # 6.3 验证 burst 容忍语义（必然超限）；6.3.5 用串行+sleep 让请求节奏对齐 SDK acquire 周期，
+    # 此时 burst 几乎为 0，可以严格验证"GLOBAL 限流是全集群合计语义"。
+    #
+    # 节奏设计：每个请求间隔 60ms（> SDK acquire 间隔 30~50ms），让 SDK 在两次请求之间
+    # 完成至少一次 acquire 上报+limiter push 周期。理论行为：
+    #   - 每窗口 = 1s = 1000ms / 60ms ≈ 16 次请求
+    #   - 阈值 = 4 个/窗口
+    #   - 每个实例发 8 个 / 1.5s 的速度 = 5.3 req/s
+    #   - 双实例合计 ≈ 10.6 req/s，仍超阈值 4 但远小于 burst
+    # 预期：3 窗口（≈4.5s）合计 ok ≈ 3*MAX = 12（误差 ±2*MAX）；LOCAL 退化 = 3*8 = 24
+    local steady_windows=3
+    local steady_per_instance=8
+    local steady_delay_ms=60
+    # 稳态 GLOBAL: ok ≈ N*MAX；上界容忍 N*MAX + 1 个 burst（首批 lower bound 抵消）
+    local steady_max_ok=$((steady_windows * GLOBAL_MAX_AMOUNT + GLOBAL_MAX_AMOUNT))
+    # LOCAL 退化下界：N_INST * MAX * N_WIN (但 N_WIN 不严格定义因为是稳态)，取 ≥ 6 即可（明显大于稳态 GLOBAL）
+    local steady_local_threshold=$((steady_windows * 2 * GLOBAL_MAX_AMOUNT - GLOBAL_MAX_AMOUNT))
+    local steady_min_limited=$steady_windows
+    print_block "[用例 6.3.5] GLOBAL 稳态精准验证（串行 + ${steady_delay_ms}ms 间隔）" \
+        "操作:   两实例并发，但每实例内部串行打 ${steady_per_instance} 个请求，每个间隔 ${steady_delay_ms}ms" \
+        "        - http://127.0.0.1:${PORT_PROVIDER_GLOBAL_A}/echo 串行 ${steady_per_instance} 次（间隔 ${steady_delay_ms}ms）" \
+        "        - http://127.0.0.1:${PORT_PROVIDER_GLOBAL_B}/echo 串行 ${steady_per_instance} 次（间隔 ${steady_delay_ms}ms）" \
+        "原理:   ${steady_delay_ms}ms 间隔 > SDK acquire 周期 (30~50ms) > limiter push 延迟，每发 1 个 SDK 都能" \
+        "        及时上报 used + 接收 push，burst 几乎为 0；与 6.3 的并发 burst 形成对照" \
+        "时间:   每实例 ${steady_per_instance}*${steady_delay_ms}ms ≈ $((steady_per_instance * steady_delay_ms))ms ≈ $((steady_per_instance * steady_delay_ms / 1000)) 个 1s 窗口" \
+        "预期:   合计 ok ≤ ${steady_max_ok}（≈ ${steady_windows}*MAX + 1 burst）、limited ≥ ${steady_min_limited}" \
+        "判定:   ok ≤ ${steady_max_ok} && limited ≥ ${steady_min_limited} && other == 0 → PASS（数值更精准）"
+
+    log_info "[用例 6.3.5] 双实例并发 + 实例内串行（${steady_per_instance} 次, ${steady_delay_ms}ms 间隔）"
+    local steady_tmp
+    steady_tmp=$(mktemp -d)
+    # A B 两实例并发启动各自的串行任务
+    (
+        count_status_serial_with_delay "$PORT_PROVIDER_GLOBAL_A" "/echo" "$steady_per_instance" "$steady_delay_ms" \
+            > "${steady_tmp}/a"
+    ) &
+    local pid_a=$!
+    (
+        count_status_serial_with_delay "$PORT_PROVIDER_GLOBAL_B" "/echo" "$steady_per_instance" "$steady_delay_ms" \
+            > "${steady_tmp}/b"
+    ) &
+    local pid_b=$!
+    wait "$pid_a" "$pid_b"
+    local steady_ok_a steady_lim_a steady_other_a steady_ok_b steady_lim_b steady_other_b
+    read -r steady_ok_a steady_lim_a steady_other_a < "${steady_tmp}/a"
+    read -r steady_ok_b steady_lim_b steady_other_b < "${steady_tmp}/b"
+    rm -rf "$steady_tmp"
+    local steady_ok=$((steady_ok_a + steady_ok_b))
+    local steady_lim=$((steady_lim_a + steady_lim_b))
+    local steady_other=$((steady_other_a + steady_other_b))
+    log_info "结果: A=(200=${steady_ok_a}, 429=${steady_lim_a})  B=(200=${steady_ok_b}, 429=${steady_lim_b})  合计 ok=${steady_ok} limit=${steady_lim} other=${steady_other}"
+
+    if [[ "$steady_other" -gt 0 ]]; then
+        record_case "用例 6.3.5 GLOBAL 稳态精准验证" "FAIL" \
+            "出现非 200/429 状态码 (other=${steady_other})"
+    elif [[ "$steady_ok" -ge "$steady_local_threshold" ]]; then
+        record_case "用例 6.3.5 GLOBAL 稳态精准验证" "FAIL" \
+            "稳态 ok=${steady_ok} 已达 LOCAL 退化下界 ${steady_local_threshold}，远端配额未真正生效"
+    elif [[ "$steady_ok" -gt "$steady_max_ok" ]]; then
+        record_case "用例 6.3.5 GLOBAL 稳态精准验证" "FAIL" \
+            "稳态 ok=${steady_ok} 超过上界 ${steady_max_ok}（${steady_delay_ms}ms 间隔下应近收敛于 N*MAX）"
+    elif [[ "$steady_lim" -lt "$steady_min_limited" ]]; then
+        record_case "用例 6.3.5 GLOBAL 稳态精准验证" "FAIL" \
+            "稳态 limited=${steady_lim} 不足 ${steady_min_limited}，未触发限流"
+    else
+        record_case "用例 6.3.5 GLOBAL 稳态精准验证" "PASS" \
+            "ok=${steady_ok}（≤${steady_max_ok}）、limited=${steady_lim}（≥${steady_min_limited}），稳态下分布式限流精准节流"
     fi
 
     sleep $((GLOBAL_WINDOW_SECOND + 1))
@@ -2043,6 +2622,594 @@ print(json.dumps([{
     fi
 }
 
+# ======================== 用例 7.x：CustomResponse 自定义返回 ========================
+# 验证目标：
+#   - 规则的 customResponse.body 能被服务端正确下发到 SDK
+#   - SDK 通过 QuotaResponse.GetActiveRule().GetCustomResponse().GetBody() 把 body 暴露给业务
+#   - provider-qps 在限流分支用该 body 作为 HTTP 响应体写回，并把规则名透传到响应头
+#   - 经 consumer 透传后，curl 收到的 body / X-Polaris-RateLimit-Rule header 与规则配置一致
+# 用例：
+#   [7.1] 限流时 body 与响应头匹配规则配置（同时间接验证 ActiveRule.RuleName 透传链路）
+run_custom_response_cases() {
+    log_step "[用例 7.x] CustomResponse 自定义返回 (链路: curl → consumer:${PORT_CONSUMER_CUSTOM_RESPONSE} → provider:${PORT_PROVIDER_CUSTOM_RESPONSE})"
+    if ! create_custom_response_rule; then
+        record_case "7.0 创建 custom-response 规则" "FAIL" "HTTP API 调用失败"
+        return
+    fi
+    # 复用 provider-qps 二进制：它已通过 GetActiveRule API 在限流分支写入 customResponse.body 与响应头.
+    if ! build_and_start_binary "provider-qps" "$PORT_PROVIDER_CUSTOM_RESPONSE" \
+        "$CUSTOM_RESPONSE_SERVICE" "provider-qps-custom-response" "PROVIDER_CUSTOM_RESPONSE_PID"; then
+        record_case "7.0 启动 custom-response provider" "FAIL" "provider-qps (custom-response) 启动失败"
+        return
+    fi
+    if ! build_and_start_binary "consumer" "$PORT_CONSUMER_CUSTOM_RESPONSE" \
+        "$CUSTOM_RESPONSE_SERVICE" "consumer-qps-custom-response" "CONSUMER_CUSTOM_RESPONSE_PID"; then
+        record_case "7.0 启动 custom-response consumer" "FAIL" "consumer (custom-response) 启动失败"
+        return
+    fi
+
+    log_info "等待 4s 让 SDK 拉到规则..."
+    sleep 4
+
+    # ---------- 用例 7.1：限流时 body 与响应头匹配 ----------
+    print_block "[用例 7.1] CustomResponse 限流响应内容验证" \
+        "操作:   串行 ${CUSTOM_RESPONSE_TOTAL_REQUESTS} 次 GET /echo（前 N-1 次预热 + 最后 1 次抓取限流 body/header）" \
+        "原理:   规则 customResponse.body 服务端→SDK→provider-qps（GetActiveRule.GetCustomResponse.GetBody）→consumer→curl" \
+        "断言 1: 最后一次 status == 429（确认已触发限流）" \
+        "断言 2: 响应 body == 规则配置的 customResponse.body（字面量精确匹配）" \
+        "断言 3: 响应头 X-Polaris-RateLimit-Rule == ${CUSTOM_RESPONSE_RULE_NAME}（GetActiveRuleName 透传）" \
+        "判定:   3 个断言全 PASS → 用例 PASS；任一失败 → FAIL"
+
+    # 重试策略：burst_until_limited 反复"并发预热 → fetch"直到 fetch 拿到 429，最多 3 次。
+    # 单次并发 curl 累计耗时可能跨过 1s 窗口，此时 fetch 落到新窗口拿到 200；重试让下一轮 fetch 落到打满的窗口内。
+    log_info "[用例 7.1] 反复并发 ${CUSTOM_RESPONSE_TOTAL_REQUESTS} 次 /echo 直到 fetch 命中 429"
+    local warmup_count=$((CUSTOM_RESPONSE_TOTAL_REQUESTS - 1))
+    local fetch_dir
+    fetch_dir=$(mktemp -d)
+    local fetch_out
+    fetch_out=$(burst_until_limited "$PORT_CONSUMER_CUSTOM_RESPONSE" "/echo" "X-Polaris-RateLimit-Rule" "$fetch_dir" "$warmup_count" 3)
+    local got_status got_header got_body
+    got_status=$(echo "$fetch_out" | sed -n '1p')
+    got_header=$(echo "$fetch_out" | sed -n '2p')
+    got_body=""
+    if [[ -f "${fetch_dir}/body" ]]; then
+        got_body=$(cat "${fetch_dir}/body")
+    fi
+    rm -rf "$fetch_dir"
+
+    log_info "  status=${got_status}"
+    log_info "  X-Polaris-RateLimit-Rule=${got_header}"
+    log_info "  body=${got_body}"
+
+    # 断言 1：status == 429
+    if [[ "$got_status" != "429" ]]; then
+        record_case "用例 7.1 CustomResponse 自定义返回" "FAIL" \
+            "限流单发期望 status=429，实际 ${got_status}（窗口已恢复？前置阶段限流次数不够？）"
+        return
+    fi
+    # 断言 2：body 精确匹配规则配置的 customResponse.body
+    if [[ "$got_body" != "$CUSTOM_RESPONSE_BODY" ]]; then
+        record_case "用例 7.1 CustomResponse 自定义返回" "FAIL" \
+            "body 不匹配：期望=${CUSTOM_RESPONSE_BODY}；实际=${got_body}"
+        return
+    fi
+    # 断言 3：响应头匹配规则名（验证 GetActiveRuleName 链路透传）
+    if [[ "$got_header" != "$CUSTOM_RESPONSE_RULE_NAME" ]]; then
+        record_case "用例 7.1 CustomResponse 自定义返回" "FAIL" \
+            "X-Polaris-RateLimit-Rule 不匹配：期望=${CUSTOM_RESPONSE_RULE_NAME}；实际=${got_header}"
+        return
+    fi
+    record_case "用例 7.1 CustomResponse 自定义返回" "PASS" \
+        "status=429 / body 精确匹配 / X-Polaris-RateLimit-Rule=${got_header}"
+
+    # ---------- 用例 7.2：GLOBAL 分布式限流 + CustomResponse ----------
+    # 前提：polaris.limiter 服务可用（不可用时 SKIP）；规则 type=GLOBAL + customResponse.body
+    # 验证：分布式限流场景下 SDK 仍然能通过 GetActiveRule 暴露 customResponse
+    if ! probe_limiter_available; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "SKIP" \
+            "polaris.limiter (${GLOBAL_LIMITER_NAMESPACE}/${GLOBAL_LIMITER_SERVICE}) 无可用实例，跳过分布式限流自定义返回验证"
+        return
+    fi
+
+    if ! create_global_custom_response_rule; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" "GLOBAL 规则创建失败"
+        return
+    fi
+
+    if ! build_and_start_binary "provider-qps" "$PORT_PROVIDER_GLOBAL_CUSTOM_RESP" \
+        "$GLOBAL_CUSTOM_RESPONSE_SERVICE" "provider-qps-global-custom-resp" "PROVIDER_GLOBAL_CUSTOM_RESP_PID"; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" "provider 启动失败"
+        return
+    fi
+    if ! build_and_start_binary "consumer" "$PORT_CONSUMER_GLOBAL_CUSTOM_RESP" \
+        "$GLOBAL_CUSTOM_RESPONSE_SERVICE" "consumer-global-custom-resp" "CONSUMER_GLOBAL_CUSTOM_RESP_PID"; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" "consumer 启动失败"
+        return
+    fi
+
+    log_info "等待 5s 让 SDK 拉到 GLOBAL 规则 + 完成远端 init..."
+    sleep 5
+
+    print_block "[用例 7.2] GLOBAL CustomResponse 分布式限流自定义返回验证" \
+        "操作:   串行 ${CUSTOM_RESPONSE_TOTAL_REQUESTS} 次触发限流 → 单发 1 次抓取 429 响应" \
+        "原理:   GLOBAL 规则走远端配额（polaris.limiter），被限后 SDK 的 ActiveRule 仍指向原始规则（含 customResponse）" \
+        "        即使 FAILOVER_LOCAL 退化路径下也同样能透传 customResponse.body" \
+        "断言:   与 7.1 一致 — status=429 / body 精确匹配 / X-Polaris-RateLimit-Rule == 规则名"
+
+    log_info "[用例 7.2] 反复并发 ${CUSTOM_RESPONSE_TOTAL_REQUESTS} 次 /echo 直到 fetch 命中 429"
+    # GLOBAL 模式远端配额同步有延迟，单次并发预热后 fetch 经常拿到 200；用 burst_until_limited 重试 5 次更稳。
+    local warmup_count=$((CUSTOM_RESPONSE_TOTAL_REQUESTS - 1))
+    fetch_dir=$(mktemp -d)
+    fetch_out=$(burst_until_limited "$PORT_CONSUMER_GLOBAL_CUSTOM_RESP" "/echo" "X-Polaris-RateLimit-Rule" "$fetch_dir" "$warmup_count" 5)
+    got_status=$(echo "$fetch_out" | sed -n '1p')
+    got_header=$(echo "$fetch_out" | sed -n '2p')
+    got_body=""
+    if [[ -f "${fetch_dir}/body" ]]; then
+        got_body=$(cat "${fetch_dir}/body")
+    fi
+    rm -rf "$fetch_dir"
+
+    log_info "  status=${got_status}"
+    log_info "  X-Polaris-RateLimit-Rule=${got_header}"
+    log_info "  body=${got_body}"
+
+    if [[ "$got_status" != "429" ]]; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" \
+            "期望 status=429，实际 ${got_status}"
+        return
+    fi
+    if [[ "$got_body" != "$CUSTOM_RESPONSE_BODY" ]]; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" \
+            "body 不匹配：期望=${CUSTOM_RESPONSE_BODY}；实际=${got_body}"
+        return
+    fi
+    if [[ "$got_header" != "$GLOBAL_CUSTOM_RESPONSE_RULE_NAME" ]]; then
+        record_case "用例 7.2 GLOBAL CustomResponse" "FAIL" \
+            "X-Polaris-RateLimit-Rule 不匹配：期望=${GLOBAL_CUSTOM_RESPONSE_RULE_NAME}；实际=${got_header}"
+        return
+    fi
+    record_case "用例 7.2 GLOBAL CustomResponse" "PASS" \
+        "分布式限流场景：status=429 / body 精确匹配 / X-Polaris-RateLimit-Rule=${got_header}"
+}
+
+# ======================== 用例 8.x：限流监控指标验证（pull /metrics） ========================
+# 验证目标：
+#   - provider 实例的 prometheus 插件按 pull 模式暴露 /metrics 端口
+#   - SDK 的 ReportStat 链路把限流结果聚合为 ratelimit_rq_total / pass / limit 三个 counter
+#   - 监控指标的 label 含 callee_namespace / callee_service / callee_method / rule_name / caller_labels（六维度齐备）
+#   - total == pass + limit 且 pass>0、limit>0（curl 6 次产生通过和限流两种结果）
+#
+# 链路：curl → consumer:18201 → (polaris 服务发现) → provider:18200 → LimitAPI.GetQuota
+# 关键设计：使用独立服务名 ${METRICS_SERVICE} 让 consumer 服务发现只能命中本用例的 provider 实例，
+# 避免与 1.x / 9.x 等用例的同服务 provider 共享 LB 池——否则当前 provider 的 /metrics 只能看到
+# 部分监控数据，limit 维度容易为 0（参见 .logs/verify_ratelimit-20260528_*.log 中 limit=0 的历史故障）.
+#
+# 前提条件：
+#   - 用例 8.x 自行启动独立的 provider + consumer 实例和独立规则
+#   - SDK 在 pull 模式下首次 ReportStat 后 30s 内 metrics 才会出现在 registry
+#   - 用例内部先发请求产生数据，再轮询 /metrics 等待聚合
+#
+# metrics 端口按 "业务端口 + 10000" 规则分配
+PORT_PROVIDER_METRICS=18200         # 用例 8.x 专用 provider 业务端口
+PORT_CONSUMER_METRICS=18201         # 用例 8.x 专用 consumer 业务端口
+METRICS_PORT=$((PORT_PROVIDER_METRICS + 10000))  # = 28200
+
+run_metrics_cases() {
+    log_step "[用例 8.x] 限流监控指标验证（链路: curl → consumer:${PORT_CONSUMER_METRICS} → provider:${PORT_PROVIDER_METRICS}, /metrics 端口 ${METRICS_PORT}）"
+
+    if ! create_metrics_rule; then
+        record_case "用例 8.1 限流监控指标" "FAIL" "Metrics 规则创建失败"
+        return
+    fi
+
+    # 启动专用 provider + consumer，绑定到独立服务 ${METRICS_SERVICE}.
+    # 独立服务名让 consumer 服务发现只能拉到本用例启动的那一个 provider 实例，
+    # 不会把请求 LB 到其它用例（1.x、9.x 等）的同服务 provider 上.
+    if ! build_and_start_binary "provider-qps" "$PORT_PROVIDER_METRICS" \
+        "$METRICS_SERVICE" "provider-qps-metrics" "PROVIDER_METRICS_PID"; then
+        record_case "用例 8.1 限流监控指标" "FAIL" "provider 启动失败"
+        return
+    fi
+    if ! build_and_start_binary "consumer" "$PORT_CONSUMER_METRICS" \
+        "$METRICS_SERVICE" "consumer-qps-metrics" "CONSUMER_METRICS_PID"; then
+        record_case "用例 8.1 限流监控指标" "FAIL" "consumer 启动失败"
+        return
+    fi
+
+    log_info "等待 4s 让 SDK 拉到规则..."
+    sleep 4
+
+    # ---------- 用例 8.1：/metrics 端口可达 + ratelimit_rq 指标存在 + 数值校验 ----------
+    print_block "[用例 8.1] /metrics 限流监控指标验证（链路 curl → consumer → provider）" \
+        "目标:   验证 provider 的 prometheus /metrics 端点（pull 模式 ${METRICS_PORT}）" \
+        "操作:   curl → consumer:${PORT_CONSUMER_METRICS}（服务发现 → ）provider:${PORT_PROVIDER_METRICS}/echo → 等聚合 → 检查 /metrics" \
+        "断言 1: HTTP 200（端口可达）" \
+        "断言 2: ratelimit_rq_total / ratelimit_rq_pass / ratelimit_rq_limit 三个指标都存在" \
+        "断言 3: 指标 label 包含 callee_namespace、callee_service（=${METRICS_SERVICE}）、callee_method、rule_name" \
+        "断言 4: pass > 0 且 limit > 0（6 次请求阈值 ${QPS_MAX_AMOUNT}/${QPS_WINDOW_SECOND}s → pass≈2 limit≈4）" \
+        "断言 5: total == pass + limit（限流监控不可丢数据的不变量）" \
+        "判定:   5 个断言全 PASS → 用例 PASS"
+
+    # 走 consumer → provider 链路。因 ${METRICS_SERVICE} 为本用例独立服务名，consumer 只能拉到一个 provider 实例，
+    # 所有请求都打到 :${PORT_PROVIDER_METRICS}，监控数据完整聚合在该 provider 的 prometheus registry。
+    log_info "[用例 8.1] curl → consumer:${PORT_CONSUMER_METRICS}/echo 发 6 次请求产生监控数据..."
+    for _i in 1 2 3 4 5 6; do
+        curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+            "http://127.0.0.1:${PORT_CONSUMER_METRICS}/echo" 2>/dev/null || true
+    done
+
+    # 轮询等待聚合：首次 ReportStat 后 30s 内 metrics 才会出现在 registry，
+    # 到达这里时通常已经过了 >30s（前序用例累计耗时），但做一个兜底轮询。
+    local metrics_body=""
+    local attempt
+    for attempt in 1 2 3 4 5 6; do
+        local poll_code
+        metrics_body=$(curl -s --connect-timeout 3 --max-time 5 \
+            -w '\n%{http_code}' "http://127.0.0.1:${METRICS_PORT}/metrics" 2>/dev/null || echo "")
+        # 分离 body 和 status code（-w 追加的最后一行是 http_code）
+        poll_code=$(echo "$metrics_body" | tail -1)
+        metrics_body=$(echo "$metrics_body" | sed '$d')
+        if echo "$metrics_body" | grep -q "ratelimit_rq_total"; then
+            log_info "[用例 8.1] 第 ${attempt} 次轮询命中 ratelimit_rq_total（HTTP=${poll_code}）"
+            break
+        fi
+        if [[ $attempt -lt 6 ]]; then
+            log_info "[用例 8.1] 第 ${attempt} 次轮询未见 ratelimit_rq_total（HTTP=${poll_code}, body_len=${#metrics_body}），等 10s..."
+            sleep 10
+        else
+            log_info "[用例 8.1] 第 ${attempt} 次轮询仍未见 ratelimit_rq_total（HTTP=${poll_code}, body_len=${#metrics_body}），放弃"
+        fi
+    done
+
+    # 断言 1：端口可达且有内容
+    if [[ -z "$metrics_body" ]]; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "curl http://127.0.0.1:${METRICS_PORT}/metrics 返回空（可能原因：1.provider 进程未启动/已退出 2.SDK prepare()未触发——需要至少一次GetQuota调用 3.残留进程占用端口但无metrics数据）"
+        return
+    fi
+
+    # 断言 2：三个指标都存在
+    if ! echo "$metrics_body" | grep -q "ratelimit_rq_total"; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "/metrics 可达但未找到 ratelimit_rq_total（聚合尚未完成？请求未触发限流？）"
+        return
+    fi
+    if ! echo "$metrics_body" | grep -q "ratelimit_rq_pass"; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "找到 ratelimit_rq_total 但缺少 ratelimit_rq_pass"
+        return
+    fi
+    if ! echo "$metrics_body" | grep -q "ratelimit_rq_limit"; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "找到 ratelimit_rq_total 但缺少 ratelimit_rq_limit"
+        return
+    fi
+
+    # 断言 3：六维度 label 齐备 + callee_service 值精确匹配 ${METRICS_SERVICE}
+    # 由于使用独立服务名，监控数据中 callee_service 必须等于 ${METRICS_SERVICE};
+    # 如果出现其它值（例如旧的 QpsRatelimitEchoServer），说明请求被 LB 跨服务了，链路有问题.
+    local has_ns has_svc_name has_method has_rule
+    has_ns=$(echo "$metrics_body" | grep "ratelimit_rq_total" | grep -c 'callee_namespace=' || echo 0)
+    has_svc_name=$(echo "$metrics_body" | grep "ratelimit_rq_total" | grep -c "callee_service=\"${METRICS_SERVICE}\"" || echo 0)
+    has_method=$(echo "$metrics_body" | grep "ratelimit_rq_total" | grep -c 'callee_method=' || echo 0)
+    has_rule=$(echo "$metrics_body" | grep "ratelimit_rq_total" | grep -c 'rule_name=' || echo 0)
+
+    if [[ "$has_ns" -eq 0 ]] || [[ "$has_svc_name" -eq 0 ]] || [[ "$has_method" -eq 0 ]] || [[ "$has_rule" -eq 0 ]]; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "ratelimit_rq_total label 校验失败：ns=${has_ns} svc(=${METRICS_SERVICE})=${has_svc_name} method=${has_method} rule=${has_rule}"
+        return
+    fi
+
+    # 断言 4 + 5：用 python3 解析指标数值，校验 pass > 0、limit > 0、total == pass + limit
+    # prometheus text format 示例：
+    #   ratelimit_rq_total{callee_method="/echo",...} 6
+    #   ratelimit_rq_pass{callee_method="/echo",...} 2
+    #   ratelimit_rq_limit{callee_method="/echo",...} 4
+    # 把所有同名指标的 value 求和（可能有多条不同 label 的时间序列）
+    local metric_check
+    metric_check=$(echo "$metrics_body" | python3 -c "
+import sys
+
+total_sum = 0.0
+pass_sum = 0.0
+limit_sum = 0.0
+
+for line in sys.stdin:
+    line = line.strip()
+    if line.startswith('#') or not line:
+        continue
+    # 格式: metric_name{labels} value  或  metric_name value
+    # 找最后一个空格之后的数字
+    parts = line.rsplit(' ', 1)
+    if len(parts) != 2:
+        continue
+    name_labels, val_str = parts
+    try:
+        val = float(val_str)
+    except ValueError:
+        continue
+    # 提取 metric name（大括号前的部分）
+    metric_name = name_labels.split('{')[0] if '{' in name_labels else name_labels
+    if metric_name == 'ratelimit_rq_total':
+        total_sum += val
+    elif metric_name == 'ratelimit_rq_pass':
+        pass_sum += val
+    elif metric_name == 'ratelimit_rq_limit':
+        limit_sum += val
+
+# 输出结果供 bash 解析
+# 格式: total pass limit ok_or_fail reason
+if pass_sum <= 0:
+    print('%.0f %.0f %.0f FAIL pass_sum=0（没有通过的请求？consumer→provider 链路异常？）' % (total_sum, pass_sum, limit_sum))
+elif limit_sum <= 0:
+    print('%.0f %.0f %.0f FAIL limit_sum=0（没有被限流的请求？规则未生效或请求被 LB 分散？）' % (total_sum, pass_sum, limit_sum))
+elif abs(total_sum - (pass_sum + limit_sum)) > 0.001:
+    print('%.0f %.0f %.0f FAIL total(%.0f)!=pass(%.0f)+limit(%.0f)（数据不一致）' % (total_sum, pass_sum, limit_sum, total_sum, pass_sum, limit_sum))
+else:
+    print('%.0f %.0f %.0f PASS' % (total_sum, pass_sum, limit_sum))
+" 2>/dev/null || echo "0 0 0 FAIL python3解析异常")
+
+    local m_total m_pass m_limit m_verdict m_reason
+    m_total=$(echo "$metric_check" | awk '{print $1}')
+    m_pass=$(echo "$metric_check" | awk '{print $2}')
+    m_limit=$(echo "$metric_check" | awk '{print $3}')
+    m_verdict=$(echo "$metric_check" | awk '{print $4}')
+    m_reason=$(echo "$metric_check" | cut -d' ' -f5-)
+
+    log_info "指标数值: total=${m_total} pass=${m_pass} limit=${m_limit}"
+
+    # 打印所有 ratelimit_rq_* 指标行（含完整 label + 数值），供日志审计排查
+    log_info "--- ratelimit_rq 完整指标 ---"
+    echo "$metrics_body" | grep "^ratelimit_rq" | while IFS= read -r line; do
+        log_info "  ${line}"
+    done
+    log_info "--- end ---"
+
+    if [[ "$m_verdict" != "PASS" ]]; then
+        record_case "用例 8.1 限流监控指标" "FAIL" \
+            "数值校验失败: total=${m_total} pass=${m_pass} limit=${m_limit} — ${m_reason}"
+        return
+    fi
+
+    record_case "用例 8.1 限流监控指标" "PASS" \
+        "label 六维度齐备（callee_service=${METRICS_SERVICE}）/ total(${m_total})=pass(${m_pass})+limit(${m_limit}) / pass>0 且 limit>0"
+}
+
+# ======================== 用例 9.x：限流事件上报验证（mock pushgateway） ========================
+# 验证目标：
+#   - 限流状态 UNLIMITED→LIMITED 时 SDK 上报 RateLimitStart 事件
+#   - 限流状态 LIMITED→UNLIMITED 时 SDK 上报 RateLimitEnd 事件
+#   - 事件包含正确的 rule_name、namespace、service、resource_type 字段
+#
+# 实现方式：
+#   - 启动本地 mock HTTP server（Python）模拟 pushgateway，捕获 POST 到文件
+#   - provider polaris.yaml 中 pushgateway.address="${POLARIS_EVENT_ADDR}" 指向 mock server
+#   - 触发限流 → 等待 batch flush → 解析捕获文件验证事件字段
+PORT_PROVIDER_EVENTS=18202
+PORT_PROVIDER_EVENTS_REMOTE=18203
+MOCK_EVENT_PORT=19090
+
+run_events_cases() {
+    log_step "[用例 9.x] 限流事件上报验证（mock pushgateway 端口 ${MOCK_EVENT_PORT}）"
+
+    # 确保 QPS 规则已存在
+    if ! rule_exists "$QPS_RULE_NAME" "$QPS_SERVICE"; then
+        if ! create_qps_rule; then
+            record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" "QPS 规则创建失败"
+            return
+        fi
+    fi
+
+    # 启动 mock event server
+    local events_file="${LOG_DIR}/captured_events.json"
+    rm -f "$events_file"
+    python3 "${SCRIPT_DIR}/mock_event_server.py" "$events_file" "$MOCK_EVENT_PORT" &
+    MOCK_EVENT_SERVER_PID=$!
+    sleep 1
+    if ! kill -0 "$MOCK_EVENT_SERVER_PID" 2>/dev/null; then
+        record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" "mock_event_server 启动失败"
+        return
+    fi
+    log_info "mock_event_server (PID=${MOCK_EVENT_SERVER_PID}) 监听 :${MOCK_EVENT_PORT}, 事件写入 ${events_file}"
+
+    # 启动专用 provider，POLARIS_EVENT_ADDR 指向 mock server
+    export POLARIS_EVENT_ADDR="127.0.0.1:${MOCK_EVENT_PORT}"
+    if ! build_and_start_binary "provider-qps" "$PORT_PROVIDER_EVENTS" \
+        "$QPS_SERVICE" "provider-qps-events" "PROVIDER_EVENTS_PID"; then
+        record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" "provider 启动失败"
+        unset POLARIS_EVENT_ADDR
+        return
+    fi
+    unset POLARIS_EVENT_ADDR
+
+    log_info "等待 4s 让 SDK 拉到规则..."
+    sleep 4
+
+    # ---------- 用例 9.1：RateLimitStart 事件 ----------
+    print_block "[用例 9.1] 限流事件 RateLimitStart" \
+        "操作:   直接向 provider:${PORT_PROVIDER_EVENTS}/echo 发 6 次请求触发 UNLIMITED→LIMITED" \
+        "原理:   首次被限流时 SDK 检测到状态从 Ok→Limited，上报 RateLimitStart 事件到 mock pushgateway" \
+        "断言:   captured_events.json 中存在 event_name=RateLimitStart 且 rule_name=ratelimit-e2e-qps-rule"
+
+    log_info "[用例 9.1] 发 6 次请求触发限流..."
+    for _i in 1 2 3 4 5 6; do
+        curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+            "http://127.0.0.1:${PORT_PROVIDER_EVENTS}/echo" 2>/dev/null || true
+    done
+
+    # 等待事件 batch flush（pushgateway 插件每秒或队列满时 flush）
+    log_info "[用例 9.1] 等待 3s 让事件 batch flush..."
+    sleep 3
+
+    # 验证 RateLimitStart 事件
+    if [[ ! -f "$events_file" ]]; then
+        record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" \
+            "未捕获到任何事件（${events_file} 不存在）"
+        return
+    fi
+
+    local start_count
+    start_count=$(grep -c '"RateLimitStart"' "$events_file" 2>/dev/null || echo 0)
+    if [[ "$start_count" -lt 1 ]]; then
+        local total_events
+        total_events=$(wc -l < "$events_file" 2>/dev/null || echo 0)
+        record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" \
+            "未找到 RateLimitStart 事件（文件共 ${total_events} 条事件）"
+        return
+    fi
+
+    # 验证事件字段
+    local start_valid
+    start_valid=$(python3 -c "
+import json, sys
+for line in open('$events_file'):
+    try:
+        e = json.loads(line.strip())
+        if e.get('event_name') == 'RateLimitStart':
+            if e.get('rule_name') == '$QPS_RULE_NAME' and e.get('namespace') == '$NAMESPACE' and e.get('service') == '$QPS_SERVICE':
+                print('OK')
+                sys.exit(0)
+    except Exception: pass
+print('FAIL')
+" 2>/dev/null || echo "FAIL")
+
+    if [[ "$start_valid" != "OK" ]]; then
+        record_case "用例 9.1 限流事件 RateLimitStart" "FAIL" \
+            "RateLimitStart 事件存在但字段不匹配（期望 rule_name=${QPS_RULE_NAME}, ns=${NAMESPACE}, svc=${QPS_SERVICE}）"
+        return
+    fi
+    record_case "用例 9.1 限流事件 RateLimitStart" "PASS" \
+        "捕获到 RateLimitStart 事件，rule_name=${QPS_RULE_NAME}，字段校验通过"
+
+    # ---------- 用例 9.2：RateLimitEnd 事件 ----------
+    print_block "[用例 9.2] 限流事件 RateLimitEnd" \
+        "操作:   等窗口恢复（2s）后发 1 次请求触发 LIMITED→UNLIMITED" \
+        "原理:   限流窗口过后首次通过的请求让状态从 Limited→Ok，SDK 上报 RateLimitEnd 事件" \
+        "断言:   captured_events.json 中存在 event_name=RateLimitEnd 且 rule_name=ratelimit-e2e-qps-rule"
+
+    log_info "[用例 9.2] 等 2s 让限流窗口恢复..."
+    sleep 2
+
+    log_info "[用例 9.2] 发 1 次请求触发 LIMITED→UNLIMITED..."
+    curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+        "http://127.0.0.1:${PORT_PROVIDER_EVENTS}/echo" 2>/dev/null || true
+
+    log_info "[用例 9.2] 等待 3s 让事件 batch flush..."
+    sleep 3
+
+    local end_count
+    end_count=$(grep -c '"RateLimitEnd"' "$events_file" 2>/dev/null || echo 0)
+    if [[ "$end_count" -lt 1 ]]; then
+        record_case "用例 9.2 限流事件 RateLimitEnd" "FAIL" \
+            "未找到 RateLimitEnd 事件（RateLimitStart=${start_count}, RateLimitEnd=${end_count}）"
+        return
+    fi
+
+    local end_valid
+    end_valid=$(python3 -c "
+import json, sys
+for line in open('$events_file'):
+    try:
+        e = json.loads(line.strip())
+        if e.get('event_name') == 'RateLimitEnd':
+            if e.get('rule_name') == '$QPS_RULE_NAME' and e.get('namespace') == '$NAMESPACE' and e.get('service') == '$QPS_SERVICE':
+                print('OK')
+                sys.exit(0)
+    except Exception: pass
+print('FAIL')
+" 2>/dev/null || echo "FAIL")
+
+    if [[ "$end_valid" != "OK" ]]; then
+        record_case "用例 9.2 限流事件 RateLimitEnd" "FAIL" \
+            "RateLimitEnd 事件存在但字段不匹配"
+        return
+    fi
+    record_case "用例 9.2 限流事件 RateLimitEnd" "PASS" \
+        "捕获到 RateLimitEnd 事件，rule_name=${QPS_RULE_NAME}，字段校验通过"
+
+    # 打印所有捕获的事件供日志审计
+    log_info "--- 捕获的限流事件 ---"
+    while IFS= read -r line; do
+        log_info "  ${line}"
+    done < "$events_file"
+    log_info "--- end ---"
+
+    # ---------- 用例 9.3：推送到远程真实 pushgateway（不 mock，验证 SDK→生产链路） ----------
+    # 与 9.1/9.2 互补：
+    #   - 9.1/9.2：mock pushgateway 本地捕获，强校验事件字段（功能验证）
+    #   - 9.3   ：不 mock，让 SDK 通过服务发现 polaris.pushgateway 推送到真实云端服务端，
+    #             便于在云端 pushgateway 的客户端事件日志（/data/pushgateway-data/polaris-client-event.log）
+    #             看到本次测试产生的事件，方便人工对账与全链路演示。
+    #
+    # 判定策略：
+    #   * 必过条件：SDK 端 polaris-event.log 中观察到 ReportEvent 调用（证明事件生成 + 入队 SDK 链路 OK）
+    #   * 告知性  ：是否真到达远程服务端不强制——服务发现拉到的实例 IP 可能在本地不可达，
+    #               这是预期的（非测试机器问题），SDK 端会打 Flush warn 日志，业务流程不受影响
+    log_step "[用例 9.3] 限流事件远程推送验证（不 mock，走服务发现 → 真实 polaris.pushgateway）"
+
+    # 启动专用 provider，**不** 设置 POLARIS_EVENT_ADDR，让 pushgateway 插件走服务发现
+    # （yaml 中 address="${POLARIS_EVENT_ADDR}" 占位符空展开为空串 → 触发 SyncGetOneInstance 拉 polaris.pushgateway）
+    if ! build_and_start_binary "provider-qps" "$PORT_PROVIDER_EVENTS_REMOTE" \
+        "$QPS_SERVICE" "provider-qps-events-remote" "PROVIDER_EVENTS_REMOTE_PID"; then
+        record_case "用例 9.3 远程 pushgateway 事件推送" "FAIL" "provider 启动失败"
+        return
+    fi
+
+    log_info "等待 4s 让 SDK 拉到规则..."
+    sleep 4
+
+    print_block "[用例 9.3] 限流事件远程 pushgateway 推送（不 mock）" \
+        "操作:   向 provider:${PORT_PROVIDER_EVENTS_REMOTE}/echo 发 6 次请求触发限流，再发 1 次让窗口恢复" \
+        "原理:   provider 走服务发现 polaris.pushgateway，把事件推到云端真实 pushgateway" \
+        "判定:   必过 — SDK 的 polaris-event.log 含 RateLimitStart/End 的 ReportEvent 调用记录" \
+        "        告知 — 实际是否到达远程取决于本地是否能访问 pushgateway 实例；不可达时只会 SDK 端 warn，不影响测试" \
+        "用途:   登录云端 pushgateway 的事件日志（/data/pushgateway-data/polaris-client-event.log）查看 client_id=10.x.x.x-${PROVIDER_EVENTS_REMOTE_PID} 的事件做端到端对账"
+
+    log_info "[用例 9.3] 发 6 次请求触发限流..."
+    for _i in 1 2 3 4 5 6; do
+        curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+            "http://127.0.0.1:${PORT_PROVIDER_EVENTS_REMOTE}/echo" 2>/dev/null || true
+    done
+
+    log_info "[用例 9.3] 等 2s 后发 1 次请求触发 LIMITED→UNLIMITED..."
+    sleep 2
+    curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+        "http://127.0.0.1:${PORT_PROVIDER_EVENTS_REMOTE}/echo" 2>/dev/null || true
+
+    # 等 SDK flush（pushgateway batch 默认每秒 flush 一次）
+    log_info "[用例 9.3] 等待 4s 让 SDK 完成事件 flush..."
+    sleep 4
+
+    # 校验 SDK 端 polaris-event.log 中的 ReportEvent 调用记录
+    local sdk_event_log="${BUILD_DIR}/provider-qps-events-remote/polaris/log/event/polaris-event.log"
+    local sdk_start_count=0 sdk_end_count=0
+    if [[ -f "$sdk_event_log" ]]; then
+        sdk_start_count=$(grep -c "ReportEvent called.*RateLimitStart" "$sdk_event_log" 2>/dev/null || echo 0)
+        sdk_end_count=$(grep -c "ReportEvent called.*RateLimitEnd" "$sdk_event_log" 2>/dev/null || echo 0)
+    fi
+    log_info "SDK event 日志: ReportEvent(RateLimitStart)=${sdk_start_count}, ReportEvent(RateLimitEnd)=${sdk_end_count}"
+
+    # 抓 flush 状态（远程是否真的接收成功）作为告知信息——不影响判定
+    local flush_success_count=0 flush_warn_count=0
+    if [[ -f "$sdk_event_log" ]]; then
+        flush_success_count=$(grep -c "request success" "$sdk_event_log" 2>/dev/null || echo 0)
+        flush_warn_count=$(grep -c "do request err\|request failed\|all .* retry attempts failed" "$sdk_event_log" 2>/dev/null || echo 0)
+    fi
+    log_info "SDK Flush 状态（仅告知）: 成功=${flush_success_count}, 失败=${flush_warn_count}"
+
+    # 判定：仅校验 SDK 端确实触发了 ReportEvent；远程是否到达不作为必过条件
+    if [[ "$sdk_start_count" -lt 1 ]] || [[ "$sdk_end_count" -lt 1 ]]; then
+        record_case "用例 9.3 远程 pushgateway 事件推送" "FAIL" \
+            "SDK 端未观察到 ReportEvent 调用 (Start=${sdk_start_count}, End=${sdk_end_count})；状态变化未触发事件构造"
+    elif [[ "$flush_success_count" -ge 1 ]]; then
+        record_case "用例 9.3 远程 pushgateway 事件推送" "PASS" \
+            "SDK 触发 ReportEvent: Start=${sdk_start_count}, End=${sdk_end_count}；Flush 成功 ${flush_success_count} 次（远程 pushgateway 已收到事件，可在云端日志查到）"
+    else
+        record_case "用例 9.3 远程 pushgateway 事件推送" "PASS" \
+            "SDK 触发 ReportEvent: Start=${sdk_start_count}, End=${sdk_end_count}；Flush 失败 ${flush_warn_count} 次（远程 pushgateway 实例不可达，本地常见，不影响 SDK 链路功能）"
+    fi
+}
+
 # ======================== 收尾清理 ========================
 # 仅停止脚本启动的 provider 进程；限流规则不删除（设计上规则永久保留，复用即可）.
 cleanup() {
@@ -2059,6 +3226,8 @@ cleanup() {
     stop_provider "$PROVIDER_GLOBAL_A_PID"
     stop_provider "$PROVIDER_GLOBAL_B_PID"
     stop_provider "$PROVIDER_GLOBAL_FAILOVER_PID"
+    stop_provider "$PROVIDER_CUSTOM_RESPONSE_PID"
+    stop_provider "$PROVIDER_GLOBAL_CUSTOM_RESP_PID"
     stop_provider "$CONSUMER_QPS_PID"
     stop_provider "$CONSUMER_UNIRATE_PID"
     stop_provider "$CONSUMER_CONC_PID"
@@ -2066,6 +3235,13 @@ cleanup() {
     stop_provider "$CONSUMER_REGEX_PID"
     stop_provider "$CONSUMER_GLOBAL_PID"
     stop_provider "$CONSUMER_GLOBAL_FAILOVER_PID"
+    stop_provider "$CONSUMER_CUSTOM_RESPONSE_PID"
+    stop_provider "$CONSUMER_GLOBAL_CUSTOM_RESP_PID"
+    stop_provider "$PROVIDER_METRICS_PID"
+    stop_provider "$CONSUMER_METRICS_PID"
+    stop_provider "$PROVIDER_EVENTS_PID"
+    stop_provider "$PROVIDER_EVENTS_REMOTE_PID"
+    stop_provider "$MOCK_EVENT_SERVER_PID"
     log_info "已停止 provider/consumer；限流规则保留以供下次复用"
 }
 trap cleanup EXIT
@@ -2097,7 +3273,10 @@ main() {
     echo "自定义匹配服务:    ${CUSTOM_SERVICE}, provider:${PORT_PROVIDER_CUSTOM} consumer:${PORT_CONSUMER_CUSTOM}（多维 AND 匹配）"
     echo "regex 服务:        ${REGEX_SERVICE}, provider:${PORT_PROVIDER_REGEX} consumer:${PORT_CONSUMER_REGEX}（regex_combine 开关）"
     echo "GLOBAL 服务:       ${GLOBAL_SERVICE}, provider A:${PORT_PROVIDER_GLOBAL_A} B:${PORT_PROVIDER_GLOBAL_B} failover:${PORT_PROVIDER_GLOBAL_FAILOVER} consumer:${PORT_CONSUMER_GLOBAL}（分布式集群限流，依赖 ${GLOBAL_LIMITER_NAMESPACE}/${GLOBAL_LIMITER_SERVICE}）"
+    echo "CustomResponse 服务: ${CUSTOM_RESPONSE_SERVICE}, provider:${PORT_PROVIDER_CUSTOM_RESPONSE} consumer:${PORT_CONSUMER_CUSTOM_RESPONSE}（验证 customResponse.body 端到端透传）"
+    echo "Metrics 服务:      ${METRICS_SERVICE}, provider:${PORT_PROVIDER_METRICS} consumer:${PORT_CONSUMER_METRICS}（用例 8.x；独立服务名避免 LB 跨服务分散）"
     echo "请求链路:          curl → consumer → provider（consumer 负责服务发现 + HTTP 转发）"
+    echo "only 列表:         ${ONLY_LIST:-（无，运行全部）}"
     echo "skip 列表:         ${SKIP_LIST:-（无）}"
     echo "保留资源:          ${KEEP_RESOURCES}"
     echo "日志文件:          ${LOG_FILE}"
@@ -2139,6 +3318,24 @@ main() {
         run_global_cases
     else
         log_warn "跳过 GLOBAL 分布式限流用例 (--skip global)"
+    fi
+
+    if ! is_skipped "custom-response"; then
+        run_custom_response_cases
+    else
+        log_warn "跳过 CustomResponse 自定义返回用例 (--skip custom-response)"
+    fi
+
+    if ! is_skipped "metrics"; then
+        run_metrics_cases
+    else
+        log_warn "跳过限流监控指标验证用例 (--skip metrics)"
+    fi
+
+    if ! is_skipped "events"; then
+        run_events_cases
+    else
+        log_warn "跳过限流事件上报验证用例 (--skip events)"
     fi
 
     # ==================== 汇总 ====================

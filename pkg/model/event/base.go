@@ -28,9 +28,10 @@ type BaseEvent interface {
 type BaseEventType int
 
 const (
-	InstanceEventType BaseEventType = iota
-	ConfigEventType   BaseEventType = iota
-	LosslessEventType BaseEventType = iota
+	InstanceEventType  BaseEventType = iota
+	ConfigEventType    BaseEventType = iota
+	LosslessEventType  BaseEventType = iota
+	RateLimitEventType BaseEventType = iota
 )
 
 func (b BaseEventType) EventTypeString() string {
@@ -41,6 +42,8 @@ func (b BaseEventType) EventTypeString() string {
 		return "Config"
 	case LosslessEventType:
 		return "Lossless"
+	case RateLimitEventType:
+		return "RateLimiting"
 	default:
 		return "Unknown"
 	}
@@ -64,6 +67,10 @@ const (
 	LosslessOfflineStart EventName = "LosslessOfflineStart"
 	// InstanceThreadEnd 实例线程结束
 	InstanceThreadEnd EventName = "InstanceThreadEnd"
+	// RateLimitStart 限流开始事件，状态从 UNLIMITED 变为 LIMITED 时触发
+	RateLimitStart EventName = "RateLimitStart"
+	// RateLimitEnd 限流结束事件，状态从 LIMITED 变为 UNLIMITED 时触发
+	RateLimitEnd EventName = "RateLimitEnd"
 )
 
 // BaseEventImpl 扁平化事件结构，与服务端 ClientEventRequest 格式对齐
@@ -100,6 +107,16 @@ type BaseEventImpl struct {
 	// 其他字段
 	Labels string `json:"labels,omitempty"`
 	Reason string `json:"reason,omitempty"`
+
+	// 限流事件相关字段
+	// CurrentStatus 本次配额分配后的状态（LIMITED / UNLIMITED）
+	CurrentStatus string `json:"current_status,omitempty"`
+	// PreviousStatus 上一次配额分配的状态（LIMITED / UNLIMITED）
+	PreviousStatus string `json:"previous_status,omitempty"`
+	// ResourceType 限流资源类型（QPS / CONCURRENCY）
+	ResourceType string `json:"resource_type,omitempty"`
+	// RuleName 命中的限流规则名称
+	RuleName string `json:"rule_name,omitempty"`
 }
 
 func (c *BaseEventImpl) SetClientIP(ip string) {

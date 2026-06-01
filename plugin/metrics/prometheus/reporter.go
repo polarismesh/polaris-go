@@ -139,6 +139,7 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 	}
 	log.GetBaseLogger().Infof("[metrics]init action, cfg:%v", model.JSONString(s.cfg))
 	if s.cfg.Type == _metricsPull {
+		log.GetBaseLogger().Infof("[metrics]init: pull mode, metricHost=%s metricPort=%d", s.cfg.IP, s.cfg.port)
 		// 如果拉模式，且端口和admin端口一致，则注册metrics路径到admin的http插件
 		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
 		if s.cfg.port == adminPort {
@@ -164,6 +165,8 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 				return nil
 			}
 			labels := statcommon.ConvertInsGaugeToLabels(val, s.clientIP)
+			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] ServiceStat received: ns=%s svc=%s method=%s retCode=%v labels=%v",
+				val.GetNamespace(), val.GetService(), val.Method, val.GetRetCode(), labels)
 			s.insCollector.CollectStatInfo(val, labels, statcommon.ServiceCallStrategy,
 				statcommon.ServiceCallLabelOrder)
 		}
@@ -174,6 +177,8 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 				return nil
 			}
 			labels := statcommon.ConvertRateLimitGaugeToLabels(val)
+			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] RateLimitStat received: ns=%s svc=%s method=%s result=%d ruleName=%q labels=%q metricLabels=%v",
+				val.Namespace, val.Service, val.Method, val.Result, val.RuleName, val.Labels, labels)
 			s.rateLimitCollector.CollectStatInfo(val, labels, statcommon.RateLimitStrategy,
 				statcommon.RateLimitLabelOrder)
 		}
@@ -184,6 +189,8 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 				return nil
 			}
 			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val)
+			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] CircuitBreakStat received: method=%s cbStatus=%v labels=%v",
+				val.Method, val.CBStatus, labels)
 			s.circuitBreakerCollector.CollectStatInfo(val, labels, statcommon.CircuitBreakerStrategy,
 				statcommon.CircuitBreakerLabelOrder)
 		}
@@ -328,6 +335,13 @@ func (pa *PullAction) doAggregation(ctx context.Context) {
 
 		insRevision := pa.reporter.insCollector.IncRevision()
 		rateLimitRevision := pa.reporter.rateLimitCollector.IncRevision()
+
+		insCount := len(pa.reporter.insCollector.CollectValues())
+		rlCount := len(pa.reporter.rateLimitCollector.CollectValues())
+		pa.reporter.logCtx.GetStatReportLogger().Debugf(
+			"[metrics][pull] aggregation done: insMetrics=%d rateLimitMetrics=%d insRevision=%d rateLimitRevision=%d",
+			insCount, rlCount, insRevision, rateLimitRevision)
+
 		if time.Since(lastRevisionLogTime) >= 30*time.Minute {
 			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] revision collector inc current revision to %d", insRevision)
 			pa.reporter.logCtx.GetStatReportLogger().Infof("[metrics][pull] collector inc current revision to %d", rateLimitRevision)
@@ -361,6 +375,7 @@ func (pa *PullAction) serveOnAdmin() {
 
 func (pa *PullAction) Run(ctx context.Context) {
 	if pa.bindPort.Load() < 0 {
+		pa.reporter.logCtx.GetStatReportLogger().Warnf("[metrics][pull] metricPort < 0, metrics http-server disabled")
 		return
 	}
 	go pa.doAggregation(ctx)
@@ -448,6 +463,12 @@ func (pa *PushAction) Run(ctx context.Context) {
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.circuitBreakerCollector, 0)
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.rateLimitCollector,
 				pa.reporter.rateLimitCollector.GetCurrentRevision())
+
+			insCount := len(pa.reporter.insCollector.CollectValues())
+			rlCount := len(pa.reporter.rateLimitCollector.CollectValues())
+			pa.reporter.logCtx.GetStatReportLogger().Debugf(
+				"[metrics][push] aggregation done: insMetrics=%d rateLimitMetrics=%d, pushing to %s",
+				insCount, rlCount, pa.cfg.Address)
 
 			if err := pa.pusher.
 				Push(); err != nil {

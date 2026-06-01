@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/polarismesh/polaris-go v1.7.0
-	github.com/polarismesh/specification v1.8.0-alpha.1.0.20260331072918-74b1c8263b13
+	github.com/polarismesh/specification v1.8.0
 )
 
 require (

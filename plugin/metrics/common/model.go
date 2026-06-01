@@ -163,11 +163,11 @@ var (
 	RateLimitGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
 		CalleeNamespace: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return val.GetNamespace()
+			return val.Namespace
 		},
 		CalleeService: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
-			return val.GetService()
+			return val.Service
 		},
 		CalleeMethod: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
@@ -175,6 +175,11 @@ var (
 		},
 		CallerLabels: func(args interface{}) string {
 			val := args.(*model.RateLimitGauge)
+			// 优先使用上游 sync_flow.formatArgumentsToLabels 预格式化的 Labels；
+			// 当 Labels 未预设（兼容旧路径）时回退到本地 Arguments 拍平。
+			if val.Labels != "" {
+				return val.Labels
+			}
 			return formatLabelsToStr(val.Arguments)
 		},
 		RuleName: func(args interface{}) string {

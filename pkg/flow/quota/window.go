@@ -18,6 +18,7 @@
 package quota
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,10 +32,12 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/flow/data"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
 	"github.com/polarismesh/polaris-go/pkg/model/pb"
 	limitpb "github.com/polarismesh/polaris-go/pkg/model/pb/metric/v2"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 	"github.com/polarismesh/polaris-go/pkg/plugin/ratelimiter"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
@@ -357,6 +360,11 @@ type RateLimitWindow struct {
 	remoteErrLogLastNano int64
 	// remoteErrLogSuppressedCount 限频期间被压制的同类错误次数；解除压制时一并打出来作为提示.
 	remoteErrLogSuppressedCount int64
+	// lastCode 最近一次 AllocateQuota 返回的结果码（int64 形式存储，方便走 atomic 原子交换）。
+	// 仅作"状态切换检测"使用：当本次结果码与上次不同（UNLIMITED↔LIMITED）时触发限流事件上报。
+	// 零值 0 = QuotaResultOk = UNLIMITED，与"窗口刚创建尚未限流"的语义一致：
+	// 首次出现限流时会构成 UNLIMITED→LIMITED 切换，触发 RateLimitStart。
+	lastCode int64
 }
 
 // remoteErrLogIntervalNano 同一窗口同类远端错误日志的最小输出间隔（5s）；
@@ -640,13 +648,115 @@ func (r *RateLimitWindow) CasStatus(oldStatus int64, status int64) bool {
 	return atomic.CompareAndSwapInt64(&r.status, oldStatus, status)
 }
 
-// AllocateQuota 分配配额
+// AllocateQuota 分配配额。
+//
+// 在调用底层 trafficShapingBucket.GetQuota 取得本次配额结果后，会顺带做一次"窗口级状态切换检测"：
+// 通过 atomic.SwapInt64 原子地把本次结果码替换进 lastCode，并与上次结果码比较——
+//   - UNLIMITED → LIMITED：投递 RateLimitStart 事件
+//   - LIMITED → UNLIMITED：投递 RateLimitEnd 事件
+//   - 状态未变：跳过事件构造，不触发任何上报
+//
+// 事件构造与投递不阻塞主流程：reportRateLimitEvent 内部出错只打日志，不影响 quotaResult 返回。
+//
+// 并发抖动说明：
+//
+//	高 QPS 限流"边缘窗口"（token 用尽前后）下，多个 goroutine 并发调用 AllocateQuota 时，
+//	bucket.GetQuota 的结果会按调度顺序在 Limited / Ok 间交替；每个 goroutine 各自做一次
+//	atomic.SwapInt64，可能产生 Start → End → Start 的"事件抖动"。
+//	这是有意保留的语义——状态确实在快速翻转，事件如实反映即可，调用方在消费侧做去重 / 节流；
+//	SDK 层不引入额外节流，避免漏掉真实的状态转换。
 func (r *RateLimitWindow) AllocateQuota(commonRequest *data.CommonRateLimitRequest) *model.QuotaResponse {
 	nowMilli := model.CurrentMillisecond()
 	atomic.StoreInt64(&r.lastAccessTimeMilli, nowMilli)
 	// 获取服务端时间
 	curTimeMs := r.toServerTimeMilli(nowMilli)
-	return r.trafficShapingBucket.GetQuota(curTimeMs, commonRequest.Token)
+	quotaResult := r.trafficShapingBucket.GetQuota(curTimeMs, commonRequest.Token)
+
+	// 状态切换检测：仅当本次与上次结果码不同时才尝试构造事件
+	currentCode := int64(quotaResult.Code)
+	previousCode := atomic.SwapInt64(&r.lastCode, currentCode)
+	if previousCode != currentCode {
+		r.reportRateLimitEvent(commonRequest,
+			model.QuotaResultCode(previousCode), quotaResult.Code, quotaResult.Info)
+	}
+
+	return quotaResult
+}
+
+// reportRateLimitEvent 上报限流状态切换事件到 EventReporter 插件链。
+//
+// 输入：
+//   - commonRequest 触发本次配额分配的请求体，用于提取主调来源信息（CALLER_SERVICE）
+//   - previousCode  上一次 AllocateQuota 的结果码
+//   - currentCode   本次 AllocateQuota 的结果码
+//   - reason        附加原因描述（一般为 QuotaResponse.Info），可为空
+//
+// 行为：
+//   - 当事件名解析为空（状态未发生 UNLIMITED↔LIMITED 切换）时直接返回
+//   - 通过 r.Engine().GetEventReportChain() 拿到插件链，逐个调用 ReportEvent
+//   - 任一插件返回错误只记日志，不打断后续插件，也不影响主流程
+func (r *RateLimitWindow) reportRateLimitEvent(
+	commonRequest *data.CommonRateLimitRequest,
+	previousCode model.QuotaResultCode,
+	currentCode model.QuotaResultCode,
+	reason string,
+) {
+	engine := r.Engine()
+	if engine == nil {
+		return
+	}
+	chainValue := engine.GetEventReportChain()
+	if chainValue == nil {
+		return
+	}
+	chain, ok := chainValue.([]events.EventReporter)
+	if !ok || len(chain) == 0 {
+		return
+	}
+
+	// 提取主调来源信息：CALLER_SERVICE 维度的 argument 形态为 {namespace: service}
+	sourceNamespace, sourceService := extractCallerService(commonRequest)
+
+	eventInfo := event.BuildRateLimitEvent(
+		r.SvcKey, r.Rule,
+		previousCode, currentCode,
+		sourceNamespace, sourceService,
+		r.Labels, reason,
+	)
+	if eventInfo == nil {
+		return
+	}
+
+	logger := r.WindowSet.flowAssistant.logCtx.GetRateLimitLogger()
+	for _, reporter := range chain {
+		if err := reporter.ReportEvent(eventInfo); err != nil {
+			logger.Errorf("[RateLimit] report flow event failed, window=%s, eventName=%s, err=%v",
+				r.uniqueKey, eventInfo.GetEventName(), err)
+		}
+	}
+}
+
+// extractCallerService 从限流请求的 arguments 中提取主调服务 (namespace, service)。
+// 当请求未携带 CALLER_SERVICE 维度时返回两个空串，调用方按缺失语义处理。
+//
+// 实现说明：CALLER_SERVICE 维度理论上可能携带多对 (ns, svc)，map 遍历顺序未定义会让事件中的
+// source_namespace / source_service 在多次上报间随机抖动，下游对账时难以定位真实主调。
+// 这里按 namespace key 字典序排序后取首个，保证同一组 arguments 永远返回相同结果。
+func extractCallerService(commonRequest *data.CommonRateLimitRequest) (string, string) {
+	if commonRequest == nil || len(commonRequest.Arguments) == 0 {
+		return "", ""
+	}
+	callerMap := commonRequest.Arguments[apitraffic.MatchArgument_CALLER_SERVICE]
+	if len(callerMap) == 0 {
+		return "", ""
+	}
+	keys := make([]string, 0, len(callerMap))
+	for k := range callerMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	ns := keys[0]
+	return ns, callerMap[ns]
 }
 
 // GetLastAccessTimeMilli 获取最近访问时间

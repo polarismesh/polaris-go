@@ -19,6 +19,8 @@ package flow
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
@@ -50,15 +52,48 @@ func (e *Engine) syncRateLimitReportAndFinalize(commonRequest *data.CommonRateLi
 	data.PoolPutCommonRateLimitRequest(commonRequest)
 }
 
+// reportRateLimitGauge 上报限流监控指标。
+//
+// 上报维度（与监控插件期望的 label 一一对应）：
+//   - Namespace / Service / Method：被调服务身份与方法
+//   - Result：本次配额分配的结果码（QuotaResultOk / QuotaResultLimited）
+//   - Arguments：限流维度的原始参数（部分上报实现用其展开 label）
+//   - RuleName：仅限流时有值，标识命中的规则名（来自 QuotaResponse.GetActiveRuleName）
+//   - Labels：把 Arguments 拍平成 TYPE:key:value|... 字符串，对接 caller_labels 维度
+//
+// 非限流场景下 RuleName 为空串、Labels 由 Arguments 驱动；
+// 这与上游监控约定一致——通过的请求 rule_name 为空，被限流的请求 rule_name 非空。
 func (e *Engine) reportRateLimitGauge(req *model.QuotaRequestImpl, resp *model.QuotaResponse) {
 	stat := &model.RateLimitGauge{
 		EmptyInstanceGauge: model.EmptyInstanceGauge{},
 		Namespace:          req.GetNamespace(),
 		Service:            req.GetService(),
+		Method:             req.GetMethod(),
 		Result:             resp.Code,
 		Arguments:          req.Arguments(),
+		RuleName:           resp.GetActiveRuleName(),
+		Labels:             formatArgumentsToLabels(req.Arguments()),
 	}
 	_ = e.SyncReportStat(model.RateLimitStat, stat)
+}
+
+// formatArgumentsToLabels 将 Arguments 列表拍平为单个标签字符串，便于作为 Prometheus 等监控的 label 值上报。
+//
+// 入参：args 限流参数列表，可为 nil 或空。
+// 输出：形如 "TYPE:key:value|TYPE:key:value" 的字符串；空输入返回空串。
+// 注意：此处会对结果排序，与 plugin/metrics/common 中 formatLabelsToStr 保持一致，
+// 保证同一组 Arguments 产生稳定的 label 值，避免 Prometheus 时序碎片化。
+func formatArgumentsToLabels(args []model.Argument) string {
+	if len(args) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(args))
+	for _, arg := range args {
+		// Argument.String() 已实现 "TYPE:key:value" 的格式化，复用以保持唯一格式
+		parts = append(parts, arg.String())
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "|")
 }
 
 // syncRuleReportAndFinalize 结果上报及归还请求实例规则对象
