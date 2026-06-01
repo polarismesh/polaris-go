@@ -208,3 +208,24 @@ Token 权限不足，请使用管理员 Token 或确认 Token 对目标 namespac
 - 确认本地 polaris-go 代码包含 `BehaviorNotRegisteredError` 修复（`go.mod` 中有 `replace` 指向 `../../`）
 - 确认 tsf 规则已成功创建到服务端（通过 OpenAPI 确认）
 - 加 `--debug` 重跑，查看完整 SDK 日志输出
+
+---
+
+## 修复发布后的清理
+
+`examples/serviceRule/go.mod` 当前包含一行用于本地验证的 replace 指令：
+
+```
+replace github.com/polarismesh/polaris-go => ../../
+```
+
+它的作用是让 demo 引用工作树本地的 polaris-go 源码，从而验证尚未发版的
+`*pb.BehaviorNotRegisteredError` 修复。**修复随版本发布到正式版本后，请按以下步骤
+清理该 replace**，恢复 demo 的常规依赖形态：
+
+1. 把 `examples/serviceRule/go.mod` 中 polaris-go 的 require 行升级到包含本修复的版本
+2. 删除 `replace github.com/polarismesh/polaris-go => ../../` 这一行
+3. 在本目录下执行 `go mod tidy` 重新生成 `go.sum`
+4. 重跑 `./verify.sh`，确认行为与 replace 模式下一致
+
+> CI 不会自动检测此 replace；该清理步骤需手工完成。

@@ -781,25 +781,43 @@ func (g *LocalCache) messageToServiceRule(cachedValue interface{}, value proto.M
 		svcRule.CacheLoaded = 1
 	}
 	if err := svcRule.ValidateAndBuildCache(); err != nil {
-		// 限流规则中 action 引用了客户端未注册的 RateLimiter 插件（例如发行版专有插件名），
-		// 属于"客户端能力缺失"导致的可容忍校验失败：规则数据本身合法，只是当前 SDK 二进制
-		// 无法构造对应限流算法。此场景以 WARN 级别记录即可，避免污染 ERROR 告警。
-		// 注意：该错误仍会通过 svcRule.GetValidateError() 暴露给上层，限流流程依旧会
-		// 因 validateError != nil 而对该服务整体跳过限流（参见 pkg/flow/quota/assist.go::lookupRules）。
-		var behaviorErr *pb.BehaviorNotRegisteredError
-		if errors.As(err, &behaviorErr) {
-			g.logCtx.GetBaseLogger().Warnf(
-				"rate limit rule for service %s, namespace %s references unregistered behavior plugin %q,"+
-					" this rule set will be skipped by limiter: %v",
-				respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(),
-				behaviorErr.Behavior, err)
-		} else {
-			g.logCtx.GetBaseLogger().Errorf(
-				"fail to validate service rule for service %s, namespace %s, error is %v",
-				respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(), err)
-		}
+		logServiceRuleValidationFailure(g.logCtx.GetBaseLogger(),
+			respInProto.GetService().GetName().GetValue(),
+			respInProto.GetService().GetNamespace().GetValue(),
+			err)
 	}
 	return svcRule
+}
+
+// logServiceRuleValidationFailure 根据规则校验错误的具体类型选择合适的日志级别。
+//
+//   - *pb.BehaviorNotRegisteredError：限流规则中 action 引用了客户端未注册的 RateLimiter
+//     插件（例如发行版专有插件名），属于"客户端能力缺失"导致的可容忍校验失败：规则数据本身
+//     合法，只是当前 SDK 二进制无法构造对应限流算法。此场景以 WARN 级别记录即可，
+//     避免污染 ERROR 告警。
+//   - 其它类型错误：视为规则数据问题，仍以 ERROR 级别记录。
+//
+// 注意：无论选择 WARN 还是 ERROR，校验错误都会通过 svcRule.GetValidateError()
+// 暴露给上层，限流流程依旧会因 validateError != nil 而对该服务整体跳过限流
+// （参见 pkg/flow/quota/assist.go::lookupRules）。本函数只决定日志级别，不改变
+// 规则处理语义。
+//
+// logger    用于输出日志的 base logger，不允许为 nil。
+// service   规则归属的服务名，用于日志定位。
+// namespace 规则归属的命名空间，用于日志定位。
+// err       svcRule.ValidateAndBuildCache() 返回的非 nil 错误。
+func logServiceRuleValidationFailure(logger log.Logger, service, namespace string, err error) {
+	var behaviorErr *pb.BehaviorNotRegisteredError
+	if errors.As(err, &behaviorErr) {
+		logger.Warnf(
+			"rate limit rule for service %s, namespace %s references unregistered behavior plugin %q,"+
+				" this rule set will be skipped by limiter: %v",
+			service, namespace, behaviorErr.Behavior, err)
+		return
+	}
+	logger.Errorf(
+		"fail to validate service rule for service %s, namespace %s, error is %v",
+		service, namespace, err)
 }
 
 func (g *LocalCache) messageToServices(cachedValue interface{}, value proto.Message, svcLocalValue local.ServiceLocalValue, cacheLoaded bool) model.RegistryValue {
