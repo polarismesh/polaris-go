@@ -18,6 +18,7 @@
 package inmemory
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -780,9 +781,23 @@ func (g *LocalCache) messageToServiceRule(cachedValue interface{}, value proto.M
 		svcRule.CacheLoaded = 1
 	}
 	if err := svcRule.ValidateAndBuildCache(); err != nil {
-		g.logCtx.GetBaseLogger().Errorf(
-			"fail to validate service rule for service %s, namespace %s, error is %v",
-			respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(), err)
+		// 限流规则中 action 引用了客户端未注册的 RateLimiter 插件（例如发行版专有插件名），
+		// 属于"客户端能力缺失"导致的可容忍校验失败：规则数据本身合法，只是当前 SDK 二进制
+		// 无法构造对应限流算法。此场景以 WARN 级别记录即可，避免污染 ERROR 告警。
+		// 注意：该错误仍会通过 svcRule.GetValidateError() 暴露给上层，限流流程依旧会
+		// 因 validateError != nil 而对该服务整体跳过限流（参见 pkg/flow/quota/assist.go::lookupRules）。
+		var behaviorErr *pb.BehaviorNotRegisteredError
+		if errors.As(err, &behaviorErr) {
+			g.logCtx.GetBaseLogger().Warnf(
+				"rate limit rule for service %s, namespace %s references unregistered behavior plugin %q,"+
+					" this rule set will be skipped by limiter: %v",
+				respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(),
+				behaviorErr.Behavior, err)
+		} else {
+			g.logCtx.GetBaseLogger().Errorf(
+				"fail to validate service rule for service %s, namespace %s, error is %v",
+				respInProto.GetService().GetName(), respInProto.GetService().GetNamespace(), err)
+		}
 	}
 	return svcRule
 }

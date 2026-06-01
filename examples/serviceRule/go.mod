@@ -6,8 +6,10 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/polarismesh/polaris-go v1.7.1-0.20260306034000-560ea3ca2dfe
 	github.com/polarismesh/specification v1.8.0
-	gopkg.in/yaml.v3 v3.0.1
 )
+
+// 使用工作树本地的 polaris-go，便于验证尚未发版的 *pb.BehaviorNotRegisteredError 修复
+replace github.com/polarismesh/polaris-go => ../../
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -57,4 +59,5 @@ require (
 	google.golang.org/grpc v1.51.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
