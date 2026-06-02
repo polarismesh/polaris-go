@@ -40,6 +40,32 @@ import (
 type RateLimitingAssistant struct {
 }
 
+// BehaviorNotRegisteredError 表示限流规则中引用的限流算法插件在当前 SDK 二进制中未注册。
+//
+// 触发场景：服务端下发的限流规则中 `action` 字段值（即 RateLimiter 插件名）在客户端
+// 没有对应实现，例如某些发行版才包含的专有插件。规则解析时无法构造对应的限流算法。
+//
+// 该错误是限流规则校验中**可以容忍的一类错误**:相对于其他校验失败（amount 非法、
+// validDuration 解析失败、reportAmount 越界等），它只表示客户端缺少处理这条规则的能力，
+// 不代表规则数据本身损坏，因此调用方可以选择以 WARN 级别记录、并保留对应缓存项。
+//
+// **影响范围（重要）**：`RateLimitingAssistant.Validate` 在遍历规则数组时遇到本错误
+// 会立即短路返回，因此 `*apitraffic.RateLimit` 中**整个规则集**都会因 `validateError`
+// 非空而被 `pkg/flow/quota/assist.go::lookupRules` 整体跳过，包括同一规则集中其它
+// 合法的规则。也就是说：如果服务有 10 条限流规则、其中 1 条 action 引用未注册插件，
+// 另外 9 条合法规则也不会生效。这是与日志降级一并需要让上层调用方知晓的语义。
+// 后续可以考虑改为"标记并跳过单条非法规则、保留其它合法规则"，但属于独立的语义改造，
+// 不在当前修复范围内。
+type BehaviorNotRegisteredError struct {
+	// Behavior 未注册的限流算法插件名（即规则中的 `action` 字段值）
+	Behavior string
+}
+
+// Error 返回错误描述。保持与历史版本完全一致的文案，便于既有监控/告警的关键字匹配继续生效。
+func (e *BehaviorNotRegisteredError) Error() string {
+	return fmt.Sprintf("behavior plugin %s not registered", e.Behavior)
+}
+
 const (
 	ruleServiceLevel = 1
 
@@ -246,7 +272,9 @@ func (r *RateLimitingAssistant) Validate(message proto.Message, ruleCache model.
 		}
 		behaviorName := rule.GetAction().GetValue()
 		if !plugin.IsPluginRegistered(common.TypeRateLimiter, behaviorName) {
-			return fmt.Errorf("behavior plugin %s not registered", behaviorName)
+			// 用 typed error 回传，便于调用方区分"客户端缺插件"这种可容忍的校验失败，
+			// 从而以 WARN 而非 ERROR 记录日志（详见 BehaviorNotRegisteredError 的注释）。
+			return &BehaviorNotRegisteredError{Behavior: behaviorName}
 		}
 		ruleCache.SetMessageCache(rule, &RateLimitRuleCache{
 			MaxDuration: maxDuration})
