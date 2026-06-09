@@ -3,10 +3,10 @@
 本文档汇总 `examples/route/lane/` 目录下两个端到端测试脚本的**测试方案（目标、前置条件、拓扑、用例、校验点）**，便于在 Polaris 服务端 + polaris-go SDK 环境下做路由/预热回归验证。
 
 - 测试脚本：
-  - [lane-test.sh](./lane-test.sh)：**泳道路由**功能测试（baseline / gray 隔离、流量匹配 STRICT/PERMISSIVE、baseLaneMode、泳道组剔除等）
+  - [lane-test.sh](./lane-test.sh)：**泳道路由**功能测试（baseline / gray 隔离、流量匹配 STRICT/PERMISSIVE、baseLaneMode、泳道组剔除、非泳道组服务的 baseLaneMode 等）
   - [lane-warmup-test.sh](./lane-warmup-test.sh)：**泳道预热（Warmup）+ 百分比灰度（Percentage）**功能测试（按概率曲线灰度放量 + 按百分比切流）
 
-两个脚本使用相同端口段（`48095 / 19080-19091` 等），**不可同时运行**，需先 `stop` 或 `./cleanup.sh` 后再切换。
+两个脚本使用相同端口段（`48095 / 19080-19093` 等，新增的 NLG 用例占用 `19100-19111`），**不可同时运行**，需先 `stop` 或 `./cleanup.sh` 后再切换。
 
 ---
 
@@ -16,11 +16,11 @@
 | --- | --- |
 | 命名空间 | `default` |
 | 入口网关服务 | 主脚本：`LaneRouterGateway`；warmup 脚本：`LaneRouterGatewayService` |
-| Provider 服务 | `LaneEchoServer`；`baseLaneMode=1` 专项使用 `StableLaneEchoServer` |
-| Consumer 服务 | `LaneEchoClient` / `SimpleLaneEchoClient` |
+| Provider 服务 | `LaneEchoServer`；`baseLaneMode=1` 专项使用 `StableLaneEchoServer`；用例 6.2 专用 `NoLaneGroupEchoServer`（不在任何泳道组内） |
+| Consumer 服务 | `LaneEchoClient` / `SimpleLaneEchoClient`；用例 6.2 专用 `NoLaneGroupEchoClient`（不在任何泳道组内） |
 | 染色 Header（直接染色） | `service-lane: <laneGroup>/<laneRule>`（如 `lane-go-example/gray`、`lane-go-warmup/gray`） |
-| 流量匹配 Header | 主脚本：`user: gray` / `user: noexist` / `user: other`；六类维度规则守卫：`lane-test: <规则名>`；warmup 脚本：`warmup-user: gray` |
-| 支持的命令 | `all` / `build` / `check` / `start` / `test` / `stop` |
+| 流量匹配 Header | 主脚本：`user: gray` / `user: noexist` / `user: strict` / `user: other`；六类维度规则守卫：`lane-test: <规则名>`；warmup 脚本：`warmup-user: gray` |
+| 支持的命令 | `all` / `build` / `check` / `start` / `test` / `stop` / `-d`（debug） |
 | 典型启动 | `./lane-test.sh all 127.0.0.1`、`./lane-warmup-test.sh all 127.0.0.1` |
 
 通用流程：`构建二进制 → 校验 Polaris 泳道规则 → 启动服务 → 等待就绪 → 执行用例 → 汇总统计 → 停止服务`。
@@ -35,19 +35,22 @@
 2. `service-lane` 直接染色 → 走 gray 泳道
 3. 流量匹配规则 `STRICT` 模式命中染色
 4. 流量匹配规则 `PERMISSIVE` 模式回退基线
-5. 规则未命中 → 走 baseline
-6. 并发下 baseline 与 gray 路径相互隔离
-7. **六类匹配维度全覆盖**：`$method` / `Header` / `Query` / `Cookie` / `$path` / `$caller_ip`，验证 SDK `findTrafficValue` 7 类 SourceMatch 中的 6 类对外暴露维度（CALLER_METADATA 由 sourceService 元数据提供，已在染色路径覆盖）
-8. `baseLaneMode=ExcludeEnabledLaneInstance (=1)` 时 baseline 只走未启用泳道实例
-9. 服务不在泳道组内（破坏性）→ 仅走无标签实例
+5. 流量匹配规则 `STRICT` 模式 + 目标泳道无实例 → 期望 HTTP 503（不降级基线）
+6. 规则未命中 → 走 baseline
+7. 并发下 baseline 与 gray 路径相互隔离
+8. **六类匹配维度全覆盖**：`$method` / `Header` / `Query` / `Cookie` / `$path` / `$caller_ip`，验证 SDK `findTrafficValue` 7 类 SourceMatch 中的 6 类对外暴露维度（CALLER_METADATA 由 sourceService 元数据提供，已在染色路径覆盖）
+9. `baseLaneMode=ExcludeEnabledLaneInstance (=1)` 时 baseline 只走未启用泳道实例
+10. 服务不在泳道组内（破坏性）→ 仅走无标签实例
+11. **非泳道组服务的 `baseLaneMode` 行为**：服务从未加入任何泳道组时，consumer 端 `baseLaneMode=0/1` 对带标签实例的可见性差异
 
 ### 2.2 前置条件（Polaris 控制台配置）
 - 泳道组：`lane-go-example`
 - 入口服务：`LaneRouterGateway / default`
 - 目标服务：`LaneEchoClient`、`SimpleLaneEchoClient`、`LaneEchoServer`、`StableLaneEchoServer`
+  - `NoLaneGroupEchoServer` / `NoLaneGroupEchoClient` **不需要**出现在泳道组里（用例 6.2 验证“服务不在任何泳道组”这一场景）
 - 规则 `gray`：Header `user=gray` → `lane=gray`，匹配模式 `STRICT`，`enable=true`
 - 规则 `permissive`：Header `user=noexist` → `lane=noexist`（无实例），匹配模式 `PERMISSIVE`，`enable=true`
-- 规则 `strict-noexist`：Header `user=strict` → `lane=strict-noexist`（无实例），STRICT，期望命中即返回 HTTP 503
+- 规则 `strict-noexist`：Header `user=strict` → `lane=strict-noexist`（无实例），STRICT，命中后 SDK 不降级、最终网关/消费端返回 HTTP 503
 - **六类匹配维度规则（全部 STRICT，染到 `lane=gray`，复用 provider-gray 实例）**：
   - 规则 `method-post`：`METHOD=POST` AND `Header lane-test=method-post` → `lane=gray`
   - 规则 `query-env`：`QUERY env=gray` AND `Header lane-test=query-env` → `lane=gray`
@@ -56,7 +59,7 @@
   - 规则 `caller-ip-local`：`CALLER_IP EXACT 127.0.0.1` AND `Header lane-test=caller-ip-local` → `lane=gray`
   - 规则 `caller-ip-not-zero`：`CALLER_IP NOT_EQUALS 0.0.0.0` AND `Header lane-test=caller-ip-not-zero` → `lane=gray`
 
-> 上述 6 条新规则由脚本 `create_full_lane_group()` / `add_rule_to_lane_group()` 自动创建，亦可手工在控制台配置。除 `path-gray` 外均叠加 `Header lane-test=<规则名>` 二级守卫，避免污染已有 baseline / permissive / isolation 用例。
+> 上述 9 条规则（旧规则 3 条 + 六类维度 6 条）由脚本 `create_full_lane_group()` / `add_rule_to_lane_group()` 自动创建，亦可手工在控制台配置。除 `path-gray` 外均叠加 `Header lane-test=<规则名>` 二级守卫，避免污染已有 baseline / permissive / strict-noexist / isolation 用例。
 
 脚本中 `validate_lane_rules()` 会自动拉取并校验以上配置；若不满足则终止测试。
 
@@ -73,6 +76,8 @@
 | `SimpleLaneEchoClient` | `:19082` | `:19083` |
 | `LaneEchoServer` | `:19090` | `:19091` |
 | `StableLaneEchoServer` | `:19092`（stable） | `:19093`（gray） |
+| `NoLaneGroupEchoServer`（用例 6.2，**不在**任何泳道组） | `:19100` | `:19101`（lane=gray） |
+| `NoLaneGroupEchoClient`（用例 6.2，**不在**任何泳道组） | `:19110`（baseLaneMode=0） | `:19111`（baseLaneMode=1） |
 
 ```
                 ┌───────────────────────────┐
@@ -84,26 +89,29 @@
                 ┌───────────────────────────┐  │    :19082 / :19083
                 │ LaneEchoClient           │◄─┘
                 │ SimpleLaneEchoClient     │
+                │ NoLaneGroupEchoClient    │ :19110(mode0) / :19111(mode1)
                 └─────────┬─────────────────┘
                           ▼
                 ┌───────────────────────────┐
                 │ LaneEchoServer            │ :19090(base) / :19091(gray)
                 │ StableLaneEchoServer      │ :19092(stable) / :19093(gray)
+                │ NoLaneGroupEchoServer     │ :19100(base) / :19101(lane=gray)
                 └───────────────────────────┘
 ```
 
-四条被测链路，编号与脚本 `log_title` 保持一致；其中 1.x / 2.x 两条入口链路在 6 个基础用例之外**额外执行 6 个六类匹配维度用例（1.7~1.12 / 2.7~2.12）**，3.x / 4.x 仅跑 6 个基础用例：
+四条被测链路，编号与脚本 `log_title` 保持一致；其中 1.x / 2.x 两条入口链路在 6 个基础用例之外**额外执行 1 个 STRICT-503 用例 + 6 个六类匹配维度用例**（共 13），3.x / 4.x 各为 7 个用例（6 基础 + 1 个 STRICT-503）：
 
 | 链路编号 | 链路标签 | Gateway | Consumer | Provider | 用例数 |
 | --- | --- | --- | --- | --- | --- |
-| 1.x | 主链路 | `gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
-| 2.x | `[simple]` | `simple-gateway` | `LaneEchoClient` | `LaneEchoServer` | **12**（6 基础 + 6 维度） |
-| 3.x | `[gw→sc]` | `gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
-| 4.x | `[sg→sc]` | `simple-gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 6 |
+| 1.x | 主链路 | `gateway` | `LaneEchoClient` | `LaneEchoServer` | **13**（6 基础 + 1 STRICT-503 + 6 维度） |
+| 2.x | `[simple]` | `simple-gateway` | `LaneEchoClient` | `LaneEchoServer` | **13**（6 基础 + 1 STRICT-503 + 6 维度） |
+| 3.x | `[gw→sc]` | `gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 7（6 基础 + 1 STRICT-503） |
+| 4.x | `[sg→sc]` | `simple-gateway` | `SimpleLaneEchoClient` | `LaneEchoServer` | 7（6 基础 + 1 STRICT-503） |
 
-外加两个专项链路：
-- **用例 5.1**：`gateway-excl` → `StableLaneEchoServer`（脚本把 `polaris.yaml` 中 `baseLaneMode: 0` 替换为 `baseLaneMode: 1`）
-- **用例 6.1**：破坏性 —— 运行期调用 Polaris OpenAPI 把 `LaneEchoServer` 从泳道组 `destinations` 中移除，结束后自动恢复
+外加三个专项链路：
+- **用例 5.1a/5.1b**：`gateway-excl` → `StableLaneEchoServer`（脚本把 `polaris.yaml` 中 `baseLaneMode: 0` 替换为 `baseLaneMode: 1`），验证 `baseLaneMode=ExcludeEnabledLaneInstance` 排除已启用泳道实例的语义
+- **用例 6.1a/6.1b**：破坏性 —— 运行期调用 Polaris OpenAPI 把 `LaneEchoServer` 从泳道组 `destinations` 中移除，结束后自动恢复
+- **用例 6.2a/6.2b**：`NoLaneGroupEchoClient` → `NoLaneGroupEchoServer`（两个服务均不在任何泳道组），验证 consumer 端 `baseLaneMode=0/1` 对带标签实例的可见性差异
 
 ### 2.4 用例矩阵
 
@@ -115,10 +123,11 @@
 | `x.2` | `service-lane` 直接染色 | `service-lane: lane-go-example/gray` | Provider 走 `:19091` `lane=gray` | 响应含 `lane=gray` 且端口匹配 |
 | `x.3` | 流量匹配 STRICT | `user: gray` | `lane=gray` | 必须命中 `gray` 实例；未命中即失败 |
 | `x.4` | 流量匹配 PERMISSIVE | `user: noexist`（目标 lane 无实例） | 回退 baseline | 响应 `lane=(baseline)` |
+| `x.4b` | 流量匹配 STRICT 无实例 | `user: strict`（目标 lane 无实例） | **HTTP 503**，不降级 | gateway/consumer 返回 503，body 不含 `lane=gray` / `lane=(baseline)` |
 | `x.5` | 未命中规则 | `user: other` | baseline | 响应 `lane=(baseline)` |
 | `x.6` | 泳道隔离并发 | 多轮交替发 baseline / gray 请求 | 两路径互不污染 | N 轮循环统计零泄漏 |
 
-> x ∈ {1, 2, 3, 4}，共 **24 条基础用例**。
+> x ∈ {1, 2, 3, 4}，共 **24 条基础用例 + 4 条 STRICT-503 用例（`x.4b`）**。`x.4b` 用于覆盖 STRICT 模式下目标泳道无实例、SDK 不允许降级基线的强契约。
 
 #### 2.4.2 六类匹配维度用例（仅 1.x / 2.x 两条入口链路）
 
@@ -143,13 +152,21 @@
 | **5.1b** | `baseLaneMode=ExcludeEnabledLaneInstance`（染色） | 同上，带 `service-lane: lane-go-example/gray` | 染色请求正确路由到 `lane=gray :19093`，`baseLaneMode` 不影响染色路径 |
 | **6.1a** | 服务不在泳道组内（破坏性，染色请求） | 通过 OpenAPI 将 `LaneEchoServer` 从泳道组 `destinations` 中移除 | 染色请求 provider 全部路由到无标签 base 实例 `:19090`；默认模式下不得命中带标签实例 |
 | **6.1b** | 服务不在泳道组内（破坏性，无 Header） | 同上 | 无 Header 请求同样路由到 base 实例 `:19090` |
-| **6.1 SKIP** | Polaris 缓存传播超时 | 管理 API 已确认移除，但 SDK 本地缓存尚未刷新 | 判定为非 SDK 问题，标记为 SKIP 而非 FAIL |
+| **6.1 SKIP** | Polaris 缓存传播超时 | 管理 API 已确认移除（管理 API 已实时生效），但 **Discover API** 在 `max_discover_wait=120s` 内仍未下发新规则 | 判定为服务端 naming cache 刷新延迟，标记为 SKIP 而非 FAIL；同时自动恢复泳道组以避免脏状态 |
+| **6.2a** | 非泳道组服务 + `baseLaneMode=0` | `NoLaneGroupEchoClient(mode0)` → `NoLaneGroupEchoServer`（两个服务均不在任何泳道组） | consumer 端 `baseLaneMode=0`（OnlyUntaggedInstance）下，所有请求都路由到无标签 base 实例 `:19100`，**不会**命中 `lane=gray :19101` |
+| **6.2b** | 非泳道组服务 + `baseLaneMode=1` | `NoLaneGroupEchoClient(mode1)` → `NoLaneGroupEchoServer` | consumer 端 `baseLaneMode=1`（ExcludeEnabledLaneInstance）下，请求**可以**命中带 `lane=gray` 标签的实例 `:19101`（因 `gray` 不在已启用规则集合内）；要求 10 次请求中至少 1 次落到 gray |
 
 > 用例 6.1 结束时会把 `LaneEchoServer` 重新加回泳道组（兼容别名写回），避免影响后续运行。
+> 用例 6.2 不修改任何 Polaris 配置，consumer / provider 的 `polaris.yaml` 通过 `sed` 切换 `baseLaneMode`，互不污染。
 
 ### 2.5 执行与结果
 - 日志：`./.logs/lane-test-<时间戳>.log`，同时各服务独立写 `./.logs/<role>.log`
 - 汇总：脚本末尾输出 `TOTAL_PASS / TOTAL_FAIL / TOTAL_COUNT`；任一 `fail` 即整体失败，退出码非 0
+- 用例数合计（按脚本实际 `run_all_tests` 编排，PASS/FAIL 计数口径与 `test_pass` / `test_fail` 一致）：
+  - 链路 1.x = 13、2.x = 13、3.x = 7、4.x = 7
+  - 专项 5.1 = 2、6.2 = 2
+  - 6.1 计数随分支变化：正常路径 2（6.1a + 6.1b）、Discover API SKIP 路径 1（仅 6.1 自身）、级联失败路径 3（6.1 + 6.1a + 6.1b 全 FAIL）
+  - 合计 **46 条**（正常成功）/ **45 条**（6.1 SKIP）/ **47 条**（6.1 级联失败）
 
 ---
 
@@ -248,12 +265,15 @@ uptime = now - etime        // etime 为规则最近一次启用时间
 
 | 症状 | 可能原因 | 处置 |
 | --- | --- | --- |
-| `wait_for_services` 超时（当前上限 60s） | Polaris 尚未把 consumer / provider 注册信息推给 gateway；或端口被占用 | 查看 `./.logs/gateway.log`、`consumer.log`、`provider.log`；或先 `./cleanup.sh` |
+| `wait_for_services` 超时（当前上限 120s） | Polaris 尚未把 consumer / provider 注册信息推给 gateway；或端口被占用 | 查看 `./.logs/gateway.log`、`consumer.log`、`provider.log`；或先 `./cleanup.sh` |
 | `ErrCodeAPIInstanceNotFound: LaneEchoClient` | Provider/Consumer 进程未正常注册 | 确认三个 `main.go` 已构建并启动，确认 `polaris.yaml` 指向正确的 Polaris 地址 |
 | 规则校验失败（`gray 规则未启用` / Header Key 不符） | Polaris 控制台未按前置条件配置 | 按 2.2 / 3.2 节重新配置规则并 `enable` |
-| 两个脚本同时运行冲突 | 共用 `48095 / 19080~19091` 端口 | 使用前先运行对方的 `stop`，或执行 `./cleanup.sh` |
+| 两个脚本同时运行冲突 | 共用 `48095 / 19080~19093` 端口（NLG 用例还会占用 `19100~19111`） | 使用前先运行对方的 `stop`，或执行 `./cleanup.sh` |
 | 用例 5.1 专项失败 | `gateway-excl/polaris.yaml` 未替换为 `baseLaneMode: 1` | 检查脚本生成的 `${gateway_excl_workdir}/polaris.yaml` |
-| 用例 6.1 标记为 SKIP | Polaris 服务端缓存传播超时，管理 API 已确认移除但 SDK 尚未感知 | 属于非 SDK 问题；可加大等待或手动重跑 |
+| 用例 6.1 标记为 SKIP | 管理 API 已确认移除，但 **Discover API** 在 120s 内仍未下发新规则 → 服务端 naming cache 刷新延迟 | 属于服务端问题；可调小 Polaris 的 naming cache 刷新间隔或手动重跑 |
+| 用例 6.1 SDK 在 30s 内未感知到变更 | 已被 1.5 排除服务端问题；可能是 SDK 泳道路由存在 bug（如 matchByStainLabel 短格式歧义） | 排查 `consumer-base.log` 中 `[Router][Lane]` 关键字；确认其它泳道组（如 `lane-go-warmup`）未与本规则产生冲突 |
+| 用例 6.2b 全打到 base，未命中 gray | consumer `polaris.yaml` 未切换为 `baseLaneMode: 1` | 检查脚本生成的 `${nlg_consumer_mode1_workdir}/polaris.yaml` |
+| `x.4b` STRICT-503 用例未返回 503 | SDK 端把 STRICT+无实例降级成了 PERMISSIVE 行为（与契约不符） | 升级 polaris-go SDK 版本；定位到 laneRouter.routeToLane 中 STRICT 路径的降级逻辑 |
 | warmup 比例明显偏高（用例 1） | 规则 `etime` 未刷新导致 `uptime` 被放大 | 确认 `validate_rules_with_wait` 成功执行；必要时手动在控制台 disable → enable |
 | warmup 用例 2/3 频繁 SKIP | `warmup_interval` 过大 > `MAX_WARMUP_WAIT` | 将规则里的 `warmup_interval` 调小（建议 ≤ 120s） |
 
