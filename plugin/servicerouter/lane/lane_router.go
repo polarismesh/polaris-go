@@ -186,24 +186,17 @@ func (r *LaneRouter) Destroy() error {
 	return nil
 }
 
-// Enable 是否需要启动泳道路由。
+// Enable 始终启用泳道路由，对齐 polaris-java LaneRouter 的语义。
 //
-// 实现说明：lane router **始终返回 true**（always-on），即使当前 callee 未关联任何
-// 泳道组也参与路由链。原因如下：
+// 即使当前 callee 没有任何 LaneGroup, lane router 也要参与:在没有规则匹配时,
+// 通过 routeToBaseline → instanceFilter 把所有"含 lane 元数据 key"的实例从结果中
+// 排除。这复刻了 polaris-java `LaneRouter.router()` 中
+// `targetRule.isPresent()=false → redirectToBase` 的行为。
 //
-//  1. 业界服务治理对“泳道”的核心约定：
-//     - 带 `lane` 元数据标签的实例属于某条泳道，未染色的请求不应被路由到这些实例上；
-//     - 没有标签的实例才是基线，承接默认流量。
-//
-//  2. 一个不在任何泳道组下的服务，如果其实例既有带 `lane` 标签的（如灰度遗留实例）
-//     也有不带标签的，**默认（baseLaneMode=OnlyUntaggedInstance）**应只路由到不带
-//     标签的实例上，否则未染色流量会被打散到泳道实例上，违背泳道隔离语义。
-//
-//  3. 旧实现下，`groups == nil` 时直接返回 false，lane router 整个跳过，
-//     默认负载均衡会把请求随机分到所有实例（含带 lane 标签的），与上述约定不符。
-//
-// 通过让 Enable() 始终返回 true，GetFilteredInstances 会进入 routeToBaseline，
-// 复用 OnlyUntaggedInstance 分支按 `lane` key 过滤掉带标签实例，对齐预期语义。
+// 早期实现这里返回 `len(groups)>0` 是为了避免置位 IgnoreFilterOnlyOnEndChain
+// 屏蔽主链 (rule/nearby/dstmeta), 但代价是带 lane 标签的实例会泄漏到未启用泳道
+// 治理的服务里。新方案通过 Cluster.instanceFilter 把"排除带 lane 标签实例"语义
+// 链式继承到主链，不再短路 FilterOnly 兜底。
 func (r *LaneRouter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
 	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
 		// clusters 理论上由调用方保证非 nil，但 Enable 作为公开接口方法加上防御性判断，
@@ -328,32 +321,16 @@ func (r *LaneRouter) GetFilteredInstances(
 ) (*servicerouter.RouteResult, error) {
 	laneGroups := r.getLaneGroups(routeInfo)
 	if len(laneGroups) == 0 {
-		// 服务不在任何泳道组下：按 BaseLaneMode 决定基线选取方式。
-		//
-		//  - OnlyUntaggedInstance（默认 mode=0）：未染色流量不应被分发到带 `lane` 标签的实例
-		//    → 走 routeToBaseline，由其第一分支过滤掉带标签实例。
-		//  - ExcludeEnabledLaneInstance（mode=1）：基线 = 实例的 `lane` 值不在“已启用规则集合”
-		//    内的实例。当前 callee 不属于任何泳道组，已启用规则集合为空，没有任何 lane 值需要
-		//    排除 → 所有实例都符合基线定义，直通全量返回。
-		debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
-		if r.cfg.BaseLaneMode == ExcludeEnabledLaneInstance {
-			if debugEnabled {
-				sourceNs, sourceSvc := extractNsSvc(routeInfo.SourceService)
-				destNs, destSvc := extractNsSvc(routeInfo.DestService)
-				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] no lane groups for %s/%s (caller=%s/%s), "+
-						"baseLaneMode=ExcludeEnabledLaneInstance → enabled lane values empty, "+
-						"pass through all instances",
-					destNs, destSvc, sourceNs, sourceSvc)
-			}
-			return r.passThroughResult(clusters, withinCluster), nil
-		}
-		if debugEnabled {
+		// 服务未关联任何泳道组：对齐 polaris-java LaneRouter 的
+		// `targetRule.isPresent()=false → redirectToBase` 行为。仍走 routeToBaseline,
+		// 由其 instanceFilter 排除带 lane 标签的实例(mode=0) 或排除值在已启用集合内的
+		// 实例(mode=1)。此处 laneGroups 为空,instanceFilter 在 mode=0 下仍按 instanceLaneKey
+		// 过滤;mode=1 下 enabledVals 为空,instanceFilter 会保留全部实例。
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
 			sourceNs, sourceSvc := extractNsSvc(routeInfo.SourceService)
 			destNs, destSvc := extractNsSvc(routeInfo.DestService)
 			r.logCtx.GetRouteLogger().Debugf(
-				"[Router][Lane] no lane groups for %s/%s (caller=%s/%s), "+
-					"baseLaneMode=OnlyUntaggedInstance → fallback to baseline to filter out tagged instances",
+				"[Router][Lane] no lane groups for %s/%s (caller=%s/%s), fallback to baseline",
 				destNs, destSvc, sourceNs, sourceSvc)
 		}
 		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
@@ -543,16 +520,24 @@ func (r *LaneRouter) passThroughResult(clusters model.ServiceClusters, withinClu
 	return result
 }
 
-// routeToBaseline 路由到基线实例
-// laneKey 为当前泳道规则使用的实例元数据 key
+// routeToBaseline 路由到基线实例。
 //
-// ⚠ OutputCluster 生命周期说明：
-// 此函数把构造的 tmpCls / baselineCls 赋给 result.OutputCluster 直接返回，
-// 不在本函数归还对象池。归还责任由上层调用方承担：
-//   - RouteResult 经 pkg/flow/sync_flow.go 逐层向上传递，最终由 InstancesResponse
-//     的 Finalize 流程统一回收（参见 PoolGetRouteResult / GetRouteResultPool 的使用者）。
-//   - 若未来在本函数中间加入 early return 且未设置 OutputCluster，则必须显式 tmpCls.PoolPut()
-//     避免泄漏。
+// 通过 Cluster.SetInstanceFilter 注入实例级过滤函数,让基线语义可以经由
+// model.NewCluster(...) 的链式继承传递给主链 (rule/nearby/dstmeta) 等插件,
+// 而不再置位 IgnoreFilterOnlyOnEndChain 屏蔽整条主链。
+//
+// 两种 baseLaneMode:
+//   - OnlyUntaggedInstance (默认 mode=0):排除"含有 laneKey 这个元数据 key"的全部
+//     实例,只保留没有泳道标签的实例作为基线。这与 polaris-java
+//     `redirectToBase` + `ONLY_UNTAGGED_INSTANCE` 的行为一致。
+//   - ExcludeEnabledLaneInstance (mode=1):排除元数据值命中"已启用泳道规则集合"
+//     的实例;若 laneKey 不在已启用集合,则该实例会被保留(可能是 lane=stable 之类
+//     的非泳道治理标签)。
+//
+// ⚠ OutputCluster 生命周期说明：本函数把构造的 baselineCls 赋给
+// result.OutputCluster 直接返回，不在本函数归还对象池。归还责任由上层调用方承担:
+// RouteResult 经 pkg/flow/sync_flow.go 逐层向上传递，最终由 InstancesResponse
+// 的 Finalize 流程统一回收（参见 PoolGetRouteResult / GetRouteResultPool 的使用者）。
 func (r *LaneRouter) routeToBaseline(
 	routeInfo *servicerouter.RouteInfo,
 	clusters model.ServiceClusters,
@@ -562,64 +547,48 @@ func (r *LaneRouter) routeToBaseline(
 ) *servicerouter.RouteResult {
 	result := servicerouter.PoolGetRouteResult(r.valueCtx)
 
-	// 优先选取无泳道 key 的实例（对应 OnlyUntaggedInstance 语义）
-	tmpCls := model.NewCluster(clusters, withinCluster)
-	tmpCls.AddMetadata(laneKey, "")
-	tmpCls.ReloadComposeMetaValue()
-	notTaggedInstSet := tmpCls.GetNotContainMetaKeyClusterValue().GetInstancesSet(false, true)
-	if notTaggedInstSet.Count() > 0 {
-		r.logCtx.GetRouteLogger().Debugf(
-			"[Router][Lane] baseline: found %d instances without %q key",
-			notTaggedInstSet.Count(), laneKey)
-		// 直接返回 tmpCls，其 value 已通过 GetNotContainMetaKeyClusterValue() 设置。
-		// 设置 ignoreFilterOnlyOnEndChain 阻止下游 filterOnly 重建 cluster 并丢失过滤结果。
-		routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
-		result.OutputCluster = tmpCls
-		result.Status = servicerouter.Normal
-		return result
-	}
-	tmpCls.PoolPut()
-
-	// ExcludeEnabledLaneInstance 模式：排除元数据值命中"已启用泳道规则集合"的实例,其余作为基线。
-	//
-	// 实现借助 Cluster 原生的 containNotMatchMetadata 语义:
-	//   - 对 Cluster 添加 `laneKey=excludedVal1`, `laneKey=excludedVal2` ... 多条 metadata
-	//     (MetaCount > 1 下,同一 key 下的多个 value 在 containNotMatchMetadata 中按"并集"处理);
-	//   - 调用 GetContainNotMatchMetaKeyClusterValue 得到"包含 laneKey 但 value 不在 excluded 集合内"
-	//     的实例集,正是 mode=1 期望的基线子集。
-	//   - 这样复用 Cluster 机制既能命中 verifyCluster 的 revision 一致性检查,又不会被后续
-	//     主链 filterOnly 基于原始 clusters 重建覆盖。
-	if r.cfg.BaseLaneMode == ExcludeEnabledLaneInstance {
+	baselineCls := model.NewCluster(clusters, withinCluster)
+	switch r.cfg.BaseLaneMode {
+	case ExcludeEnabledLaneInstance:
+		// mode=1: 仅排除元数据值命中"已启用泳道规则集合"的实例
 		enabledVals := buildEnabledLaneValues(laneGroups)
-		if excluded, hasKey := enabledVals[laneKey]; hasKey && len(excluded) > 0 {
-			excludeCls := model.NewCluster(clusters, withinCluster)
-			for excludedVal := range excluded {
-				excludeCls.AddMetadata(laneKey, excludedVal)
+		excluded := enabledVals[laneKey]
+		baselineCls.SetInstanceFilter(func(inst model.Instance) bool {
+			meta := inst.GetMetadata()
+			if len(meta) == 0 {
+				return true
 			}
-			excludeCls.ReloadComposeMetaValue()
-			baselineSet := excludeCls.GetContainNotMatchMetaKeyClusterValue().GetInstancesSet(false, true)
-			if baselineSet.Count() > 0 {
-				if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-					r.logCtx.GetRouteLogger().Debugf(
-						"[Router][Lane] baseline (ExcludeEnabledLaneInstance): laneKey=%s excluded=%v, "+
-							"%d instances survive",
-						laneKey, excluded, baselineSet.Count())
-				}
-				// 设置 ignoreFilterOnlyOnEndChain,阻止后续主链 filterOnly 基于原始 clusters
-				// 重建 cluster 并冲掉过滤结果。
-				routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
-				result.OutputCluster = excludeCls
-				result.Status = servicerouter.Normal
-				return result
+			val, ok := meta[laneKey]
+			if !ok {
+				return true
 			}
-			excludeCls.PoolPut()
+			if _, hit := excluded[val]; hit {
+				return false
+			}
+			return true
+		})
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] baseline (ExcludeEnabledLaneInstance): laneKey=%s excluded=%v",
+				laneKey, excluded)
+		}
+	default:
+		// mode=0: 只保留不含 laneKey 元数据的实例
+		baselineCls.SetInstanceFilter(func(inst model.Instance) bool {
+			meta := inst.GetMetadata()
+			if len(meta) == 0 {
+				return true
+			}
+			_, tagged := meta[laneKey]
+			return !tagged
+		})
+		if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] baseline (OnlyUntaggedInstance): exclude instances with key=%s", laneKey)
 		}
 	}
 
-	// 兜底：返回所有实例
-	r.logCtx.GetRouteLogger().Debugf(
-		"[Router][Lane] baseline: no dedicated baseline instances found, returning all instances")
-	result.OutputCluster = model.NewCluster(clusters, withinCluster)
+	result.OutputCluster = baselineCls
 	result.Status = servicerouter.Normal
 	return result
 }

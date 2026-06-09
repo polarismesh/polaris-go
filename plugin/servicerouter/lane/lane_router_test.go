@@ -266,12 +266,12 @@ func TestParseWarmupEtime(t *testing.T) {
 	})
 }
 
-// TestLaneRouter_Enable 覆盖 Enable 在不同 routeInfo 状态下的返回值。
+// TestLaneRouter_Enable 验证 lane router 始终启用（always-on）。
 //
-// 自 always-on 改造后：lane router 不再依赖泳道规则是否存在，始终返回 true。
-// 原因：未在任何泳道组下的服务，其带 `lane` 标签的实例仍然不应被未染色流量
-// 选中（baseLaneMode=OnlyUntaggedInstance 默认语义）。GetFilteredInstances
-// 内部会基于 laneGroups 是否为空走相应的 baseline 分支或泳道路由分支。
+// 即使 routeInfo 没有任何 LaneGroup, lane router 也会参与路由 ——
+// GetFilteredInstances 在无规则匹配时走 routeToBaseline, 通过
+// Cluster.SetInstanceFilter 将"排除带 lane 标签实例"语义传递给主链。
+// 这与 polaris-java LaneRouter 的 `redirectToBase` 行为一致。
 func TestLaneRouter_Enable(t *testing.T) {
 	r := &LaneRouter{}
 	tests := []struct {
@@ -279,7 +279,7 @@ func TestLaneRouter_Enable(t *testing.T) {
 		routeInfo *servicerouter.RouteInfo
 	}{
 		{
-			// 测试场景：无规则 → 仍应返回 true，由 GetFilteredInstances 走 baseline 过滤带标签实例
+			// 测试场景：无规则 → 仍然返回 true，由 routeToBaseline 通过 instanceFilter 过滤带 lane 标签实例
 			name: "no_rule_still_enabled",
 			routeInfo: &servicerouter.RouteInfo{
 				SourceLaneRule: nil,

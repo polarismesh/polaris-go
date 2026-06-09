@@ -2968,6 +2968,7 @@ _restore_lane_group() {
 # 验证当 consumer 和 provider 都不属于任何泳道组时:
 #   - baseLaneMode=0 (OnlyUntaggedInstance, 默认): consumer 请求 provider 时
 #     不应返回带有泳道标签(如 lane=gray)的实例,只返回无标签基线实例。
+#     对齐 polaris-java LaneRouter.redirectToBase + ONLY_UNTAGGED_INSTANCE 语义。
 #   - baseLaneMode=1 (ExcludeEnabledLaneInstance): consumer 请求 provider 时
 #     可能返回带有泳道标签的实例(前提是标签值不在“已启用规则集合”中)。
 # 此测试用例不修改泳道组配置,不影响其他用例。
