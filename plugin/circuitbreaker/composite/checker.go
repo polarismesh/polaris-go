@@ -72,7 +72,7 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 		},
 		healthCheckers: breaker.healthCheckers,
 		instances:      make(map[string]*ProtocolInstance, 16),
-		log:            breaker.logCtx.GetStatLogger(),
+		log:            breaker.logCtx.GetCircuitBreakerLogger(),
 	}
 	if insRes, ok := res.(*model.InstanceResource); ok {
 		checker.addInstance(insRes, false)
@@ -252,12 +252,55 @@ func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource,
 	return matchRule
 }
 
+// matchMethod 旧版本接口路径匹配，仅比较 path 维度
+// 适用场景：探测规则匹配（FaultDetectRule.targetService.method）以及
+// METHOD 级熔断规则在 BlockConfigs 为空时的兼容回退路径
+// res     必须为 MethodResource，否则视为非接口级直接放行
+// val     待匹配的 MatchString，承载老规则中 destination.method / targetService.method 字段
+// regexFunc 正则编译缓存函数
 func matchMethod(res model.Resource, val *apimodel.MatchString, regexFunc func(string) *regexp.Regexp) bool {
 	if res.GetLevel() != fault_tolerance.Level_METHOD {
 		return true
 	}
 	methodRes := res.(*model.MethodResource)
-	return match.MatchString(methodRes.Method, val, regexFunc)
+	return match.MatchString(methodRes.Path, val, regexFunc)
+}
+
+// matchMethodWithAPI 接口级熔断 BlockConfig.Api 匹配
+// 与 polaris-java MatchUtils.matchMethod 等价：按 protocol + method + path 三个维度
+// 同时验证，任一维度不匹配则失败；api 为 nil 时视为通配匹配所有接口
+// res     被检查的资源；非 METHOD 级直接放行
+// api     BlockConfig.Api 配置块，承载 protocol/method/path 三元组
+// regexFunc 正则编译缓存函数
+// 返回 true 表示该 BlockConfig 适用于当前资源
+func matchMethodWithAPI(res model.Resource, api *apimodel.API, regexFunc func(string) *regexp.Regexp) bool {
+	if res.GetLevel() != fault_tolerance.Level_METHOD {
+		return true
+	}
+	if api == nil {
+		return true
+	}
+	methodRes := res.(*model.MethodResource)
+	if !matchProtocolOrMethod(methodRes.Protocol, api.GetProtocol()) {
+		return false
+	}
+	if !matchProtocolOrMethod(methodRes.Method, api.GetMethod()) {
+		return false
+	}
+	if api.GetPath() == nil {
+		return true
+	}
+	return match.MatchString(methodRes.Path, api.GetPath(), regexFunc)
+}
+
+// matchProtocolOrMethod 单字段协议/HTTP 方法匹配
+// target 为空或通配符（*）时视为放行；否则与 source 忽略大小写比较
+// 与 polaris-java MatchUtils.matchProtocolOrMethod 行为一致
+func matchProtocolOrMethod(source, target string) bool {
+	if target == "" || match.IsMatchAll(target) {
+		return true
+	}
+	return strings.EqualFold(source, target)
 }
 
 type ProtocolInstance struct {

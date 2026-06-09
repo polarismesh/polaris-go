@@ -71,6 +71,8 @@ const (
 	DefaultAuthLogLevel = log.DefaultAuthLogLevel
 	// DefaultRateLimitLogLevel 默认限流日志级别
 	DefaultRateLimitLogLevel = log.DefaultRateLimitLogLevel
+	// DefaultCircuitBreakerLogLevel 默认熔断日志级别
+	DefaultCircuitBreakerLogLevel = log.DefaultCircuitBreakerLogLevel
 )
 
 // SetBaseLogger 设置基础日志对象
@@ -173,6 +175,16 @@ func GetRateLimitLogger() Logger {
 	return log.GetRateLimitLogger()
 }
 
+// SetCircuitBreakerLogger 设置熔断日志对象
+func SetCircuitBreakerLogger(logger Logger) {
+	log.SetCircuitBreakerLogger(logger)
+}
+
+// GetCircuitBreakerLogger 获取熔断日志对象
+func GetCircuitBreakerLogger() Logger {
+	return log.GetCircuitBreakerLogger()
+}
+
 // ConfigLoggers 全局配置日志对象
 func ConfigLoggers(logDir string, logLevel int) error {
 	var err error
@@ -208,6 +220,9 @@ func ConfigLoggers(logDir string, logLevel int) error {
 	}
 	if err = ConfigRateLimitLogger(logDir, logLevel); err != nil {
 		return fmt.Errorf("fail to ConfigRateLimitLogger: %v", err)
+	}
+	if err = ConfigCircuitBreakerLogger(logDir, logLevel); err != nil {
+		return fmt.Errorf("fail to ConfigCircuitBreakerLogger: %v", err)
 	}
 	return nil
 }
@@ -278,6 +293,12 @@ func ConfigRateLimitLogger(logDir string, logLevel int) error {
 	return log.ConfigRateLimitLogger(log.DefaultLogger, option)
 }
 
+// ConfigCircuitBreakerLogger 配置熔断日志对象
+func ConfigCircuitBreakerLogger(logDir string, logLevel int) error {
+	option := log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultCircuitBreakerLogRotationPath), logLevel)
+	return log.ConfigCircuitBreakerLogger(log.DefaultLogger, option)
+}
+
 // SetLoggersLevel 设置所有日志级别
 func SetLoggersLevel(loglevel int) error {
 	var err error
@@ -324,6 +345,10 @@ func SetLoggersLevel(loglevel int) error {
 	logErr = log.GetRateLimitLogger().SetLogLevel(loglevel)
 	if nil != logErr {
 		err = multierror.Append(err, multierror.Prefix(err, "fail to set ratelimit logLevel"))
+	}
+	logErr = log.GetCircuitBreakerLogger().SetLogLevel(loglevel)
+	if nil != logErr {
+		err = multierror.Append(err, multierror.Prefix(err, "fail to set circuitbreaker logLevel"))
 	}
 	return err
 }
@@ -396,6 +421,12 @@ func SetLoggersDir(logDir string) error {
 	if err = log.ConfigRateLimitLogger(log.DefaultLogger, option); err != nil {
 		errs = multierror.Append(errs, multierror.Prefix(err,
 			fmt.Sprintf("fail to create default ratelimit logger with logDir %s", logDir)))
+	}
+	option = log.CreateDefaultLoggerOptions(filepath.Join(logDir, log.DefaultCircuitBreakerLogRotationPath),
+		DefaultCircuitBreakerLogLevel)
+	if err = log.ConfigCircuitBreakerLogger(log.DefaultLogger, option); err != nil {
+		errs = multierror.Append(errs, multierror.Prefix(err,
+			fmt.Sprintf("fail to create default circuitbreaker logger with logDir %s", logDir)))
 	}
 	return errs
 }

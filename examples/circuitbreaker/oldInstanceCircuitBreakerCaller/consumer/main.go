@@ -135,35 +135,46 @@ func (svr *PolarisClient) runWebServer() {
 
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
-			// 上报服务调用结果
+			// 上报服务调用结果（LB / 健康检查路径）
 			delay := time.Since(start)
 			svr.reportServiceCallResult(instance, model.RetFail, http.StatusInternalServerError, delay)
 
-			// 上报熔断结果，用于熔断计算
-			svr.reportCircuitBreak(instance, model.RetFail, strconv.Itoa(http.StatusInternalServerError), start)
+			// 上报熔断结果（熔断器路径）：使用 SDK 内部约定的 "-1" 哨兵值，
+			// SDK 端 block_counter.parseRetStatus 会在挂有 RET_CODE 类条件的块中
+			// 直接将 -1 计为 RetFail，无需依赖具体规则配置。
+			svr.reportCircuitBreak(instance, model.RetFail, "-1", start)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
 		defer resp.Body.Close()
 
-		// 上报服务调用结果
+		// 上报服务调用结果（LB / 健康检查路径）
+		// 只把 5xx 当作"实例侧故障"，4xx（参数 / 鉴权类）不应让 LB 降低实例权重
+		// 或健康检查摘除实例。429 仍按 RetFlowControl 表达限流路径。
+		// 与熔断器路径独立：熔断由后续 reportCircuitBreak 携带的 retCode + 规则决定。
 		delay := time.Since(start)
 		retStatus := model.RetSuccess
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retStatus = model.RetFlowControl
-		} else if resp.StatusCode != http.StatusOK {
+		} else if resp.StatusCode >= http.StatusInternalServerError {
 			retStatus = model.RetFail
 		}
 		svr.reportServiceCallResult(instance, retStatus, resp.StatusCode, delay)
 
-		// 上报熔断结果，用于熔断计算
-		if resp.StatusCode != http.StatusOK {
+		// 上报熔断结果（熔断器路径）：按 5xx / 4xx / 2xx 三类分别上报，
+		// 让"区分 4xx/5xx"语义与统一装饰器写法的 demo 对齐：
+		//   - 5xx：RetFail + 真实状态码 → 命中规则的 RANGE/EXACT/REGEX/IN/NOT_IN 类
+		//   - 4xx：RetSuccess + 真实状态码 → 不计入熔断（用户可显式配 IN [400,500] 纳入）
+		//   - 2xx：RetSuccess + 真实状态码 → 规则不命中，计为成功
+		// 实际是否计入熔断完全由用户配置的 BlockConfig.ErrorConditions 决定。
+		switch {
+		case resp.StatusCode >= http.StatusInternalServerError:
 			svr.reportCircuitBreak(instance, model.RetFail,
 				strconv.Itoa(resp.StatusCode), start)
-		} else {
+		default:
 			svr.reportCircuitBreak(instance, model.RetSuccess,
-				strconv.Itoa(http.StatusOK), start)
+				strconv.Itoa(resp.StatusCode), start)
 		}
 
 		data, err := io.ReadAll(resp.Body)
@@ -196,8 +207,9 @@ func (svr *PolarisClient) runWebServer() {
 func (svr *PolarisClient) printAllInstances() {
 	req := &polaris.GetInstancesRequest{
 		GetInstancesRequest: model.GetInstancesRequest{
-			Service:   calleeService,
-			Namespace: calleeNamespace,
+			Service:         calleeService,
+			Namespace:       calleeNamespace,
+			SkipRouteFilter: true,
 		},
 	}
 	instancesResp, err := svr.consumer.GetInstances(req)
@@ -209,10 +221,14 @@ func (svr *PolarisClient) printAllInstances() {
 
 	for _, ins := range instancesResp.GetInstances() {
 		cbStatus := "close"
+		isHealthy := ins.IsHealthy()
+		isIsolated := ins.IsIsolated()
 		if ins.GetCircuitBreakerStatus() != nil {
 			cbStatus = ins.GetCircuitBreakerStatus().GetStatus().String()
+
 		}
-		log.Printf("%s:%d. cb status: %s\n", ins.GetHost(), ins.GetPort(), cbStatus)
+		log.Printf("  %s:%d cb_status=%s healthy:%v, isolated:%v", ins.GetHost(), ins.GetPort(), cbStatus, isHealthy,
+			isIsolated)
 	}
 }
 

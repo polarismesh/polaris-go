@@ -24,13 +24,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 
 	"github.com/polarismesh/polaris-go"
+	"github.com/polarismesh/polaris-go/api"
 )
 
 var (
@@ -39,6 +42,7 @@ var (
 	token      string
 	port       int64
 	configPath string
+	debug      bool
 )
 
 func initArgs() {
@@ -48,18 +52,26 @@ func initArgs() {
 	flag.StringVar(&token, "token", "", "token")
 	flag.Int64Var(&port, "port", 0, "port")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
+	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
 
 // PolarisProvider is a provider for polaris
 type PolarisProvider struct {
-	provider   polaris.ProviderAPI
-	namespace  string
-	service    string
-	host       string
-	port       int
-	needErr    int32
-	isShutdown bool
-	webSvr     *http.Server
+	provider  polaris.ProviderAPI
+	namespace string
+	service   string
+	host      string
+	port      int
+	// /echo 的失败开关（保持向后兼容）。1=返回 500，0=返回 200。
+	needErr int32
+	// /order 的失败开关，用于接口级熔断 demo 中验证"两个接口各自规则生效"。
+	// 1=返回 500，0=返回 200。默认与 needErr 一致。
+	needErrOrder int32
+	// /slow 接口的人为延迟（毫秒）。0=立即返回；>0 时 sleep 该时长后再返回 200，
+	// 用于"时延（DELAY）触发熔断"用例。
+	slowDelayMs int64
+	isShutdown  bool
+	webSvr      *http.Server
 }
 
 // Run . execute
@@ -88,16 +100,91 @@ func (svr *PolarisProvider) runWebServer() {
 		_, _ = rw.Write([]byte(msg))
 	})
 
-	http.HandleFunc("/switch", func(rw http.ResponseWriter, r *http.Request) {
+	// /order：用于接口级熔断 demo 验证"两个接口各自规则生效"。
+	// 与 /echo 共享 Provider 进程，但故障开关独立（needErrOrder）。
+	http.HandleFunc("/order", func(rw http.ResponseWriter, r *http.Request) {
 		var msg string
-		val := r.URL.Query().Get("openError")
-		if val == "true" {
-			atomic.StoreInt32(&svr.needErr, 1)
-			msg = fmt.Sprintf("echo request status code set to 500")
+		if atomic.LoadInt32(&svr.needErrOrder) == 1 {
+			msg = fmt.Sprintf("status code: 500, Fatal, My host : %s:%d, path: /order", svr.host, svr.port)
+			rw.WriteHeader(http.StatusInternalServerError)
 		} else {
-			atomic.StoreInt32(&svr.needErr, 0)
-			msg = fmt.Sprintf("echo request status code set to 200")
+			msg = fmt.Sprintf("status code: 200, Hello, My host : %s:%d, path: /order", svr.host, svr.port)
+			rw.WriteHeader(http.StatusOK)
 		}
+		log.Printf("get order request from client address: %s, response:%s", r.RemoteAddr, msg)
+		_, _ = rw.Write([]byte(msg))
+	})
+
+	// /info：固定返回 500，用于验证"没有配置规则的接口不会被熔断"。
+	// 没有任何故障开关，由 verify_circuitbreaker.sh 在测试时通过不创建对应规则
+	// + 在 consumer 侧禁用默认实例熔断来验证该路径永远不会被 abort。
+	http.HandleFunc("/info", func(rw http.ResponseWriter, r *http.Request) {
+		msg := fmt.Sprintf("status code: 500, Fatal, My host : %s:%d, path: /info", svr.host, svr.port)
+		rw.WriteHeader(http.StatusInternalServerError)
+		log.Printf("get info request from client address: %s, response:%s", r.RemoteAddr, msg)
+		_, _ = rw.Write([]byte(msg))
+	})
+
+	// /forbidden：固定返回 403，用于验证"4xx 路径不被默认 RANGE 500~599 规则计入熔断"。
+	// 没有故障开关，与 /info 镜像但状态码改为 4xx；
+	// verify_circuitbreaker.sh 据此连发请求验证：4xx 透传后规则不命中、不触发熔断。
+	http.HandleFunc("/forbidden", func(rw http.ResponseWriter, r *http.Request) {
+		msg := fmt.Sprintf("status code: 403, Forbidden, My host : %s:%d, path: /forbidden",
+			svr.host, svr.port)
+		rw.WriteHeader(http.StatusForbidden)
+		log.Printf("get forbidden request from client address: %s, response:%s", r.RemoteAddr, msg)
+		_, _ = rw.Write([]byte(msg))
+	})
+
+	// /slow：根据 svr.slowDelayMs 在返回前先 sleep 指定毫秒数，全部返回 200。
+	// 用于演示 ErrorCondition.input_type=DELAY 时的熔断：把规则阈值设到 sleep
+	// 时长以下，调用就会被 SDK 计为 RetTimeout，从而触发熔断。
+	http.HandleFunc("/slow", func(rw http.ResponseWriter, r *http.Request) {
+		delay := atomic.LoadInt64(&svr.slowDelayMs)
+		if delay > 0 {
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+		}
+		msg := fmt.Sprintf("status code: 200, Hello, My host : %s:%d, path: /slow, delay: %dms",
+			svr.host, svr.port, delay)
+		rw.WriteHeader(http.StatusOK)
+		log.Printf("get slow request from client address: %s, response:%s", r.RemoteAddr, msg)
+		_, _ = rw.Write([]byte(msg))
+	})
+
+	http.HandleFunc("/switch", func(rw http.ResponseWriter, r *http.Request) {
+		// /switch 支持以下查询参数（可任选其一或多个组合）：
+		//   openError       —— 翻转 /echo 的故障开关（true=500/false=200）
+		//   openErrorOrder  —— 翻转 /order 的故障开关
+		//   slowDelayMs     —— 设置 /slow 的人为延迟（整数毫秒；0 表示立即返回）
+		// 兼容历史：未传的字段保持原状不动。
+		var parts []string
+		if val := r.URL.Query().Get("openError"); val != "" {
+			if val == "true" {
+				atomic.StoreInt32(&svr.needErr, 1)
+				parts = append(parts, "echo=500")
+			} else {
+				atomic.StoreInt32(&svr.needErr, 0)
+				parts = append(parts, "echo=200")
+			}
+		}
+		if val := r.URL.Query().Get("openErrorOrder"); val != "" {
+			if val == "true" {
+				atomic.StoreInt32(&svr.needErrOrder, 1)
+				parts = append(parts, "order=500")
+			} else {
+				atomic.StoreInt32(&svr.needErrOrder, 0)
+				parts = append(parts, "order=200")
+			}
+		}
+		if val := r.URL.Query().Get("slowDelayMs"); val != "" {
+			if ms, err := strconv.ParseInt(val, 10, 64); err == nil && ms >= 0 {
+				atomic.StoreInt64(&svr.slowDelayMs, ms)
+				parts = append(parts, fmt.Sprintf("slow=%dms", ms))
+			} else {
+				parts = append(parts, fmt.Sprintf("slow=invalid(%s)", val))
+			}
+		}
+		msg := fmt.Sprintf("switch updated: %s", strings.Join(parts, ","))
 		log.Printf("get switch request from client address: %s, response:%s", r.RemoteAddr, msg)
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte(msg))
@@ -174,8 +261,16 @@ func (svr *PolarisProvider) runMainLoop() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
+	if debug {
+		if err := api.SetLoggersLevel(api.DebugLog); err != nil {
+			log.Printf("[WARN] 设置日志级别为 DEBUG 失败: %v", err)
+		} else {
+			log.Printf("[INFO] 已设置 Polaris SDK 日志级别为 DEBUG")
+		}
+	}
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")
 		return
@@ -200,8 +295,10 @@ func main() {
 		provider:  provider,
 		namespace: namespace,
 		service:   service,
-		// provider-a 的错误状态为 0，provider-b 的错误状态为 1
-		needErr: 0,
+		// provider-a 默认 200，provider-b 默认 500（由各自 main.go 初始化值控制）
+		needErr:      0,
+		needErrOrder: 0,
+		slowDelayMs:  0,
 	}
 
 	svr.Run()

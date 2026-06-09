@@ -61,7 +61,7 @@ func newRuleContainer(ctx context.Context, res model.Resource, breaker *Composit
 			return breaker.loadOrStoreCompiledRegex(s)
 		},
 		engineFlow: breaker.engineFlow,
-		log:        breaker.logCtx.GetStatLogger(),
+		log:        breaker.logCtx.GetCircuitBreakerLogger(),
 		executor:   breaker.executor,
 	}
 	c.scheduleCircuitBreaker()
@@ -86,6 +86,10 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 	if err != nil {
 		c.log.Errorf("[CircuitBreaker] get %s rule fail: %+v", c.res.GetService().String(), err)
 		return
+	}
+	// 同步刷新三级索引：以服务为粒度替换旧规则集合，便于其他资源 Lookup 复用
+	if c.breaker.ruleDict != nil {
+		c.breaker.ruleDict.PutServiceRule(*c.res.GetService(), resp)
 	}
 	resourceCounters := c.breaker.getLevelResourceCounters(c.res.GetLevel())
 	cbRule := c.getCircuitBreakerRule(resp)
@@ -174,7 +178,7 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 }
 
 func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse,
-	regexFunc func(string) *regexp.Regexp, baseLogger log.Logger) *fault_tolerance.CircuitBreakerRule {
+	regexFunc func(string) *regexp.Regexp, cbLogger log.Logger) *fault_tolerance.CircuitBreakerRule {
 	if object == nil || object.Value == nil {
 		return nil
 	}
@@ -190,36 +194,63 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 	for i := range sortedRules {
 		cbRule := sortedRules[i]
 		if !cbRule.Enable {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
 			continue
 		}
 		if cbRule.Level != res.GetLevel() {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
 				"level: %v, resource: %s)", cbRule.Name, cbRule.Level, res.GetLevel(), res.String())
 			continue
 		}
 		ruleMatcher := cbRule.RuleMatcher
 		destination := ruleMatcher.Destination
 		if !match.MatchService(res.GetService(), destination.Namespace, destination.Service) {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
 				"resource: %s)",
 				cbRule.Name, destination.Namespace, destination.Service, res.GetService().String())
 			continue
 		}
 		source := ruleMatcher.Source
 		if !match.MatchService(res.GetCallerService(), source.Namespace, source.Service) {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
 				"resource caller: %s)", cbRule.Name, source.Namespace, source.Service, res.GetCallerService().String())
 			continue
 		}
-		if ok := matchMethod(res, destination.GetMethod(), regexFunc); !ok {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: method mismatch", cbRule.Name)
+		if !matchRuleAPI(res, cbRule, destination, regexFunc) {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: api/method mismatch", cbRule.Name)
 			continue
 		}
-		baseLogger.Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
+		cbLogger.Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
 		return cbRule
 	}
 	return nil
+}
+
+// matchRuleAPI 判定一条规则的接口/方法维度是否命中当前资源
+// 对 METHOD 级规则：优先遍历 BlockConfigs.Api，任一 BlockConfig 与资源匹配即命中；
+// 若 BlockConfigs 为空（兼容老规则），回退到 destination.Method 单字段匹配。
+// 对 SERVICE / INSTANCE 级规则：方法维度不参与匹配，直接放行。
+// res         待匹配资源
+// cbRule      候选熔断规则
+// destination 规则的目标服务匹配块（用于回退路径取 destination.Method）
+// regexFunc   正则编译缓存函数
+func matchRuleAPI(res model.Resource, cbRule *fault_tolerance.CircuitBreakerRule,
+	destination *fault_tolerance.RuleMatcher_DestinationService,
+	regexFunc func(string) *regexp.Regexp) bool {
+	if cbRule.Level != fault_tolerance.Level_METHOD {
+		return true
+	}
+	blockConfigs := cbRule.GetBlockConfigs()
+	if len(blockConfigs) > 0 {
+		for _, bc := range blockConfigs {
+			if matchMethodWithAPI(res, bc.GetApi(), regexFunc) {
+				return true
+			}
+		}
+		return false
+	}
+	// 兼容老规则：BlockConfigs 为空时回退到 destination.method 单字段匹配
+	return matchMethod(res, destination.GetMethod(), regexFunc)
 }
 
 func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fault_tolerance.CircuitBreakerRule {

@@ -44,11 +44,11 @@ type noopTestLogger struct {
 	level int
 }
 
-func (n *noopTestLogger) Tracef(string, ...interface{})    {}
-func (n *noopTestLogger) Debugf(string, ...interface{})    {}
-func (n *noopTestLogger) Infof(string, ...interface{})     {}
-func (n *noopTestLogger) Warnf(string, ...interface{})     {}
-func (n *noopTestLogger) Errorf(string, ...interface{})    {}
-func (n *noopTestLogger) Fatalf(string, ...interface{})    {}
-func (n *noopTestLogger) IsLevelEnabled(l int) bool        { return l >= n.level }
-func (n *noopTestLogger) SetLogLevel(l int) error          { n.level = l; return nil }
+func (n *noopTestLogger) Tracef(string, ...interface{}) {}
+func (n *noopTestLogger) Debugf(string, ...interface{}) {}
+func (n *noopTestLogger) Infof(string, ...interface{})  {}
+func (n *noopTestLogger) Warnf(string, ...interface{})  {}
+func (n *noopTestLogger) Errorf(string, ...interface{}) {}
+func (n *noopTestLogger) Fatalf(string, ...interface{}) {}
+func (n *noopTestLogger) IsLevelEnabled(l int) bool     { return l >= n.level }
+func (n *noopTestLogger) SetLogLevel(l int) error       { n.level = l; return nil }

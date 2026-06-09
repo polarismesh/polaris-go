@@ -153,6 +153,8 @@ const (
 	AuthLogger
 	// RateLimitLogger 限流日志对象
 	RateLimitLogger
+	// CircuitBreakerLogger 熔断日志对象
+	CircuitBreakerLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -215,6 +217,11 @@ func (c *container) SetAuthLogger(logger Logger) {
 // SetRateLimitLogger 设置限流日志对象
 func (c *container) SetRateLimitLogger(logger Logger) {
 	c.loggers[RateLimitLogger].Store(&logger)
+}
+
+// SetCircuitBreakerLogger 设置熔断日志对象
+func (c *container) SetCircuitBreakerLogger(logger Logger) {
+	c.loggers[CircuitBreakerLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -316,6 +323,15 @@ func (c *container) GetRateLimitLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetCircuitBreakerLogger 获取熔断日志对象
+func (c *container) GetCircuitBreakerLogger() Logger {
+	value := c.loggers[CircuitBreakerLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -369,6 +385,11 @@ func SetAuthLogger(logger Logger) {
 // SetRateLimitLogger 全局设置限流日志对象
 func SetRateLimitLogger(logger Logger) {
 	logContainer.SetRateLimitLogger(logger)
+}
+
+// SetCircuitBreakerLogger 全局设置熔断日志对象
+func SetCircuitBreakerLogger(logger Logger) {
+	logContainer.SetCircuitBreakerLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -429,6 +450,11 @@ func GetAuthLogger() Logger {
 // GetRateLimitLogger 获取全局限流日志对象
 func GetRateLimitLogger() Logger {
 	return logContainer.GetRateLimitLogger()
+}
+
+// GetCircuitBreakerLogger 获取全局熔断日志对象
+func GetCircuitBreakerLogger() Logger {
+	return logContainer.GetCircuitBreakerLogger()
 }
 
 // Options defines the set of options for component logging package.
@@ -558,6 +584,10 @@ func RegisterLoggerCreator(name string, creator loggerCreator) {
 		if err = ConfigDefaultRateLimitLogger(name); err != nil {
 			errs = multierror.Append(errs, multierror.Prefix(err,
 				fmt.Sprintf("fail to create default ratelimit logger %s", name)))
+		}
+		if err = ConfigDefaultCircuitBreakerLogger(name); err != nil {
+			errs = multierror.Append(errs, multierror.Prefix(err,
+				fmt.Sprintf("fail to create default circuitbreaker logger %s", name)))
 		}
 		if errs != nil {
 			log.Fatalf("RegisterLoggerCreator failed, errs is %v", errs)
@@ -693,6 +723,16 @@ func ConfigRateLimitLogger(pluginName string, options *Options) error {
 	return nil
 }
 
+// ConfigCircuitBreakerLogger 配置熔断日志器
+func ConfigCircuitBreakerLogger(pluginName string, options *Options) error {
+	logger, err := configLogger(pluginName, circuitBreakerLoggerName, options, DefaultCircuitBreakerLogLevel)
+	if err != nil {
+		return err
+	}
+	SetCircuitBreakerLogger(logger)
+	return nil
+}
+
 // CreateDefaultLoggerOptions 配置默认的日志插件
 func CreateDefaultLoggerOptions(rotationPath string, logLevel int) *Options {
 	return &Options{
@@ -766,4 +806,10 @@ func ConfigDefaultAuthLogger(pluginName string) error {
 func ConfigDefaultRateLimitLogger(pluginName string) error {
 	return ConfigRateLimitLogger(pluginName,
 		CreateDefaultLoggerOptions(DefaultRateLimitLogRotationFile, DefaultRateLimitLogLevel))
+}
+
+// ConfigDefaultCircuitBreakerLogger 配置默认的熔断日志器
+func ConfigDefaultCircuitBreakerLogger(pluginName string) error {
+	return ConfigCircuitBreakerLogger(pluginName,
+		CreateDefaultLoggerOptions(DefaultCircuitBreakerLogRotationFile, DefaultCircuitBreakerLogLevel))
 }
