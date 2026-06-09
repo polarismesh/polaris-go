@@ -186,10 +186,25 @@ func (r *LaneRouter) Destroy() error {
 	return nil
 }
 
-// Enable 是否需要启动泳道路由
+// Enable 是否需要启动泳道路由。
+//
+// 实现说明：lane router **始终返回 true**（always-on），即使当前 callee 未关联任何
+// 泳道组也参与路由链。原因如下：
+//
+//  1. 业界服务治理对“泳道”的核心约定：
+//     - 带 `lane` 元数据标签的实例属于某条泳道，未染色的请求不应被路由到这些实例上；
+//     - 没有标签的实例才是基线，承接默认流量。
+//
+//  2. 一个不在任何泳道组下的服务，如果其实例既有带 `lane` 标签的（如灰度遗留实例）
+//     也有不带标签的，**默认（baseLaneMode=OnlyUntaggedInstance）**应只路由到不带
+//     标签的实例上，否则未染色流量会被打散到泳道实例上，违背泳道隔离语义。
+//
+//  3. 旧实现下，`groups == nil` 时直接返回 false，lane router 整个跳过，
+//     默认负载均衡会把请求随机分到所有实例（含带 lane 标签的），与上述约定不符。
+//
+// 通过让 Enable() 始终返回 true，GetFilteredInstances 会进入 routeToBaseline，
+// 复用 OnlyUntaggedInstance 分支按 `lane` key 过滤掉带标签实例，对齐预期语义。
 func (r *LaneRouter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
-	groups := r.getLaneGroups(routeInfo)
-	enabled := groups != nil
 	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
 		// clusters 理论上由调用方保证非 nil，但 Enable 作为公开接口方法加上防御性判断，
 		// 避免上游改动或单测直传 nil 时日志格式化触发 panic。
@@ -197,10 +212,11 @@ func (r *LaneRouter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.S
 		if clusters != nil {
 			serviceKey = clusters.GetServiceKey()
 		}
-		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] Enable: service=%s, enabled=%v, laneGroups=%d",
-			serviceKey, enabled, len(groups))
+		groups := r.getLaneGroups(routeInfo)
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] Enable: service=%s, always-on=true, laneGroups=%d",
+			serviceKey, len(groups))
 	}
-	return enabled
+	return true
 }
 
 // getLaneGroups 从 routeInfo 中获取泳道规则列表。
@@ -312,8 +328,35 @@ func (r *LaneRouter) GetFilteredInstances(
 ) (*servicerouter.RouteResult, error) {
 	laneGroups := r.getLaneGroups(routeInfo)
 	if len(laneGroups) == 0 {
-		r.logCtx.GetRouteLogger().Debugf("[Router][Lane] no lane groups found, pass through")
-		return r.passThroughResult(clusters, withinCluster), nil
+		// 服务不在任何泳道组下：按 BaseLaneMode 决定基线选取方式。
+		//
+		//  - OnlyUntaggedInstance（默认 mode=0）：未染色流量不应被分发到带 `lane` 标签的实例
+		//    → 走 routeToBaseline，由其第一分支过滤掉带标签实例。
+		//  - ExcludeEnabledLaneInstance（mode=1）：基线 = 实例的 `lane` 值不在“已启用规则集合”
+		//    内的实例。当前 callee 不属于任何泳道组，已启用规则集合为空，没有任何 lane 值需要
+		//    排除 → 所有实例都符合基线定义，直通全量返回。
+		debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
+		if r.cfg.BaseLaneMode == ExcludeEnabledLaneInstance {
+			if debugEnabled {
+				sourceNs, sourceSvc := extractNsSvc(routeInfo.SourceService)
+				destNs, destSvc := extractNsSvc(routeInfo.DestService)
+				r.logCtx.GetRouteLogger().Debugf(
+					"[Router][Lane] no lane groups for %s/%s (caller=%s/%s), "+
+						"baseLaneMode=ExcludeEnabledLaneInstance → enabled lane values empty, "+
+						"pass through all instances",
+					destNs, destSvc, sourceNs, sourceSvc)
+			}
+			return r.passThroughResult(clusters, withinCluster), nil
+		}
+		if debugEnabled {
+			sourceNs, sourceSvc := extractNsSvc(routeInfo.SourceService)
+			destNs, destSvc := extractNsSvc(routeInfo.DestService)
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] no lane groups for %s/%s (caller=%s/%s), "+
+					"baseLaneMode=OnlyUntaggedInstance → fallback to baseline to filter out tagged instances",
+				destNs, destSvc, sourceNs, sourceSvc)
+		}
+		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 	}
 
 	// 染色检测: api.go / api/consumer.go 的 convert() 已经把请求中的 Arguments
@@ -490,7 +533,9 @@ func (r *LaneRouter) GetFilteredInstances(
 	return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, laneKey), nil
 }
 
-// passThroughResult 直通（不过滤）结果
+// passThroughResult 直通（不过滤）结果。
+// 当 callee 不在任何泳道组下且 BaseLaneMode=ExcludeEnabledLaneInstance 时，
+// 已启用规则集合为空，没有任何 lane 值需要排除，所有实例都视为基线，直通返回。
 func (r *LaneRouter) passThroughResult(clusters model.ServiceClusters, withinCluster *model.Cluster) *servicerouter.RouteResult {
 	result := servicerouter.PoolGetRouteResult(r.valueCtx)
 	result.OutputCluster = model.NewCluster(clusters, withinCluster)

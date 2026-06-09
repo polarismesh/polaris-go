@@ -73,6 +73,14 @@ PROVIDER_GRAY_PORT=19091
 PROVIDER_EXCL_STABLE_PORT=19092
 PROVIDER_EXCL_GRAY_PORT=19093
 
+# baseLaneMode 专项测试 — 服务不在任何泳道组内:
+# NoLaneGroupEchoServer 从未被加入任何泳道组,
+# 验证 lane router 对非泳道组服务的 baseLaneMode 行为。
+NLG_PROVIDER_BASE_PORT=19100
+NLG_PROVIDER_GRAY_PORT=19101
+NLG_CONSUMER_MODE0_PORT=19110
+NLG_CONSUMER_MODE1_PORT=19111
+
 # 服务名
 NAMESPACE="default"
 PROVIDER_SERVICE="LaneEchoServer"
@@ -83,6 +91,8 @@ GATEWAY_SERVICE="LaneRouterGateway"
 # 该服务只注册带 lane 标签的实例（stable + gray），没有任何未打标签的实例，
 # 这样才能触发 routeToBaseline 里 ExcludeEnabledLaneInstance 分支。
 PROVIDER_EXCL_SERVICE="StableLaneEchoServer"
+NLG_PROVIDER_SERVICE="NoLaneGroupEchoServer"
+NLG_CONSUMER_SERVICE="NoLaneGroupEchoClient"
 
 # 预期的泳道规则配置
 EXPECTED_LANE_GROUP="lane-go-example"
@@ -1151,6 +1161,8 @@ cleanup_zombies_on_ports() {
         "${SIMPLE_CONSUMER_BASE_PORT}" "${SIMPLE_CONSUMER_GRAY_PORT}"
         "${PROVIDER_BASE_PORT}" "${PROVIDER_GRAY_PORT}"
         "${PROVIDER_EXCL_STABLE_PORT}" "${PROVIDER_EXCL_GRAY_PORT}"
+        "${NLG_PROVIDER_BASE_PORT}" "${NLG_PROVIDER_GRAY_PORT}"
+        "${NLG_CONSUMER_MODE0_PORT}" "${NLG_CONSUMER_MODE1_PORT}"
     )
     local any=false
     for port in "${ports[@]}"; do
@@ -1214,11 +1226,18 @@ start_services() {
     local provider_excl_stable_workdir="${BUILD_DIR}/provider-excl-stable"
     local provider_excl_gray_workdir="${BUILD_DIR}/provider-excl-gray"
     local gateway_excl_workdir="${BUILD_DIR}/gateway-excl-run"
+    # 以下 4 个目录用于“非泳道组服务 baseLaneMode”专项测试
+    local nlg_provider_base_workdir="${BUILD_DIR}/nlg-provider-base"
+    local nlg_provider_gray_workdir="${BUILD_DIR}/nlg-provider-gray"
+    local nlg_consumer_mode0_workdir="${BUILD_DIR}/nlg-consumer-mode0"
+    local nlg_consumer_mode1_workdir="${BUILD_DIR}/nlg-consumer-mode1"
     mkdir -p "$provider_base_workdir" "$provider_gray_workdir" \
              "$consumer_base_workdir" "$consumer_gray_workdir" \
              "$simple_consumer_base_workdir" "$simple_consumer_gray_workdir" \
              "$gateway_workdir" "$simple_gateway_workdir" \
-             "$provider_excl_stable_workdir" "$provider_excl_gray_workdir" "$gateway_excl_workdir"
+             "$provider_excl_stable_workdir" "$provider_excl_gray_workdir" "$gateway_excl_workdir" \
+             "$nlg_provider_base_workdir" "$nlg_provider_gray_workdir" \
+             "$nlg_consumer_mode0_workdir" "$nlg_consumer_mode1_workdir"
     cp "${polaris_yaml}" "${provider_base_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${provider_gray_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${consumer_base_workdir}/polaris.yaml"
@@ -1229,9 +1248,15 @@ start_services() {
     cp "${polaris_yaml}" "${simple_gateway_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${provider_excl_stable_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${provider_excl_gray_workdir}/polaris.yaml"
+    cp "${polaris_yaml}" "${nlg_provider_base_workdir}/polaris.yaml"
+    cp "${polaris_yaml}" "${nlg_provider_gray_workdir}/polaris.yaml"
     # gateway-excl 专门用 baseLaneMode=1。polaris.yaml 里把 `baseLaneMode: 0` 改为 `baseLaneMode: 1`
     # 这样 gateway-excl 在路由到 StableLaneEchoServer 时,会走 ExcludeEnabledLaneInstance 分支。
     sed 's/baseLaneMode: 0/baseLaneMode: 1/' "${polaris_yaml}" > "${gateway_excl_workdir}/polaris.yaml"
+    # NLG consumer mode0 使用默认的 baseLaneMode=0
+    cp "${polaris_yaml}" "${nlg_consumer_mode0_workdir}/polaris.yaml"
+    # NLG consumer mode1 使用 baseLaneMode=1
+    sed 's/baseLaneMode: 0/baseLaneMode: 1/' "${polaris_yaml}" > "${nlg_consumer_mode1_workdir}/polaris.yaml"
 
     # 启动 provider-base（无泳道标签，基线实例）
     local debug_flag=""
@@ -1393,6 +1418,59 @@ start_services() {
     echo $! >> "${PID_FILE}"
     log_info "gateway-excl PID: $!"
 
+    # === baseLaneMode 专项测试 — 非泳道组服务 (NoLaneGroupEchoServer/NoLaneGroupEchoClient) ===
+    # 两对 provider+consumer 都不在任何泳道组内:
+    #   - NLG provider-base (无 lane 标签) + NLG provider-gray (lane=gray)
+    #   - NLG consumer-mode0 (baseLaneMode=0) + NLG consumer-mode1 (baseLaneMode=1)
+    log_info "启动 nlg-provider-base (端口: ${NLG_PROVIDER_BASE_PORT}, service: ${NLG_PROVIDER_SERVICE})..."
+    (cd "$nlg_provider_base_workdir" && exec env POLARIS_SERVER="${POLARIS_HOST}" \
+        "${BUILD_DIR}/provider" \
+        -namespace="${NAMESPACE}" \
+        -service="${NLG_PROVIDER_SERVICE}" \
+        -port="${NLG_PROVIDER_BASE_PORT}" \
+        ${debug_flag} \
+        > "${LOG_DIR}/nlg-provider-base.log" 2>&1) &
+    echo $! >> "${PID_FILE}"
+    log_info "nlg-provider-base PID: $!"
+
+    log_info "启动 nlg-provider-gray (端口: ${NLG_PROVIDER_GRAY_PORT}, service: ${NLG_PROVIDER_SERVICE}, lane: gray)..."
+    (cd "$nlg_provider_gray_workdir" && exec env POLARIS_SERVER="${POLARIS_HOST}" \
+        "${BUILD_DIR}/provider" \
+        -namespace="${NAMESPACE}" \
+        -service="${NLG_PROVIDER_SERVICE}" \
+        -port="${NLG_PROVIDER_GRAY_PORT}" \
+        -lane="gray" \
+        ${debug_flag} \
+        > "${LOG_DIR}/nlg-provider-gray.log" 2>&1) &
+    echo $! >> "${PID_FILE}"
+    log_info "nlg-provider-gray PID: $!"
+
+    log_info "启动 nlg-consumer-mode0 (端口: ${NLG_CONSUMER_MODE0_PORT}, baseLaneMode=0)..."
+    (cd "$nlg_consumer_mode0_workdir" && exec env POLARIS_SERVER="${POLARIS_HOST}" \
+        "${BUILD_DIR}/simple-consumer" \
+        -namespace="${NAMESPACE}" \
+        -service="${NLG_PROVIDER_SERVICE}" \
+        -selfNamespace="${NAMESPACE}" \
+        -selfService="${NLG_CONSUMER_SERVICE}" \
+        -port="${NLG_CONSUMER_MODE0_PORT}" \
+        ${debug_flag} \
+        > "${LOG_DIR}/nlg-consumer-mode0.log" 2>&1) &
+    echo $! >> "${PID_FILE}"
+    log_info "nlg-consumer-mode0 PID: $!"
+
+    log_info "启动 nlg-consumer-mode1 (端口: ${NLG_CONSUMER_MODE1_PORT}, baseLaneMode=1)..."
+    (cd "$nlg_consumer_mode1_workdir" && exec env POLARIS_SERVER="${POLARIS_HOST}" \
+        "${BUILD_DIR}/simple-consumer" \
+        -namespace="${NAMESPACE}" \
+        -service="${NLG_PROVIDER_SERVICE}" \
+        -selfNamespace="${NAMESPACE}" \
+        -selfService="${NLG_CONSUMER_SERVICE}" \
+        -port="${NLG_CONSUMER_MODE1_PORT}" \
+        ${debug_flag} \
+        > "${LOG_DIR}/nlg-consumer-mode1.log" 2>&1) &
+    echo $! >> "${PID_FILE}"
+    log_info "nlg-consumer-mode1 PID: $!"
+
     log_info "所有服务已启动，PID 记录在 ${PID_FILE}"
     log_info "Polaris SDK 日志目录:"
     log_info "  provider-base:        ${provider_base_workdir}/polaris/"
@@ -1406,6 +1484,10 @@ start_services() {
     log_info "  provider-excl-stable: ${provider_excl_stable_workdir}/polaris/"
     log_info "  provider-excl-gray:   ${provider_excl_gray_workdir}/polaris/"
     log_info "  gateway-excl:         ${gateway_excl_workdir}/polaris/  (baseLaneMode=1)"
+    log_info "  nlg-provider-base:    ${nlg_provider_base_workdir}/polaris/"
+    log_info "  nlg-provider-gray:    ${nlg_provider_gray_workdir}/polaris/"
+    log_info "  nlg-consumer-mode0:   ${nlg_consumer_mode0_workdir}/polaris/  (baseLaneMode=0)"
+    log_info "  nlg-consumer-mode1:   ${nlg_consumer_mode1_workdir}/polaris/  (baseLaneMode=1)"
 }
 
 # ==================== 等待服务就绪 ====================
@@ -1493,6 +1575,25 @@ wait_for_services() {
                 wait_ready_on_port "${SIMPLE_GATEWAY_PORT}" "${CONSUMER_SERVICE}" "simple-gateway → consumer → provider" 30 || true
                 wait_ready_on_port "${GATEWAY_PORT}" "${SIMPLE_CONSUMER_SERVICE}" "gateway → simple-consumer → provider" 30 || true
                 wait_ready_on_port "${GATEWAY_EXCL_PORT}" "${PROVIDER_EXCL_SERVICE}" "gateway-excl → ${PROVIDER_EXCL_SERVICE}" 30 || true
+
+                # 等待 nlg-consumer 就绪(直接 /echo,不走 gateway proxy)
+                local nlg_timeout=30
+                for nlg_label_port in "nlg-consumer-mode0,${NLG_CONSUMER_MODE0_PORT}" "nlg-consumer-mode1,${NLG_CONSUMER_MODE1_PORT}"; do
+                    local nlg_label="${nlg_label_port%%,*}"
+                    local nlg_port="${nlg_label_port##*,}"
+                    local nlg_waited=0
+                    local nlg_ok=false
+                    while [ $nlg_waited -lt $nlg_timeout ]; do
+                        probe_url "http://127.0.0.1:${nlg_port}/echo" "$tmp_status" "$tmp_body"
+                        local nlg_code
+                        nlg_code=$(cat "$tmp_status")
+                        case "$nlg_code" in
+                            2*) log_ok "${nlg_label} 就绪 (耗时 ${nlg_waited}s, HTTP=${nlg_code})"; nlg_ok=true; break ;;
+                            *)   sleep 2; nlg_waited=$((nlg_waited + 2)) ;;
+                        esac
+                    done
+                    [ "$nlg_ok" = true ] || log_warn "${nlg_label} 在 ${nlg_timeout}s 内未就绪"
+                done
 
                 return 0
                 ;;
@@ -2863,6 +2964,71 @@ _restore_lane_group() {
     fi
 }
 
+# ---------- 用例 6.2: baseLaneMode 控制非泳道组服务中带标签实例的可见性 ----------
+# 验证当 consumer 和 provider 都不属于任何泳道组时:
+#   - baseLaneMode=0 (OnlyUntaggedInstance, 默认): consumer 请求 provider 时
+#     不应返回带有泳道标签(如 lane=gray)的实例,只返回无标签基线实例。
+#   - baseLaneMode=1 (ExcludeEnabledLaneInstance): consumer 请求 provider 时
+#     可能返回带有泳道标签的实例(前提是标签值不在“已启用规则集合”中)。
+# 此测试用例不修改泳道组配置,不影响其他用例。
+test_base_lane_mode_no_lane_group() {
+    log_title "用例 6.2: baseLaneMode 控制非泳道组服务中带标签实例的可见性"
+    log_info "consumer (${NLG_CONSUMER_SERVICE}) → provider (${NLG_PROVIDER_SERVICE})"
+    log_info "两个服务均不在任何泳道组: provider 有 base(无标签) + gray(lane=gray) 两个实例"
+    log_info ""
+
+    # --- 子测试 6.2a: baseLaneMode=0 — 只路由到无标签基线实例 ---
+    log_info "--- 子测试 6.2a: baseLaneMode=0 — consumer(mode0) 应只路由到无标签 base 实例 ---"
+    local base_count=0
+    local gray_count=0
+    for i in $(seq 1 10); do
+        local resp
+        resp=$(curl -s --connect-timeout 5 --max-time 10 \
+            "http://127.0.0.1:${NLG_CONSUMER_MODE0_PORT}/echo" 2>/dev/null || true)
+        log_raw "  第${i}次: ${resp}"
+        if echo "$resp" | grep -q ":${NLG_PROVIDER_BASE_PORT}"; then
+            base_count=$((base_count + 1))
+        elif echo "$resp" | grep -q ":${NLG_PROVIDER_GRAY_PORT}"; then
+            gray_count=$((gray_count + 1))
+        fi
+        sleep 0.3
+    done
+    log_info "  路由分布: base(:${NLG_PROVIDER_BASE_PORT})=${base_count}, gray(:${NLG_PROVIDER_GRAY_PORT})=${gray_count}"
+    if [ $base_count -eq 10 ] && [ $gray_count -eq 0 ]; then
+        test_pass "[用例6.2a] baseLaneMode=0: 全部路由到无标签 base 实例,符合 OnlyUntaggedInstance 语义"
+    elif [ $base_count -gt 0 ] && [ $gray_count -gt 0 ]; then
+        test_fail "[用例6.2a] baseLaneMode=0: 出现负载均衡,mode=0 下不应路由到带 lane=gray 标签的实例"
+    else
+        test_fail "[用例6.2a] baseLaneMode=0: 路由分布异常 (base=${base_count}, gray=${gray_count})"
+    fi
+
+    # --- 子测试 6.2b: baseLaneMode=1 — 可以路由到带泳道标签的实例 ---
+    log_info ""
+    log_info "--- 子测试 6.2b: baseLaneMode=1 — consumer(mode1) 可能路由到带 lane=gray 标签的实例 ---"
+    local base_count2=0
+    local gray_count2=0
+    for i in $(seq 1 10); do
+        local resp2
+        resp2=$(curl -s --connect-timeout 5 --max-time 10 \
+            "http://127.0.0.1:${NLG_CONSUMER_MODE1_PORT}/echo" 2>/dev/null || true)
+        log_raw "  第${i}次: ${resp2}"
+        if echo "$resp2" | grep -q ":${NLG_PROVIDER_BASE_PORT}"; then
+            base_count2=$((base_count2 + 1))
+        elif echo "$resp2" | grep -q ":${NLG_PROVIDER_GRAY_PORT}"; then
+            gray_count2=$((gray_count2 + 1))
+        fi
+        sleep 0.3
+    done
+    log_info "  路由分布: base(:${NLG_PROVIDER_BASE_PORT})=${base_count2}, gray(:${NLG_PROVIDER_GRAY_PORT})=${gray_count2}"
+    if [ $gray_count2 -gt 0 ]; then
+        test_pass "[用例6.2b] baseLaneMode=1: 至少 1 次路由到 lane=gray 实例(gray=${gray_count2}/10),符合 ExcludeEnabledLaneInstance 语义"
+    elif [ $base_count2 -eq 10 ] && [ $gray_count2 -eq 0 ]; then
+        test_fail "[用例6.2b] baseLaneMode=1: 10 次全部路由到 base,mode=1 下理论上应允许路由到 lane=gray 实例(gray 不在已启用规则集合)"
+    else
+        test_fail "[用例6.2b] baseLaneMode=1: 路由分布异常 (base=${base_count2}, gray=${gray_count2})"
+    fi
+}
+
 # ==================== 运行所有测试 ====================
 run_all_tests() {
     log_title "开始泳道路由测试"
@@ -2878,6 +3044,10 @@ run_all_tests() {
     log_info "Provider-gray 端口: ${PROVIDER_GRAY_PORT}"
     log_info "Provider-excl-stable 端口: ${PROVIDER_EXCL_STABLE_PORT} (${PROVIDER_EXCL_SERVICE})"
     log_info "Provider-excl-gray 端口: ${PROVIDER_EXCL_GRAY_PORT} (${PROVIDER_EXCL_SERVICE})"
+    log_info "NLG-Provider-base 端口: ${NLG_PROVIDER_BASE_PORT} (${NLG_PROVIDER_SERVICE})"
+    log_info "NLG-Provider-gray 端口: ${NLG_PROVIDER_GRAY_PORT} (${NLG_PROVIDER_SERVICE})"
+    log_info "NLG-Consumer-mode0 端口: ${NLG_CONSUMER_MODE0_PORT} (baseLaneMode=0, ${NLG_CONSUMER_SERVICE})"
+    log_info "NLG-Consumer-mode1 端口: ${NLG_CONSUMER_MODE1_PORT} (baseLaneMode=1, ${NLG_CONSUMER_SERVICE})"
     log_info ""
 
     TOTAL_PASS=0
@@ -2972,6 +3142,10 @@ run_all_tests() {
     log_title "开始破坏性用例（test_out_of_lane_group）"
     print_lane_group_summary
     test_out_of_lane_group
+
+    # ========== baseLaneMode 非泳道组服务专项测试 ==========
+    log_title "开始 baseLaneMode 非泳道组服务专项测试（nlg-consumer → nlg-provider）"
+    test_base_lane_mode_no_lane_group
 
     log_title "测试结果汇总"
     _log "总计: ${TOTAL_COUNT}  ${GREEN}通过: ${TOTAL_PASS}${NC}  ${RED}失败: ${TOTAL_FAIL}${NC}"

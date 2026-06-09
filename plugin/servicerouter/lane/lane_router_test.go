@@ -266,22 +266,25 @@ func TestParseWarmupEtime(t *testing.T) {
 	})
 }
 
-// TestLaneRouter_Enable 覆盖 Enable 的两种状态：有/无规则
+// TestLaneRouter_Enable 覆盖 Enable 在不同 routeInfo 状态下的返回值。
+//
+// 自 always-on 改造后：lane router 不再依赖泳道规则是否存在，始终返回 true。
+// 原因：未在任何泳道组下的服务，其带 `lane` 标签的实例仍然不应被未染色流量
+// 选中（baseLaneMode=OnlyUntaggedInstance 默认语义）。GetFilteredInstances
+// 内部会基于 laneGroups 是否为空走相应的 baseline 分支或泳道路由分支。
 func TestLaneRouter_Enable(t *testing.T) {
 	r := &LaneRouter{}
 	tests := []struct {
 		name      string
 		routeInfo *servicerouter.RouteInfo
-		want      bool
 	}{
 		{
-			// 测试场景：无规则 → Enable 返回 false，路由链不会调用本插件
-			name: "no_rule_disabled",
+			// 测试场景：无规则 → 仍应返回 true，由 GetFilteredInstances 走 baseline 过滤带标签实例
+			name: "no_rule_still_enabled",
 			routeInfo: &servicerouter.RouteInfo{
 				SourceLaneRule: nil,
 				DestLaneRule:   nil,
 			},
-			want: false,
 		},
 		{
 			// 测试场景：只有 dst 有规则 → Enable 返回 true
@@ -289,7 +292,6 @@ func TestLaneRouter_Enable(t *testing.T) {
 			routeInfo: &servicerouter.RouteInfo{
 				DestLaneRule: wrapGroups(makeGroup("g1")),
 			},
-			want: true,
 		},
 		{
 			// 测试场景：只有 src 有规则 → Enable 返回 true
@@ -297,21 +299,19 @@ func TestLaneRouter_Enable(t *testing.T) {
 			routeInfo: &servicerouter.RouteInfo{
 				SourceLaneRule: wrapGroups(makeGroup("g1")),
 			},
-			want: true,
 		},
 		{
-			// 测试场景：routeInfo 为 nil → Enable 返回 false，不 panic
+			// 测试场景：routeInfo 为 nil → 仍返回 true，且不 panic
 			name:      "nil_route_info",
 			routeInfo: nil,
-			want:      false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := r.Enable(tt.routeInfo, nil)
-			if got != tt.want {
-				t.Errorf("Enable() = %v, want %v", got, tt.want)
+			if !got {
+				t.Errorf("Enable() = %v, want true (always-on)", got)
 			}
 		})
 	}
