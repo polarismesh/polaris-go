@@ -88,12 +88,14 @@ func (g *InstancesFilter) GetFilteredInstances(
 	if len(dstMetadata) > 0 {
 		instSet := targetCluster.GetClusterValue().GetInstancesSet(true, true)
 		if instSet.Count() > 0 {
-			// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 dstmeta 路由的输出。
-			// (DEBUG 不再单独打印 "metadata matched",信息已被这条 INFO 完全覆盖)
-			g.logCtx.GetRouteLogger().Infof(
-				"[Router][DstMeta] result: dest=%s/%s, status=metadata-matched, metadata=%v, instances=%d",
-				routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
-				dstMetadata, instSet.Count())
+			// 成功命中:每条请求都会触发,使用 DEBUG。生产环境如需观测匹配量,
+			// 应使用监控指标 (如实例选择直方图) 而非日志聚合。
+			if debugEnabled {
+				g.logCtx.GetRouteLogger().Debugf(
+					"[Router][DstMeta] result: dest=%s/%s, status=metadata-matched, metadata=%v, instances=%d",
+					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+					dstMetadata, instSet.Count())
+			}
 			return g.getResult(targetCluster), nil
 		}
 

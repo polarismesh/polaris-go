@@ -544,11 +544,15 @@ func (r *LaneRouter) GetFilteredInstances(
 		}
 		// 入口染色概率检查 (percentage / warmup)
 		if !r.tryStainCurrentTraffic(matchedItem.rule) {
-			r.logCtx.GetRouteLogger().Infof(
-				"[Router][Lane] traffic gray check rejected (not stained), group=%s, rule=%s, "+
-					"grayMode=%s, fallback to baseline",
-				matchedItem.group.GetName(), matchedItem.rule.GetName(),
-				matchedItem.rule.GetTrafficGray().GetMode())
+			// percentage / warmup 概率拒绝染色 → 走基线。属于成功路径(按概率分流的预期行为),
+			// DEBUG 级别即可;否则灰度放量期间 INFO 会刷屏。
+			if debugEnabled {
+				r.logCtx.GetRouteLogger().Debugf(
+					"[Router][Lane] traffic gray check rejected (not stained), group=%s, rule=%s, "+
+						"grayMode=%s, fallback to baseline",
+					matchedItem.group.GetName(), matchedItem.rule.GetName(),
+					matchedItem.rule.GetTrafficGray().GetMode())
+			}
 			return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 		}
 		// 染色成功:把完整 stain label ({groupName}/{ruleName}) 写回 RouteMetadata.
@@ -568,9 +572,13 @@ func (r *LaneRouter) GetFilteredInstances(
 
 	// 目标服务不在此泳道组的 destinations 中 → 回退基线
 	if !checkServiceInLane(matchedItem.group, routeInfo.DestService) {
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] dest service %s/%s not in lane group %q destinations, fallback to baseline",
-			destNs, destSvc, matchedItem.group.GetName())
+		// 该路径常见于 callee 服务尚未加入本规则所在泳道组的场景,属于配置层面的边界情况。
+		// 单条请求按规则逻辑回退基线即可,使用 DEBUG;若需观测发生频率,可通过监控指标
+		if debugEnabled {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] dest service %s/%s not in lane group %q destinations, fallback to baseline",
+				destNs, destSvc, matchedItem.group.GetName())
+		}
 		return r.routeToBaseline(routeInfo, clusters, withinCluster, laneGroups, instanceLaneKey), nil
 	}
 
@@ -585,12 +593,14 @@ func (r *LaneRouter) GetFilteredInstances(
 	laneInstSet := tmpLaneCls.GetClusterValue().GetInstancesSet(false, true)
 
 	if laneInstSet.Count() > 0 {
-		// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 lane 命中行为。
-		// (DEBUG 不再重复打印一行 "route to lane",信息已被这条 INFO 覆盖)
-		r.logCtx.GetRouteLogger().Infof(
-			"[Router][Lane] result: dest=%s/%s, status=lane-matched, group=%s, rule=%s, %s=%s, instances=%d",
-			destNs, destSvc, matchedItem.group.GetName(), matchedItem.rule.GetName(),
-			laneKey, laneVal, laneInstSet.Count())
+		// 成功命中泳道实例:属于"每条请求都会触发"的常态路径,使用 DEBUG。
+		// 生产环境如需观测命中量,应使用监控指标而非日志聚合,避免每次请求都写盘。
+		if debugEnabled {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] result: dest=%s/%s, status=lane-matched, group=%s, rule=%s, %s=%s, instances=%d",
+				destNs, destSvc, matchedItem.group.GetName(), matchedItem.rule.GetName(),
+				laneKey, laneVal, laneInstSet.Count())
+		}
 		result := servicerouter.PoolGetRouteResult(r.valueCtx)
 		// 命中泳道实例:输出带 lane metadata 的 cluster 给下一跳路由(rule / nearby /
 		// dstmeta 等)。下游通过 model.NewCluster(svcClusters, tmpLaneCls) 自动继承
@@ -605,6 +615,9 @@ func (r *LaneRouter) GetFilteredInstances(
 
 	// 无泳道实例
 	if matchedItem.rule.GetMatchMode() == apitraffic.LaneRule_STRICT {
+		// STRICT + 无目标实例 → 返回空 cluster, 上层 LB 会触发 HTTP 503。
+		// 这是真正的"路径不通"异常,**保留 INFO** 便于观测;频率受配置 + 实例可用性影响,
+		// 通常不会高频触发。日志固定,便于聚合告警。
 		r.logCtx.GetRouteLogger().Infof(
 			"[Router][Lane] no lane instances for %s=%s (STRICT mode)，"+
 				"return empty cluster to trigger HTTP 503，group=%s，rule=%s，dest=%s/%s",
@@ -632,7 +645,9 @@ func (r *LaneRouter) GetFilteredInstances(
 	// 在 STRICT 早退之后再 PoolPut，避免 STRICT 路径误回收仍在对外输出的对象。
 	defer tmpLaneCls.PoolPut()
 
-	// PERMISSIVE 模式：回退基线
+	// PERMISSIVE 模式:配置了 lane=<val> 但 callee 实际没有该 lane 的实例 → 回退基线。
+	// 属于配置层面的"非健康状态",**保留 INFO** 提示用户:目标 lane 实际无实例,
+	// 应当排查实例注册或泳道组 destinations 配置。频率不会高(规则级别错配),不会刷屏。
 	r.logCtx.GetRouteLogger().Infof(
 		"[Router][Lane] no lane instances for %s=%s (PERMISSIVE mode), "+
 			"fallback to baseline, group=%s, rule=%s, dest=%s/%s",
@@ -721,13 +736,14 @@ func (r *LaneRouter) routeToBaseline(
 
 	result.OutputCluster = baselineCls
 	result.Status = servicerouter.Normal
-	// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 baseline 回退行为。
-	// baseline 路径常见于"无 lane 染色 / 命中 PERMISSIVE 但实例不存在 / 非入口染色"
-	// 三种情况, 输出 dest + baseLaneMode 便于排查。
-	destNs, destSvc := extractNsSvc(routeInfo.DestService)
-	r.logCtx.GetRouteLogger().Infof(
-		"[Router][Lane] result: dest=%s/%s, status=baseline, mode=%d, laneKey=%s",
-		destNs, destSvc, r.cfg.BaseLaneMode, laneKey)
+	// 出口摘要:baseline 路径每次请求都会触发(无 lane 染色 / PERMISSIVE 无实例 / 非入口染色 …),
+	// 属于"成功路径",**用 DEBUG**。
+	if r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		destNs, destSvc := extractNsSvc(routeInfo.DestService)
+		r.logCtx.GetRouteLogger().Debugf(
+			"[Router][Lane] result: dest=%s/%s, status=baseline, mode=%d, laneKey=%s",
+			destNs, destSvc, r.cfg.BaseLaneMode, laneKey)
+	}
 	return result
 }
 

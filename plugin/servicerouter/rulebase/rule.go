@@ -215,13 +215,25 @@ finally:
 		}
 	}
 
-	// 出口摘要: Info 级,方便在不开 DEBUG_MODE 时也能看到规则路由的最终决策。
-	// 与 lane router 在异常路径用 Info 的风格一致, 每次路由输出 1 行。
+	// 出口摘要:成功路径(noRouteRule / sourceRuleSuccess / dstRuleSuccess)使用 DEBUG,
+	// (failover-all / failover-none / failover-none(empty))使用 INFO,便于观测路由失败的频率。
 	instCount := targetCluster.GetClusterValue().GetInstancesSet(false, false).Count()
-	g.logCtx.GetRouteLogger().Infof(
-		"[Router][RuleBased] result: dest=%s/%s, status=%s, instances=%d",
-		routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
-		finalStatus, instCount)
+	switch finalStatus {
+	case "noRouteRule", "sourceRuleSuccess", "dstRuleSuccess":
+		if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			g.logCtx.GetRouteLogger().Debugf(
+				"[Router][RuleBased] result: dest=%s/%s, status=%s, instances=%d",
+				routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+				finalStatus, instCount)
+		}
+	default:
+		// failover-all / failover-none / failover-none(empty): 路由规则匹配失败后的降级路径,
+		// 属于异常,保留 INFO 便于聚合告警。
+		g.logCtx.GetRouteLogger().Infof(
+			"[Router][RuleBased] result: dest=%s/%s, status=%s, instances=%d",
+			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+			finalStatus, instCount)
+	}
 
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster
