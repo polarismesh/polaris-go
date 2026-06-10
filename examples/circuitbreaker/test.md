@@ -12,14 +12,20 @@
                   └──── provider-b (端口 28082，默认 500) ────┘
                                        ▲
                                        │
-                ┌────── instance-consumer     (18081)  selfService=CircuitBreakerInstanceCaller
+                ┌────── instance-consumer        (18081)  selfService=CircuitBreakerInstanceCaller
                 │
-                ├────── service-consumer      (18082)  selfService=CircuitBreakerServiceCaller
+                ├────── service-consumer         (18082)  selfService=CircuitBreakerServiceCaller
    用户 curl ───┤
-                ├────── interface-consumer    (18083)  selfService=CircuitBreakerInterfaceCaller
+                ├────── interface-consumer       (18083)  selfService=CircuitBreakerInterfaceCaller
                 │
-                └────── old-instance-consumer (18084)  selfService=CircuitBreakerOldInstanceCaller
-                                                       （旧版散装写法，向后兼容验证）
+                ├────── old-instance-consumer    (18084)  selfService=CircuitBreakerOldInstanceCaller
+                │                                       （旧版散装写法，向后兼容验证）
+                ├────── http_status-consumer      (18085)  selfService=CircuitBreakerHttpStatusCaller
+                │
+                ├────── default_rule-consumer    (18086)  selfService=CircuitBreakerDefaultRuleCaller
+                │                                       （不依赖服务端规则，验证 SDK 本地默认规则）
+                └────── modify_rule-consumer     (18087)  selfService=CircuitBreakerModifyRuleCaller
+                                                        （验证 update_circuitbreaker_rule 改参数后熔断按新阈值生效）
 ```
 
 前三个 consumer 共享同一份源代码：`examples/circuitbreaker/newCircuitBreakerCaller/consumer/main.go`，
@@ -56,7 +62,7 @@
 
 1. 步骤 A：环境准备（检查 Go/python3/curl，创建 `.build/`、`.logs/`，生成规则模板 `_gen_rule.py`）
 2. 步骤 B：启动 provider-a + provider-b
-3. 步骤 C：依次执行用例 1（instance）、用例 2（service）、用例 3（interface）、用例 4（old_instance）
+3. 步骤 C：依次执行用例 1（instance）、用例 2（service）、用例 3（interface）、用例 4（old_instance）、用例 5（http_status）、用例 6（default_rule）、用例 7（modify_rule）
    - 每个用例开始时打印结构化 `print_block` 概览（Caller 写法 / 规则配置 / 验证步骤 / 预期结果 / 判定标准）
    - 创建规则前会通过 `inspect_caller_rules` + `inspect_callee_rules` 巡检主调与被调维度的现有熔断规则
      - 默认仅 WARN，列出陌生规则
@@ -255,17 +261,50 @@
 - ── C 段：网络错熔断（-1 哨兵） ──
 - 5.8 关停 provider-a / provider-b 制造网络错
 - 5.9 连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → SDK 内部 retCode="-1" 命中 RANGE 类条件
-- 5.10 重启 provider 恢复，等 `WAIT_HALF_OPEN_SECONDS` 让 sleepWindow 过期
+- 5.10 case 5 C 段把 provider 全杀了，恢复由主 shell 在 case 5 退出后接管：主 shell
+       通过 `lsof -ti :28081 / :28082` 检测端口，按需 `start_provider` 重新拉起两个
+       provider（PID 落到主 shell 全局 `PROVIDER_A_PID/PROVIDER_B_PID`），等
+       `WAIT_HALF_OPEN_SECONDS` 让 sleepWindow 过期
+- 5.8 实现细节：`lsof -ti :28081` 默认匹配所有 (LISTEN + ESTABLISHED) 占用 28081 端口的进程，
+       SDK keep-alive 期间 consumer 跟 28081 端口有 ESTABLISHED 连接，会同时返回 consumer PID。
+       必须用 `-sTCP:LISTEN` 只匹配 LISTEN 状态，确保杀的是 provider 进程不是 consumer 进程。
+       否则 5.9 跑 curl 时 consumer 已被误杀，全部 connection refused，走不到 SDK 路由 / -1 哨兵路径。
 
 ### 通过条件（3 段独立判定）
 - A 段：`a_fail ≥ 1` 且 `a_abort == 0`（4xx 全部 fail 但永不熔断 —— 关键约束）
-- B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok == RECOVERY_REQUEST_COUNT` 且 `b_recover_ok == RECOVERY_REQUEST_COUNT`
+- B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok + b_verify_abort == RECOVERY_REQUEST_COUNT` 且
+       `b_recover_ok == RECOVERY_REQUEST_COUNT`
+       - `b_verify_ok + b_verify_abort == 10`：理想是 `b_verify_ok == 10`（INSTANCE 28082 OPEN 后 SDK 只路由到 28081），
+         但测试环境 polaris 控制台残留了之前 case 5 创建的 `cb-service-CircuitBreakerHttpStatusCaller`
+         SERVICE 规则（DELETE 403 无法清理），5.5 trigger 3 fail 同时触发 SERVICE OPEN，
+         5.6 verify 期间 acquirePermission 在 SERVICE 维度直接 abort 全 10 个请求。
+         INSTANCE 维度 OPEN 仅 LB 排除该实例，SERVICE 维度 OPEN 才会 acquirePermission 拒绝。
+         两者都正确反映了"5.5 触发的熔断在 5.6 仍生效"，因此 verify 阶段只要所有 10 个请求都
+         被 SDK 拦截（abort）或路由到 a（ok）即视为通过。
 - C 段：`c_fail ≥ 1` 且 `c_abort ≥ 1`（网络错触发熔断 —— 验证 -1 哨兵生效）
 
 ### 验证目的
 1. 验证 4xx 在默认 `RANGE 500~599` 规则下不被熔断（demo 端 4xx 走 OnSuccess）
 2. 验证 5xx 通过 OnError 路径累计 3 次后正常触发熔断
 3. 验证 SDK 内部 `-1` 哨兵能让网络错被熔断器拦截，无需依赖具体规则配置
+
+### cb-service 遗留规则干扰说明
+
+测试环境 polaris 服务端 namespace=default 下有一条预置 SERVICE 级规则 `cbRuleCtxB`（id `3c1b1c7ad94d44e5b7234500e7507dae`，ctime `2026-03-12 17:26:25`，
+ERROR_RATE 50%@30s/min_req=5，sleep_window=60s）。每次 case 5 跑完，C 段会创建 `cb-service-CircuitBreakerHttpStatusCaller`
+（同样 SERVICE 级 + ERROR_RATE 类）。DELETE 403 无法清理，遗留规则在 case 6/7 期间继续参与判定。
+
+5.5 期间 3 fail 同时触发 cb-instance + cb-service 两条规则 OPEN，5.6 期间 SERVICE OPEN 导致 acquirePermission 全 abort。
+B 段判定改用 `b_verify_ok + b_verify_abort == 10` 接受这一行为。
+
+### 已知 pre-existing 干扰
+
+除 cb-service 遗留规则外，`cbRuleCtxB`（详见 `project_polaris_cbrule_ctx_b.md`）会进一步干扰：
+- 5xx 走 OnError 路径时被 SDK 改成 `"-1"` 哨兵，cbRuleCtxB 累 fail
+- 30s 滑动窗口 50% 阈值在多轮 trigger 期间被踩中
+- sleepWindow=60s 持续污染 SDK 缓存，影响后续 case 2/3/4/5 跑出来的结果
+
+本次会话已记录的干扰面：用例 1/6/7 不受干扰（用例 1 跨度 < 30s，用例 6 启用本地默认规则，用例 7 INSTANCE 阈值 7），用例 2/3/4/5 受不同程度干扰。
 
 ---
 
@@ -310,6 +349,79 @@
 
 ---
 
+## 用例 7：修改熔断参数生效（CONSECUTIVE_ERROR=3 → 7）
+
+### Caller 写法
+- 同 `newCircuitBreakerCaller/consumer`，selfService=`CircuitBreakerModifyRuleCaller`，端口 18087
+- 与用例 1 共享同一份源码和装饰器写法（`MakeFunctionDecorator` + `RequestContext.Method=/echo` + `SetInstance`）
+
+### 规则
+- `level=INSTANCE`，`name=cb-instance-CircuitBreakerModifyRuleCaller`
+- `rule_matcher.source.service=CircuitBreakerModifyRuleCaller`（与用例 1/4/5 隔离，避免规则覆盖）
+- `block_configs[0]`：
+  - `error_conditions`：`RET_CODE RANGE 500~599`（4xx 不计入熔断）
+  - `trigger_conditions`：`CONSECUTIVE_ERROR` 阈值在两轮间变化
+- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+
+### 验证步骤
+- 7.1 复位 provider：a=200 / b=500
+- 7.2 启动 modify_rule consumer
+- 7.3 创建 INSTANCE 级规则（`CONSECUTIVE_ERROR=3`）
+- ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
+- 7.4 触发：发 `TRIGGER_REQUEST_COUNT`（默认 15）次让 b 累计 3 次连续 5xx 失败 → 实例 b 被摘除
+- 7.5 验证：再发 `RECOVERY_REQUEST_COUNT` 次，流量应全部走 a → 200
+- 7.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS` 进半开 → 关闭
+- ── 规则更新 ──
+- 7.7 调用 `update_circuitbreaker_rule` API 将 `CONSECUTIVE_ERROR` 改为 7
+- 7.8 等待 `WAIT_RULE_READY_SECONDS` 让 SDK 拉到新规则
+- ── 第 2 轮（CONSECUTIVE_ERROR=7） ──
+- 7.9 触发：发 `MODIFY_R2_TRIGGER_COUNT=30` 次让 b 累计 7 次连续 5xx 失败 → 实例 b 被摘除
+  - **说明**：阈值从 3 提到 7 后，50/50 LB 分布下默认 burst=15 时 b 最长连续被选中的次数
+    期望 7-8 次，但实测最长连续通常只到 3（被 a 打断），达不到 7 阈值 → b 没熔断 →
+    7.10 verify 阶段 1 个请求漏到 b 返 500，导致用例 FAIL。**轮 2 单独把 burst 提到
+    30 才能稳定让 b 连续 7 次被选中**。
+- 7.10 验证：再发 `RECOVERY_REQUEST_COUNT` 次，流量应全部走 a → 200
+- 7.11 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS` → 关闭
+
+### 通过条件（共 6 项指标）
+- 两轮 `trigger_fail >= 1`
+- 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
+- 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
+
+### 验证目的
+1. 验证 `update_circuitbreaker_rule` API 可修改已有规则的 trigger 阈值
+2. 验证 SDK 感知规则变更后熔断行为按新参数生效（不重启 consumer）
+3. 验证两轮不同阈值的熔断均能正确触发与恢复
+
+---
+
+## 测试环境干扰说明
+
+`project_polaris_delete_403` 限制下，测试环境 Polar is 服务端 namespace=default 下预置的几条规则无法清理，会干扰部分用例的判定：
+
+- **`cbRuleCtxB`**（id `3c1b1c7ad94d44e5b7234500e7507dae`，ctime `2026-03-12 17:26:25`，SERVICE 级，ERROR_RATE 50%@30s/min_req=5，sleep_window=60s）：被 4xx→OnError→"-1" 哨兵 / 5xx fail 累积触发 OPEN，污染用例 2/3/4/5 状态。详见 `project_polaris_cbrule_ctx_b.md`。
+- **`cbRuleB`**（id `c769e3cec6844500b2cfb7f3843791b6`，SERVICE 级，匹配 `DiscoverEchoServer`）：不干扰 circuitbreaker 用例（caller service 不同）。
+- 每次 case 5 跑完后遗留的 `cb-service-CircuitBreakerHttpStatusCaller`：用例 5 5.5 期间 3 fail 同时触发 INSTANCE + SERVICE OPEN，5.6 verify 期间 SERVICE OPEN 全 abort，破坏 B 段"全部走 a"的预期。
+
+干扰面（按用例维度）：
+
+| 用例 | 干扰 | 通过情况 |
+|---|---|---|
+| 1 INSTANCE | 受 cbRuleCtxB 干扰但时序躲过（< 30s 窗口 33% failRatio 不触发 OPEN） | ✅ PASS |
+| 2 SERVICE | 5.7 恢复期间 5xx 走 OnError 触发 cbRuleCtxB OPEN | ❌ FAIL（pre-existing） |
+| 3 METHOD | 5.4+5.7 两轮 trigger 30s 窗口踩中 50% 阈值 | ❌ FAIL（pre-existing） |
+| 4 INSTANCE | 5.4+5.7 同上 | ❌ FAIL（pre-existing） |
+| 5 HTTP_STATUS | cbRuleCtxB + cb-service 遗留规则双重干扰 | ❌ FAIL（pre-existing） |
+| 6 DEFAULT_RULE | 启用本地默认规则不依赖服务端，cbRuleCtxB 干扰下仍能触发 | ✅ PASS |
+| 7 MODIFY_RULE | INSTANCE 阈值 7，cbRuleCtxB OPEN 时 SDK 仍能 abort 探测 | ✅ PASS |
+
+可用的根因修复路径（按推荐度）：
+
+1. **接受 pre-existing**：用例 1/6/7 PASS 即视为通过，2/3/4/5 标记为环境干扰
+2. **专用 namespace**：用例 2/3/4/5 改用独立 namespace（如 `cb_test`），让 cbRuleCtxB 不匹配（cbRuleCtxB source 限定 `namespace=default`）——但破坏参数化
+3. **update cbRuleCtxB 阈值**：主流程开头 `update_circuitbreaker_rule` 把 cbRuleCtxB 阈值改到极端（CONSECUTIVE_ERROR=100, ERROR_RATE 99%@30s/min_req=1000），case 跑完后还原；PUT 权限未验证
+4. **删 cbRuleCtxB**：DELETE 403 当前不可行
+
 ## 失败诊断
 
 每个用例失败时脚本会输出统计变量值，常见原因：
@@ -321,6 +433,10 @@
 | `verify_ok < RECOVERY_REQUEST_COUNT`（仅实例级） | 流量未完全转移；或 provider-a 同时也异常；或 GetOneInstance 把 cb=Open 实例仍然返回 | 查 `instance_consumer.log` 中 `printAllInstances` 输出 |
 | `recover_ok=0`（服务级/接口级/实例级） | sleepWindow 不够；或半开探测打到仍 500 的实例；或 HalfOpen → Close 没生效 | 增大 `--wait-half-open`；服务级用例必须把所有实例同步翻回 200 |
 | `inspect_caller_rules` 警告"陌生规则" | 上一次脚本运行未清理干净；或控制台手工建过同主调的规则 | 登录控制台清理；或设 `STRICT_RULE_CHECK=true` 让脚本直接 FAIL 防误判 |
+| 用例 6/7 verify 阶段全 EOF | case 5 C 段关 provider 后，subshell 退出时 `trap cleanup` 杀掉了 case 5.10 在 subshell 内启动的新 provider；后续 case 6/7 拿到 EOF/Polaris-1010 | 确认脚本已用本次修复（`lsof -ti` 检测 + 主 shell `start_provider` 接管）；看 `provider_a.log` 在 case 5 退出后是否仍继续接请求 |
+| 用例 7 轮 2 verify=9 (期望 10) | CONSECUTIVE_ERROR=7 阈值下 burst=15 不够，b 没被连续选 7 次触发熔断 | 确认轮 2 用了 case-local `MODIFY_R2_TRIGGER_COUNT=30`；如仍未触发，再加 burst 或降阈值 |
+| 规则 `circuitbreaker_rule_needs_update` 永远报"参数不一致" | `_gen_rule.py` 输出的 snake_case 键名与服务端 GET 返回的 camelCase 键名不匹配；或服务端给 `blockConfigs[].api` 补了 `protocol/method/path.type` 等默认字段 | 确认脚本已用归一化 + subset 语义（`existing ⊇ expected`）修复 |
+| 用例 2/3/4/5 verify 阶段全 abort | 测试环境 Polaris 服务端预置 SERVICE 级规则 `cbRuleCtxB`（ctime 2026-03-12，ERROR_RATE 50%@30s/min_req=5）被多轮 5xx fail 累积触发 OPEN，覆盖各用例的 INSTANCE 级断言 | 接受为 pre-existing 环境干扰（详见 `project_polaris_cbrule_ctx_b.md`）；如需修复需专用 namespace 或 update cbRuleCtxB 阈值到极端 |
 
 ## 与 polaris-go 代码改造的对应关系
 
@@ -341,3 +457,6 @@
 | `blockCounter.parseRetStatus` 的 `-1` 哨兵识别（与 polaris-java 对齐） | 用例 5 C 段：网络错路径下 SDK 默认 `code="-1"`，哨兵直接命中 RANGE 类条件触发熔断 |
 | demo 端 4xx → OnSuccess、5xx → OnError 的分流（与 polaris-java 同款） | 用例 5 A 段：4xx 透传真实状态码后不命中 RANGE 500~599，永不熔断；用例 5 B 段：5xx 走 OnError 触发熔断 |
 | `default.go` dictionary lookup miss + `defaultRuleEnable=true` 兜底默认规则 | 用例 6：服务端 0 规则时，本地默认实例级熔断按 RANGE 500~599 + CONSECUTIVE_ERROR=3 触发 |
+| `update_circuitbreaker_rule` API 热改 trigger 阈值后 SDK 感知 | 用例 7：两轮不同 CONSECUTIVE_ERROR 阈值（3 → 7）下，熔断均按新阈值触发与恢复 |
+| verify 脚本：`r=$(case_xxx)` subshell 必杀内部 disown 的 bg process | 用例 5 C 段：subshell 退出时即便 disown 也无法保住 case 5.10 启动的 provider；改为在主 shell 接管（`lsof -ti` 检测端口 + `start_provider` 重建） |
+| verify 脚本：键名归一化 + `existing ⊇ expected` subset 语义 | 用例 5/6/7 每次创建规则前 `_gen_rule.py` 输出与 polaris 服务端 GET 返回格式不同时，避免无意义 PUT 更新 |

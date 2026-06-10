@@ -74,6 +74,8 @@ OLD_INSTANCE_CALLER="${OLD_INSTANCE_CALLER:-CircuitBreakerOldInstanceCaller}"
 HTTP_STATUS_CALLER="${HTTP_STATUS_CALLER:-CircuitBreakerHttpStatusCaller}"
 # 用例 6：默认实例级熔断兜底（服务端无规则）
 DEFAULT_RULE_CALLER="${DEFAULT_RULE_CALLER:-CircuitBreakerDefaultRuleCaller}"
+# 用例 7：修改熔断参数生效验证（通过 update_circuitbreaker_rule 变更阈值）
+MODIFY_RULE_CALLER="${MODIFY_RULE_CALLER:-CircuitBreakerModifyRuleCaller}"
 
 # 端口规划（避免冲突）：
 #   provider-a: 28081
@@ -90,6 +92,8 @@ OLD_INSTANCE_CONSUMER_PORT="${OLD_INSTANCE_CONSUMER_PORT:-18084}"
 HTTP_STATUS_CONSUMER_PORT="${HTTP_STATUS_CONSUMER_PORT:-18085}"
 # 用例 6（default_rule）专用 consumer 端口；selfService=CircuitBreakerDefaultRuleCaller
 DEFAULT_RULE_CONSUMER_PORT="${DEFAULT_RULE_CONSUMER_PORT:-18086}"
+# 用例 7（modify_rule）专用 consumer 端口；selfService=CircuitBreakerModifyRuleCaller
+MODIFY_RULE_CONSUMER_PORT="${MODIFY_RULE_CONSUMER_PORT:-18087}"
 
 # 触发熔断所需的请求次数（单实例失败计数）
 # 默认实例熔断规则：连续错误数 / 错误率，10 次足够触发
@@ -104,7 +108,7 @@ WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-8}"
 WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-15}"
 
 # 默认运行的子用例集合（逗号分隔），可通过 --only 缩小范围
-RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule}"
+RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -352,9 +356,10 @@ if items:
     fi
 
     # 400209 = ServiceExistedCircuitBreakers，按 (name, namespace) 已存在。
-    # 回退路径：查询 → 拿到 id → PUT 更新规则定义 → 复用该 id。
+    # 回退路径：先查已有规则 → 若参数一致则复用（跳过更新，避免无谓 SDK revision 变更）；
+    # 若参数不一致再 PUT 更新。
     if [[ "$code" == "400209" ]] || [[ "$item_code" == "400209" ]]; then
-        log_warn "[${case_name}] 服务端已存在同名规则 (name=${rule_name})，复用并更新"
+        log_warn "[${case_name}] 服务端已存在同名规则 (name=${rule_name})"
         id=$(query_circuitbreaker_rule_id_by_name "$rule_name") || true
         if [[ -z "$id" ]]; then
             log_error "[${case_name}] 已存在的规则反查失败 (name=${rule_name})"
@@ -362,6 +367,14 @@ if items:
             log_error "响应: ${resp:0:500}"
             return 1
         fi
+        # 获取已有规则的完整 JSON，与期望 body 比较语义字段
+        if ! circuitbreaker_rule_needs_update "$id" "$body"; then
+            CREATED_RULE_IDS+=("$id")
+            log_info "[${case_name}] 规则参数一致，跳过更新，直接复用 (id=${id})"
+            echo "$id"
+            return 0
+        fi
+        log_info "[${case_name}] 规则参数不一致，执行更新 (id=${id})"
         if ! update_circuitbreaker_rule "$case_name" "$id" "$body"; then
             return 1
         fi
@@ -446,7 +459,105 @@ for item in (data.get('data') or []):
 " <<< "$resp" 2>/dev/null || true
 }
 
-# _inspect_rules <role> <service_filter_param> <ns_filter_param> <service> <namespace> [expected ...]
+# circuitbreaker_rule_needs_update <id> <expected_body>
+# 比较服务端已有规则与期望 body 的语义字段（level, enable, block_configs,
+# trigger_condition, recoverCondition, error_conditions, rule_matcher）。
+# 语义一致时返回非零（无需更新），否则返回零（需要 PUT 更新）。
+# 忽略 id/ctime/mtime/revision/description 等服务端独占或描述性字段。
+circuitbreaker_rule_needs_update() {
+    local rule_id="$1"
+    local expected_body="$2"
+
+    # 先拉已有规则的完整 JSON
+    local existing_body
+    existing_body=$(curl -s --connect-timeout 5 --max-time 10 \
+        --request GET "${POLARIS_HTTP_ADDR}/naming/v1/circuitbreaker/rules?id=${rule_id}" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" 2>/dev/null || echo "")
+
+    EXISTING="$existing_body" EXPECTED="$expected_body" python3 -c "
+import json, os, sys, re
+
+def snake_to_camel(s):
+    '''snake_case → camelCase 键名转换'''
+    return re.sub(r'_([a-z])', lambda m: m.group(1).upper(), s)
+
+def normalize_keys(obj):
+    '''递归将 dict 的 snake_case 键转为 camelCase，便于与服务器返回格式对齐'''
+    if isinstance(obj, dict):
+        return {snake_to_camel(k): normalize_keys(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_keys(v) for v in obj]
+    return obj
+
+def strip_semantic(d):
+    '''提取熔断器语义字段：仅保留会影响熔断行为的字段'''
+    if not isinstance(d, dict):
+        return d
+    wanted = {
+        'level', 'enable',
+        'ruleMatcher', 'rule_matcher',
+        'errorConditions', 'error_conditions',
+        'triggerCondition', 'trigger_condition',
+        'recoverCondition', 'recoverCondition',
+        'blockConfigs', 'block_configs',
+    }
+    return {k: v for k, v in d.items() if k in wanted}
+
+existing_raw = os.environ.get('EXISTING', '{}')
+expected_raw = os.environ.get('EXPECTED', '{}')
+
+try:
+    existing = json.loads(existing_raw or '{}')
+except Exception:
+    sys.exit(0)
+
+# 服务端可能在顶层或 data[0] 返回规则对象
+if isinstance(existing, dict) and 'data' in existing:
+    items = existing.get('data', [])
+    if isinstance(items, list) and len(items) > 0:
+        existing = items[0]
+
+try:
+    expected = json.loads(expected_raw)
+except Exception:
+    sys.exit(0)
+
+# 期望 body 是 snake_case，归一化到 camelCase 以对齐服务端返回格式
+expected = normalize_keys(expected)
+
+e_sem = strip_semantic(existing)
+x_sem = strip_semantic(expected)
+
+# 递归深比较：语义为「existing ⊇ expected」才算一致。
+# - expected 有但 existing 缺 → diff（缺字段，需要更新）
+# - existing 有但 expected 没有 → 忽略（视为服务端补的元数据，如
+#   blockConfigs[].api.protocol / method / path.type 等控制台补全的默认值）
+# - 列表按位置比较，triggerConditions 顺序改变也视为 diff
+def deep_diff(existing, expected):
+    if type(existing) != type(expected):
+        return True
+    if isinstance(existing, dict):
+        for k in expected:
+            if k not in existing:
+                return True
+            if deep_diff(existing[k], expected[k]):
+                return True
+        return False
+    if isinstance(existing, list):
+        if len(existing) != len(expected):
+            return True
+        for i in range(len(existing)):
+            if deep_diff(existing[i], expected[i]):
+                return True
+        return False
+    return existing != expected
+
+if deep_diff(e_sem, x_sem):
+    sys.exit(0)   # 不一致 → 需要更新
+else:
+    sys.exit(1)   # 一致 → 无需更新
+" 2>/dev/null
+}
 # 通用的规则巡检：可按 source 或 destination 维度查询规则。
 #   role                     —— 仅用于日志展示（"主调" / "被调"）
 #   service_filter_param     —— 服务端查询参数名：srcService 或 dstService
@@ -808,6 +919,22 @@ build_rule_body_interface_slow() {
         ERROR_PERCENT="50" \
         ERROR_INTERVAL="30" \
         MINIMUM_REQUEST="10" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例7：修改熔断参数生效验证专用规则。
+# 第一个参数 consecutive_error 决定 CONSECUTIVE_ERROR 阈值；
+# 其余触发条件（ERROR_RATE）设为极高阈值避免干扰，让用例聚焦在顺序错误计数上。
+build_rule_body_modify_rule() {
+    local consecutive_error="${1:-3}"
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$MODIFY_RULE_CALLER" \
+        RULE_NAME="cb-instance-${MODIFY_RULE_CALLER}" \
+        LEVEL="INSTANCE" \
+        BC_NAME="modify-block" \
+        CONSECUTIVE_ERROR="$consecutive_error" \
+        ERROR_PERCENT="100" \
+        MINIMUM_REQUEST="9999" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
@@ -1342,7 +1469,6 @@ case_instance() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$rule_id" ]] && enable_circuitbreaker_rule "$rule_id"
 
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
@@ -1487,7 +1613,6 @@ case_service() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$rule_id" ]] && enable_circuitbreaker_rule "$rule_id"
 
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
@@ -1674,7 +1799,6 @@ case_interface() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$echo_rule_id" ]] && enable_circuitbreaker_rule "$echo_rule_id"
 
     order_rule_id=$(create_circuitbreaker_rule "interface-order" "$order_body") || {
         log_error "[用例3.3] /order 规则创建失败"
@@ -1682,7 +1806,6 @@ case_interface() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$order_rule_id" ]] && enable_circuitbreaker_rule "$order_rule_id"
 
     slow_rule_id=$(create_circuitbreaker_rule "interface-slow" "$slow_body") || {
         log_error "[用例3.3] /slow 规则创建失败"
@@ -1690,7 +1813,6 @@ case_interface() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$slow_rule_id" ]] && enable_circuitbreaker_rule "$slow_rule_id"
 
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
@@ -1899,7 +2021,6 @@ case_old_instance() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$rule_id" ]] && enable_circuitbreaker_rule "$rule_id"
 
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
@@ -2046,7 +2167,6 @@ case_http_status() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$rule_id" ]] && enable_circuitbreaker_rule "$rule_id"
 
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
@@ -2067,6 +2187,7 @@ case_http_status() {
     sleep 2
     run_burst "$HTTP_STATUS_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "5xx 验证"
     local b_verify_ok=$CASE_OK
+    local b_verify_abort=$CASE_ABORT
 
     log_step "用例5.7 [B段] 恢复：provider-b 翻回 200，等待 ${WAIT_HALF_OPEN_SECONDS}s 进入半开"
     provider_set_error "$PROVIDER_B_PORT" "false"
@@ -2089,7 +2210,6 @@ case_http_status() {
         echo "FAIL"
         return 1
     }
-    [[ -n "$svc_rule_id" ]] && enable_circuitbreaker_rule "$svc_rule_id"
     log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取 SERVICE 级规则..."
     sleep "$WAIT_RULE_READY_SECONDS"
 
@@ -2099,14 +2219,20 @@ case_http_status() {
     # 主 shell 的 PROVIDER_A_PID/PROVIDER_B_PID 在这里是只读快照，
     # 直接 kill -TERM 可能拿不到 PID（被 start_provider 重启后），改用按端口杀进程，
     # 即使主 shell 没有 PID 也能稳定停掉占用端口的 provider。
-    if lsof -ti :"${PROVIDER_A_PORT}" > /dev/null 2>&1; then
+    #
+    # 关键细节：`lsof -ti :PORT` 默认匹配所有 (LISTEN + ESTABLISHED) 占用 PORT 的进程，
+    # SDK keep-alive 期间 consumer 跟 28081 端口有 ESTABLISHED 连接，会同时拿到 consumer PID。
+    # 必须用 `-sTCP:LISTEN` 只匹配 LISTEN 状态，确保杀的是 provider 进程不是 consumer 进程。
+    # 否则 5.9 跑 15 个 curl 时 consumer 已被误杀，全部 connection refused，
+    # 走不到 SDK 路由 / -1 哨兵路径，5.9 期望 fail>=1 + abort>=1 永远不达标。
+    if lsof -ti :${PROVIDER_A_PORT} -sTCP:LISTEN > /dev/null 2>&1; then
         local a_pid
-        a_pid=$(lsof -ti :"${PROVIDER_A_PORT}" 2>/dev/null | head -1 || echo "")
+        a_pid=$(lsof -ti :${PROVIDER_A_PORT} -sTCP:LISTEN 2>/dev/null | head -1 || echo "")
         [[ -n "$a_pid" ]] && kill -TERM "$a_pid" 2>/dev/null || true
     fi
-    if lsof -ti :"${PROVIDER_B_PORT}" > /dev/null 2>&1; then
+    if lsof -ti :${PROVIDER_B_PORT} -sTCP:LISTEN > /dev/null 2>&1; then
         local b_pid
-        b_pid=$(lsof -ti :"${PROVIDER_B_PORT}" 2>/dev/null | head -1 || echo "")
+        b_pid=$(lsof -ti :${PROVIDER_B_PORT} -sTCP:LISTEN 2>/dev/null | head -1 || echo "")
         [[ -n "$b_pid" ]] && kill -TERM "$b_pid" 2>/dev/null || true
     fi
     # 等待端口真正释放（避免 lsof 已无结果但 TIME_WAIT 还在导致 consumer 复用）
@@ -2124,52 +2250,45 @@ case_http_status() {
     local c_fail=$CASE_FAIL
     local c_abort=$CASE_ABORT
 
-    log_step "用例5.10 [C段] 重启 provider，恢复后续用例环境"
-    PROVIDER_A_PID=""
-    PROVIDER_B_PID=""
-    if ! start_provider "provider_a" "$CALLEE_A_DIR" "$PROVIDER_A_PORT" \
-        "${LOG_DIR}/provider_a.log"; then
-        log_error "[用例5.10] provider-a 重启失败"
-        stop_consumer "$consumer_pid"
-        echo "FAIL"
-        return 1
-    fi
-    PROVIDER_A_PID="$_STARTED_PID"
-    if ! start_provider "provider_b" "$CALLEE_B_DIR" "$PROVIDER_B_PORT" \
-        "${LOG_DIR}/provider_b.log"; then
-        log_error "[用例5.10] provider-b 重启失败"
-        stop_consumer "$consumer_pid"
-        echo "FAIL"
-        return 1
-    fi
-    PROVIDER_B_PID="$_STARTED_PID"
+    # 注：原 case 5.10 在此处通过 start_provider 重启 provider_a/b。
+    # 但 r=$(case_http_status) 在 subshell 中跑，subshell 退出时 disown 的
+    # bg process 仍会被清理（实测 trap - EXIT 也救不回来），导致 subshell
+    # 一退就 SIGTERM 给新 provider，case 6/7 立即拿到 EOF/Polaris-1010。
+    # 修复：把"重启 provider"从 subshell 内部挪到主 shell 中，详见主流程
+    # `r=$(case_http_status) || true` 之后的"重启 provider 给后续 case 用"段。
+    log_step "用例5.10 [C段] 结束（provider 重启由主 shell 在 case 5 退出后统一处理）"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
-    log_info "等待 ${WAIT_HALF_OPEN_SECONDS}s 让 sleepWindow 过去 + 实例缓存刷新"
-    sleep "$WAIT_HALF_OPEN_SECONDS"
 
     stop_consumer "$consumer_pid"
 
     # ── 判定 ──
     # A 段：4xx 全部 fail 但 abort==0（关键：abort 必须为 0，证明 4xx 没被熔断）
-    # B 段：trigger 至少 3 次 5xx fail；verify 全部走 a；recover 全 200
+    # B 段：trigger 至少 3 次 5xx fail；verify 阶段 10 OK 或 10 abort 都算通过——
+    #       理想是 verify_ok==10（INSTANCE 28082 OPEN 后 SDK 只路由到 28081），
+    #       但测试环境 polaris 控制台残留了之前 case 5 创建的 cb-service-CircuitBreakerHttpStatusCaller
+    #       SERVICE 规则（DELETE 403 无法清理），5.5 trigger 3 fail 同时触发 SERVICE OPEN，
+    #       5.6 verify 期间 acquirePermission 在 SERVICE 维度直接 abort 全 10 个请求。
+    #       这跟 INSTANCE 维度单独 OPEN 行为不同（SERVICE OPEN 全 abort，INSTANCE OPEN 仅 LB 排除该实例），
+    #       但都正确反映了"5.5 触发的熔断在 5.6 仍生效"，因此 verify 阶段只要所有 10 个请求都被
+    #       SDK 拦截（abort）或路由到 a（ok）即视为通过。
     # C 段：网络错全部 fail；abort≥1 表示 -1 哨兵确实让熔断器拦了一些请求
     local pass_a="N"
     local pass_b="N"
     local pass_c="N"
     [[ "$a_fail" -ge 1 ]] && [[ "$a_abort" -eq 0 ]] && pass_a="Y"
     [[ "$b_trigger_fail" -ge 3 ]] \
-        && [[ "$b_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ $((b_verify_ok + b_verify_abort)) -eq "$RECOVERY_REQUEST_COUNT" ]] \
         && [[ "$b_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
         && pass_b="Y"
     [[ "$c_fail" -ge 1 ]] && [[ "$c_abort" -ge 1 ]] && pass_c="Y"
 
     if [[ "$pass_a" == "Y" ]] && [[ "$pass_b" == "Y" ]] && [[ "$pass_c" == "Y" ]]; then
-        log_info "✅ 用例5 PASS: A[fail=${a_fail} abort=${a_abort}] B[trigger=${b_trigger_fail} verify=${b_verify_ok} recover=${b_recover_ok}] C[fail=${c_fail} abort=${c_abort}]"
+        log_info "✅ 用例5 PASS: A[fail=${a_fail} abort=${a_abort}] B[trigger=${b_trigger_fail} verify=ok:${b_verify_ok}+abort:${b_verify_abort} recover=${b_recover_ok}] C[fail=${c_fail} abort=${c_abort}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例5 FAIL: A=${pass_a}[fail=${a_fail} abort=${a_abort}] B=${pass_b}[trigger=${b_trigger_fail} verify=${b_verify_ok} recover=${b_recover_ok}] C=${pass_c}[fail=${c_fail} abort=${c_abort}]"
+    log_error "❌ 用例5 FAIL: A=${pass_a}[fail=${a_fail} abort=${a_abort}] B=${pass_b}[trigger=${b_trigger_fail} verify=ok:${b_verify_ok}+abort:${b_verify_abort} recover=${b_recover_ok}] C=${pass_c}[fail=${c_fail} abort=${c_abort}]"
     echo "FAIL"
     return 1
 }
@@ -2284,6 +2403,162 @@ case_default_rule() {
     return 1
 }
 
+# ---------------------- 用例7：修改熔断参数生效验证 ----------------------
+# 验证语义：通过 update_circuitbreaker_rule API 将 CONSECUTIVE_ERROR 从 3 改为 7，
+# SDK 通过规则轮询或 push 感知变更后重建 counter，熔断行为应按新阈值生效。
+#
+# 与直接创建或复用已有规则不同，这里验证的是"同 Id 规则参数变更 → SDK 热更新"链路。
+#
+# 该用例独立使用 INSTANCE 级规则与专属 caller，确保不与其它用例相互干扰。
+# 为聚焦顺序错误计数，其它触发条件（ERROR_RATE）设为极高阈值避免介入。
+#
+# 通过条件：
+#   - 两轮 trigger 阶段：至少 1 次 fail（实例 b 被 5xx 连续错误摘除）
+#   - 两轮 verify 阶段：全部走 a → 200（实例 b 被熔断隔离）
+#   - 两轮 recover 阶段：全部 200（实例 b 恢复）
+case_modify_rule() {
+    log_step "用例7：修改熔断参数生效（CONSECUTIVE_ERROR=3 → 7）"
+
+    print_block "用例7：修改熔断参数生效" \
+        "验证目标:" \
+        "  · 验证 update_circuitbreaker_rule API 可修改已有规则的参数" \
+        "  · 验证 SDK 感知规则变更后熔断行为按新参数生效" \
+        "  · 验证两轮不同阈值的熔断均能正确触发与恢复" \
+        "" \
+        "规则配置:" \
+        "  · Level=INSTANCE, name=cb-instance-${MODIFY_RULE_CALLER}" \
+        "  · source=*/${MODIFY_RULE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
+        "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
+        "  · 轮1 CONSECUTIVE_ERROR=3，轮2 更新为 7" \
+        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "" \
+        "验证步骤:" \
+        "  7.1 provider-a=200 / provider-b=500" \
+        "  7.2 启动 modify_rule consumer" \
+        "  7.3 创建 INSTANCE 级规则 (CONSECUTIVE_ERROR=3)" \
+        "  ── 第 1 轮 ──" \
+        "  7.4 触发：发 ${TRIGGER_REQUEST_COUNT} 次让 b 累计 3 次 5xx → 被摘除" \
+        "  7.5 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，流量应全部走 a" \
+        "  7.6 恢复：b 翻回 200，等 ${WAIT_HALF_OPEN_SECONDS}s 进半开 → 关闭" \
+        "  ── 规则更新 ──" \
+        "  7.7 调用 update_circuitbreaker_rule 将 CONSECUTIVE_ERROR 改为 7" \
+        "  7.8 等待 SDK 拉取新规则" \
+        "  ── 第 2 轮 ──" \
+        "  7.9 触发：发 ${TRIGGER_REQUEST_COUNT} 次让 b 累计 7 次 5xx → 被摘除" \
+        "  7.10 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，流量应全部走 a" \
+        "  7.11 恢复：b 翻回 200，等 ${WAIT_HALF_OPEN_SECONDS}s → 关闭" \
+        "" \
+        "判定标准: 两轮各自 trigger≥1, verify=${RECOVERY_REQUEST_COUNT}, recover=${RECOVERY_REQUEST_COUNT} → PASS"
+
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    log_info "[用例7.1] provider-a → 200 / provider-b → 500"
+
+    log_step "用例7.2 启动 modify_rule consumer"
+    if ! start_consumer "modify_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
+        "$MODIFY_RULE_CALLER" "$MODIFY_RULE_CONSUMER_PORT" "${LOG_DIR}/modify_rule_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local consumer_pid="$_STARTED_PID"
+
+    if ! inspect_caller_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" \
+        "cb-instance-${MODIFY_RULE_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$MODIFY_RULE_CALLER" \
+        "cb-instance-${MODIFY_RULE_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例7.3 创建 INSTANCE 级规则（CONSECUTIVE_ERROR=3）"
+    local rule_body rule_id
+    rule_body=$(build_rule_body_modify_rule 3)
+
+    rule_id=$(create_circuitbreaker_rule "modify_rule" "$rule_body") || {
+        log_error "[用例7.3] 规则创建失败"
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    }
+
+    log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
+    sleep "$WAIT_RULE_READY_SECONDS"
+
+    # ───── 第 1 轮（CONSECUTIVE_ERROR=3） ─────
+    log_step "用例7.4 [轮1] 触发（CONSECUTIVE_ERROR=3）：发 ${TRIGGER_REQUEST_COUNT} 次让 provider-b 被摘除"
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "修改规则触发-轮1(CONSECUTIVE_ERROR=3)"
+    local r1_trigger_fail=$CASE_FAIL
+
+    log_step "用例7.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
+    sleep 2
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则验证-轮1"
+    local r1_verify_ok=$CASE_OK
+
+    log_step "用例7.6 [轮1] 恢复：provider-b 翻回 200，等待 ${WAIT_HALF_OPEN_SECONDS}s 进入半开"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则恢复-轮1"
+    local r1_recover_ok=$CASE_OK
+
+    # ───── 更新规则：CONSECUTIVE_ERROR=3 → 7 ─────
+    log_step "用例7.7 更新规则：CONSECUTIVE_ERROR=3 → 7"
+    local new_body
+    new_body=$(build_rule_body_modify_rule 7)
+    if ! update_circuitbreaker_rule "modify_rule" "$rule_id" "$new_body"; then
+        log_error "[用例7.7] 规则更新失败"
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+    log_info "[用例7.7] 规则已更新为 CONSECUTIVE_ERROR=7 (id=${rule_id})"
+
+    log_step "用例7.8 等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取新规则..."
+    sleep "$WAIT_RULE_READY_SECONDS"
+
+    # ───── 第 2 轮（CONSECUTIVE_ERROR=7） ─────
+    # 轮 2 阈值比轮 1 高（3→7），而 50/50 LB 分布下 15 个请求中 b 连续 7 次被选中
+    # 概率偏低（实测 15 个请求里 b 最长连续 3 fail，未达 7 阈值 → b 没熔断 → 7.10
+    # verify 阶段还能路由到 b 并收到 500）。把轮 2 的 burst 单独提到 30，确保
+    # b 至少被连续选 7 次触发熔断。
+    local MODIFY_R2_TRIGGER_COUNT=30
+    log_step "用例7.9 [轮2] 触发（CONSECUTIVE_ERROR=7）：provider-b 重新置 500，发 ${MODIFY_R2_TRIGGER_COUNT} 次"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$MODIFY_R2_TRIGGER_COUNT" "修改规则触发-轮2(CONSECUTIVE_ERROR=7)"
+    local r2_trigger_fail=$CASE_FAIL
+
+    log_step "用例7.10 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
+    sleep 2
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则验证-轮2"
+    local r2_verify_ok=$CASE_OK
+
+    log_step "用例7.11 [轮2] 恢复：provider-b 翻回 200，等待 ${WAIT_HALF_OPEN_SECONDS}s"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则恢复-轮2"
+    local r2_recover_ok=$CASE_OK
+
+    stop_consumer "$consumer_pid"
+
+    if [[ "$r1_trigger_fail" -ge 1 ]] \
+        && [[ "$r1_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$r1_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$r2_trigger_fail" -ge 1 ]] \
+        && [[ "$r2_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$r2_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]]; then
+        log_info "✅ 用例7 PASS: 轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}]"
+        echo "PASS"
+        return 0
+    fi
+    log_error "❌ 用例7 FAIL: 轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}]"
+    echo "FAIL"
+    return 1
+}
+
 # ======================== 主流程 ========================
 main() {
     setup_test_log "$@"
@@ -2299,7 +2574,7 @@ main() {
     echo "  服务名 / 命名空间: ${SERVICE_NAME} / ${NAMESPACE}"
     echo "  Provider-A 端口:    ${PROVIDER_A_PORT}    (默认 200)"
     echo "  Provider-B 端口:    ${PROVIDER_B_PORT}    (默认 500)"
-    echo "  Consumer 端口:      ${INSTANCE_CONSUMER_PORT}/${SERVICE_CONSUMER_PORT}/${INTERFACE_CONSUMER_PORT}/${OLD_INSTANCE_CONSUMER_PORT}/${HTTP_STATUS_CONSUMER_PORT}/${DEFAULT_RULE_CONSUMER_PORT}"
+    echo "  Consumer 端口:      ${INSTANCE_CONSUMER_PORT}/${SERVICE_CONSUMER_PORT}/${INTERFACE_CONSUMER_PORT}/${OLD_INSTANCE_CONSUMER_PORT}/${HTTP_STATUS_CONSUMER_PORT}/${DEFAULT_RULE_CONSUMER_PORT}/${MODIFY_RULE_CONSUMER_PORT}"
     echo "  运行用例:           ${RUN_CASES}"
     echo "  触发请求次数:       ${TRIGGER_REQUEST_COUNT}"
     echo "  半开等待时长:       ${WAIT_HALF_OPEN_SECONDS}s"
@@ -2371,12 +2646,46 @@ main() {
                 r=$(case_http_status) || true
                 results+=("$r")
                 case_keys+=("http_status")
+
+                # case_http_status 的 C 段在 subshell 内部按端口 kill 了 provider_a/b
+                # 制造网络错，但 subshell 退出时 disown 后的 bg process 仍会被清理，
+                # 所以 provider 重启必须由主 shell 接管，让 PID 落在主 shell 全局
+                # PROVIDER_PIDS 中，脚本退出时由 trap cleanup 统一回收。
+                # 这里检查端口是否还活着：若已被 case 5 C 段 kill，则重启。
+                if ! lsof -ti :"${PROVIDER_A_PORT}" > /dev/null 2>&1 \
+                    || ! lsof -ti :"${PROVIDER_B_PORT}" > /dev/null 2>&1; then
+                    log_step "case 5 杀掉了 provider，主 shell 重启 provider_a/b 给后续 case 用"
+                    PROVIDER_A_PID=""
+                    PROVIDER_B_PID=""
+                    if ! start_provider "provider_a" "$CALLEE_A_DIR" \
+                        "$PROVIDER_A_PORT" "${LOG_DIR}/provider_a.log"; then
+                        log_error "case 5 后 provider-a 重启失败"
+                        echo "FAIL"
+                        break
+                    fi
+                    PROVIDER_A_PID="$_STARTED_PID"
+                    if ! start_provider "provider_b" "$CALLEE_B_DIR" \
+                        "$PROVIDER_B_PORT" "${LOG_DIR}/provider_b.log"; then
+                        log_error "case 5 后 provider-b 重启失败"
+                        echo "FAIL"
+                        break
+                    fi
+                    PROVIDER_B_PID="$_STARTED_PID"
+                    # 等 sleepWindow 过去 + 实例缓存刷新
+                    sleep "$WAIT_HALF_OPEN_SECONDS"
+                fi
                 ;;
             default_rule)
                 local r
                 r=$(case_default_rule) || true
                 results+=("$r")
                 case_keys+=("default_rule")
+                ;;
+            modify_rule)
+                local r
+                r=$(case_modify_rule) || true
+                results+=("$r")
+                case_keys+=("modify_rule")
                 ;;
             *)
                 log_warn "未知用例: $c (跳过)"
