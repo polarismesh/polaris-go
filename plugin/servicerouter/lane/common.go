@@ -53,53 +53,50 @@ func extractNsSvc(svc model.ServiceMetadata) (string, string) {
 	return svc.GetNamespace(), svc.GetService()
 }
 
-// isTrafficEntry 判断当前调用方是否为该泳道组的流量入口
+// isTrafficEntry 判断当前调用方是否为该泳道组的流量入口。
+//
+// 日志策略:命中时只打印 1 行 INFO 级别的命中摘要;未命中时只在 DEBUG 级打印
+// 1 行 summary(列出 selector 数量 + 调用方),避免逐 selector 刷屏。仅在解析
+// selector 失败或遇到未知 entry type 时打印 Warn,因为这通常意味着规则配置有误。
 func isTrafficEntry(entries []*apitraffic.TrafficEntry, sourceService model.ServiceMetadata) bool {
 	if sourceService == nil {
 		return false
 	}
 	routeLogger := log.GetRouteLogger()
 	debugEnabled := routeLogger.IsLevelEnabled(log.DebugLog)
+	gatewayCount, serviceCount := 0, 0
 	for _, entry := range entries {
 		switch entry.GetType() {
 		case gatewayEntryType:
+			gatewayCount++
 			sel := &apitraffic.ServiceGatewaySelector{}
 			if err := entry.GetSelector().UnmarshalTo(sel); err != nil {
-				if debugEnabled {
-					routeLogger.Debugf("[Router][Lane] isTrafficEntry: failed to unmarshal gateway selector, err=%v", err)
-				}
+				routeLogger.Warnf("[Router][Lane] isTrafficEntry: unmarshal gateway selector failed: %v", err)
 				continue
 			}
-			svcMatched := matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService)
-			labelMatched := matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata())
-			if debugEnabled {
-				routeLogger.Debugf("[Router][Lane] isTrafficEntry: gateway entry check, "+
-					"selector=%s/%s, source=%s/%s, svcMatched=%v, labelMatched=%v",
-					sel.GetNamespace(), sel.GetService(),
-					sourceService.GetNamespace(), sourceService.GetService(),
-					svcMatched, labelMatched)
-			}
-			if svcMatched && labelMatched {
+			if matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService) &&
+				matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata()) {
+				if debugEnabled {
+					routeLogger.Debugf("[Router][Lane] isTrafficEntry: HIT gateway %s/%s by source=%s/%s",
+						sel.GetNamespace(), sel.GetService(),
+						sourceService.GetNamespace(), sourceService.GetService())
+				}
 				return true
 			}
 		case serviceEntryType:
+			serviceCount++
 			sel := &apitraffic.ServiceSelector{}
 			if err := entry.GetSelector().UnmarshalTo(sel); err != nil {
-				if debugEnabled {
-					routeLogger.Debugf("[Router][Lane] isTrafficEntry: failed to unmarshal service selector, err=%v", err)
-				}
+				routeLogger.Warnf("[Router][Lane] isTrafficEntry: unmarshal service selector failed: %v", err)
 				continue
 			}
-			svcMatched := matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService)
-			labelMatched := matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata())
-			if debugEnabled {
-				routeLogger.Debugf("[Router][Lane] isTrafficEntry: service entry check, "+
-					"selector=%s/%s, source=%s/%s, svcMatched=%v, labelMatched=%v",
-					sel.GetNamespace(), sel.GetService(),
-					sourceService.GetNamespace(), sourceService.GetService(),
-					svcMatched, labelMatched)
-			}
-			if svcMatched && labelMatched {
+			if matchSelectorService(sel.GetNamespace(), sel.GetService(), sourceService) &&
+				matchSelectorLabels(sel.GetLabels(), sourceService.GetMetadata()) {
+				if debugEnabled {
+					routeLogger.Debugf("[Router][Lane] isTrafficEntry: HIT service %s/%s by source=%s/%s",
+						sel.GetNamespace(), sel.GetService(),
+						sourceService.GetNamespace(), sourceService.GetService())
+				}
 				return true
 			}
 		default:
@@ -107,6 +104,11 @@ func isTrafficEntry(entries []*apitraffic.TrafficEntry, sourceService model.Serv
 			routeLogger.Warnf("[Router][Lane] isTrafficEntry: unknown entry type %q, skipped",
 				entry.GetType())
 		}
+	}
+	if debugEnabled {
+		routeLogger.Debugf("[Router][Lane] isTrafficEntry: NOT entry, source=%s/%s, "+
+			"gatewayEntries=%d, serviceEntries=%d",
+			sourceService.GetNamespace(), sourceService.GetService(), gatewayCount, serviceCount)
 	}
 	return false
 }
@@ -198,7 +200,10 @@ func findTrafficValue(arg *apitraffic.SourceMatch, sourceService model.ServiceMe
 	}
 }
 
-// checkServiceInLane 检查目标服务是否在泳道组的 destinations 中
+// checkServiceInLane 检查目标服务是否在泳道组的 destinations 中。
+//
+// 日志策略:命中 / 未命中各打 1 行 DEBUG 摘要,不再逐 destination 输出。
+// 只有在大量逐项 mismatch 信息确实需要时,可临时通过修改本函数 enable trace 调试。
 func checkServiceInLane(group *apitraffic.LaneGroup, destService model.ServiceMetadata) bool {
 	if destService == nil {
 		return false
@@ -210,29 +215,22 @@ func checkServiceInLane(group *apitraffic.LaneGroup, destService model.ServiceMe
 		destNs := dest.GetNamespace()
 		destSvc := dest.GetService()
 		if destNs != "" && destNs != destService.GetNamespace() {
-			if debugEnabled {
-				routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s dest[%d] ns mismatch, "+
-					"ruleNs=%q, actualNs=%q", group.GetName(), i, destNs, destService.GetNamespace())
-			}
 			continue
 		}
 		if destSvc != "" && destSvc != destService.GetService() {
-			if debugEnabled {
-				routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s dest[%d] svc mismatch, "+
-					"ruleSvc=%q, actualSvc=%q", group.GetName(), i, destSvc, destService.GetService())
-			}
 			continue
 		}
 		if debugEnabled {
-			routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s matched dest[%d]=%s/%s",
-				group.GetName(), i, destNs, destSvc)
+			routeLogger.Debugf("[Router][Lane] checkServiceInLane: HIT group=%s dest[%d]=%s/%s, target=%s/%s",
+				group.GetName(), i, destNs, destSvc,
+				destService.GetNamespace(), destService.GetService())
 		}
 		return true
 	}
 	if debugEnabled {
-		routeLogger.Debugf("[Router][Lane] checkServiceInLane: group=%s no dest matched, "+
-			"destsCount=%d, target=%s/%s",
-			group.GetName(), len(dests), destService.GetNamespace(), destService.GetService())
+		routeLogger.Debugf("[Router][Lane] checkServiceInLane: MISS group=%s, destsCount=%d, target=%s/%s",
+			group.GetName(), len(dests),
+			destService.GetNamespace(), destService.GetService())
 	}
 	return false
 }

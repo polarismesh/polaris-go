@@ -2,8 +2,11 @@
 # ============================================================
 # 泳道预热（Warmup）+ 百分比（Percentage）灰度测试脚本（Go SDK 版本）
 #
-# 用法: ./lane-warmup-test.sh <命令> [polaris地址]
-# 示例: ./lane-warmup-test.sh all 127.0.0.1
+# 用法: ./lane-warmup-test.sh <命令> [-d|--debug] [polaris地址]
+# 示例: ./lane-warmup-test.sh all -d 127.0.0.1
+#
+# 选项:
+#   -d, --debug  开启 debug 模式，所有服务输出 Polaris SDK debug 级别日志
 #
 # 命令:
 #   all     完整流程（构建 → 验证规则 → 启动 → 等待 → 测试 → 停止）
@@ -53,6 +56,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 POLARIS_HOST="127.0.0.1"
 POLARIS_TOKEN=""
+DEBUG_MODE=false
 
 init_config() {
     POLARIS_HTTP_ADDR="http://${POLARIS_HOST}:8090"
@@ -1031,6 +1035,12 @@ start_services() {
     cp "${polaris_yaml}" "${consumer_gray_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${gateway_workdir}/polaris.yaml"
 
+    local debug_flag=""
+    if [ "$DEBUG_MODE" = true ]; then
+        debug_flag="-debug"
+        log_info "DEBUG 模式已开启，所有服务将输出 Polaris SDK debug 日志"
+    fi
+
     # provider-base: 无泳道标签（基线实例）
     log_info "启动 provider-base (端口: ${PROVIDER_BASE_PORT}, lane: baseline)..."
     (cd "$provider_base_workdir" && POLARIS_SERVER="${POLARIS_HOST}" \
@@ -1038,6 +1048,7 @@ start_services() {
         -namespace="${NAMESPACE}" \
         -service="${PROVIDER_SERVICE}" \
         -port="${PROVIDER_BASE_PORT}" \
+        ${debug_flag} \
         > "${LOG_DIR}/provider-base.log" 2>&1) &
     echo $! >> "${PID_FILE}"
     log_info "provider-base PID: $!"
@@ -1050,6 +1061,7 @@ start_services() {
         -service="${PROVIDER_SERVICE}" \
         -port="${PROVIDER_GRAY_PORT}" \
         -lane="gray" \
+        ${debug_flag} \
         > "${LOG_DIR}/provider-gray.log" 2>&1) &
     echo $! >> "${PID_FILE}"
     log_info "provider-gray PID: $!"
@@ -1063,6 +1075,7 @@ start_services() {
         -selfNamespace="${NAMESPACE}" \
         -selfService="${CONSUMER_SERVICE}" \
         -port="${CONSUMER_BASE_PORT}" \
+        ${debug_flag} \
         > "${LOG_DIR}/consumer-base.log" 2>&1) &
     echo $! >> "${PID_FILE}"
     log_info "consumer-base PID: $!"
@@ -1077,6 +1090,7 @@ start_services() {
         -selfService="${CONSUMER_SERVICE}" \
         -port="${CONSUMER_GRAY_PORT}" \
         -lane="gray" \
+        ${debug_flag} \
         > "${LOG_DIR}/consumer-gray.log" 2>&1) &
     echo $! >> "${PID_FILE}"
     log_info "consumer-gray PID: $!"
@@ -1089,6 +1103,7 @@ start_services() {
         -selfNamespace="${NAMESPACE}" \
         -selfService="${GATEWAY_SERVICE}" \
         -port="${GATEWAY_PORT}" \
+        ${debug_flag} \
         > "${LOG_DIR}/gateway.log" 2>&1) &
     echo $! >> "${PID_FILE}"
     log_info "gateway PID: $!"
@@ -1748,6 +1763,9 @@ usage() {
     echo "  test   执行测试用例（服务需已启动）"
     echo "  stop   停止所有服务"
     echo ""
+    echo "选项:"
+    echo "  -d, --debug  开启 debug 模式，所有服务输出 Polaris SDK debug 级别日志"
+    echo ""
     echo "参数:"
     echo "  polaris地址  Polaris 服务端 IP（默认: 127.0.0.1）"
     echo ""
@@ -1772,15 +1790,36 @@ usage() {
     echo "  脚本被 Ctrl-C 打断时也会通过 trap 尝试恢复规则；若仍异常请在 Polaris 控制台手动核对。"
     echo ""
     echo "示例:"
-    echo "  $0 all 127.0.0.1      # 完整测试"
-    echo "  $0 check 127.0.0.1    # 仅检查规则"
-    echo "  $0 start 127.0.0.1    # 启动服务"
-    echo "  $0 test               # 执行测试"
-    echo "  $0 stop               # 停止服务"
+    echo "  $0 all 127.0.0.1         # 完整测试"
+    echo "  $0 all -d 127.0.0.1      # 完整测试（debug 模式）"
+    echo "  $0 check 127.0.0.1       # 仅检查规则"
+    echo "  $0 start -d 127.0.0.1    # 启动服务（debug 模式）"
+    echo "  $0 test                  # 执行测试"
+    echo "  $0 stop                  # 停止服务"
 }
 
 CMD="${1:-all}"
 shift 2>/dev/null || true
+
+# 解析选项参数（如 -d）
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -d|--debug)
+            DEBUG_MODE=true
+            shift
+            ;;
+        -*)
+            log_fail "未知选项: $1"
+            usage
+            exit 1
+            ;;
+        *)
+            # 非选项参数作为 polaris 地址
+            POLARIS_HOST="$1"
+            shift
+            ;;
+    esac
+done
 
 mkdir -p "$(dirname "${TEST_LOG_FILE}")"
 echo "===== 泳道预热测试日志 $(date '+%Y-%m-%d %H:%M:%S') =====" > "${TEST_LOG_FILE}"

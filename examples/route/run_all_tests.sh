@@ -115,6 +115,9 @@ log_step() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
 }
 
+# 导出 DEBUG_MODE 供 mixed/run.sh 等通过环境变量读取的子脚本使用
+export DEBUG_MODE
+
 # 把 stdout/stderr 同时写到聚合日志（保留颜色，日志里剥离 ANSI）
 {
     echo "===== examples/route 聚合测试日志 $(date '+%Y-%m-%d %H:%M:%S') ====="
@@ -136,11 +139,19 @@ if [[ -n "$POLARIS_TOKEN" ]]; then
     _TOKEN_ARG="--polaris-token ${POLARIS_TOKEN}"
 fi
 
+# 构建 debug 透传参数（各子脚本用不同 flag 名）
+_DEBUG_LANE_ARG=""
+_DEBUG_VERIFY_ARG=""
+if [[ "$DEBUG_MODE" == "true" ]]; then
+    _DEBUG_LANE_ARG="-d"
+    _DEBUG_VERIFY_ARG="--debug"
+fi
+
 DEMOS=(
-    "lane|${SCRIPT_DIR}/lane/lane-test.sh|all ${POLARIS_SERVER}"
-    "metadata|${SCRIPT_DIR}/metadata/verify_metadata_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
-    "nearby|${SCRIPT_DIR}/nearby/verify_nearby_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
-    "rule|${SCRIPT_DIR}/rule/verify_rule_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
+    "lane|${SCRIPT_DIR}/lane/lane-test.sh|all ${POLARIS_SERVER} ${_DEBUG_LANE_ARG}"
+    "metadata|${SCRIPT_DIR}/metadata/verify_metadata_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG} ${_DEBUG_VERIFY_ARG}"
+    "nearby|${SCRIPT_DIR}/nearby/verify_nearby_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG} ${_DEBUG_VERIFY_ARG}"
+    "rule|${SCRIPT_DIR}/rule/verify_rule_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG} ${_DEBUG_VERIFY_ARG}"
     "mixed|${SCRIPT_DIR}/mixed/run.sh|all ${POLARIS_SERVER}"
 )
 
@@ -273,6 +284,7 @@ main() {
     echo "  only 列表:          ${ONLY_LIST:-（全部）}"
     echo "  skip 列表:          ${SKIP_LIST:-（无）}"
     echo "  失败时继续:         ${CONTINUE_ON_FAILURE}"
+    echo "  debug 模式:         ${DEBUG_MODE}"
     echo "  聚合日志:           ${AGG_LOG_FILE}"
     echo ""
 

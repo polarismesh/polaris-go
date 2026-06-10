@@ -358,11 +358,8 @@ finally:
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = outCluster
 	result.Status = checkNearbyStatus(matchLevel, finalLevel)
-	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetRouteLogger().Debugf("[Router][Nearby] matched level=%d, instances=%d, status=%v",
-			finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
-	}
 	// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到就近路由的输出。
+	// (DEBUG 不再单独打印 "matched level=...",信息已被这条 INFO 完全覆盖)
 	g.logCtx.GetRouteLogger().Infof(
 		"[Router][Nearby] result: service=%s, finalLevel=%d, matchLevel=%d, instances=%d, status=%v",
 		outCluster.GetClusters().GetServiceKey(), finalLevel, matchLevel,

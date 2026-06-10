@@ -71,18 +71,25 @@ func (g *InstancesFilter) GetFilteredInstances(
 	clusters model.ServiceClusters,
 	withinCluster *model.Cluster) (*servicerouter.RouteResult, error) {
 	dstMetadata := routeInfo.DestService.GetMetadata()
+	debugEnabled := g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
+
+	// 入口摘要:每次请求 1 行 DEBUG,记录目标服务 + 期望的 metadata。
+	// 后续命中/未命中的细节由分支日志补充。
+	if debugEnabled {
+		g.logCtx.GetRouteLogger().Debugf(
+			"[Router][DstMeta] start filtering, dest=%s/%s, dstMetadata=%v, "+
+				"failOverEnabled=%v, withinClusterMeta=%v",
+			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+			dstMetadata, routeInfo.EnableFailOverDefaultMeta, withinCluster.ComposeMetaValue)
+	}
+
 	targetCluster := g.getTargetCluster(clusters, withinCluster, dstMetadata)
 
 	if len(dstMetadata) > 0 {
 		instSet := targetCluster.GetClusterValue().GetInstancesSet(true, true)
 		if instSet.Count() > 0 {
-			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-				g.logCtx.GetRouteLogger().Debugf(
-					"[Router][DstMeta] metadata matched, service=%s/%s, metadata=%v, instances=%d",
-					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
-					dstMetadata, instSet.Count())
-			}
 			// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 dstmeta 路由的输出。
+			// (DEBUG 不再单独打印 "metadata matched",信息已被这条 INFO 完全覆盖)
 			g.logCtx.GetRouteLogger().Infof(
 				"[Router][DstMeta] result: dest=%s/%s, status=metadata-matched, metadata=%v, instances=%d",
 				routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
@@ -92,11 +99,12 @@ func (g *InstancesFilter) GetFilteredInstances(
 
 		targetCluster.PoolPut()
 		if routeInfo.EnableFailOverDefaultMeta {
-			if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+			// failover 诊断 DEBUG: 命中 0 实例 → 走 failover 的原因,默认 INFO 行无法体现
+			// "源 metadata 没有匹配实例" 这层语义,所以保留 DEBUG。
+			if debugEnabled {
 				g.logCtx.GetRouteLogger().Debugf(
-					"[Router][DstMeta] metadata not matched, fallback to failOverDefaultMeta, type=%v, service=%s/%s",
-					routeInfo.FailOverDefaultMeta.Type,
-					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService())
+					"[Router][DstMeta] dstMetadata=%v matched 0 instances, fallback to failOverDefaultMeta type=%v",
+					dstMetadata, routeInfo.FailOverDefaultMeta.Type)
 			}
 			targetCluster, err := g.failOverDefaultMetaHandler(clusters, withinCluster, routeInfo)
 			if err != nil {
@@ -117,9 +125,12 @@ func (g *InstancesFilter) GetFilteredInstances(
 		return nil, g.metaNotMatchError(routeInfo)
 	}
 
-	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+	// 兜底分支:Enable() 已经把空 metadata 的请求过滤掉,理论上不会到这里。
+	// 仅在 DEBUG 级别打 1 行作为防御性日志,便于排查 Enable 与 GetFilteredInstances
+	// 调用顺序异常的情况;不输出 INFO,避免空 metadata 误以为 dstmeta 路由生效。
+	if debugEnabled {
 		g.logCtx.GetRouteLogger().Debugf(
-			"[Router][DstMeta] no dst metadata required, service=%s/%s, pass through",
+			"[Router][DstMeta] no dst metadata required, dest=%s/%s, pass through (Enable should have excluded this case)",
 			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService())
 	}
 	return g.getResult(targetCluster), nil
@@ -227,14 +238,12 @@ func init() {
 	plugin.RegisterPlugin(&InstancesFilter{})
 }
 
-// Enable 是否需要启动规则路由
+// Enable 是否需要启动规则路由。
+//
+// 仅当 DestService.Metadata 非空时启用。本方法不输出日志,因为:
+//   - GetFilteredInstances 入口的 "start filtering" DEBUG 行已经包含了
+//     dest 服务名 + dstMetadata,完全覆盖 Enable 这里的诊断信息;
+//   - Enable 在每次路由链调用时都会被框架调用,额外打印只会刷屏。
 func (g *InstancesFilter) Enable(routeInfo *servicerouter.RouteInfo, clusters model.ServiceClusters) bool {
-	enabled := len(routeInfo.DestService.GetMetadata()) != 0
-	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetRouteLogger().Debugf(
-			"[Router][DstMeta] Enable: service=%s/%s, enabled=%v, metadata=%v",
-			routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
-			enabled, routeInfo.DestService.GetMetadata())
-	}
-	return enabled
+	return len(routeInfo.DestService.GetMetadata()) != 0
 }
