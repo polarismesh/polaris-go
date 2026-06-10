@@ -82,6 +82,11 @@ func (g *InstancesFilter) GetFilteredInstances(
 					routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
 					dstMetadata, instSet.Count())
 			}
+			// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 dstmeta 路由的输出。
+			g.logCtx.GetRouteLogger().Infof(
+				"[Router][DstMeta] result: dest=%s/%s, status=metadata-matched, metadata=%v, instances=%d",
+				routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+				dstMetadata, instSet.Count())
 			return g.getResult(targetCluster), nil
 		}
 
@@ -98,9 +103,17 @@ func (g *InstancesFilter) GetFilteredInstances(
 				return nil, err
 			}
 			routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+			// 出口摘要: failover 路径也输出 Info,方便定位降级行为。
+			foInstCount := targetCluster.GetClusterValue().GetInstancesSet(false, false).Count()
+			g.logCtx.GetRouteLogger().Infof(
+				"[Router][DstMeta] result: dest=%s/%s, status=failover, type=%v, instances=%d",
+				routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+				routeInfo.FailOverDefaultMeta.Type, foInstCount)
 			return g.getResult(targetCluster), nil
 		}
 
+		// 元数据不匹配 + 未启用 failover → 报错路径,metaNotMatchError 内部已 Warn,
+		// 此处不再重复输出 Info,以免与下方 Warnf 重复。
 		return nil, g.metaNotMatchError(routeInfo)
 	}
 

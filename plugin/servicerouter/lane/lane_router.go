@@ -27,8 +27,11 @@
 package lane
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
+	"sort"
+	"strings"
 	"time"
 
 	apitraffic "github.com/polarismesh/specification/source/go/api/v1/traffic_manage"
@@ -153,6 +156,108 @@ type LaneRouter struct {
 	valueCtx sdk.ValueContext
 	logCtx   *log.ContextLogger
 	cfg      *Config
+}
+
+// dumpRequestLabels 把 SourceService.Metadata 中的请求标签按维度分组打印，
+// 用于排查"为什么这条规则没命中 / 为什么命中了那条规则"。
+//
+// 标签 key 来自 pkg/model/argument.go 的 ToLabels():
+//   - $method=POST
+//   - $header.<lower-key>=value        (HTTP Header)
+//   - $query.<lower-key>=value         (URL Query)
+//   - $cookie.<name>=value             (Cookie)
+//   - $path=/foo/bar
+//   - $caller_ip=127.0.0.1
+//   - $caller_service.<ns>=svc         (主调服务身份)
+//   - $caller_metadata.<key>=value     (主调实例元数据)
+//
+// 染色标签 $header.service-lane 单独成组高亮。
+func (r *LaneRouter) dumpRequestLabels(srcMeta map[string]string) {
+	if !r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		return
+	}
+	if len(srcMeta) == 0 {
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane]   request-labels: (empty)")
+		return
+	}
+	// 分组桶：固定顺序便于 grep
+	buckets := map[string][]string{
+		"method":          {},
+		"header":          {},
+		"header.stain":    {}, // 仅 $header.service-lane
+		"query":           {},
+		"cookie":          {},
+		"path":            {},
+		"caller_ip":       {},
+		"caller_service":  {},
+		"caller_metadata": {},
+		"custom":          {},
+	}
+	for k, v := range srcMeta {
+		switch {
+		case k == model.LabelKeyMethod:
+			buckets["method"] = append(buckets["method"], fmt.Sprintf("%s", v))
+		case k == model.LabelKeyCallerIP:
+			buckets["caller_ip"] = append(buckets["caller_ip"], v)
+		case k == model.LabelKeyPath:
+			buckets["path"] = append(buckets["path"], v)
+		case k == model.LabelKeyHeader+trafficStainLabel:
+			// 染色标签单独高亮，便于一眼看到
+			buckets["header.stain"] = append(buckets["header.stain"], fmt.Sprintf("%s=%q", trafficStainLabel, v))
+		case strings.HasPrefix(k, model.LabelKeyHeader):
+			realKey := k[len(model.LabelKeyHeader):]
+			buckets["header"] = append(buckets["header"], fmt.Sprintf("%s=%q", realKey, v))
+		case strings.HasPrefix(k, model.LabelKeyQuery):
+			realKey := k[len(model.LabelKeyQuery):]
+			buckets["query"] = append(buckets["query"], fmt.Sprintf("%s=%q", realKey, v))
+		case strings.HasPrefix(k, model.LabelKeyCookie):
+			realKey := k[len(model.LabelKeyCookie):]
+			buckets["cookie"] = append(buckets["cookie"], fmt.Sprintf("%s=%q", realKey, v))
+		case strings.HasPrefix(k, model.LabelKeyCallerService):
+			realKey := k[len(model.LabelKeyCallerService):]
+			buckets["caller_service"] = append(buckets["caller_service"], fmt.Sprintf("%s=%q", realKey, v))
+		case strings.HasPrefix(k, model.LabelKeyCallerMetadata):
+			realKey := k[len(model.LabelKeyCallerMetadata):]
+			buckets["caller_metadata"] = append(buckets["caller_metadata"], fmt.Sprintf("%s=%q", realKey, v))
+		default:
+			buckets["custom"] = append(buckets["custom"], fmt.Sprintf("%s=%q", k, v))
+		}
+	}
+	for _, name := range []string{"method", "header.stain", "header", "query", "cookie", "path", "caller_ip", "caller_service", "caller_metadata", "custom"} {
+		if len(buckets[name]) == 0 {
+			continue
+		}
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane]   request-labels[%s]: %s",
+			name, strings.Join(buckets[name], ", "))
+	}
+}
+
+// dumpRuleArguments 把一条泳道规则的 trafficMatchRule.arguments 展开成可读形式。
+// 输出形如: arg[0] TYPE=KEY expected(EXACT)=VALUE
+func (r *LaneRouter) dumpRuleArguments(rule *apitraffic.LaneRule) {
+	if !r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		return
+	}
+	tmr := rule.GetTrafficMatchRule()
+	if tmr == nil {
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane]     traffic-match-rule: (nil)")
+		return
+	}
+	args := tmr.GetArguments()
+	if len(args) == 0 {
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane]     traffic-match-rule: (no arguments)")
+		return
+	}
+	mode := "AND"
+	if tmr.GetMatchMode() != apitraffic.TrafficMatchRule_AND {
+		mode = "OR"
+	}
+	r.logCtx.GetRouteLogger().Debugf("[Router][Lane]     traffic-match-rule: mode=%s, args=%d", mode, len(args))
+	for i, a := range args {
+		val := a.GetValue()
+		r.logCtx.GetRouteLogger().Debugf("[Router][Lane]       arg[%d] type=%s key=%q expected(%s)=%q",
+			i, a.GetType(), a.GetKey(), val.GetType(), val.GetValue().GetValue())
+	}
 }
 
 // Type 插件类型
@@ -287,18 +392,34 @@ func (r *LaneRouter) findMatchedRule(
 ) *laneRuleItem {
 	debugEnabled := r.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog)
 	if alreadyStained {
+		if debugEnabled {
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] alreadyStained=true, try matchByStainLabel(stainLabel=%q)", stainLabel)
+		}
 		matchedItem := container.matchByStainLabel(stainLabel, sourceService, destService)
 		if debugEnabled {
 			if matchedItem != nil {
+				// 区分精确匹配 / 短格式回退
+				hitType := "short-format-fallback"
+				if container.stainLabelIndex[stainLabel] == matchedItem {
+					hitType = "exact-format"
+				}
 				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] matched by stain label %q → group=%s, rule=%s",
-					stainLabel, matchedItem.group.GetName(), matchedItem.rule.GetName())
+					"[Router][Lane] matched by stain label %q (%s) → group=%s, rule=%s, defaultLane=%s",
+					stainLabel, hitType,
+					matchedItem.group.GetName(), matchedItem.rule.GetName(),
+					matchedItem.rule.GetDefaultLabelValue())
 			} else {
 				r.logCtx.GetRouteLogger().Debugf(
-					"[Router][Lane] stain label %q not found in rule index", stainLabel)
+					"[Router][Lane] stain label %q not found in rule index (exact) and no rule has defaultLabelValue==%q",
+					stainLabel, stainLabel)
 			}
 		}
 		return matchedItem
+	}
+	if debugEnabled {
+		r.logCtx.GetRouteLogger().Debugf(
+			"[Router][Lane] alreadyStained=false, try matchByRouteInfo (TrafficMatchRule flow)")
 	}
 	matchedItem := container.matchByRouteInfo(sourceService)
 	if debugEnabled {
@@ -307,7 +428,19 @@ func (r *LaneRouter) findMatchedRule(
 				"[Router][Lane] matched by traffic rule → group=%s, rule=%s, stainLabel=%s",
 				matchedItem.group.GetName(), matchedItem.rule.GetName(), matchedItem.stainLabel)
 		} else {
-			r.logCtx.GetRouteLogger().Debugf("[Router][Lane] no traffic rule matched")
+			// 列出所有 entry=true 的规则名,让用户快速定位"应该走哪条但没命中"
+			entryRules := make([]string, 0)
+			for _, it := range container.sortedItems {
+				if it.isEntry {
+					entryRules = append(entryRules,
+						fmt.Sprintf("%s/%s", it.group.GetName(), it.rule.GetName()))
+				}
+			}
+			sort.Strings(entryRules)
+			r.logCtx.GetRouteLogger().Debugf(
+				"[Router][Lane] no traffic rule matched (entry rules: [%s]). "+
+					"检查请求标签是否覆盖了规则的所有 arguments",
+				strings.Join(entryRules, ", "))
 		}
 	}
 	return matchedItem
@@ -353,6 +486,11 @@ func (r *LaneRouter) GetFilteredInstances(
 		r.logCtx.GetRouteLogger().Debugf(
 			"[Router][Lane] start routing, source=%s/%s, dest=%s/%s, laneGroups=%d, stainLabel=%q, "+
 				"alreadyStained=%v", sourceNs, sourceSvc, destNs, destSvc, len(laneGroups), stainLabel, alreadyStained)
+		// 详细打印请求中收到的路由参数（Header/Query/Cookie/Path/Method/CallerIP 摊平后），
+		// 配合下方的 matchTrafficRule 日志可还原完整的「输入 → 匹配过程」。
+		r.logCtx.GetRouteLogger().Debugf(
+			"[Router][Lane] === request input (SourceService.Metadata) ===")
+		r.dumpRequestLabels(srcMeta)
 	}
 
 	// 构建泳道规则容器
@@ -362,6 +500,16 @@ func (r *LaneRouter) GetFilteredInstances(
 		r.logCtx.GetRouteLogger().Debugf(
 			"[Router][Lane] built rule container, totalRules=%d, stainLabelIndexSize=%d",
 			len(container.sortedItems), len(container.stainLabelIndex))
+		// stainLabelIndex 一览：方便确认「当前 stainLabel 是否在索引中、短格式回退会落在哪」
+		if len(container.stainLabelIndex) > 0 {
+			idxDump := make([]string, 0, len(container.stainLabelIndex))
+			for sl := range container.stainLabelIndex {
+				idxDump = append(idxDump, sl)
+			}
+			sort.Strings(idxDump)
+			r.logCtx.GetRouteLogger().Debugf("[Router][Lane]   stainLabelIndex: %s", strings.Join(idxDump, " | "))
+		}
+		// 逐条规则打印 group/rule/entry/priority/matchMode/arguments
 		for i, item := range container.sortedItems {
 			r.logCtx.GetRouteLogger().Debugf(
 				"[Router][Lane]   rule[%d]: group=%s, rule=%s, isEntry=%v, stainLabel=%s, "+
@@ -369,6 +517,7 @@ func (r *LaneRouter) GetFilteredInstances(
 				i, item.group.GetName(), item.rule.GetName(),
 				item.isEntry, item.stainLabel,
 				item.rule.GetPriority(), item.rule.GetMatchMode())
+			r.dumpRuleArguments(item.rule)
 		}
 	}
 
@@ -463,10 +612,18 @@ func (r *LaneRouter) GetFilteredInstances(
 				matchedItem.group.GetName(), matchedItem.rule.GetName(),
 				laneKey, laneVal, laneInstSet.Count(), destNs, destSvc)
 		}
+		// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 lane 命中行为。
+		r.logCtx.GetRouteLogger().Infof(
+			"[Router][Lane] result: dest=%s/%s, status=lane-matched, group=%s, rule=%s, %s=%s, instances=%d",
+			destNs, destSvc, matchedItem.group.GetName(), matchedItem.rule.GetName(),
+			laneKey, laneVal, laneInstSet.Count())
 		result := servicerouter.PoolGetRouteResult(r.valueCtx)
-		// 直接返回带 lane metadata 的 cluster，其 GetClusterValue() 已缓存正确的泳道实例集。
-		// 设置 ignoreFilterOnlyOnEndChain 阻止 filterOnly 重建 cluster。
-		routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+		// 命中泳道实例:输出带 lane metadata 的 cluster 给下一跳路由(rule / nearby /
+		// dstmeta 等)。下游通过 model.NewCluster(svcClusters, tmpLaneCls) 自动继承
+		// `lane=val` metadata 并叠加自己的过滤条件,从而支持「泳道路由 ∩ 规则路由 ∩
+		// 就近路由」AND 复合过滤,与 polaris-java 链式路由语义一致。
+		// 不再置位 ignoreFilterOnlyOnEndChain:主链 (filterOnly 兜底) 会基于该 cluster
+		// 的 metadata 继续过滤,语义正确。
 		result.OutputCluster = tmpLaneCls
 		result.Status = servicerouter.Normal
 		return result, nil
@@ -590,6 +747,13 @@ func (r *LaneRouter) routeToBaseline(
 
 	result.OutputCluster = baselineCls
 	result.Status = servicerouter.Normal
+	// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到 baseline 回退行为。
+	// baseline 路径常见于"无 lane 染色 / 命中 PERMISSIVE 但实例不存在 / 非入口染色"
+	// 三种情况, 输出 dest + baseLaneMode 便于排查。
+	destNs, destSvc := extractNsSvc(routeInfo.DestService)
+	r.logCtx.GetRouteLogger().Infof(
+		"[Router][Lane] result: dest=%s/%s, status=baseline, mode=%d, laneKey=%s",
+		destNs, destSvc, r.cfg.BaseLaneMode, laneKey)
 	return result
 }
 

@@ -172,14 +172,21 @@ func (g *RuleBasedInstancesFilter) GetFilteredInstances(
 
 finally:
 	var targetCluster *model.Cluster
+	// finalStatus 用于在 Info 摘要日志里描述本次规则路由的决策结果。
+	// 取值与 ruleStatus 一致, 但增加 "default" 分支按 failoverType 区分:
+	// "failover-all" / "failover-none"。
+	var finalStatus string
 	switch ruleStatus {
 	case noRouteRule:
 		// 如果没有路由规则, 则返回有效实例(有效个数不满足配置的量则返回全量)
 		targetCluster = model.NewCluster(clusters, withinCluster)
+		finalStatus = "noRouteRule"
 	case sourceRuleSuccess:
 		targetCluster = sourceFilteredInstances
+		finalStatus = "sourceRuleSuccess"
 	case dstRuleSuccess:
 		targetCluster = dstFilteredInstances
+		finalStatus = "dstRuleSuccess"
 	default:
 		failoverType := routeInfo.FailOverType
 		if failoverType == nil {
@@ -201,10 +208,20 @@ finally:
 			// （见 pkg/plugin/servicerouter/util.go:121-127 +
 			//  plugin/servicerouter/filteronly/router.go:87）。
 			routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+			finalStatus = "failover-none(empty)"
 		} else {
 			targetCluster = model.NewCluster(clusters, withinCluster)
+			finalStatus = "failover-all"
 		}
 	}
+
+	// 出口摘要: Info 级,方便在不开 DEBUG_MODE 时也能看到规则路由的最终决策。
+	// 与 lane router 在异常路径用 Info 的风格一致, 每次路由输出 1 行。
+	instCount := targetCluster.GetClusterValue().GetInstancesSet(false, false).Count()
+	g.logCtx.GetRouteLogger().Infof(
+		"[Router][RuleBased] result: dest=%s/%s, status=%s, instances=%d",
+		routeInfo.DestService.GetNamespace(), routeInfo.DestService.GetService(),
+		finalStatus, instCount)
 
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = targetCluster

@@ -7,6 +7,7 @@
 #   2. metadata  元数据路由       metadata/verify_metadata_route.sh
 #   3. nearby    就近路由         nearby/verify_nearby_route.sh
 #   4. rule      规则路由 + failoverType  rule/verify_rule_route.sh
+#   5. mixed     混合路由 (lane × rule × nearby)  mixed/run.sh all <polaris>
 #
 # 每个 demo 运行完后，从退出码与输出中的「验证结论」字样判定 PASS/PARTIAL/FAIL，
 # 并在末尾输出：
@@ -140,6 +141,7 @@ DEMOS=(
     "metadata|${SCRIPT_DIR}/metadata/verify_metadata_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
     "nearby|${SCRIPT_DIR}/nearby/verify_nearby_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
     "rule|${SCRIPT_DIR}/rule/verify_rule_route.sh|--polaris-server ${POLARIS_SERVER} ${_TOKEN_ARG}"
+    "mixed|${SCRIPT_DIR}/mixed/run.sh|all ${POLARIS_SERVER}"
 )
 
 # 是否运行某个 demo（依据 --only / --skip）

@@ -349,6 +349,10 @@ finally:
 	// 根据是否开启recoverall，决定是否要进行兜底过滤
 	rInfo.SetIgnoreFilterOnlyOnEndChain(!g.recoverAll)
 	if outCluster.MissLocationInstances {
+		// 出口摘要: Info 级,失败路径必输出。
+		g.logCtx.GetRouteLogger().Infof(
+			"[Router][Nearby] result: service=%s, status=miss-location, location=%s, %s",
+			outCluster.GetClusters().GetServiceKey(), location, outCluster.LocationMatchInfo)
 		return nil, g.misMatchError(location, outCluster)
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
@@ -358,6 +362,11 @@ finally:
 		g.logCtx.GetRouteLogger().Debugf("[Router][Nearby] matched level=%d, instances=%d, status=%v",
 			finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	}
+	// 出口摘要: Info 级,在不开 DEBUG_MODE 时也能看到就近路由的输出。
+	g.logCtx.GetRouteLogger().Infof(
+		"[Router][Nearby] result: service=%s, finalLevel=%d, matchLevel=%d, instances=%d, status=%v",
+		outCluster.GetClusters().GetServiceKey(), finalLevel, matchLevel,
+		outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	return result, nil
 }
 
