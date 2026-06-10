@@ -1,0 +1,37 @@
+global:
+  serverConnector:
+    addresses:
+      - ${POLARIS_SERVER}:8091
+    connectTimeout: 3s
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: push
+        address: ${POLARIS_SERVER}:9091
+        interval: 10s
+consumer:
+  serviceRouter:
+    # 三链共存：泳道路由(beforeChain) → 规则路由 + 就近路由(主链) → 全死全活兜底
+    chain:
+      - ruleBasedRouter
+      - nearbyBasedRouter
+    plugin:
+      laneRouter:
+        # baseLaneMode 基线泳道模式：
+        #   0 = OnlyUntaggedInstance       只选取无 lane 标签的实例作为基线（默认）
+        #   1 = ExcludeEnabledLaneInstance 排除已启用泳道规则关联的实例,其余作为基线
+        baseLaneMode: 0
+      ruleBasedRouter:
+        # all: 规则全部失败 → 兜底返回所有实例
+        # none: 规则全部失败 → 返回空实例列表（严格匹配）
+        failoverType: all
+      nearbyBasedRouter:
+        # 就近路由匹配级别。本 demo 通过实例 metadata 的 region/zone 模拟。
+        # 设为 ALL 表示无地域差异时不强制就近,纯按 metadata + rule 过滤,避免本地
+        # 测试环境地域信息缺失导致路由空集。
+        matchLevel: ALL
+        maxMatchLevel: ALL
+        strictNearby: false

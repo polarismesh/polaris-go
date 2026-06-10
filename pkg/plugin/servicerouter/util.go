@@ -77,7 +77,38 @@ func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeI
 			sourceStr, destStr, len(routers), instancesCount)
 	}
 
+	// processed 标记是否已经有 router 真正执行过 (router.GetFilteredInstances 被调用).
+	// 仅当某个 router 处理后输出空 cluster 才触发短路, 初始 cluster 就空 (例如
+	// 测试场景或服务暂时无实例) 不视为"上游过滤后空"语义, 不能短路, 否则会绕过
+	// 下游 router 的 enable 判断和链尾 filteronly 全死全活兜底。
+	processed := false
 	for _, router := range routers {
+		// 对齐 polaris-java BaseFlow.processRouterChain (BaseFlow.java:174-177) 的
+		// 短路语义: 上游 router 输出的 cluster 实例数为 0 时, 跳过后续所有 router,
+		// 直接返回当前空 cluster。
+		//
+		// 这一保护确保:
+		//   - rulebase 在 failoverType=none + 规则不匹配时返回的空 cluster, 不会
+		//     被下游 nearby/dstmeta 用全量 svcClusters 重建出非空实例集 (nearby
+		//     的 NewCluster(svcClusters, withinCluster) 只继承 metadata, 实例集
+		//     来自 svcClusters 全量, 会绕过 rulebase 的空集语义);
+		//   - lane × rule 交集为空(如 user=gray + env=prod 但无 gray-prod 实例)
+		//     时, nearby 不会因 location 全空报 ErrCodeLocationMismatch (HTTP 500),
+		//     而是让最终空 cluster 由上层 LB 返回 ErrCodeAPIInstanceNotFound (HTTP 503),
+		//     语义一致。
+		//
+		// 同步置位 IgnoreFilterOnlyOnEndChain, 阻止链尾 filteronly 用 svcClusters
+		// 把全量实例捞回, 否则前面置空的语义会被全死全活兜底破坏。
+		if processed && cluster != nil && cluster.GetClusterValue().Count() == 0 {
+			if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+				logCtx.GetBaseLogger().Debugf(
+					"processServiceRouters: short-circuit before router=%v, "+
+						"upstream cluster has 0 instances", router.Name())
+			}
+			routeInfo.SetIgnoreFilterOnlyOnEndChain(true)
+			break
+		}
+
 		routerName := router.Name()
 		isRouterEnabled := routeInfo.IsRouterEnable(router.ID())
 		isEnabled := router.Enable(routeInfo, svcClusters)
@@ -112,6 +143,7 @@ func processServiceRouters(ctx sdk.ValueContext, routers []ServiceRouter, routeI
 			return result, nil
 		}
 		cluster = result.OutputCluster
+		processed = true
 		if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 			instances := cluster.GetClusterValue().GetInstancesSet(false, false).GetRealInstances()
 			logCtx.GetBaseLogger().Debugf("processServiceRouters: router=%v done, instances=%s, status=%s", routerName,

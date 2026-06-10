@@ -349,14 +349,30 @@ finally:
 	// 根据是否开启recoverall，决定是否要进行兜底过滤
 	rInfo.SetIgnoreFilterOnlyOnEndChain(!g.recoverAll)
 	if outCluster.MissLocationInstances {
+		// 出口摘要: Info 级,失败路径必输出。
+		g.logCtx.GetRouteLogger().Infof(
+			"[Router][Nearby] result: service=%s, status=miss-location, location=%s, %s",
+			outCluster.GetClusters().GetServiceKey(), location, outCluster.LocationMatchInfo)
 		return nil, g.misMatchError(location, outCluster)
 	}
 	result := servicerouter.PoolGetRouteResult(g.valueCtx)
 	result.OutputCluster = outCluster
 	result.Status = checkNearbyStatus(matchLevel, finalLevel)
-	if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
-		g.logCtx.GetRouteLogger().Debugf("[Router][Nearby] matched level=%d, instances=%d, status=%v",
-			finalLevel, outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
+	// 出口摘要:
+	//   - 命中本级 (matchLevel == finalLevel): 属于成功路径,每次请求都会触发 → DEBUG
+	//   - 降级到更高级别 (matchLevel != finalLevel): 实例不健康/缺失触发降级 → INFO,
+	//     便于观测就近降级行为,通常不会高频触发。
+	if matchLevel != finalLevel {
+		g.logCtx.GetRouteLogger().Infof(
+			"[Router][Nearby] result: service=%s, finalLevel=%d, matchLevel=%d, instances=%d, status=%v "+
+				"(degraded due to insufficient healthy instances at matchLevel)",
+			outCluster.GetClusters().GetServiceKey(), finalLevel, matchLevel,
+			outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
+	} else if g.logCtx.GetRouteLogger().IsLevelEnabled(log.DebugLog) {
+		g.logCtx.GetRouteLogger().Debugf(
+			"[Router][Nearby] result: service=%s, finalLevel=%d, matchLevel=%d, instances=%d, status=%v",
+			outCluster.GetClusters().GetServiceKey(), finalLevel, matchLevel,
+			outCluster.GetClusterValue().GetInstancesSet(false, false).Count(), result.Status)
 	}
 	return result, nil
 }

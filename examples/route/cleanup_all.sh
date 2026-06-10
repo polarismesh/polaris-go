@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
 选项:
   -f, --force     直接清理，不需要确认
   --dry-run       仅展示匹配的进程与目录，不执行清理
-  --skip <列表>   跳过指定 demo 的子清理，逗号分隔 (lane,metadata,nearby,rule)
+  --skip <列表>   跳过指定 demo 的子清理，逗号分隔 (lane,metadata,nearby,rule,mixed)
   -h, --help      展示本帮助
 
 示例:
@@ -211,8 +211,8 @@ main() {
     echo "  skip:     ${SKIP_LIST:-（无）}"
     echo ""
 
-    # 调用 4 个子清理
-    for name in lane metadata nearby rule; do
+    # 调用 5 个子清理
+    for name in lane metadata nearby rule mixed; do
         run_sub_cleanup "$name"
     done
 

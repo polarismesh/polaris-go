@@ -266,22 +266,25 @@ func TestParseWarmupEtime(t *testing.T) {
 	})
 }
 
-// TestLaneRouter_Enable 覆盖 Enable 的两种状态：有/无规则
+// TestLaneRouter_Enable 验证 lane router 始终启用（always-on）。
+//
+// 即使 routeInfo 没有任何 LaneGroup, lane router 也会参与路由 ——
+// GetFilteredInstances 在无规则匹配时走 routeToBaseline, 通过
+// Cluster.SetInstanceFilter 将"排除带 lane 标签实例"语义传递给主链。
+// 这与 polaris-java LaneRouter 的 `redirectToBase` 行为一致。
 func TestLaneRouter_Enable(t *testing.T) {
 	r := &LaneRouter{}
 	tests := []struct {
 		name      string
 		routeInfo *servicerouter.RouteInfo
-		want      bool
 	}{
 		{
-			// 测试场景：无规则 → Enable 返回 false，路由链不会调用本插件
-			name: "no_rule_disabled",
+			// 测试场景：无规则 → 仍然返回 true，由 routeToBaseline 通过 instanceFilter 过滤带 lane 标签实例
+			name: "no_rule_still_enabled",
 			routeInfo: &servicerouter.RouteInfo{
 				SourceLaneRule: nil,
 				DestLaneRule:   nil,
 			},
-			want: false,
 		},
 		{
 			// 测试场景：只有 dst 有规则 → Enable 返回 true
@@ -289,7 +292,6 @@ func TestLaneRouter_Enable(t *testing.T) {
 			routeInfo: &servicerouter.RouteInfo{
 				DestLaneRule: wrapGroups(makeGroup("g1")),
 			},
-			want: true,
 		},
 		{
 			// 测试场景：只有 src 有规则 → Enable 返回 true
@@ -297,21 +299,19 @@ func TestLaneRouter_Enable(t *testing.T) {
 			routeInfo: &servicerouter.RouteInfo{
 				SourceLaneRule: wrapGroups(makeGroup("g1")),
 			},
-			want: true,
 		},
 		{
-			// 测试场景：routeInfo 为 nil → Enable 返回 false，不 panic
+			// 测试场景：routeInfo 为 nil → 仍返回 true，且不 panic
 			name:      "nil_route_info",
 			routeInfo: nil,
-			want:      false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := r.Enable(tt.routeInfo, nil)
-			if got != tt.want {
-				t.Errorf("Enable() = %v, want %v", got, tt.want)
+			if !got {
+				t.Errorf("Enable() = %v, want true (always-on)", got)
 			}
 		})
 	}

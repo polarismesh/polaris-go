@@ -124,6 +124,16 @@ type Cluster struct {
 	reuse bool
 
 	IncludeHalfOpen bool
+
+	// instanceFilter 实例级前置过滤器（可选）。
+	//
+	// 用途：让前置链插件（如 lane router）在选实例时表达"按实例属性排除"
+	// 这种 metadata 之外的语义，并通过 NewCluster 链式继承给主链插件，
+	// 而无需置位 IgnoreFilterOnlyOnEndChain 屏蔽整条主链。
+	//
+	// 语义：返回 true 保留该实例；false 排除。每次 build* 在循环里调用，
+	// 命中 instanceFilter 的 cluster 会跳过 ServiceClusters 全局缓存以避免污染。
+	instanceFilter func(Instance) bool
 }
 
 // reset 重置集群对象
@@ -143,6 +153,7 @@ func (c *Cluster) reset(clusters ServiceClusters) {
 	c.MetaComposedValue.metaValue = ""
 	c.MetaComposedValue.composedValue = ""
 	c.reuse = true
+	c.instanceFilter = nil
 }
 
 // PoolPut 归还对象到池子中
@@ -190,6 +201,9 @@ func NewCluster(clusters ServiceClusters, cls *Cluster) *Cluster {
 		newCls.MetaCount = cls.MetaCount
 		newCls.MetaComposedValue = cls.MetaComposedValue
 	}
+	// 链式继承前置链注入的实例过滤器，保证后续 router(rule/dstmeta/nearby...) 在
+	// 重建 cluster 时也会按相同的实例语义过滤。
+	newCls.instanceFilter = cls.instanceFilter
 	return newCls
 }
 
@@ -301,9 +315,30 @@ func (c *Cluster) SetClusterValue(value *ClusterValue) {
 	c.value = value
 }
 
+// SetInstanceFilter 设置实例级前置过滤器。filter 返回 true 保留实例。
+// 该过滤器会通过 NewCluster 链式继承给下游 router，让前置链 (lane router) 的
+// 实例排除语义可以传递到主链 (rule/nearby/dstmeta) 而无需短路 FilterOnly 兜底。
+//
+// 注意：设置 filter 后该 cluster 的 ClusterValue 会跳过 ServiceClusters 全局缓存
+// （避免不同 filter 共享同一 ClusterKey 缓存导致结果交叉污染）。
+func (c *Cluster) SetInstanceFilter(filter func(Instance) bool) {
+	c.instanceFilter = filter
+}
+
+// HasInstanceFilter 是否设置了实例级前置过滤器
+func (c *Cluster) HasInstanceFilter() bool {
+	return c.instanceFilter != nil
+}
+
 // GetClusterValue 重构建集群缓存
 func (c *Cluster) GetClusterValue() *ClusterValue {
 	if nil != c.value {
+		return c.value
+	}
+	// instanceFilter 不为 nil 时，必须直接 build 出与 filter 匹配的实例集，
+	// 跳过 ServiceClusters 的全局缓存（共享缓存按 ClusterKey 复用，会与不同 filter 串扰）。
+	if c.instanceFilter != nil {
+		c.value = c.buildCluster()
 		return c.value
 	}
 	svcClusters := c.clusters
@@ -319,6 +354,10 @@ func (c *Cluster) GetContainNotMatchMetaKeyClusterValue() *ClusterValue {
 	if nil != c.value {
 		return c.value
 	}
+	if c.instanceFilter != nil {
+		c.value = c.buildContainNotMatchMetaKeyCluster()
+		return c.value
+	}
 	svcClusters := c.clusters
 	c.value = svcClusters.GetContainNotMatchMetaKeyClusterInstances(c.ClusterKey)
 	if nil == c.value {
@@ -332,6 +371,10 @@ func (c *Cluster) GetNotContainMetaKeyClusterValue() *ClusterValue {
 	if nil != c.value {
 		return c.value
 	}
+	if c.instanceFilter != nil {
+		c.value = c.buildNotContainMetaKeyCluster()
+		return c.value
+	}
 	svcClusters := c.clusters
 	c.value = svcClusters.GetNotContainMetaKeyClusterInstances(c.ClusterKey)
 	if nil == c.value {
@@ -343,6 +386,10 @@ func (c *Cluster) GetNotContainMetaKeyClusterValue() *ClusterValue {
 // GetContainMetaKeyClusterValue 重构 包含Key 的缓存
 func (c *Cluster) GetContainMetaKeyClusterValue() *ClusterValue {
 	if nil != c.value {
+		return c.value
+	}
+	if c.instanceFilter != nil {
+		c.value = c.buildContainMetaKeyCluster()
 		return c.value
 	}
 	svcClusters := c.clusters
@@ -367,7 +414,15 @@ func (c *Cluster) buildCluster() *ClusterValue {
 		if !matchLocation(inst, c.Location) {
 			continue
 		}
+		if c.instanceFilter != nil && !c.instanceFilter(inst) {
+			continue
+		}
 		clsValue.addInstance(index, inst)
+	}
+	// 设置了 instanceFilter 时返回新构建的 ClusterValue,不写入共享缓存,
+	// 避免不同 filter 之间通过 ClusterKey 串扰。
+	if c.instanceFilter != nil {
+		return clsValue
 	}
 	value, _ := clsCache.cacheValues.LoadOrStore(clsKey, clsValue)
 	return value.(*ClusterValue)
@@ -387,7 +442,13 @@ func (c *Cluster) buildContainNotMatchMetaKeyCluster() *ClusterValue {
 		if !matchLocation(inst, c.Location) {
 			continue
 		}
+		if c.instanceFilter != nil && !c.instanceFilter(inst) {
+			continue
+		}
 		clsValue.addInstance(index, inst)
+	}
+	if c.instanceFilter != nil {
+		return clsValue
 	}
 	value, _ := clsCache.notMatchMetaKeyCacheValues.LoadOrStore(clsKey, clsValue)
 	return value.(*ClusterValue)
@@ -407,7 +468,13 @@ func (c *Cluster) buildNotContainMetaKeyCluster() *ClusterValue {
 		if !matchLocation(inst, c.Location) {
 			continue
 		}
+		if c.instanceFilter != nil && !c.instanceFilter(inst) {
+			continue
+		}
 		clsValue.addInstance(index, inst)
+	}
+	if c.instanceFilter != nil {
+		return clsValue
 	}
 	value, _ := clsCache.notContainMetaKeyCacheValues.LoadOrStore(clsKey, clsValue)
 	return value.(*ClusterValue)
@@ -427,7 +494,13 @@ func (c *Cluster) buildContainMetaKeyCluster() *ClusterValue {
 		if !matchLocation(inst, c.Location) {
 			continue
 		}
+		if c.instanceFilter != nil && !c.instanceFilter(inst) {
+			continue
+		}
 		clsValue.addInstance(index, inst)
+	}
+	if c.instanceFilter != nil {
+		return clsValue
 	}
 	value, _ := clsCache.containMetaKeyCacheValues.LoadOrStore(clsKey, clsValue)
 	return value.(*ClusterValue)
