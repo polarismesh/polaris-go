@@ -52,12 +52,16 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,6 +75,8 @@ const (
 	// trafficStainHeader 是泳道染色标签 HTTP 请求头名称。
 	// 上游或网关会在请求头中透传该标签，格式：{laneGroupName}/{laneRuleName}。
 	trafficStainHeader = "service-lane"
+	// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+	reqIDHeader = "X-Request-ID"
 )
 
 var (
@@ -89,6 +95,68 @@ func initArgs() {
 	flag.Int64Var(&port, "port", 48080, "网关 HTTP 监听端口")
 	flag.StringVar(&token, "token", "", "token（北极星开启鉴权时使用）")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
+}
+
+// newReqID 生成 8 字符请求 ID，用于串起同一次请求的多条日志.
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// formatHeaders 把 http.Header 压缩为单行字符串.
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(h[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// formatQuery 把 query 参数压缩为单行字符串.
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(q[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// logIncomingRequest 单行打印收到的请求：方法/URL/query/headers/body/cookie，都带 reqID 前缀.
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(), formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印自身回给上游 client 的响应.
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
 }
 
 // LaneGateway 泳道网关入口
@@ -116,14 +184,22 @@ func (gw *LaneGateway) Run() {
 // 例如：/LaneCallerService/lane/caller/rest → 路由到 LaneCallerService 的某个泳道实例，
 // 转发路径为 /lane/caller/rest。
 func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
+	reqID := r.Header.Get(reqIDHeader)
+	if reqID == "" {
+		reqID = newReqID()
+	}
+	logIncomingRequest(reqID, r, r.URL.Path)
+
 	// 1. 解析目标服务名和转发路径
 	targetService, forwardPath, ok := parsePath(r.URL.Path)
 	if !ok {
-		http.Error(rw, "invalid path: expected /{targetService}/{path...}", http.StatusBadRequest)
+		body := "invalid path: expected /{targetService}/{path...}"
+		http.Error(rw, body, http.StatusBadRequest)
+		logReply(reqID, r.RemoteAddr, http.StatusBadRequest, body)
 		return
 	}
-	log.Printf("[INFO] received request: %s %s → self=%s/%s, targetService=%s, forwardPath=%s",
-		r.Method, r.URL.Path, gw.selfNamespace, gw.selfService, targetService, forwardPath)
+	log.Printf("[%s] self=%s/%s → targetService=%s, forwardPath=%s",
+		reqID, gw.selfNamespace, gw.selfService, targetService, forwardPath)
 
 	// 2. 获取目标服务全量实例
 	getAllReq := &polaris.GetAllInstancesRequest{}
@@ -131,11 +207,13 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	getAllReq.Service = targetService
 	instancesResp, err := gw.consumer.GetAllInstances(getAllReq)
 	if err != nil {
-		log.Printf("[ERROR] fail to getAllInstances for %s: %v", targetService, err)
-		http.Error(rw, fmt.Sprintf("fail to getAllInstances: %v", err), http.StatusInternalServerError)
+		body := fmt.Sprintf("fail to getAllInstances: %v", err)
+		log.Printf("[%s] [error] fail to getAllInstances for %s: %v", reqID, targetService, err)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
-	log.Printf("[INFO] %s all instances count: %d", targetService, len(instancesResp.Instances))
+	log.Printf("[%s] targetService=%s all instances count: %d", reqID, targetService, len(instancesResp.Instances))
 
 	// 3. 构建路由请求
 	routerReq := &polaris.ProcessRoutersRequest{}
@@ -151,12 +229,14 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	// 5. 执行路由过滤（泳道路由 + 规则路由）
 	routedResp, err := gw.router.ProcessRouters(routerReq)
 	if err != nil {
-		log.Printf("[ERROR] fail to processRouters for %s: %v", targetService, err)
-		http.Error(rw, fmt.Sprintf("fail to processRouters: %v", err), http.StatusInternalServerError)
+		body := fmt.Sprintf("fail to processRouters: %v", err)
+		log.Printf("[%s] [error] fail to processRouters for %s: %v", reqID, targetService, err)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
-	log.Printf("[INFO] %s routed instances count: %d",
-		targetService, len(routedResp.Instances))
+	log.Printf("[%s] targetService=%s routed instances count: %d",
+		reqID, targetService, len(routedResp.Instances))
 
 	// 6. 负载均衡，选取单个实例
 	lbReq := &polaris.ProcessLoadBalanceRequest{}
@@ -164,30 +244,31 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	lbReq.LbPolicy = config.DefaultLoadBalancerWR
 	oneInstResp, err := gw.router.ProcessLoadBalance(lbReq)
 	if err != nil {
-		log.Printf("[ERROR] fail to processLoadBalance for %s: %v", targetService, err)
-		// ErrCodeAPIInstanceNotFound 表示路由链过滤后没有任何可用实例
-		// (例如 STRICT 泳道匹配但无实例), 这是一种"路径不通"而不是"网关内部错误",
-		// 应向外部返回 HTTP 503 (Service Unavailable), 以便调用方/测试脚本能区分
-		// "没有候选实例" 与 "网关自身异常".
+		body := fmt.Sprintf("fail to processLoadBalance: %v", err)
+		log.Printf("[%s] [error] fail to processLoadBalance for %s: %v", reqID, targetService, err)
 		if sdkErr, ok := err.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
 			http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+			logReply(reqID, r.RemoteAddr, http.StatusServiceUnavailable, body)
 			return
 		}
-		http.Error(rw, fmt.Sprintf("fail to processLoadBalance: %v", err), http.StatusInternalServerError)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
 	instance := oneInstResp.GetInstance()
 	if instance == nil {
-		log.Printf("[WARN] no instance selected for %s", targetService)
-		http.Error(rw, "no available instance", http.StatusServiceUnavailable)
+		body := "no available instance"
+		log.Printf("[%s] [warn] no instance selected for %s", reqID, targetService)
+		http.Error(rw, body, http.StatusServiceUnavailable)
+		logReply(reqID, r.RemoteAddr, http.StatusServiceUnavailable, body)
 		return
 	}
 	laneLabel := instance.GetMetadata()["lane"]
 	if laneLabel == "" {
 		laneLabel = "(baseline)"
 	}
-	log.Printf("[INFO] selected instance: %s:%d, lane=%s, metadata=%v",
-		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
+	log.Printf("[%s] selected instance: %s:%d, lane=%s, metadata=%v",
+		reqID, instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
 
 	// 7. 构建转发请求
 	callResult := &polaris.ServiceCallResult{}
@@ -200,8 +281,10 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	}
 	upstreamReq, err := http.NewRequest(r.Method, upstreamURL, r.Body)
 	if err != nil {
-		log.Printf("[ERROR] fail to create upstream request: %v", err)
-		http.Error(rw, fmt.Sprintf("fail to create upstream request: %v", err), http.StatusInternalServerError)
+		body := fmt.Sprintf("fail to create upstream request: %v", err)
+		log.Printf("[%s] [error] fail to create upstream request: %v", reqID, err)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
 
@@ -211,6 +294,8 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 			upstreamReq.Header.Add(k, v)
 		}
 	}
+	// 将 reqID 注入下游请求头，便于全链路日志串联
+	upstreamReq.Header.Set(reqIDHeader, reqID)
 
 	// 透传泳道染色标签:
 	//
@@ -233,7 +318,7 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 		}
 		if propagated != "" {
 			upstreamReq.Header.Set(trafficStainHeader, propagated)
-			log.Printf("[INFO] propagate stain label: %s=%s", trafficStainHeader, propagated)
+			log.Printf("[%s] propagate stain label: %s=%s", reqID, trafficStainHeader, propagated)
 		}
 	}
 
@@ -242,24 +327,28 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	callResult.SetDelay(time.Since(startTime))
 
 	if err != nil {
-		log.Printf("[ERROR] forward request to %s:%d fail: %v", instance.GetHost(), instance.GetPort(), err)
+		body := fmt.Sprintf("forward request fail: %v", err)
+		log.Printf("[%s] [error] forward request to %s:%d fail: %v", reqID, instance.GetHost(), instance.GetPort(), err)
 		gw.reportResult(callResult, model.RetFail, -1)
-		http.Error(rw, fmt.Sprintf("forward request fail: %v", err), http.StatusBadGateway)
+		http.Error(rw, body, http.StatusBadGateway)
+		logReply(reqID, r.RemoteAddr, http.StatusBadGateway, body)
 		return
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[ERROR] read response from %s:%d fail: %v", instance.GetHost(), instance.GetPort(), err)
+		body := fmt.Sprintf("read response fail: %v", err)
+		log.Printf("[%s] [error] read response from %s:%d fail: %v", reqID, instance.GetHost(), instance.GetPort(), err)
 		gw.reportResult(callResult, model.RetFail, -1)
-		http.Error(rw, fmt.Sprintf("read response fail: %v", err), http.StatusBadGateway)
+		http.Error(rw, body, http.StatusBadGateway)
+		logReply(reqID, r.RemoteAddr, http.StatusBadGateway, body)
 		return
 	}
 
 	gw.reportResult(callResult, model.RetSuccess, int32(resp.StatusCode))
-	log.Printf("[INFO] upstream %s:%d ok, status=%d, bytes=%d",
-		instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
+	log.Printf("[%s] upstream %s:%d ok, status=%d, bytes=%d",
+		reqID, instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
 
 	// 9. 将下游响应返回给客户端：拼成单行 msg（self/lane/host:port/callee addr/callee lane/callee resp）
 	// 注意: 不能照搬下游 Content-Length,否则 net/http 会按下游 body 长度截断/提前关连接。
@@ -276,8 +365,9 @@ func (gw *LaneGateway) handleProxy(rw http.ResponseWriter, r *http.Request) {
 	msg := fmt.Sprintf("Hello, I'm %s. lane=%s, host=0.0.0.0:%d, callee addr:%s:%d, callee lane=%s, callee resp=%s",
 		gw.selfService, "(entry)", port, instance.GetHost(), instance.GetPort(), laneLabel,
 		string(data))
-	log.Printf("resp to caller: %s, bytes~=%d", msg, len(msg))
+	log.Printf("[%s] resp to caller: %s, bytes~=%d", reqID, msg, len(msg))
 	_, _ = rw.Write([]byte(msg))
+	logReply(reqID, r.RemoteAddr, resp.StatusCode, msg)
 }
 
 func (gw *LaneGateway) reportResult(result *polaris.ServiceCallResult, retStatus model.RetStatus, retCode int32) {
@@ -341,7 +431,7 @@ func buildRouteArguments(r *http.Request) []model.Argument {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 

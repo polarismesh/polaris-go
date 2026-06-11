@@ -47,7 +47,7 @@ func main() {
 	initArgs()
 	flag.Parse()
 	// 设置日志输出格式：日期 + 时间 + 文件名:行号
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Println("开始启动配置文件监听示例...")
 	if debug {
 		// 设置日志级别为DEBUG

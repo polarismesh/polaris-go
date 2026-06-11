@@ -66,7 +66,7 @@ func getParamValue(reqValue, defaultValue string) string {
 var consumerAPI api.ConsumerAPI
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 

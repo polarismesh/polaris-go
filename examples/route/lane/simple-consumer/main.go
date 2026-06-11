@@ -38,15 +38,19 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -59,6 +63,8 @@ import (
 const (
 	// trafficStainHeader 是泳道染色标签 HTTP 请求头名称。
 	trafficStainHeader = "service-lane"
+	// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+	reqIDHeader = "X-Request-ID"
 )
 
 var (
@@ -82,6 +88,68 @@ func initArgs() {
 	// lane 参数：可选值为 "gray"、"stable" 或 ""（空字符串表示基线实例，不携带泳道标签）
 	flag.StringVar(&lane, "lane", "", "lane label value, e.g. gray / stable / (empty for baseline)")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
+}
+
+// newReqID 生成 8 字符请求 ID，用于串起同一次请求的多条日志.
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// formatHeaders 把 http.Header 压缩为单行字符串.
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(h[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// formatQuery 把 query 参数压缩为单行字符串.
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(q[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// logIncomingRequest 单行打印收到的请求：方法/URL/query/headers/body/cookie，都带 reqID 前缀.
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(), formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印自身回给上游 client 的响应.
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
 }
 
 // SimpleLaneConsumer 使用 GetOneInstance 的简化泳道消费端
@@ -191,43 +259,52 @@ func (svr *SimpleLaneConsumer) runMainLoop() {
 }
 
 func (svr *SimpleLaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Request) {
+	reqID := r.Header.Get(reqIDHeader)
+	if reqID == "" {
+		reqID = newReqID()
+	}
+	logIncomingRequest(reqID, r, "/echo")
+
 	// simple-consumer 自身的泳道标签：空串视为基线实例
 	myLaneLabel := lane
 	if myLaneLabel == "" {
 		myLaneLabel = "(baseline)"
 	}
-	log.Printf("received request from %s, self=%s/%s, myLane=%s, headers=%v",
-		r.RemoteAddr, svr.selfNamespace, svr.selfService, myLaneLabel, r.Header)
+	log.Printf("[%s] received request from %s, self=%s/%s, myLane=%s",
+		reqID, r.RemoteAddr, svr.selfNamespace, svr.selfService, myLaneLabel)
 
 	// 把上游 HTTP Header / Query 转为 Arguments 传给 SDK，
 	// lane router 据此做流量识别 / 染色标签匹配
-	instance, err := svr.getOneInstance(r)
+	instance, routeMeta, err := svr.getOneInstance(r)
 	if err != nil {
-		log.Printf("[error] fail to getOneInstance: %v", err)
-		// ErrCodeAPIInstanceNotFound 表示路由过滤后没有候选实例 (STRICT 泳道常见),
-		// 向外返回 503 以区分"服务级不可用"与"网关内部错误".
+		body := fmt.Sprintf("fail to getOneInstance: %v", err)
+		log.Printf("[%s] [error] fail to getOneInstance: %v", reqID, err)
 		cause := err
 		if unwrapped := errors.Unwrap(err); unwrapped != nil {
 			cause = unwrapped
 		}
 		if sdkErr, ok := cause.(model.SDKError); ok && sdkErr.ErrorCode() == model.ErrCodeAPIInstanceNotFound {
 			http.Error(rw, fmt.Sprintf("no instance available: %v", err), http.StatusServiceUnavailable)
+			logReply(reqID, r.RemoteAddr, http.StatusServiceUnavailable, body)
 			return
 		}
-		http.Error(rw, fmt.Sprintf("fail to getOneInstance: %v", err), http.StatusInternalServerError)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
 	if instance == nil {
-		log.Printf("[warn] no instance selected")
-		http.Error(rw, "no available instance", http.StatusServiceUnavailable)
+		body := "no available instance"
+		log.Printf("[%s] [warn] no instance selected", reqID)
+		http.Error(rw, body, http.StatusServiceUnavailable)
+		logReply(reqID, r.RemoteAddr, http.StatusServiceUnavailable, body)
 		return
 	}
 	laneLabel := instance.GetMetadata()["lane"]
 	if laneLabel == "" {
 		laneLabel = "(baseline)"
 	}
-	log.Printf("selected instance: %s:%d, lane=%s, metadata=%v",
-		instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
+	log.Printf("[%s] selected instance: %s:%d, lane=%s, metadata=%v",
+		reqID, instance.GetHost(), instance.GetPort(), laneLabel, instance.GetMetadata())
 
 	// 构建上游请求
 	callResult := &polaris.ServiceCallResult{}
@@ -237,55 +314,80 @@ func (svr *SimpleLaneConsumer) handleEcho(rw http.ResponseWriter, r *http.Reques
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
 		fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
 	if err != nil {
-		log.Printf("[error] fail to create upstream request: %v", err)
-		http.Error(rw, fmt.Sprintf("fail to create request: %v", err), http.StatusInternalServerError)
+		body := fmt.Sprintf("fail to create request: %v", err)
+		log.Printf("[%s] [error] fail to create upstream request: %v", reqID, err)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
+	// 将 reqID 注入下游请求头，便于全链路日志串联
+	upstreamReq.Header.Set(reqIDHeader, reqID)
 
-	// 透传已有的染色标签给下游（若存在）。
-	// 若原请求无染色标签但本次路由命中了泳道实例，则用 lane 元数据值作为短格式标签透传。
+	// 透传已有的染色标签给下游。优先级:
+	//   1. 上游透传来的 service-lane header（直接原样转发）
+	//   2. RouteMetadata["service-lane"] —— lane router 染色后回传的完整标签，
+	//      适用 PERMISSIVE 回退基线但 stainLabel 仍被记录的场景（如 half 链路染色穿透）
+	//   3. 选中实例的 metadata["lane"] —— 短格式标签兜底
 	if stain := r.Header.Get(trafficStainHeader); stain != "" {
 		upstreamReq.Header.Set(trafficStainHeader, stain)
-	} else if lane := instance.GetMetadata()["lane"]; lane != "" {
-		upstreamReq.Header.Set(trafficStainHeader, lane)
+	} else {
+		stainToPropagate := ""
+		if routeMeta != nil {
+			stainToPropagate = routeMeta[trafficStainHeader]
+		}
+		if stainToPropagate == "" {
+			stainToPropagate = instance.GetMetadata()["lane"]
+		}
+		if stainToPropagate != "" {
+			upstreamReq.Header.Set(trafficStainHeader, stainToPropagate)
+			log.Printf("[%s] propagate stain label: %s=%s",
+				reqID, trafficStainHeader, stainToPropagate)
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(upstreamReq)
 	callResult.SetDelay(time.Since(startTime))
 
 	if err != nil {
-		log.Printf("[error] send request to %s:%d fail: %s", instance.GetHost(), instance.GetPort(), err)
+		body := fmt.Sprintf("send request fail: %s", err)
+		log.Printf("[%s] [error] send request to %s:%d fail: %s", reqID, instance.GetHost(), instance.GetPort(), err)
 		svr.reportResult(callResult, model.RetFail, -1)
-		http.Error(rw, fmt.Sprintf("send request fail: %s", err), http.StatusInternalServerError)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[error] read resp from %s:%d fail: %s", instance.GetHost(), instance.GetPort(), err)
+		body := fmt.Sprintf("read resp fail: %s", err)
+		log.Printf("[%s] [error] read resp from %s:%d fail: %s", reqID, instance.GetHost(), instance.GetPort(), err)
 		svr.reportResult(callResult, model.RetFail, -1)
-		http.Error(rw, fmt.Sprintf("read resp fail: %s", err), http.StatusInternalServerError)
+		http.Error(rw, body, http.StatusInternalServerError)
+		logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, body)
 		return
 	}
 
 	svr.reportResult(callResult, model.RetSuccess, int32(resp.StatusCode))
-	log.Printf("upstream %s:%d ok, status=%d, bytes=%d",
-		instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
+	log.Printf("[%s] upstream %s:%d ok, status=%d, bytes=%d",
+		reqID, instance.GetHost(), instance.GetPort(), resp.StatusCode, len(data))
 	rw.WriteHeader(http.StatusOK)
 	msg := fmt.Sprintf("Hello, I'm %s. lane=%s, host=%s:%d, callee addr:%s:%d, callee lane=%s, callee resp=%s",
 		svr.selfService, myLaneLabel, svr.host, svr.port, instance.GetHost(), instance.GetPort(), laneLabel,
 		string(data))
-	log.Printf("resp to caller: %s, bytes~=%d", msg, len(msg))
+	log.Printf("[%s] resp to caller: %s, bytes~=%d", reqID, msg, len(msg))
 	_, _ = rw.Write([]byte(msg))
+	logReply(reqID, r.RemoteAddr, http.StatusOK, msg)
 }
 
-// getOneInstance 通过 ConsumerAPI.GetOneInstance 获取单个可用实例。
+// getOneInstance 通过 ConsumerAPI.GetOneInstance 获取单个可用实例及其 RouteMetadata。
 // SDK 内部会自动执行路由过滤（包括泳道路由）和负载均衡。
 //
 // 关键：把当前请求的 HTTP Header / Query 通过 AddArguments 传入，lane router 才能
 // 按 TrafficMatchRule 或 service-lane 染色标签选到正确的泳道实例。
-func (svr *SimpleLaneConsumer) getOneInstance(r *http.Request) (model.Instance, error) {
+// 返回的 routeMeta 包含 lane router 设置的染色信息（如 RouteMetadata["service-lane"]），
+// 调用方应据此透传染色标签给下游。
+func (svr *SimpleLaneConsumer) getOneInstance(r *http.Request) (model.Instance, map[string]string, error) {
 	getOneRequest := &polaris.GetOneInstanceRequest{}
 	getOneRequest.Namespace = svr.namespace
 	getOneRequest.Service = svr.service
@@ -296,9 +398,9 @@ func (svr *SimpleLaneConsumer) getOneInstance(r *http.Request) (model.Instance, 
 	getOneRequest.AddArguments(buildRouteArguments(r)...)
 	oneInstResp, err := svr.consumer.GetOneInstance(getOneRequest)
 	if err != nil {
-		return nil, fmt.Errorf("fail to getOneInstance: %w", err)
+		return nil, nil, fmt.Errorf("fail to getOneInstance: %w", err)
 	}
-	return oneInstResp.GetInstance(), nil
+	return oneInstResp.GetInstance(), oneInstResp.RouteMetadata, nil
 }
 
 func (svr *SimpleLaneConsumer) reportResult(result *polaris.ServiceCallResult, retStatus model.RetStatus, retCode int32) {
@@ -345,7 +447,7 @@ func getLocalHost(serverAddr string) (string, error) {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if namespace == "" || service == "" {

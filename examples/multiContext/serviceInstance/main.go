@@ -70,7 +70,7 @@ var consumerAPIs sync.Map // key: clientId(string), value: api.ConsumerAPI
 
 func main() {
 	flag.Parse()
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
 	// 解析 -clients 参数
 	clientMap, err := parseClients(clientsVal)

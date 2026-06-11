@@ -454,10 +454,10 @@ func (svr *PolarisConsumer) runWebServer() {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
 	if len(namespace) == 0 || len(service) == 0 {
 		log.Print("namespace and service are required")

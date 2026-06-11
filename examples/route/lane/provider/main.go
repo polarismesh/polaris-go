@@ -18,13 +18,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -52,6 +56,71 @@ func initArgs() {
 	flag.StringVar(&lane, "lane", "", "lane label value, e.g. gray / stable / (empty for baseline)")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
 }
+
+// newReqID 生成 8 字符请求 ID，用于串起同一次请求的多条日志.
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// formatHeaders 把 http.Header 压缩为单行字符串.
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(h[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// formatQuery 把 query 参数压缩为单行字符串.
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return "{}"
+	}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, strings.Join(q[k], ",")))
+	}
+	return "{" + strings.Join(parts, "; ") + "}"
+}
+
+// logIncomingRequest 单行打印收到的请求：方法/URL/query/headers/body/cookie，都带 reqID 前缀.
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(), formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印自身回给上游 client 的响应.
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
+}
+
+// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+const reqIDHeader = "X-Request-ID"
 
 // LaneProvider 泳道路由 provider 示例
 type LaneProvider struct {
@@ -127,14 +196,21 @@ func (svr *LaneProvider) deregisterService() {
 
 func (svr *LaneProvider) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
+		reqID := r.Header.Get(reqIDHeader)
+		if reqID == "" {
+			reqID = newReqID()
+		}
+		logIncomingRequest(reqID, r, "/echo")
 		rw.WriteHeader(http.StatusOK)
 		laneLabel := svr.lane
 		if laneLabel == "" {
 			laneLabel = "(baseline)"
 		}
 		msg := fmt.Sprintf("Hello, I'm %s. lane=%s, host=%s:%d", svr.service, laneLabel, svr.host, svr.port)
-		log.Printf("get echo request from %s, response: %s", r.RemoteAddr, msg)
+		log.Printf("[%s] handle echo: remote=%s, self=%s/%s, lane=%s",
+			reqID, r.RemoteAddr, svr.namespace, svr.service, laneLabel)
 		_, _ = rw.Write([]byte(msg))
+		logReply(reqID, r.RemoteAddr, http.StatusOK, msg)
 	})
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", svr.port))
@@ -162,7 +238,7 @@ func (svr *LaneProvider) runMainLoop() {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if namespace == "" || service == "" {

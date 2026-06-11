@@ -56,6 +56,11 @@
 #     - 匹配条件: Header user=half-strict
 #     - 目标泳道: lane=gray
 #     - 匹配模式: STRICT（验证 consumer 一跳无目标实例时直接 503）
+#
+#   half-simple 链路专项规则（覆盖 simple-gateway → simple-consumer(无 lane 实例) → provider(有 lane 实例) 链路）:
+#    复用上述两条 half-gray-permissive 和 half-gray-strict 规则，但走 GetOneInstance 链路。
+#    与 half 链路的差异: middle consumer 使用 simple-consumer (基于 GetOneInstance) 而非
+#    consumer (基于 ProcessRouters)，验证两种实现路径在 half 场景下行为一致。
 # ============================================================
 
 # ==================== 配置区 ====================
@@ -99,6 +104,11 @@ HALF_CONSUMER_PORT=19120
 HALF_PROVIDER_BASE_PORT=19130
 HALF_PROVIDER_GRAY_PORT=19131
 
+# half-simple 链路专项测试 — 与 half 链路一致的拓扑但走 GetOneInstance 路径:
+# simple-gateway → simple-consumer(无 lane 实例) → provider(有 lane 实例)
+# half-simple-consumer 只有 baseline 一台实例,下游复用 ${PROVIDER_SERVICE} 的 baseline+gray。
+HALF_SIMPLE_CONSUMER_PORT=19140
+
 # 服务名
 NAMESPACE="default"
 PROVIDER_SERVICE="LaneEchoServer"
@@ -117,6 +127,10 @@ NLG_CONSUMER_SERVICE="NoLaneGroupEchoClient"
 #   - HalfLaneEchoServer: 同时注册 baseline + lane=gray 两台实例
 HALF_CONSUMER_SERVICE="HalfLaneEchoClient"
 HALF_PROVIDER_SERVICE="HalfLaneEchoServer"
+# half-simple 链路专项测试 — 基于 GetOneInstance 的 half 链路变体:
+#   - HalfSimpleLaneEchoClient: 只注册 baseline 实例(不带 lane 标签)
+#   - 下游复用 ${PROVIDER_SERVICE} (LaneEchoServer, 已有 baseline+gray)
+HALF_SIMPLE_CONSUMER_SERVICE="HalfSimpleLaneEchoClient"
 
 # 预期的泳道规则配置
 EXPECTED_LANE_GROUP="lane-go-example"
@@ -264,7 +278,7 @@ if not entry_found:
 destinations = target_group.get('destinations', [])
 dest_services = {d.get('service', '') for d in destinations}
 fixable_dest = []
-for required_svc in ['${CONSUMER_SERVICE}', '${PROVIDER_SERVICE}', '${SIMPLE_CONSUMER_SERVICE}', '${PROVIDER_EXCL_SERVICE}', '${HALF_CONSUMER_SERVICE}', '${HALF_PROVIDER_SERVICE}']:
+for required_svc in ['${CONSUMER_SERVICE}', '${PROVIDER_SERVICE}', '${SIMPLE_CONSUMER_SERVICE}', '${PROVIDER_EXCL_SERVICE}', '${HALF_CONSUMER_SERVICE}', '${HALF_PROVIDER_SERVICE}', '${HALF_SIMPLE_CONSUMER_SERVICE}']:
     if required_svc not in dest_services:
         fixable_dest.append(required_svc)
         errors.append(f'泳道组目标服务缺少 {required_svc}，当前: {dest_services}')
@@ -371,7 +385,7 @@ else:
         log_info "期望的泳道规则配置:"
         log_info "  泳道组: ${EXPECTED_LANE_GROUP}"
         log_info "  入口: ${EXPECTED_ENTRY_SERVICE} (${NAMESPACE} 命名空间)"
-        log_info "  目标服务: ${CONSUMER_SERVICE}, ${SIMPLE_CONSUMER_SERVICE}, ${PROVIDER_SERVICE}, ${PROVIDER_EXCL_SERVICE}, ${HALF_CONSUMER_SERVICE}, ${HALF_PROVIDER_SERVICE}"
+        log_info "  目标服务: ${CONSUMER_SERVICE}, ${SIMPLE_CONSUMER_SERVICE}, ${PROVIDER_SERVICE}, ${PROVIDER_EXCL_SERVICE}, ${HALF_CONSUMER_SERVICE}, ${HALF_PROVIDER_SERVICE}, ${HALF_SIMPLE_CONSUMER_SERVICE}"
         log_info "  规则 gray:               Header user=gray       → lane=gray,           STRICT"
         log_info "  规则 permissive:         Header user=noexist    → lane=noexist,        PERMISSIVE"
         log_info "  规则 strict-noexist:     Header user=strict     → lane=strict-noexist, STRICT (无实例 → HTTP 503)"
@@ -492,6 +506,7 @@ group = {
         {'service': '${PROVIDER_EXCL_SERVICE}', 'namespace': '${NAMESPACE}'},
         {'service': '${HALF_CONSUMER_SERVICE}', 'namespace': '${NAMESPACE}'},
         {'service': '${HALF_PROVIDER_SERVICE}', 'namespace': '${NAMESPACE}'},
+        {'service': '${HALF_SIMPLE_CONSUMER_SERVICE}', 'namespace': '${NAMESPACE}'},
     ],
     'rules': [
         {
@@ -689,7 +704,7 @@ try:
     resp_data = json.loads(resp.read().decode('utf-8'))
     code = resp_data.get('code', 0)
     if code in (200000, 200001):
-        print(f'OK|已创建泳道组 ${EXPECTED_LANE_GROUP}（含 11 条规则：gray + permissive + strict-noexist + 6 条维度规则 + half-gray-permissive + half-gray-strict）')
+        print(f'OK|已创建泳道组 ${EXPECTED_LANE_GROUP}（含 11 条规则：gray + permissive + strict-noexist + 6 条维度规则 + half-gray-permissive + half-gray-strict）加上 ${HALF_SIMPLE_CONSUMER_SERVICE} 目标')
     else:
         info = resp_data.get('info', '')
         print(f'ERROR|创建失败，返回码: {code}, 信息: {info}')
@@ -1265,6 +1280,7 @@ cleanup_zombies_on_ports() {
         "${NLG_PROVIDER_BASE_PORT}" "${NLG_PROVIDER_GRAY_PORT}"
         "${NLG_CONSUMER_MODE0_PORT}" "${NLG_CONSUMER_MODE1_PORT}"
         "${HALF_CONSUMER_PORT}" "${HALF_PROVIDER_BASE_PORT}" "${HALF_PROVIDER_GRAY_PORT}"
+        "${HALF_SIMPLE_CONSUMER_PORT}"
     )
     local any=false
     for port in "${ports[@]}"; do
@@ -1338,6 +1354,9 @@ start_services() {
     local half_consumer_workdir="${BUILD_DIR}/half-consumer"
     local half_provider_base_workdir="${BUILD_DIR}/half-provider-base"
     local half_provider_gray_workdir="${BUILD_DIR}/half-provider-gray"
+    # 以下 1 个目录用于 half-simple 链路专项测试:
+    # simple-gateway → half-simple-consumer (无 lane 实例, GetOneInstance) → provider (有 lane=gray 实例)
+    local half_simple_consumer_workdir="${BUILD_DIR}/half-simple-consumer"
     mkdir -p "$provider_base_workdir" "$provider_gray_workdir" \
              "$consumer_base_workdir" "$consumer_gray_workdir" \
              "$simple_consumer_base_workdir" "$simple_consumer_gray_workdir" \
@@ -1345,7 +1364,8 @@ start_services() {
              "$provider_excl_stable_workdir" "$provider_excl_gray_workdir" "$gateway_excl_workdir" \
              "$nlg_provider_base_workdir" "$nlg_provider_gray_workdir" \
              "$nlg_consumer_mode0_workdir" "$nlg_consumer_mode1_workdir" \
-             "$half_consumer_workdir" "$half_provider_base_workdir" "$half_provider_gray_workdir"
+             "$half_consumer_workdir" "$half_provider_base_workdir" "$half_provider_gray_workdir" \
+             "$half_simple_consumer_workdir"
     cp "${polaris_yaml}" "${provider_base_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${provider_gray_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${consumer_base_workdir}/polaris.yaml"
@@ -1362,6 +1382,8 @@ start_services() {
     cp "${polaris_yaml}" "${half_consumer_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${half_provider_base_workdir}/polaris.yaml"
     cp "${polaris_yaml}" "${half_provider_gray_workdir}/polaris.yaml"
+    # half-simple 链路所有实例使用默认 baseLaneMode=0
+    cp "${polaris_yaml}" "${half_simple_consumer_workdir}/polaris.yaml"
     # gateway-excl 专门用 baseLaneMode=1。polaris.yaml 里把 `baseLaneMode: 0` 改为 `baseLaneMode: 1`
     # 这样 gateway-excl 在路由到 StableLaneEchoServer 时,会走 ExcludeEnabledLaneInstance 分支。
     sed 's/baseLaneMode: 0/baseLaneMode: 1/' "${polaris_yaml}" > "${gateway_excl_workdir}/polaris.yaml"
@@ -1626,6 +1648,22 @@ start_services() {
     echo $! >> "${PID_FILE}"
     log_info "half-provider-gray PID: $!"
 
+    # 启动 half-simple-consumer (基于 GetOneInstance, 只有 baseline 实例)
+    # 链路: simple-gateway → half-simple-consumer (无 lane 实例) → provider (baseline+gray)
+    # half-simple-consumer 使用 simple-consumer 二进制，目标下游复用 ${PROVIDER_SERVICE}
+    log_info "启动 half-simple-consumer (端口: ${HALF_SIMPLE_CONSUMER_PORT}, service: ${HALF_SIMPLE_CONSUMER_SERVICE}, lane: baseline)..."
+    (cd "$half_simple_consumer_workdir" && exec env POLARIS_SERVER="${POLARIS_HOST}" \
+        "${BUILD_DIR}/simple-consumer" \
+        -namespace="${NAMESPACE}" \
+        -service="${PROVIDER_SERVICE}" \
+        -selfNamespace="${NAMESPACE}" \
+        -selfService="${HALF_SIMPLE_CONSUMER_SERVICE}" \
+        -port="${HALF_SIMPLE_CONSUMER_PORT}" \
+        ${debug_flag} \
+        > "${LOG_DIR}/half-simple-consumer.log" 2>&1) &
+    echo $! >> "${PID_FILE}"
+    log_info "half-simple-consumer PID: $!"
+
     log_info "所有服务已启动，PID 记录在 ${PID_FILE}"
     log_info "Polaris SDK 日志目录:"
     log_info "  provider-base:        ${provider_base_workdir}/polaris/"
@@ -1646,6 +1684,7 @@ start_services() {
     log_info "  half-consumer:        ${half_consumer_workdir}/polaris/  (无 lane 标签实例)"
     log_info "  half-provider-base:   ${half_provider_base_workdir}/polaris/"
     log_info "  half-provider-gray:   ${half_provider_gray_workdir}/polaris/"
+    log_info "  half-simple-consumer: ${half_simple_consumer_workdir}/polaris/  (无 lane 标签实例, GetOneInstance)"
 }
 
 # ==================== 等待服务就绪 ====================
@@ -1735,6 +1774,8 @@ wait_for_services() {
                 wait_ready_on_port "${GATEWAY_EXCL_PORT}" "${PROVIDER_EXCL_SERVICE}" "gateway-excl → ${PROVIDER_EXCL_SERVICE}" 30 || true
                 # half 链路: gateway → half-consumer → half-provider
                 wait_ready_on_port "${GATEWAY_PORT}" "${HALF_CONSUMER_SERVICE}" "gateway → half-consumer → half-provider" 30 || true
+                # half-simple 链路: simple-gateway → half-simple-consumer → provider
+                wait_ready_on_port "${SIMPLE_GATEWAY_PORT}" "${HALF_SIMPLE_CONSUMER_SERVICE}" "simple-gateway → half-simple-consumer → provider" 30 || true
 
                 # 等待 nlg-consumer 就绪(直接 /echo,不走 gateway proxy)
                 local nlg_timeout=30
@@ -3810,6 +3851,142 @@ test_half_chain_baseline() {
     fi
 }
 
+# ---------- half-simple 链路用例 8.x: simple-gateway → simple-consumer(无 lane 实例) → provider(有 lane 实例) ----------
+# 链路特点:
+#   - half-simple-consumer (HalfSimpleLaneEchoClient): 只注册 baseline 实例,没有 lane=gray 实例, 基于 GetOneInstance
+#   - provider (LaneEchoServer): 同时有 baseline + lane=gray 两台实例
+#   - 与 half 链路 (7.x) 的差异: 中间 consumer 使用 simple-consumer (GetOneInstance) 而非 consumer (ProcessRouters)
+#
+# 关键验证点:
+#   1) PERMISSIVE 规则下, simple-gateway 通过 RouteMetadata 透传 service-lane header 给 half-simple-consumer,
+#      half-simple-consumer 作为中间节点透传给 provider, 后者命中 lane=gray 实例。
+#   2) STRICT 规则下, simple-gateway 一跳就因 half-simple-consumer 无 gray 实例返回 HTTP 503。
+#   3) 无 Header 的基线流量正常走 baseline 实例, 链路不受影响。
+
+# ---------- 用例 8.1: half-simple 链路 — 无 Header 基线流量不受影响 ----------
+test_half_simple_chain_baseline() {
+    log_title "用例 8.1: [half-simple] 无 Header — 基线流量正常路由到 baseline 实例"
+    log_info "测试目的: 确认 half 规则只对带相应 Header 的流量生效, 普通基线请求仍按 baseline 路由"
+    log_info "链路: simple-gateway → ${HALF_SIMPLE_CONSUMER_SERVICE} → ${PROVIDER_SERVICE} (无 Header)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${HALF_SIMPLE_CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q ":${PROVIDER_BASE_PORT}" \
+        && echo "$resp" | grep -q "lane=(baseline)"; then
+        test_pass "[用例8.1] 基线流量正确路由到 provider baseline(:${PROVIDER_BASE_PORT})"
+    elif echo "$resp" | grep -q ":${PROVIDER_GRAY_PORT}"; then
+        test_fail "[用例8.1] 无 Header 流量被错误染色, 路由到 lane=gray 实例(:${PROVIDER_GRAY_PORT})"
+        log_info "  实际响应: ${resp}"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例8.1] 收到响应但路由结果不符合预期"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例8.1] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 8.2: half-simple 链路 — PERMISSIVE 染色穿透中间 baseline 节点 ----------
+test_half_simple_chain_permissive_passthrough() {
+    log_title "用例 8.2: [half-simple] PERMISSIVE — 中间 simple-consumer 无 lane 实例时染色穿透到 provider"
+    log_info "测试目的: 验证 simple-gateway 染色后, lane=gray 在 half-simple-consumer 一跳回退 baseline 但 service-lane 透传, provider 命中 lane=gray"
+    log_info "链路: simple-gateway → ${HALF_SIMPLE_CONSUMER_SERVICE} (仅 baseline) → ${PROVIDER_SERVICE} (baseline+gray)"
+    log_info "请求头: user: half-permissive (规则 half-gray-permissive: PERMISSIVE → lane=gray)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "user: half-permissive" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${HALF_SIMPLE_CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    # 期望响应中:
+    #   - half-simple-consumer 自己 lane=(baseline) (它没有 lane 标签)
+    #   - 它选中的 callee (即 provider) lane=gray
+    if echo "$resp" | grep -q ":${PROVIDER_GRAY_PORT}" \
+        && echo "$resp" | grep -q "${HALF_SIMPLE_CONSUMER_SERVICE}. lane=(baseline)"; then
+        test_pass "[用例8.2] PERMISSIVE 染色穿透成功: half-simple-consumer baseline → provider lane=gray(:${PROVIDER_GRAY_PORT})"
+    elif echo "$resp" | grep -q ":${PROVIDER_BASE_PORT}"; then
+        test_fail "[用例8.2] provider 命中 baseline(:${PROVIDER_BASE_PORT}) 而非 lane=gray, 染色未穿透"
+        log_info "  实际响应: ${resp}"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例8.2] 收到响应但路由结果不符合预期"
+        log_info "  期望: ${HALF_SIMPLE_CONSUMER_SERVICE} lane=(baseline) 且 callee 命中 :${PROVIDER_GRAY_PORT}"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例8.2] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 8.2d: half-simple 链路 — service-lane 直接染色对照 ----------
+# 与 8.2 形成对照: 8.2 走"普通 header → simple-gateway 按规则匹配后染色"路径,
+# 8.2d 直接构造 service-lane stain label,跳过 TrafficMatchRule 流量识别。
+test_half_simple_chain_permissive_passthrough_by_stain_label() {
+    log_title "用例 8.2d: [half-simple] PERMISSIVE — service-lane 直接染色对照"
+    log_info "测试目的: 验证直接染色 (跳过 TrafficMatchRule) 与流量匹配染色 (8.2) 走出同样的链路: half-simple-consumer baseline → provider lane=gray"
+    log_info "链路: simple-gateway → ${HALF_SIMPLE_CONSUMER_SERVICE} (仅 baseline) → ${PROVIDER_SERVICE} (baseline+gray)"
+    log_info "请求头: service-lane: ${EXPECTED_LANE_GROUP}/half-gray-permissive (直接染色,绕过流量匹配)"
+    log_info ""
+
+    local resp
+    resp=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "service-lane: ${EXPECTED_LANE_GROUP}/half-gray-permissive" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${HALF_SIMPLE_CONSUMER_SERVICE}/echo" 2>/dev/null || true)
+    log_raw "  响应: ${resp}"
+
+    if echo "$resp" | grep -q ":${PROVIDER_GRAY_PORT}" \
+        && echo "$resp" | grep -q "${HALF_SIMPLE_CONSUMER_SERVICE}. lane=(baseline)"; then
+        test_pass "[用例8.2d] service-lane 直接染色穿透成功: half-simple-consumer baseline → provider lane=gray(:${PROVIDER_GRAY_PORT})"
+    elif echo "$resp" | grep -q ":${PROVIDER_BASE_PORT}"; then
+        test_fail "[用例8.2d] provider 命中 baseline(:${PROVIDER_BASE_PORT}) 而非 lane=gray, stain label 染色未生效"
+        log_info "  实际响应: ${resp}"
+    elif echo "$resp" | grep -q "LaneEchoServer"; then
+        test_fail "[用例8.2d] 收到响应但路由结果不符合预期"
+        log_info "  期望: ${HALF_SIMPLE_CONSUMER_SERVICE} lane=(baseline) 且 callee 命中 :${PROVIDER_GRAY_PORT}"
+        log_info "  实际响应: ${resp}"
+    else
+        test_fail "[用例8.2d] 未收到有效响应"
+        log_info "  响应: ${resp}"
+    fi
+}
+
+# ---------- 用例 8.3: half-simple 链路 — STRICT 在 simple-gateway 一跳直接 503 ----------
+test_half_simple_chain_strict_blocks_at_gateway() {
+    log_title "用例 8.3: [half-simple] STRICT — simple-gateway 一跳就因 half-simple-consumer 无 lane 实例返回 503"
+    log_info "测试目的: 验证 STRICT 模式下 simple-gateway 用 GetOneInstance 路由, consumer 无 gray 实例时直接 HTTP 503"
+    log_info "链路: simple-gateway → ${HALF_SIMPLE_CONSUMER_SERVICE} (仅 baseline) — 在此处中断"
+    log_info "请求头: user: half-strict (规则 half-gray-strict: STRICT → lane=gray)"
+    log_info ""
+
+    local tmp_body http_code body
+    tmp_body=$(mktemp -t lane-test-half-simple-strict-body.XXXXXX)
+    http_code=$(curl -s --connect-timeout 5 --max-time 10 \
+        -H "user: half-strict" \
+        -o "$tmp_body" -w "%{http_code}" \
+        "http://127.0.0.1:${SIMPLE_GATEWAY_PORT}/${HALF_SIMPLE_CONSUMER_SERVICE}/echo" 2>/dev/null || echo "000")
+    http_code=$(printf '%s' "$http_code" | tr -cd '0-9' | cut -c1-3)
+    [ -z "$http_code" ] && http_code="000"
+    body=$(cat "$tmp_body" 2>/dev/null || echo "")
+    rm -f "$tmp_body"
+    log_raw "  HTTP ${http_code}, 响应: ${body}"
+
+    if [ "$http_code" = "503" ]; then
+        test_pass "[用例8.3] STRICT 模式 simple-gateway GetOneInstance 无目标 lane 实例时正确返回 HTTP 503"
+    elif echo "$body" | grep -q ":${PROVIDER_GRAY_PORT}"; then
+        test_fail "[用例8.3] STRICT 模式被错误地穿透到 provider(:${PROVIDER_GRAY_PORT}), 期望在 gateway 一跳就 503"
+    elif echo "$body" | grep -q "LaneEchoServer"; then
+        test_fail "[用例8.3] STRICT 模式路由到了实例(期望 503), body=${body:0:120}"
+    else
+        test_fail "[用例8.3] STRICT 模式未返回 503 (HTTP=${http_code})"
+        log_info "  响应: ${body:0:200}"
+    fi
+}
+
 # ==================== 运行所有测试 ====================
 run_all_tests() {
     log_title "开始泳道路由测试"
@@ -3832,6 +4009,7 @@ run_all_tests() {
     log_info "Half-Consumer 端口: ${HALF_CONSUMER_PORT} (${HALF_CONSUMER_SERVICE}, 仅 baseline)"
     log_info "Half-Provider-base 端口: ${HALF_PROVIDER_BASE_PORT} (${HALF_PROVIDER_SERVICE})"
     log_info "Half-Provider-gray 端口: ${HALF_PROVIDER_GRAY_PORT} (${HALF_PROVIDER_SERVICE}, lane=gray)"
+    log_info "Half-Simple-Consumer 端口: ${HALF_SIMPLE_CONSUMER_PORT} (${HALF_SIMPLE_CONSUMER_SERVICE}, 仅 baseline, GetOneInstance)"
     log_info ""
 
     TOTAL_PASS=0
@@ -3950,6 +4128,14 @@ run_all_tests() {
     test_half_chain_permissive_passthrough_by_stain_label
     test_half_chain_strict_blocks_at_consumer
 
+    # ========== half-simple 链路: simple-gateway → simple-consumer(无 lane 实例) → provider(有 lane 实例) ==========
+    log_title "开始 half-simple 链路测试（simple-gateway → ${HALF_SIMPLE_CONSUMER_SERVICE} → ${PROVIDER_SERVICE}）"
+    print_lane_group_summary
+    test_half_simple_chain_baseline
+    test_half_simple_chain_permissive_passthrough
+    test_half_simple_chain_permissive_passthrough_by_stain_label
+    test_half_simple_chain_strict_blocks_at_gateway
+
     # ========== 最后执行（涉及规则变更，避免影响前面用例）==========
     log_title "开始破坏性用例（test_out_of_lane_group）"
     print_lane_group_summary
@@ -4060,7 +4246,7 @@ usage() {
     echo "预期的 Polaris 泳道规则（需提前在控制台配置）:"
     echo "  泳道组: lane-go-example"
     echo "  入口: LaneRouterGateway/default"
-    echo "  目标: LaneEchoClient, SimpleLaneEchoClient, LaneEchoServer, StableLaneEchoServer, HalfLaneEchoClient, HalfLaneEchoServer"
+    echo "  目标: LaneEchoClient, SimpleLaneEchoClient, LaneEchoServer, StableLaneEchoServer, HalfLaneEchoClient, HalfLaneEchoServer, HalfSimpleLaneEchoClient"
     echo "  规则 gray:               Header user=gray       → lane=gray,           STRICT"
     echo "  规则 permissive:         Header user=noexist    → lane=noexist,        PERMISSIVE"
     echo "  规则 strict-noexist:     Header user=strict     → lane=strict-noexist, STRICT (无实例 → HTTP 503)"
