@@ -66,8 +66,14 @@ NAMESPACE="${NAMESPACE:-default}"
 SERVICE_NAME="${SERVICE_NAME:-CircuitBreakerCallee}"
 # 四个子用例使用四个独立 caller 服务名，避免规则相互干扰
 INSTANCE_CALLER="${INSTANCE_CALLER:-CircuitBreakerInstanceCaller}"
+# 用例 1 InvokeHandler 子阶段使用独立 caller
+INSTANCE_INVOKE_CALLER="${INSTANCE_INVOKE_CALLER:-CircuitBreakerInstanceInvokeCaller}"
 SERVICE_CALLER="${SERVICE_CALLER:-CircuitBreakerServiceCaller}"
+# 用例 2 InvokeHandler 子阶段
+SERVICE_INVOKE_CALLER="${SERVICE_INVOKE_CALLER:-CircuitBreakerServiceInvokeCaller}"
 INTERFACE_CALLER="${INTERFACE_CALLER:-CircuitBreakerInterfaceCaller}"
+# 用例 3 InvokeHandler 子阶段
+INTERFACE_INVOKE_CALLER="${INTERFACE_INVOKE_CALLER:-CircuitBreakerInterfaceInvokeCaller}"
 # 用例4 使用独立的 caller 服务名，避免与用例1（同样是 INSTANCE 级）的规则冲突
 OLD_INSTANCE_CALLER="${OLD_INSTANCE_CALLER:-CircuitBreakerOldInstanceCaller}"
 # 用例 5：HTTP 状态码区分（4xx 不熔断 / 5xx 熔断 / 网络错熔断）
@@ -81,6 +87,12 @@ MODIFY_RULE_CALLER="${MODIFY_RULE_CALLER:-CircuitBreakerModifyRuleCaller}"
 PM_CALLER="${PM_CALLER:-CircuitBreakerPMCaller}"
 # 用例 9：路径匹配方式维度（5 种 MatchString 类型）独立 1 条规则 5 个 BlockConfig
 PATHTYPE_CALLER="${PATHTYPE_CALLER:-CircuitBreakerPathTypeCaller}"
+# 用例 10：全死全活兜底策略验证（enableRecoverAll 开启 vs 关闭对比）
+# 覆盖三种调用模式：Decorator / InvokeHandler / Bare Report
+# 每种模式使用独立 caller 避免规则相互干扰
+ALL_DEAD_DECORATOR_CALLER="${ALL_DEAD_DECORATOR_CALLER:-CircuitBreakerAllDeadDecoratorCaller}"
+ALL_DEAD_INVOKE_CALLER="${ALL_DEAD_INVOKE_CALLER:-CircuitBreakerAllDeadInvokeCaller}"
+ALL_DEAD_REPORT_CALLER="${ALL_DEAD_REPORT_CALLER:-CircuitBreakerAllDeadReportCaller}"
 
 # 端口规划（避免冲突）：
 #   provider-a: 28081
@@ -90,8 +102,14 @@ PATHTYPE_CALLER="${PATHTYPE_CALLER:-CircuitBreakerPathTypeCaller}"
 PROVIDER_A_PORT="${PROVIDER_A_PORT:-28081}"
 PROVIDER_B_PORT="${PROVIDER_B_PORT:-28082}"
 INSTANCE_CONSUMER_PORT="${INSTANCE_CONSUMER_PORT:-18081}"
+# 用例 1 InvokeHandler 子阶段 consumer 端口
+INSTANCE_INVOKE_CONSUMER_PORT="${INSTANCE_INVOKE_CONSUMER_PORT:-18091}"
 SERVICE_CONSUMER_PORT="${SERVICE_CONSUMER_PORT:-18082}"
+# 用例 2 InvokeHandler 子阶段
+SERVICE_INVOKE_CONSUMER_PORT="${SERVICE_INVOKE_CONSUMER_PORT:-18092}"
 INTERFACE_CONSUMER_PORT="${INTERFACE_CONSUMER_PORT:-18083}"
+# 用例 3 InvokeHandler 子阶段
+INTERFACE_INVOKE_CONSUMER_PORT="${INTERFACE_INVOKE_CONSUMER_PORT:-18093}"
 OLD_INSTANCE_CONSUMER_PORT="${OLD_INSTANCE_CONSUMER_PORT:-18084}"
 # 用例 5（http_status）专用 consumer 端口；selfService=CircuitBreakerHttpStatusCaller
 HTTP_STATUS_CONSUMER_PORT="${HTTP_STATUS_CONSUMER_PORT:-18085}"
@@ -103,6 +121,10 @@ MODIFY_RULE_CONSUMER_PORT="${MODIFY_RULE_CONSUMER_PORT:-18087}"
 PM_CONSUMER_PORT="${PM_CONSUMER_PORT:-18088}"
 # 用例 9（路径匹配方式）专用 consumer 端口
 PATHTYPE_CONSUMER_PORT="${PATHTYPE_CONSUMER_PORT:-18089}"
+# 用例 10（全死全活）专用 consumer 端口（三种模式各一个）
+ALL_DEAD_DECORATOR_PORT="${ALL_DEAD_DECORATOR_PORT:-18090}"
+ALL_DEAD_INVOKE_PORT="${ALL_DEAD_INVOKE_PORT:-18091}"
+ALL_DEAD_REPORT_PORT="${ALL_DEAD_REPORT_PORT:-18092}"
 
 # 触发熔断所需的请求次数（单实例失败计数）
 # 默认实例熔断规则：连续错误数 / 错误率，10 次足够触发
@@ -117,7 +139,7 @@ WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-8}"
 WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-15}"
 
 # 默认运行的子用例集合（逗号分隔），可通过 --only 缩小范围
-RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype}"
+RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -178,6 +200,8 @@ INTERFACE_CONSUMER_DIR="${CALLER_CONSUMER_DIR}"
 # 用例4：旧版散装写法（CircuitBreakerAPI.Report + ConsumerAPI.UpdateServiceCallResult），
 # 仅暴露 /echo 一个端点，验证存量客户的实例级熔断路径在新版 SDK 中仍然可用。
 OLD_INSTANCE_CONSUMER_DIR="${SCRIPT_DIR}/oldInstanceCircuitBreakerCaller/consumer"
+# 用例 10：InvokeHandler 模式使用独立的 consumer 源码（手动编排 AcquirePermission + OnSuccess/OnError）
+INVOKE_HANDLER_CONSUMER_DIR="${SCRIPT_DIR}/invokeHandlerCaller/consumer"
 BUILD_DIR="${SCRIPT_DIR}/.build"
 LOG_DIR="${SCRIPT_DIR}/.logs"
 
@@ -826,6 +850,7 @@ enable_circuitbreaker_rule() {
 #     + CONSECUTIVE_ERROR=5；error_conditions = retCode 5xx
 #   - recover_condition.sleepWindow = 30s，consecutiveSuccess = 1（只要 1 次成功即恢复）
 
+# 用例1 Decorator 子阶段
 build_rule_body_instance() {
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$INSTANCE_CALLER" \
@@ -835,8 +860,7 @@ build_rule_body_instance() {
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
-# 用例4：旧版散装写法的实例级熔断规则
-# 与用例1结构一致，仅 source.service 改为 OLD_INSTANCE_CALLER，避免与用例1的规则相互干扰。
+# 用例4：旧版散装写法的实例级熔断规则（独立规则，与用例1隔离）
 build_rule_body_old_instance() {
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$OLD_INSTANCE_CALLER" \
@@ -854,12 +878,50 @@ build_rule_body_old_instance() {
 #   - 5xx 路径：3 次连续 5xx 即触发熔断
 #   - 4xx 路径：所有请求都返回 RetSuccess，永远不触发熔断
 #   - 网络错路径：SDK 内部 retCode="-1" 哨兵命中 RANGE 类条件，3 次即触发
+# 用例5 A/B段：HTTP 状态码区分专用规则（INSTANCE 级，CONSECUTIVE_ERROR=3）
+# 与用例7（modify_rule）和用例10（all_dead_fallback）隔离，各有独立规则
 build_rule_body_http_status() {
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$HTTP_STATUS_CALLER" \
         RULE_NAME="cb-instance-${HTTP_STATUS_CALLER}" \
         LEVEL="INSTANCE" \
         BC_NAME="http-status-block" \
+        CONSECUTIVE_ERROR="3" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例10：全死全活兜底策略验证（三种调用模式）
+# 使用 INSTANCE 级熔断规则（CONSECUTIVE_ERROR=3），验证当所有实例都被熔断 OPEN 后，
+# 全死全活开启时 GetOneInstance 仍能选到实例（请求可透传至 provider），
+# 全死全活关闭时 GetOneInstance 直接失败。
+# 子阶段 A：Decorator 模式（MakeFunctionDecorator + SetInstance）
+# 用例 10 三个子阶段共用 cb-instance-${MODIFY_RULE_CALLER}（source=*/*，全死全活需要多 consumer 共用）
+build_rule_body_all_dead_decorator() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="*" SOURCE_SERVICE="*" \
+        RULE_NAME="cb-instance-${HTTP_STATUS_CALLER}" \
+        LEVEL="INSTANCE" \
+        BC_NAME="all-dead-decorator-block" \
+        CONSECUTIVE_ERROR="3" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+# 子阶段 B：InvokeHandler 模式（MakeInvokeHandler + AcquirePermission + OnSuccess/OnError）
+build_rule_body_all_dead_invoke() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="*" SOURCE_SERVICE="*" \
+        RULE_NAME="cb-instance-${HTTP_STATUS_CALLER}" \
+        LEVEL="INSTANCE" \
+        BC_NAME="all-dead-invoke-block" \
+        CONSECUTIVE_ERROR="3" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+# 子阶段 C：Bare Report 模式（CircuitBreakerAPI.Report + UpdateServiceCallResult）
+build_rule_body_all_dead_report() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="*" SOURCE_SERVICE="*" \
+        RULE_NAME="cb-instance-${HTTP_STATUS_CALLER}" \
+        LEVEL="INSTANCE" \
+        BC_NAME="all-dead-report-block" \
         CONSECUTIVE_ERROR="3" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
@@ -880,6 +942,7 @@ build_rule_body_http_status_service() {
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
+# 用例2 Decorator 子阶段
 build_rule_body_service() {
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$SERVICE_CALLER" \
@@ -952,6 +1015,19 @@ print(json.dumps(bcs))
         ERROR_PERCENT="50" \
         ERROR_INTERVAL="30" \
         MINIMUM_REQUEST="10" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例3 InvokeHandler 子阶段：简化 METHOD 级规则，只验证 /echo 路径
+# 复用 Decorator 的规则名（相同 selfService + 相同规则）
+build_rule_body_interface_invoke() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$INTERFACE_CALLER" \
+        RULE_NAME="cb-interface-${INTERFACE_CALLER}" \
+        LEVEL="METHOD" \
+        BC_NAME="echo-invoke-block" \
+        BC_API_PATH="/echo" \
+        BC_API_PATH_TYPE="EXACT" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
@@ -1076,7 +1152,7 @@ build_rule_body_protocol_method() {
     python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
-# 用例 10：路径匹配方式维度 5 条规则（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）
+# 用例 9：路径匹配方式维度 5 条规则（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）
 # 1 条规则 = 1 个 BlockConfig（按 path MatchString 类型区分）
 # 第一个参数是 ptype，第二个是 path_value
 #   - EXACT:        /api/pathtype/exact
@@ -1338,6 +1414,9 @@ generate_consumer_polaris_yaml() {
     # 第二参数控制是否启用默认实例熔断规则；默认 false（关闭，避免干扰其它用例）
     # 用例 6（default_rule）会传 "true"，验证不下发任何规则时本地默认熔断的兜底行为
     local enable_default="${2:-false}"
+    # 第三参数控制是否启用全死全活；默认 true
+    # 用例 10（all_dead_fallback）阶段 B 会传 "false"，验证全死全活关闭时 GetOneInstance 失败
+    local enable_recover_all="${3:-true}"
 
     local default_block=""
     if [[ "$enable_default" == "true" ]]; then
@@ -1377,6 +1456,8 @@ consumer:
     # 缩短规则拉取/检查间隔，加快测试中规则下发感知
     checkPeriod: 5s
 ${default_block}
+  serviceRouter:
+    enableRecoverAll: ${enable_recover_all}
 EOF
 }
 
@@ -1472,11 +1553,13 @@ start_consumer() {
     local log_file="$5"
     # 第六参数（可选）：是否启用默认实例熔断规则；默认 false
     local enable_default_rule="${6:-false}"
+    # 第七参数（可选）：是否启用全死全活；默认 true
+    local enable_recover_all="${7:-true}"
 
     # 注意：workdir 不能与二进制输出路径同名，理由同 start_provider。
     local workdir="${BUILD_DIR}/${name}_run"
     mkdir -p "$workdir"
-    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule"
+    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule" "$enable_recover_all"
 
     if lsof -ti :"${port}" > /dev/null 2>&1; then
         log_warn "端口 ${port} 已被占用，尝试终止已有进程..."
@@ -1641,8 +1724,8 @@ case_instance() {
         "    → 装饰器结束阶段自动按 InstanceResource 上报" \
         "" \
         "规则配置:" \
-        "  · Level=INSTANCE, name=cb-instance-${INSTANCE_CALLER}" \
-        "  · source=*/${INSTANCE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
+        "  · Level=INSTANCE, name=cb-instance-v5（source=*/*，用例1/4 共用）" \
+        "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
         "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
@@ -1685,8 +1768,7 @@ case_instance() {
         return 1
     fi
 
-    # 巡检被调维度的熔断规则——其他主调指向同一被调（甚至 source=*）的规则也会被
-    # 本用例 consumer 命中，照样会污染统计；同样按"严格模式 abort"语义处理。
+    # 巡检被调维度的熔断规则
     if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INSTANCE_CALLER" \
         "cb-instance-${INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -1694,7 +1776,7 @@ case_instance() {
         return 1
     fi
 
-    log_step "用例1.3 创建 INSTANCE 级熔断规则"
+    log_step "用例1.3 创建 INSTANCE 级熔断规则（Decorator + InvokeHandler 共用）"
     local rule_body rule_id
     rule_body=$(build_rule_body_instance)
     rule_id=$(create_circuitbreaker_rule "instance" "$rule_body") || {
@@ -1746,17 +1828,51 @@ case_instance() {
 
     stop_consumer "$consumer_pid"
 
+    # ───── InvokeHandler 子阶段：验证手动编排模式同样能触发 INSTANCE 级熔断 ─────
+    # 复用 Decorator 阶段的规则（相同 selfService + 相同规则），不再创建新规则
+    log_step "用例1.10 [InvokeHandler] 启动 invokeHandler consumer（selfService=${INSTANCE_CALLER}）"
+    if ! start_consumer "instance_invoke_consumer" "$INVOKE_HANDLER_CONSUMER_DIR" \
+        "$INSTANCE_CALLER" "$INSTANCE_INVOKE_CONSUMER_PORT" \
+        "${LOG_DIR}/instance_invoke_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local invoke_pid="$_STARTED_PID"
+
+    # InvokeHandler 子阶段：一轮 trigger → verify → recover
+    log_step "用例1.11 [InvokeHandler] trigger: provider-b=500, 发 ${INSTANCE_R1_TRIGGER_COUNT} 次"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$INSTANCE_INVOKE_CONSUMER_PORT" "$INSTANCE_R1_TRIGGER_COUNT" "实例级InvokeHandler触发"
+    local i_trigger_fail=$CASE_FAIL
+
+    log_step "用例1.12 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
+    sleep 2
+    run_burst "$INSTANCE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级InvokeHandler验证"
+    local i_verify_ok=$CASE_OK
+
+    log_step "用例1.13 [InvokeHandler] recover: provider-b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$INSTANCE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级InvokeHandler恢复"
+    local i_recover_ok=$CASE_OK
+
+    stop_consumer "$invoke_pid"
+
     if [[ "$r1_trigger_fail" -ge 1 ]] \
         && [[ "$r1_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
         && [[ "$r1_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
         && [[ "$r2_trigger_fail" -ge 1 ]] \
         && [[ "$r2_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
-        && [[ "$r2_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]]; then
-        log_info "✅ 用例1 PASS: 轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}]"
+        && [[ "$r2_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$i_trigger_fail" -ge 1 ]] \
+        && [[ "$i_verify_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$i_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]]; then
+        log_info "✅ 用例1 PASS: Decorator轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} verify=${i_verify_ok} recover=${i_recover_ok}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例1 FAIL: 轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}]"
+    log_error "❌ 用例1 FAIL: Decorator轮1[trigger=${r1_trigger_fail} verify=${r1_verify_ok} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} verify=${r2_verify_ok} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} verify=${i_verify_ok} recover=${i_recover_ok}]"
     echo "FAIL"
     return 1
 }
@@ -1786,7 +1902,7 @@ case_service() {
         "  · customer func 内的 SetInstance 同时也参与实例级统计（不影响服务级判定）" \
         "" \
         "规则配置:" \
-        "  · Level=SERVICE, name=cb-service-${SERVICE_CALLER}" \
+        "  · Level=SERVICE, name=cb-service-merged（source=*/*，用例2/5C 共用）" \
         "  · source=*/${SERVICE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
@@ -1835,14 +1951,13 @@ case_service() {
     fi
 
     # 巡检被调维度的熔断规则
-    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$SERVICE_CALLER" \
-        "cb-service-${SERVICE_CALLER}"; then
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$SERVICE_CALLER" "cb-service-${SERVICE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
-    log_step "用例2.3 创建 SERVICE 级熔断规则"
+    log_step "用例2.3 创建 SERVICE 级熔断规则（cb-service-merged，source=*/*）"
     local rule_body rule_id
     rule_body=$(build_rule_body_service)
     rule_id=$(create_circuitbreaker_rule "service" "$rule_body") || {
@@ -1896,13 +2011,45 @@ case_service() {
 
     stop_consumer "$consumer_pid"
 
+    # ───── InvokeHandler 子阶段：验证手动编排模式同样能触发 SERVICE 级熔断 ─────
+    # 复用 Decorator 阶段的规则（相同 selfService + 相同规则）
+    log_step "用例2.10 [InvokeHandler] 启动 invokeHandler consumer（selfService=${SERVICE_CALLER}）"
+    if ! start_consumer "service_invoke_consumer" "$INVOKE_HANDLER_CONSUMER_DIR" \
+        "$SERVICE_CALLER" "$SERVICE_INVOKE_CONSUMER_PORT" \
+        "${LOG_DIR}/service_invoke_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local invoke_pid="$_STARTED_PID"
+
+    log_step "用例2.11 [InvokeHandler] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次"
+    provider_set_error "$PROVIDER_A_PORT" "true"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$SERVICE_INVOKE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级InvokeHandler触发"
+    local i_trigger_fail=$CASE_FAIL
+
+    log_step "用例2.12 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
+    sleep 1
+    run_burst "$SERVICE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级InvokeHandler验证"
+    local i_verify_abort=$CASE_ABORT
+
+    log_step "用例2.13 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$SERVICE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级InvokeHandler恢复"
+    local i_recover_ok=$CASE_OK
+
+    stop_consumer "$invoke_pid"
+
     if [[ "$r1_trigger_fail" -ge 1 ]] && [[ "$r1_verify_abort" -ge 1 ]] && [[ "$r1_recover_ok" -ge 1 ]] \
-        && [[ "$r2_trigger_fail" -ge 1 ]] && [[ "$r2_verify_abort" -ge 1 ]] && [[ "$r2_recover_ok" -ge 1 ]]; then
-        log_info "✅ 用例2 PASS: 轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}]"
+        && [[ "$r2_trigger_fail" -ge 1 ]] && [[ "$r2_verify_abort" -ge 1 ]] && [[ "$r2_recover_ok" -ge 1 ]] \
+        && [[ "$i_trigger_fail" -ge 1 ]] && [[ "$i_verify_abort" -ge 1 ]] && [[ "$i_recover_ok" -ge 1 ]]; then
+        log_info "✅ 用例2 PASS: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例2 FAIL: 轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}]"
+    log_error "❌ 用例2 FAIL: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
     echo "FAIL"
     return 1
 }
@@ -1942,18 +2089,17 @@ case_interface() {
         "  · customer func 内 SetInstance（实例级也参与统计，互不干扰）" \
         "  · 同一份源码（newCircuitBreakerCaller/consumer）跑三种用例，仅 selfService/port 不同" \
         "" \
-        "规则配置（共 3 条 METHOD 级规则，挂在同一个 service）:" \
-        "  · /echo  cb-interface-${INTERFACE_CALLER}" \
-        "      · BlockConfig.api.path=/echo (EXACT)" \
+        "规则配置（1 条 METHOD 级规则，3 个 BlockConfig）:" \
+        "  · cb-interface-merged（source=*/*）" \
+        "      · BlockConfig /echo : 5 种 MatchString RET_CODE 错误条件" \
         "      · ErrorCondition: 5 条 RET_CODE 同时挂，覆盖 RANGE/EXACT/REGEX/" \
         "          IN/NOT_IN — 全部只命中 5xx，4xx 不计入熔断" \
         "      · Trigger: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minReq=10" \
         "      · Recover: sleepWindow=12s, consecutiveSuccess=1" \
-        "  · /order cb-interface-${INTERFACE_CALLER}-order" \
-        "      · BlockConfig.api.path=/order (EXACT)" \
+        "      · BlockConfig /order : 极高阈值不触发" \
         "      · 阈值故意调高: CONSECUTIVE_ERROR=100 / ERROR_RATE=99%@30s, minReq=200" \
         "      · 演示\"两个接口配置不同的规则会按各自规则生效\"" \
-        "  · /slow  cb-interface-${INTERFACE_CALLER}-slow" \
+        "  · /slow  cb-interface-merged" \
         "      · BlockConfig.api.path=/slow (EXACT)" \
         "      · ErrorCondition: input_type=DELAY, value=200 (毫秒)" \
         "      · 演示\"错误判断条件支持时延\"" \
@@ -2000,17 +2146,15 @@ case_interface() {
     local consumer_pid="$_STARTED_PID"
 
     # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定。
-    # 接口级用例合并为 1 条规则，预期只有 cb-interface-${INTERFACE_CALLER}。
-    if ! inspect_caller_rules "$INTERFACE_CALLER" "$NAMESPACE" \
-        "cb-interface-${INTERFACE_CALLER}"; then
+    # 接口级用例合并为 1 条规则，预期只有 cb-interface-merged。
+    if ! inspect_caller_rules "$INTERFACE_CALLER" "$NAMESPACE" "cb-interface-${INTERFACE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
     # 巡检被调维度的熔断规则
-    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INTERFACE_CALLER" \
-        "cb-interface-${INTERFACE_CALLER}"; then
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INTERFACE_CALLER" "cb-interface-${INTERFACE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
@@ -2020,7 +2164,7 @@ case_interface() {
     #   /echo  block 用 5 种 MatchString 演示 RET_CODE 错误条件
     #   /order block 阈值极高确保不触发
     #   /slow  block 用 DELAY 错误条件
-    log_step "用例3.3 创建 METHOD 级合并规则（3 个 BlockConfig）"
+    log_step "用例3.3 创建 METHOD 级合并规则（cb-interface-merged，3 个 BlockConfig，source=*/*）"
     local rule_body rule_id
     rule_body=$(build_rule_body_interface_merged)
     rule_id=$(create_circuitbreaker_rule "interface" "$rule_body") || {
@@ -2111,6 +2255,37 @@ case_interface() {
 
     stop_consumer "$consumer_pid"
 
+    # ───── InvokeHandler 子阶段：验证手动编排模式同样能触发 METHOD 级熔断 ─────
+    # 复用 Decorator 阶段的规则（相同 selfService + 相同规则）
+    log_step "用例3.15 [InvokeHandler] 启动 invokeHandler consumer（selfService=${INTERFACE_CALLER}）"
+    if ! start_consumer "interface_invoke_consumer" "$INVOKE_HANDLER_CONSUMER_DIR" \
+        "$INTERFACE_CALLER" "$INTERFACE_INVOKE_CONSUMER_PORT" \
+        "${LOG_DIR}/interface_invoke_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local invoke_pid="$_STARTED_PID"
+
+    log_step "用例3.16 [InvokeHandler] trigger: a=500/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo"
+    provider_set_error "$PROVIDER_A_PORT" "true"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$INTERFACE_INVOKE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级InvokeHandler触发"
+    local i_trigger_fail=$CASE_FAIL
+
+    log_step "用例3.17 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
+    sleep 1
+    run_burst "$INTERFACE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级InvokeHandler验证"
+    local i_verify_abort=$CASE_ABORT
+
+    log_step "用例3.18 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$INTERFACE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级InvokeHandler恢复"
+    local i_recover_ok=$CASE_OK
+
+    stop_consumer "$invoke_pid"
+
     # 通过条件：
     #   /echo 两轮 trigger / verify / recover 全部满足
     #   /order 整批失败且不应 abort
@@ -2127,12 +2302,15 @@ case_interface() {
         && [[ "$info_abort" -eq 0 ]] && [[ "$info_fail" -ge 1 ]] \
         && [[ "$slow_trigger_ok_or_abort" -ge 1 ]] \
         && [[ "$slow_verify_abort" -ge 1 ]] \
-        && [[ "$slow_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]]; then
-        log_info "✅ 用例3 PASS: /echo 轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}"
+        && [[ "$slow_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
+        && [[ "$i_trigger_fail" -ge 1 ]] \
+        && [[ "$i_verify_abort" -ge 1 ]] \
+        && [[ "$i_recover_ok" -ge 1 ]]; then
+        log_info "✅ 用例3 PASS: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例3 FAIL: /echo 轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}"
+    log_error "❌ 用例3 FAIL: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
     echo "FAIL"
     return 1
 }
@@ -2172,8 +2350,8 @@ case_old_instance() {
         "  · 源码: examples/circuitbreaker/oldInstanceCircuitBreakerCaller/consumer" \
         "" \
         "规则配置:" \
-        "  · Level=INSTANCE, name=cb-instance-${OLD_INSTANCE_CALLER}" \
-        "  · source=*/${OLD_INSTANCE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
+        "  · Level=INSTANCE, name=cb-instance-v5（source=*/*，用例1/4 共用）" \
+        "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
         "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
@@ -2213,22 +2391,21 @@ case_old_instance() {
     local consumer_pid="$_STARTED_PID"
 
     # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
-    if ! inspect_caller_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" \
-        "cb-instance-${OLD_INSTANCE_CALLER}"; then
+    # 用例4 与用例1 共用 cb-instance-v5（source=*/*）
+    if ! inspect_caller_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" "cb-instance-${OLD_INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
     # 巡检被调维度的熔断规则
-    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$OLD_INSTANCE_CALLER" \
-        "cb-instance-${OLD_INSTANCE_CALLER}"; then
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$OLD_INSTANCE_CALLER" "cb-instance-${OLD_INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
-    log_step "用例4.3 创建 INSTANCE 级熔断规则（source=${OLD_INSTANCE_CALLER}）"
+    log_step "用例4.3 创建 INSTANCE 级熔断规则（cb-instance-v5，source=*/*，用例1/4 共用）"
     local rule_body rule_id
     rule_body=$(build_rule_body_old_instance)
     rule_id=$(create_circuitbreaker_rule "old_instance" "$rule_body") || {
@@ -2325,7 +2502,7 @@ case_http_status() {
         "" \
         "规则配置:" \
         "  · Level=INSTANCE, name=cb-instance-${HTTP_STATUS_CALLER}" \
-        "  · source=*/${HTTP_STATUS_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
+        "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=3 (收紧阈值便于快速验证)" \
         "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
@@ -2365,20 +2542,18 @@ case_http_status() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    if ! inspect_caller_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" \
-        "cb-instance-${HTTP_STATUS_CALLER}"; then
+    if ! inspect_caller_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
-    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$HTTP_STATUS_CALLER" \
-        "cb-instance-${HTTP_STATUS_CALLER}"; then
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$HTTP_STATUS_CALLER" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
-    log_step "用例5.3 创建 INSTANCE 级熔断规则（CONSECUTIVE_ERROR=3）"
+    log_step "用例5.3 创建 INSTANCE 级熔断规则（cb-instance-${MODIFY_RULE_CALLER}，source=*/*，用例5/7/10 共用）"
     local rule_body rule_id
     rule_body=$(build_rule_body_http_status)
     rule_id=$(create_circuitbreaker_rule "http_status" "$rule_body") || {
@@ -2648,7 +2823,7 @@ case_modify_rule() {
         "  · 验证两轮不同阈值的熔断均能正确触发与恢复" \
         "" \
         "规则配置:" \
-        "  · Level=INSTANCE, name=cb-instance-${MODIFY_RULE_CALLER}" \
+        "  · Level=INSTANCE, name=cb-instance-${HTTP_STATUS_CALLER}" \
         "  · source=*/${MODIFY_RULE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · 轮1 CONSECUTIVE_ERROR=3，轮2 更新为 7" \
@@ -2684,20 +2859,18 @@ case_modify_rule() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    if ! inspect_caller_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" \
-        "cb-instance-${MODIFY_RULE_CALLER}"; then
+    if ! inspect_caller_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
-    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$MODIFY_RULE_CALLER" \
-        "cb-instance-${MODIFY_RULE_CALLER}"; then
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$MODIFY_RULE_CALLER" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
-    log_step "用例7.3 创建 INSTANCE 级规则（CONSECUTIVE_ERROR=3）"
+    log_step "用例7.3 创建 INSTANCE 级规则（cb-instance-${MODIFY_RULE_CALLER}，CONSECUTIVE_ERROR=3，source=*/*）"
     local rule_body rule_id
     rule_body=$(build_rule_body_modify_rule 3)
 
@@ -2951,16 +3124,16 @@ case_protocol_method() {
     return 1
 }
 
-# ======================== 用例 10：路径匹配方式维度 ========================
+# ======================== 用例9：路径匹配方式维度 ========================
 # 验证 SDK 按 BlockConfig.api.path 维度匹配：5 种 MatchString 类型
 # （EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）各 1 个 BC，独立 trigger / verify / recover。
 #
 # 实现：consumer 端按 path 段（/api/pathtype/{...}）填 RequestContext.Path，
 # 消费者用 path 是否匹配规则决定是否触发。
 case_pathtype() {
-    log_step "用例10：路径匹配方式维度（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
+    log_step "用例9：路径匹配方式维度（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
 
-    print_block "用例10：路径匹配方式维度" \
+    print_block "用例9：路径匹配方式维度" \
         "Caller 写法（统一装饰器，selfService=${PATHTYPE_CALLER}）:" \
         "  · 5 种 MatchString 类型合并到 1 条 METHOD 规则的 5 个 BlockConfig" \
         "" \
@@ -2972,17 +3145,17 @@ case_pathtype() {
         "  · NOT_IN      path=NOT_IN /api/pathtype/forbidden1,/api/pathtype/forbidden2, 消费者请求 /api/pathtype/allowed 触发" \
         "" \
         "验证步骤 (5 种 path type 各跑正向 3 阶段):" \
-        "  10.1 启动 pathtype consumer" \
-        "  10.2 创建 1 条 METHOD 规则（5 个 BlockConfig）" \
-        "  10.{ptype}.trigger  : provider a/b=500, 发 ${PATHTYPE_TRIGGER_COUNT:-30} 次对应 path → 触发对应 BC" \
-        "  10.{ptype}.verify   : 再发 3 次 → 期望全部 abort" \
-        "  10.{ptype}.recover  : provider a/b=200, 等 ${WAIT_HALF_OPEN_SECONDS}s → 再发 3 次 → 全 200" \
+        "  9.1 启动 pathtype consumer" \
+        "  9.2 创建 1 条 METHOD 规则（5 个 BlockConfig）" \
+        "  9.{ptype}.trigger  : provider a/b=500, 发 ${PATHTYPE_TRIGGER_COUNT:-30} 次对应 path → 触发对应 BC" \
+        "  9.{ptype}.verify   : 再发 3 次 → 期望全部 abort" \
+        "  9.{ptype}.recover  : provider a/b=200, 等 ${WAIT_HALF_OPEN_SECONDS}s → 再发 3 次 → 全 200" \
         "" \
         "判定标准: 5 种 path type 各自 trigger fail≥1(或 abort≥1) / verify abort=3 / recover ok=3 → PASS" \
         "  注: 5 个 BC 合并在 1 条规则,NOT_EQUALS/NOT_IN 等否定匹配会吃掉几乎所有 path," \
         "      不存在对全部 BC 都不匹配的'反向 path',故反向验证不适用于合并规则结构。"
 
-    log_step "用例10.1 启动 pathtype consumer"
+    log_step "用例9.1 启动 pathtype consumer"
     if ! start_consumer "pathtype_consumer" "$CALLER_CONSUMER_DIR" \
         "$PATHTYPE_CALLER" "$PATHTYPE_CONSUMER_PORT" "${LOG_DIR}/pathtype_consumer.log"; then
         echo "FAIL"
@@ -3004,11 +3177,11 @@ case_pathtype() {
         return 1
     fi
 
-    log_step "用例10.2 创建 1 条 METHOD 规则（内含 5 个 BlockConfig，覆盖 EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
+    log_step "用例9.2 创建 1 条 METHOD 规则（内含 5 个 BlockConfig，覆盖 EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
     local pathtype_body
     pathtype_body=$(build_rule_body_pathtype_merged)
     create_circuitbreaker_rule "pathtype" "$pathtype_body" >/dev/null || {
-        log_error "[用例10.2] create pathtype 合并规则失败"
+        log_error "[用例9.2] create pathtype 合并规则失败"
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
@@ -3039,17 +3212,17 @@ case_pathtype() {
         # 导致 burst 循环只跑 1 次 → total=1）。
         local ptype req_path ptype_label
         IFS='|' read -r ptype req_path ptype_label <<< "$entry"
-        log_step "用例10.$ptype_label: trigger / verify / recover"
+        log_step "用例9.$ptype_label: trigger / verify / recover"
 
         # trigger：a、b 都置 500（b 默认即 500，这里显式确保），让对应 BC 熔断触发。
         provider_set_error "$PROVIDER_A_PORT" "true"
         provider_set_error "$PROVIDER_B_PORT" "true"
-        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_TRIGGER_COUNT" "10.$ptype_label-trigger" "$req_path"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_TRIGGER_COUNT" "9.$ptype_label-trigger" "$req_path"
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
 
         sleep 2
-        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_VERIFY_COUNT" "10.$ptype_label-verify" "$req_path"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_VERIFY_COUNT" "9.$ptype_label-verify" "$req_path"
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
 
@@ -3057,7 +3230,7 @@ case_pathtype() {
         provider_set_error "$PROVIDER_A_PORT" "false"
         provider_set_error "$PROVIDER_B_PORT" "false"
         sleep "$WAIT_HALF_OPEN_SECONDS"
-        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_RECOVER_COUNT" "10.$ptype_label-recover" "$req_path"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_RECOVER_COUNT" "9.$ptype_label-recover" "$req_path"
         local r_ok=$CASE_OK
 
         # 说明：原先这里有"反向 path"3 阶段，意图证明不匹配规则的 5xx 不计入熔断。
@@ -3078,14 +3251,196 @@ case_pathtype() {
             all_pass=false
         fi
         summary+="  $ptype_label: trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"$'\n'
-        log_info "[用例10.$ptype_label] trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"
+        log_info "[用例9.$ptype_label] trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"
     done
     unset IFS
 
     stop_consumer "$consumer_pid"
 
     if $all_pass; then
-        log_info "✅ 用例10 PASS (5 种 path type 正向 3 阶段):"$'\n'"$summary"
+        log_info "✅ 用例9 PASS (5 种 path type 正向 3 阶段):"$'\n'"$summary"
+        echo "PASS"
+        return 0
+    fi
+    log_error "❌ 用例9 FAIL:"$'\n'"$summary"
+    echo "FAIL"
+    return 1
+}
+
+# ======================== 用例10：全死全活兜底策略验证（三种调用模式） ========================
+# 验证当所有实例都被 INSTANCE 级熔断后：
+#   - 全死全活开启（enableRecoverAll=true）：
+#     GetOneInstance 仍能选到 OPEN 实例，请求可透传至 provider。
+#   - 全死全活关闭（enableRecoverAll=false）：
+#     GetOneInstance 直接失败。
+# 三种调用模式各跑一轮 enableRecoverAll 开启/关闭对比：
+#   A) Decorator（MakeFunctionDecorator + SetInstance）
+#   B) InvokeHandler（MakeInvokeHandler + AcquirePermission）
+#   C) Bare Report（CircuitBreakerAPI.Report + UpdateServiceCallResult）
+#
+# 每个子阶段用一个辅助函数 _run_all_dead_phase 执行，参数：
+#   $1=phase_label $2=consumer_dir $3=caller $4=port $5=log_file $6=rule_builder_func
+_run_all_dead_phase() {
+    local phase_label="$1"
+    local consumer_dir="$2"
+    local caller="$3"
+    local port="$4"
+    local log_file="$5"
+    local rule_builder="$6"
+
+    # ── 全死全活开启 ──
+    log_step "[${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
+    if ! start_consumer "${phase_label}_consumer" "$consumer_dir" \
+        "$caller" "$port" "$log_file" "false" "true"; then
+        return 1
+    fi
+    local consumer_pid="$_STARTED_PID"
+
+    if ! inspect_caller_rules "$caller" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        return 1
+    fi
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$caller" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        return 1
+    fi
+
+    log_step "[${phase_label}.2] 创建 INSTANCE 级熔断规则"
+    local rule_body rule_id
+    rule_body=$($rule_builder)
+    rule_id=$(create_circuitbreaker_rule "${phase_label}" "$rule_body") || {
+        log_error "[${phase_label}.2] 规则创建失败"
+        stop_consumer "$consumer_pid"
+        return 1
+    }
+    sleep "$WAIT_RULE_READY_SECONDS"
+
+    # trigger: 两个 provider 都 500，发 60 次让两个实例都被熔断 OPEN
+    log_step "[${phase_label}.3] trigger: a/b=500, 发 60 次让两个实例都被熔断"
+    provider_set_error "$PROVIDER_A_PORT" "true"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$port" "60" "${phase_label}触发"
+    local a_trigger_fail=$CASE_FAIL
+
+    # verify: provider 翻回 200，全死全活开启 → 请求透传到 provider → 200
+    log_step "[${phase_label}.4] verify: a/b 翻回 200，验证全死全活生效"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep 2
+    run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}验证"
+    local a_verify_ok=$CASE_OK
+
+    # recover
+    log_step "[${phase_label}.5] recover: 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}恢复"
+    local a_recover_ok=$CASE_OK
+
+    # ── 全死全活关闭 ──
+    log_step "[${phase_label}.6] 重启 consumer（enableRecoverAll=false）"
+    stop_consumer "$consumer_pid"
+    sleep 2
+    if ! start_consumer "${phase_label}_consumer_b" "$consumer_dir" \
+        "$caller" "$port" "${log_file%.log}_b.log" "false" "false"; then
+        return 1
+    fi
+    consumer_pid="$_STARTED_PID"
+
+    # 重新触发熔断
+    log_step "[${phase_label}.7] trigger: a/b=500, 发 60 次重新触发熔断"
+    provider_set_error "$PROVIDER_A_PORT" "true"
+    provider_set_error "$PROVIDER_B_PORT" "true"
+    run_burst "$port" "60" "${phase_label}触发B"
+    local b_trigger_fail=$CASE_FAIL
+
+    # verify: 全死全活关闭 → GetOneInstance 失败
+    log_step "[${phase_label}.8] verify: a/b 翻回 200，验证全死全活关闭"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "false"
+    sleep 2
+    run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}验证B"
+    local b_verify_fail=$CASE_FAIL
+
+    # recover: 重启 consumer 恢复 enableRecoverAll=true
+    log_step "[${phase_label}.9] recover: 重启 consumer（恢复 enableRecoverAll=true）"
+    stop_consumer "$consumer_pid"
+    sleep 2
+    if ! start_consumer "${phase_label}_consumer_c" "$consumer_dir" \
+        "$caller" "$port" "${log_file%.log}_c.log" "false" "true"; then
+        return 1
+    fi
+    consumer_pid="$_STARTED_PID"
+    sleep "$WAIT_HALF_OPEN_SECONDS"
+    run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}恢复B"
+    local b_recover_ok=$CASE_OK
+
+    stop_consumer "$consumer_pid"
+
+    # 判定
+    if [[ "$a_trigger_fail" -ge 5 ]] \
+        && [[ "$a_verify_ok" -ge 1 ]] \
+        && [[ "$a_recover_ok" -ge 1 ]] \
+        && [[ "$b_trigger_fail" -ge 5 ]] \
+        && [[ "$b_verify_fail" -ge 1 ]] \
+        && [[ "$b_recover_ok" -ge 1 ]]; then
+        log_info "✅ [${phase_label}] PASS: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+        return 0
+    fi
+    log_error "❌ [${phase_label}] FAIL: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+    return 1
+}
+
+case_all_dead_fallback() {
+    log_step "用例10：全死全活（AllDeadFallback）三种调用模式验证"
+
+    print_block "用例10：全死全活（AllDeadFallback）三种调用模式验证" \
+        "验证当所有实例都被 INSTANCE 级熔断 OPEN 后，三种调用模式的行为：" \
+        "  · 全死全活开启：GetOneInstance 仍能选到 OPEN 实例，请求透传至 provider" \
+        "  · 全死全活关闭：GetOneInstance 直接失败" \
+        "" \
+        "子阶段 A：Decorator（MakeFunctionDecorator + SetInstance）" \
+        "子阶段 B：InvokeHandler（MakeInvokeHandler + AcquirePermission）" \
+        "子阶段 C：Bare Report（CircuitBreakerAPI.Report + UpdateServiceCallResult）" \
+        "" \
+        "每个子阶段含 enableRecoverAll=true/false 对比。" \
+        "" \
+        "判定标准: 三个子阶段全部 PASS → 用例 PASS"
+
+    local all_pass=true
+    local summary=""
+
+    # ── 子阶段 A：Decorator ──
+    if _run_all_dead_phase "decorator" "$CALLER_CONSUMER_DIR" \
+        "$ALL_DEAD_DECORATOR_CALLER" "$ALL_DEAD_DECORATOR_PORT" \
+        "${LOG_DIR}/all_dead_decorator.log" "build_rule_body_all_dead_decorator"; then
+        summary+="  Decorator: ✅"$'\n'
+    else
+        summary+="  Decorator: ❌"$'\n'
+        all_pass=false
+    fi
+
+    # ── 子阶段 B：InvokeHandler ──
+    if _run_all_dead_phase "invoke" "$INVOKE_HANDLER_CONSUMER_DIR" \
+        "$ALL_DEAD_INVOKE_CALLER" "$ALL_DEAD_INVOKE_PORT" \
+        "${LOG_DIR}/all_dead_invoke.log" "build_rule_body_all_dead_invoke"; then
+        summary+="  InvokeHandler: ✅"$'\n'
+    else
+        summary+="  InvokeHandler: ❌"$'\n'
+        all_pass=false
+    fi
+
+    # ── 子阶段 C：Bare Report ──
+    if _run_all_dead_phase "report" "$OLD_INSTANCE_CONSUMER_DIR" \
+        "$ALL_DEAD_REPORT_CALLER" "$ALL_DEAD_REPORT_PORT" \
+        "${LOG_DIR}/all_dead_report.log" "build_rule_body_all_dead_report"; then
+        summary+="  Bare Report: ✅"$'\n'
+    else
+        summary+="  Bare Report: ❌"$'\n'
+        all_pass=false
+    fi
+
+    if $all_pass; then
+        log_info "✅ 用例10 PASS:"$'\n'"$summary"
         echo "PASS"
         return 0
     fi
@@ -3109,7 +3464,7 @@ main() {
     echo "  服务名 / 命名空间: ${SERVICE_NAME} / ${NAMESPACE}"
     echo "  Provider-A 端口:    ${PROVIDER_A_PORT}    (默认 200)"
     echo "  Provider-B 端口:    ${PROVIDER_B_PORT}    (默认 500)"
-    echo "  Consumer 端口:      ${INSTANCE_CONSUMER_PORT}/${SERVICE_CONSUMER_PORT}/${INTERFACE_CONSUMER_PORT}/${OLD_INSTANCE_CONSUMER_PORT}/${HTTP_STATUS_CONSUMER_PORT}/${DEFAULT_RULE_CONSUMER_PORT}/${MODIFY_RULE_CONSUMER_PORT}"
+    echo "  Consumer 端口:      ${INSTANCE_CONSUMER_PORT}/${SERVICE_CONSUMER_PORT}/${INTERFACE_CONSUMER_PORT}/${OLD_INSTANCE_CONSUMER_PORT}/${HTTP_STATUS_CONSUMER_PORT}/${DEFAULT_RULE_CONSUMER_PORT}/${MODIFY_RULE_CONSUMER_PORT}/${PM_CONSUMER_PORT}/${PATHTYPE_CONSUMER_PORT}/${ALL_DEAD_DECORATOR_PORT}/${ALL_DEAD_INVOKE_PORT}/${ALL_DEAD_REPORT_PORT}"
     echo "  运行用例:           ${RUN_CASES}"
     echo "  触发请求次数:       ${TRIGGER_REQUEST_COUNT}"
     echo "  半开等待时长:       ${WAIT_HALF_OPEN_SECONDS}s"
@@ -3233,6 +3588,12 @@ main() {
                 r=$(case_pathtype) || true
                 results+=("$r")
                 case_keys+=("pathtype")
+                ;;
+            all_dead_fallback)
+                local r
+                r=$(case_all_dead_fallback) || true
+                results+=("$r")
+                case_keys+=("all_dead_fallback")
                 ;;
             *)
                 log_warn "未知用例: $c (跳过)"
