@@ -53,6 +53,9 @@ type RuleContainer struct {
 	executor *TaskExecutor
 }
 
+// newRuleContainer 仅构造 RuleContainer，不产生任何副作用。
+// 首次拉取规则的调度由调用方在确认其被存入 sync.Map 后显式调用 scheduleCircuitBreaker() 触发，
+// 避免并发场景下构造了多余实例却仍触发一次无用的远程规则刷新。
 func newRuleContainer(ctx context.Context, res model.Resource, breaker *CompositeCircuitBreaker) *RuleContainer {
 	c := &RuleContainer{
 		res:     res,
@@ -64,7 +67,6 @@ func newRuleContainer(ctx context.Context, res model.Resource, breaker *Composit
 		log:        breaker.logCtx.GetCircuitBreakerLogger(),
 		executor:   breaker.executor,
 	}
-	c.scheduleCircuitBreaker()
 	return c
 }
 
@@ -258,7 +260,6 @@ func matchRuleAPI(res model.Resource, cbRule *fault_tolerance.CircuitBreakerRule
 
 // sortCircuitBreakerRules 对熔断规则按优先级排序，数值越小优先级越高。
 // 排序优先级：rule.Priority → destination service（精确匹配优先于通配匹配）→ rule.Id（字典序保证确定性）。
-// 与 polaris-java CircuitBreakerRuleDictionary.sortCircuitBreakerRules 三级比较器语义一致。
 func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fault_tolerance.CircuitBreakerRule {
 	ret := make([]*fault_tolerance.CircuitBreakerRule, 0, len(rules))
 	ret = append(ret, rules...)

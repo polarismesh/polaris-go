@@ -195,6 +195,7 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	}
 	newStatus := model.NewCircuitBreakerStatus(status.GetCircuitBreaker(), model.Close, time.Now())
 	rc.updateCircuitBreakerStatus(newStatus)
+	rc.reportCircuitStatus(newStatus)
 	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
 		status.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
 		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)

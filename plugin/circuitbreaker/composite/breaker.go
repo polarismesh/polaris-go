@@ -266,18 +266,19 @@ func (c *CompositeCircuitBreaker) recordReportedService(svc model.ServiceKey) {
 }
 
 // loadOrStoreContainer 惰性获取或创建给定 resource 的 RuleContainer。
-// 与 sync.Map.LoadOrStore(newRuleContainer(...)) 的关键区别：
-// newRuleContainer 会调用 scheduleCircuitBreaker() 产生一次实时规则刷新，如果直接用作
-// LoadOrStore 的参数，Go 会先求值再调 LoadOrStore —— 即使 key 已存在也会创建并丢弃
-// 多余的 RuleContainer，浪费一次网络规则拉取。这里改为先 Load、不存在才构造并 Store，
-// 避免不必要的规则刷新开销与由此引发的计数器重复 initialized。
+// newRuleContainer 本身已无副作用（不再在构造时触发规则刷新），首次拉取规则的调度
+// 推迟到这里：仅当 LoadOrStore 确认本 goroutine 的实例被真正存入（loaded==false）时
+// 才调 scheduleCircuitBreaker()。并发抢占场景下，落败 goroutine 构造的 container 是
+// 一个未调度的空壳，会被 GC 回收，不会产生多余的远程规则刷新与计数器重复 initialized。
 func (c *CompositeCircuitBreaker) loadOrStoreContainer(res model.Resource) {
 	key := res.String()
 	if _, ok := c.containers.Load(key); ok {
 		return
 	}
 	container := newRuleContainer(c.taskCtx, res, c)
-	c.containers.LoadOrStore(key, container)
+	if _, loaded := c.containers.LoadOrStore(key, container); !loaded {
+		container.scheduleCircuitBreaker()
+	}
 }
 
 // checkRules 周期性规则复检
