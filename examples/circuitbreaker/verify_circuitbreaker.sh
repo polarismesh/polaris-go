@@ -1957,7 +1957,7 @@ case_service() {
         return 1
     fi
 
-    log_step "用例2.3 创建 SERVICE 级熔断规则（cb-service-merged，source=*/*）"
+    log_step "用例2.3 创建 SERVICE 级熔断规则"
     local rule_body rule_id
     rule_body=$(build_rule_body_service)
     rule_id=$(create_circuitbreaker_rule "service" "$rule_body") || {
@@ -2164,7 +2164,7 @@ case_interface() {
     #   /echo  block 用 5 种 MatchString 演示 RET_CODE 错误条件
     #   /order block 阈值极高确保不触发
     #   /slow  block 用 DELAY 错误条件
-    log_step "用例3.3 创建 METHOD 级合并规则（cb-interface-merged，3 个 BlockConfig，source=*/*）"
+    log_step "用例3.3 创建 METHOD 级合并规则（3 个 BlockConfig）"
     local rule_body rule_id
     rule_body=$(build_rule_body_interface_merged)
     rule_id=$(create_circuitbreaker_rule "interface" "$rule_body") || {
@@ -2405,7 +2405,7 @@ case_old_instance() {
         return 1
     fi
 
-    log_step "用例4.3 创建 INSTANCE 级熔断规则（cb-instance-v5，source=*/*，用例1/4 共用）"
+    log_step "用例4.3 创建 INSTANCE 级熔断规则（source=${OLD_INSTANCE_CALLER}）"
     local rule_body rule_id
     rule_body=$(build_rule_body_old_instance)
     rule_id=$(create_circuitbreaker_rule "old_instance" "$rule_body") || {
@@ -2553,7 +2553,7 @@ case_http_status() {
         return 1
     fi
 
-    log_step "用例5.3 创建 INSTANCE 级熔断规则（cb-instance-${MODIFY_RULE_CALLER}，source=*/*，用例5/7/10 共用）"
+    log_step "用例5.3 创建 INSTANCE 级熔断规则（cb-instance-${HTTP_STATUS_CALLER}，CONSECUTIVE_ERROR=3）"
     local rule_body rule_id
     rule_body=$(build_rule_body_http_status)
     rule_id=$(create_circuitbreaker_rule "http_status" "$rule_body") || {
@@ -2870,7 +2870,7 @@ case_modify_rule() {
         return 1
     fi
 
-    log_step "用例7.3 创建 INSTANCE 级规则（cb-instance-${MODIFY_RULE_CALLER}，CONSECUTIVE_ERROR=3，source=*/*）"
+    log_step "用例7.3 创建 INSTANCE 级规则（cb-instance-${MODIFY_RULE_CALLER}，CONSECUTIVE_ERROR=3）"
     local rule_body rule_id
     rule_body=$(build_rule_body_modify_rule 3)
 

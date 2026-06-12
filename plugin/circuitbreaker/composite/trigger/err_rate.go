@@ -68,8 +68,8 @@ func NewErrRateCounter(name string, opt *Options) *ErrRateCounter {
 }
 
 func (c *ErrRateCounter) init() {
-	c.log.Infof("[CircuitBreaker][ErrRateCounter] initialized, ruleName:%s, ruleId:%s, ruleRev:%s, resource(%s)",
-		c.ruleName, c.ruleId, c.ruleRevision, c.res.String())
+	c.log.Infof("[CircuitBreaker][ErrRateCounter] initialized, ruleName:%s, ruleID:%s, ruleRev:%s, resource(%s)",
+		c.ruleName, c.ruleID, c.ruleRevision, c.res.String())
 	c.metricWindow = time.Duration(c.triggerCondition.Interval) * time.Second
 	c.errorPercent = int(c.triggerCondition.ErrorPercent)
 	c.minimumRequest = int32(c.triggerCondition.MinimumRequest)
@@ -102,9 +102,9 @@ func (c *ErrRateCounter) Report(success bool) {
 		return 0
 	})
 	if !success && atomic.CompareAndSwapInt32(&c.scheduled, 0, 1) {
-		c.log.Infof("[CircuitBreaker][ErrRateCounter] scheduled error rate check, ruleName:%s, ruleId:%s, "+
+		c.log.Infof("[CircuitBreaker][ErrRateCounter] scheduled error rate check, ruleName:%s, ruleID:%s, "+
 			"ruleRev:%s, metricWindow(%v), resource(%s)",
-			c.ruleName, c.ruleId, c.ruleRevision, c.metricWindow, c.res.String())
+			c.ruleName, c.ruleID, c.ruleRevision, c.metricWindow, c.res.String())
 		c.delayExecutor(c.metricWindow, func() {
 			currentTime := time.Now()
 			timeRange := &metric.TimeRange{
@@ -123,10 +123,10 @@ func (c *ErrRateCounter) Report(success bool) {
 				return
 			}
 			c.suspend()
-			c.log.Infof("[CircuitBreaker][ErrRateCounter] triggered CloseToOpen, ruleName:%s, ruleId:%s, "+
+			c.log.Infof("[CircuitBreaker][ErrRateCounter] triggered CloseToOpen, ruleName:%s, ruleID:%s, "+
 				"ruleRev:%s, reqCount(%d), failCount(%d), failRatio(%.2f%%), minimumRequest(%d), "+
 				"errorPercent(%d%%), resource(%s)",
-				c.ruleName, c.ruleId, c.ruleRevision, reqCount, reqFailCount, failRatio,
+				c.ruleName, c.ruleID, c.ruleRevision, reqCount, reqFailCount, failRatio,
 				c.minimumRequest, c.errorPercent, c.res.String())
 			c.handler.CloseToOpen(c.ruleName)
 			atomic.StoreInt32(&c.scheduled, 0)
@@ -137,8 +137,8 @@ func (c *ErrRateCounter) Report(success bool) {
 func (c *ErrRateCounter) Resume() {
 	if c.isSuspend() {
 		c.resume()
-		c.log.Infof("[CircuitBreaker][ErrRateCounter] resumed counter, ruleName:%s, ruleId:%s, ruleRev:%s, resource(%s)",
-			c.ruleName, c.ruleId, c.ruleRevision, c.res.String())
+		c.log.Infof("[CircuitBreaker][ErrRateCounter] resumed counter, ruleName:%s, ruleID:%s, ruleRev:%s, resource(%s)",
+			c.ruleName, c.ruleID, c.ruleRevision, c.res.String())
 	}
 }
 
