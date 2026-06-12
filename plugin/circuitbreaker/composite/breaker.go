@@ -167,9 +167,11 @@ func (c *CompositeCircuitBreaker) Start() error {
 	return nil
 }
 
-// Destroy 销毁插件，可用于释放资源
+// Destroy 销毁插件，可用于释放资源。
+// 通过 CAS 保证幂等：仅首次调用（destroy 从 0 翻为 1）执行实际销毁；
+// 重复调用时 CAS 失败，直接返回 nil。
 func (c *CompositeCircuitBreaker) Destroy() error {
-	if atomic.CompareAndSwapInt32(&c.destroy, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&c.destroy, 0, 1) {
 		return nil
 	}
 	c.cancel()

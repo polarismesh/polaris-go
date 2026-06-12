@@ -206,14 +206,22 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 			continue
 		}
 		ruleMatcher := cbRule.RuleMatcher
+		if ruleMatcher == nil {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: nil rule matcher", cbRule.Name)
+			continue
+		}
 		destination := ruleMatcher.Destination
+		source := ruleMatcher.Source
+		if destination == nil || source == nil {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: nil destination or source in rule matcher", cbRule.Name)
+			continue
+		}
 		if !match.MatchService(res.GetService(), destination.Namespace, destination.Service) {
 			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
 				"resource: %s)",
 				cbRule.Name, destination.Namespace, destination.Service, res.GetService().String())
 			continue
 		}
-		source := ruleMatcher.Source
 		if !match.MatchService(res.GetCallerService(), source.Namespace, source.Service) {
 			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
 				"resource caller: %s)", cbRule.Name, source.Namespace, source.Service, res.GetCallerService().String())
