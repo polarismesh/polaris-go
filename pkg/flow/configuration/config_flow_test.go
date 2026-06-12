@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
@@ -31,6 +33,10 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/plugin/configfilter"
 	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
+
+	// 匿名引入 zaplog 插件：其 init() 会注册默认 Logger 并初始化全局 baseLogger，
+	// 否则本测试直接构造 ValueContext 时 baseLogger 为 nil，GetConfigFile 内部调用日志会 panic。
+	_ "github.com/polarismesh/polaris-go/plugin/logger/zaplog"
 )
 
 // MockConnector 模拟配置连接器
@@ -71,7 +77,10 @@ func (m *MockConnector) IsEnable(cfg config.Configuration) bool {
 
 // ConfigConnector接口实现
 func (m *MockConnector) GetConfigFile(configFile *configconnector.ConfigFile) (*configconnector.ConfigFileResponse, error) {
+	// 返回 ExecuteSuccess，使 ConfigFileRepo.pull() 首次拉取即成功，
+	// 避免因 Code=0（unexpected）触发重试退避，导致并发抢分段锁超时。
 	return &configconnector.ConfigFileResponse{
+		Code:       uint32(apimodel.Code_ExecuteSuccess),
 		ConfigFile: configFile,
 	}, nil
 }
