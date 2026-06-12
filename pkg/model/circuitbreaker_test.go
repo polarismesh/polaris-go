@@ -45,7 +45,7 @@ func TestNewMethodResourceWithAPI_Basic(t *testing.T) {
 
 // TestNewMethodResourceWithAPI_NormalizeEmpty 测试场景：protocol/method 空串规范化
 // 前置条件：protocol 与 method 传空字符串
-// 预期结果：自动转换为通配符 "*"，与 polaris-java 行为一致
+// 预期结果：自动转换为通配符 "*"
 func TestNewMethodResourceWithAPI_NormalizeEmpty(t *testing.T) {
 	svc := &ServiceKey{Namespace: "default", Service: "svc"}
 	res, err := NewMethodResourceWithAPI(svc, nil, "", "", "/path")

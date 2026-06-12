@@ -82,7 +82,7 @@ func NewServiceResource(svc, caller *ServiceKey) (*ServiceResource, error) {
 }
 
 // MethodResource 接口级（方法级）熔断资源
-// 与 polaris-java 的 MethodResource 保持一致，承载 protocol/method/path 三元组
+// 承载 protocol/method/path 三元组，三个维度共同决定 counter bucket 的唯一 key
 // Protocol 协议（http、grpc 等），空串规范化为 "*"
 // Method   HTTP 方法（GET、POST 等），gRPC 场景填 "*"，空串规范化为 "*"
 // Path     接口路径（HTTP 的 URL Path 或 gRPC 的 fullMethod）
@@ -109,7 +109,7 @@ func (r *MethodResource) String() string {
 // NewMethodResource 创建接口级熔断资源（兼容旧调用，method 参数被视为 path）
 // svc     被调服务
 // caller  主调服务
-// method  接口路径，对应 polaris-java 的 path 参数；空串返回错误
+// method  接口路径；空串返回错误
 // 返回的 Resource 中 Protocol 与 Method 字段被规范化为 "*"
 func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource, error) {
 	return NewMethodResourceWithAPI(svc, caller, "", "", method)
@@ -645,16 +645,6 @@ func (c *HalfOpenStatus) CalNextStatus() Status {
 	}
 	// 连续成功数达到最大请求数，熔断器关闭
 	return Close
-}
-
-func (c *HalfOpenStatus) IsAvailable() bool {
-	if c.status == Close {
-		return true
-	}
-	if c.status == Open {
-		return false
-	}
-	return true
 }
 
 var ErrorCallAborted = errors.New("call aborted")

@@ -1,6 +1,6 @@
 # examples/circuitbreaker — 北极星（Polaris）故障熔断 Demo 集合
 
-本目录提供 polaris-go SDK **三种熔断级别**（实例级 / 服务级 / 接口级）的端到端示例，并提供一键 E2E 测试脚本与清理脚本，方便快速验证新版 SDK 是否符合预期。
+本目录提供 polaris-go SDK **三种熔断级别**（实例级 / 服务级 / 接口级）+ **三种编程模型**（装饰器 / InvokeHandler / 散装 Report）的端到端示例，并提供一键 E2E 测试脚本与清理脚本，方便快速验证新版 SDK 是否符合预期。
 
 ## 目录结构
 
@@ -15,13 +15,213 @@ examples/circuitbreaker/
 │   └── consumer/                        #   一份 demo 同时覆盖 SERVICE/METHOD/INSTANCE 三种级别
 │                                        #   - MakeFunctionDecorator + RequestContext.Method
 │                                        #   - customer func 内 SetInstance 让实例级也走装饰器
+├── invokeHandlerCaller/                 # InvokeHandler 手动编排写法
+│   └── consumer/                        #   暴露 AcquirePermission / OnSuccess / OnError 三阶段钩子
+│                                        #   适用 gRPC interceptor / 自定义中间件 / 异步模型
 ├── oldInstanceCircuitBreakerCaller/     # 旧版散装写法（保留兼容）
-│   └── consumer/                        #   ConsumerAPI.UpdateServiceCallResult + CircuitBreakerAPI.Report
+│   └── consumer/                        #   CircuitBreakerAPI.Report + ConsumerAPI.UpdateServiceCallResult
+│                                        #   仅覆盖实例级熔断
 ├── verify_circuitbreaker.sh             # 【主入口】一键 E2E 测试脚本
 ├── cleanup.sh                           # 进程与目录清理脚本
 ├── test.md                              # 用例清单
 └── README.md                            # 本文件
 ```
+
+## 三种编程模型详解
+
+polaris-go SDK 提供三种接入熔断的方式，按推荐程度排序：
+
+### 一、统一装饰器写法（`newCircuitBreakerCaller`）—— 【主推】
+
+通过 `CircuitBreakerAPI.MakeFunctionDecorator` 将"熔断检查 → 业务调用 → 熔断上报"封装为**一个 `DecoratorFunction`**，业务只需写好 customer func 即可。
+
+**核心调用链**：
+
+```go
+decorator := svr.circuitBreaker.MakeFunctionDecorator(
+    // ① 业务回调：服务发现 + HTTP 调用 + 回填 Instance
+    func(ctx context.Context, args interface{}) (interface{}, error) {
+        instance, _ := svr.discoverInstance()
+        model.GetInvokeContext(ctx).SetInstance(instance)  // ← 关键：触发实例级
+        resp, err := http.Get(url)
+        // 5xx 返回 error → 走 OnError；2xx/4xx 返回 commonResponse → 走 OnSuccess
+        ...
+    },
+    // ② RequestContext：Method 非空 → 启用接口级
+    &api.RequestContext{
+        RequestContext: model.RequestContext{
+            Caller: &model.ServiceKey{...},
+            Callee: &model.ServiceKey{...},
+            CodeConvert: &customCodeConvert{},  // ← 从 commonResponse 抽取 retCode
+            Method: "/echo",                    // ← 触发接口级
+        },
+    },
+)
+// ③ 调用 decorator：一行代码完成"检查→执行→上报"
+ret, abort, err := decorator(context.Background(), nil)
+```
+
+**生命周期（完全自动）**：
+
+```
+DecoratorFunction()
+  ├─ [自动] Check          ← 服务级 → 接口级 短路检查
+  ├─ [自动] customer func  ← 用户业务逻辑
+  └─ [自动] Report         ← 按 ServiceResource → MethodResource → InstanceResource 三级上报
+```
+
+**覆盖熔断级别**：
+
+| RequestContext.Method | ic.SetInstance() | 覆盖级别 |
+|---|---|---|
+| 为空 | 不调用 | **仅服务级** — 最轻量 |
+| 非空 | 不调用 | 服务级 + 接口级 |
+| 非空 | 调用 | **服务级 + 接口级 + 实例级** — demo 默认用法 |
+
+**适用场景**：
+
+- **标准同步调用**（HTTP RPC / gRPC Unary）：天然适合，一行 `decorator(ctx, nil)` 搞定
+- **只需服务级熔断**：Method 留空 + 不调 `SetInstance`，零额外开销
+- **同时要服务级 + 接口级**：填 Method 即可，多接口隔离
+- **要对齐 4xx/5xx 语义**：`5xx → return error`（走 OnError → SDK 用 retCode="-1" 哨兵命中规则），`2xx/4xx → return (commonResponse, nil)`（走 OnSuccess → retCode 透传真实状态码，由规则 ErrorCondition 决定）
+
+**示例代码**：`newCircuitBreakerCaller/consumer/main.go:216-274`
+
+---
+
+### 二、InvokeHandler 手动编排写法（`invokeHandlerCaller`）
+
+通过 `CircuitBreakerAPI.MakeInvokeHandler` 获取 `InvokeHandler`，它暴露 **三个生命周期钩子**，由调用方自行编排检查 → 执行 → 上报的顺序。
+
+**核心调用链**：
+
+```go
+handler := svr.circuitBreaker.MakeInvokeHandler(&api.RequestContext{...})
+
+// ── 第一步：熔断检查 ──
+pass, aborted, err := handler.AcquirePermission()
+if !pass { /* 被熔断拦截，处理 fallback 或返回 503 */ }
+
+// ── 第二步：业务调用（服务发现 + HTTP）──
+instance, _ := svr.discoverInstance()
+resp, err := http.Get(url)
+
+// ── 第三步：熔断上报 ──
+if err != nil {
+    handler.OnError(&model.ResponseContext{
+        Duration: delay, Err: err, Instance: instance,
+    })
+} else {
+    handler.OnSuccess(&model.ResponseContext{
+        Duration: delay,
+        Result:   commonResponse{code: resp.StatusCode, body: string(data)},
+        Instance: instance,
+    })
+}
+
+// ── 附加：调用结果指标上报（Prometheus 等）──
+// 注意：与 LB 权重 / 健康检查 / 熔断均无关；
+//   LB 动态权重由 weightAdjuster（warmup）管理，
+//   健康检查由 healthCheck 插件链独立周期探测，
+//   熔断由 CircuitBreakerAPI.Report() 上报。
+svr.consumer.UpdateServiceCallResult(...)
+```
+
+**生命周期（手动控制）**：
+
+```
+【你控制】 handler.AcquirePermission()  ← 服务级 → 接口级 短路检查
+【你控制】 服务发现 + HTTP 调用
+【你控制】 handler.OnSuccess() 或 OnError()
+```
+
+**与装饰器写法的关键差异**：
+
+| 维度 | 装饰器（`MakeFunctionDecorator`） | InvokeHandler（`MakeInvokeHandler`） |
+|---|---|---|
+| 编程模型 | 闭包 + 回调 | 三阶段钩子 |
+| 自动上报 | ✅ 检查/执行/上报全自动 | ❌ 需手动调用 `OnSuccess/OnError` |
+| 代码量 | 最少（约 40 行） | 较多（约 80 行） |
+| 熔断检查时机 | 只能在装饰器入口 | **可在业务调用前任意时刻** |
+| 熔断上报时机 | 装饰器结束时自动 | **可在业务调用完成后任意时刻** |
+| 同一 handler 复用 | 不支持（每个 decorator 绑定一个 customer func） | **支持**（同一个 handler 可被多次 Acquire→Report 循环复用） |
+
+**适用场景**：
+
+- **gRPC interceptor**：UnaryServerInterceptor 中先 `AcquirePermission()` → `handler(ctx, req)` → 根据结果调 `OnSuccess/OnError`，与 gRPC 生命周期天然对齐
+- **自定义中间件**：Go 标准库 `http.Handler` middleware 中在 `next.ServeHTTP` 前后分别做检查/上报
+- **异步调用模型**：消息消费、定时任务等，需要先检查再异步执行，最后异步回调上报
+- **需要先预检再决定是否发起请求**：比如资源有限时先 `AcquirePermission` 再 `GetOneInstance`
+
+**示例代码**：`invokeHandlerCaller/consumer/main.go:223-340`
+
+---
+
+### 三、旧版散装写法（`oldInstanceCircuitBreakerCaller`）—— 保留兼容
+
+通过 `CircuitBreakerAPI.Report()` + `ConsumerAPI.UpdateServiceCallResult()` 手动构造 `InstanceResource` 上报。
+
+**核心调用链**：
+
+```go
+// ── 服务发现 ──
+instance, _ := svr.consumer.GetOneInstance(...)
+
+// ── HTTP 调用 ──
+resp, err := http.Get(...)
+
+// ── 调用结果指标上报（Prometheus 等）──
+svr.consumer.UpdateServiceCallResult(...)
+
+// ── 熔断上报（手动构造 Resource）──
+insRes, _ := model.NewInstanceResource(
+    &model.ServiceKey{Namespace: calleeNs, Service: calleeSvc},
+    &model.ServiceKey{Namespace: callerNs, Service: callerSvc},
+    "http", instance.GetHost(), instance.GetPort())
+svr.circuitBreaker.Report(&model.ResourceStat{
+    Delay:     time.Since(start),
+    RetStatus: retStatus,
+    RetCode:   retCode,
+    Resource:  insRes,
+})
+```
+
+**与装饰器 / InvokeHandler 的关键差异**：
+
+| 维度 | 装饰器 / InvokeHandler | 旧版散装 Report |
+|---|---|---|
+| 覆盖级别 | SERVICE / METHOD / INSTANCE 三级 | **仅 INSTANCE**（实例级） |
+| 熔断检查 | SDK 自动 Check | **无**（只能上报，不会主动拦截） |
+| 半开配额管理 | SDK 自动管理 | **不参与**（上报即计入，无配额限制下的放行/拒绝逻辑） |
+| Resource 构造 | SDK 内部自动 | **手动 NewInstanceResource** |
+| 代码量 | 一/三个钩子 | 需完整拼接 ServiceKey + host:port + caller |
+
+> **本质差异**：装饰器 / InvokeHandler 走的是 `Check → Execute → Report` 完整闭环，而旧版 `Report` 只做"上报统计"这一步，没有"熔断检查"能力。因此旧版写法**收到 500 后仍能继续发请求**，不会像装饰器那样主动拦截返回 `CallAborted`。
+
+**适用场景**：
+
+- **存量代码零改动兼容**：历史上用 `Report` 的代码不用改，新项目不建议使用
+- **仅需实例级熔断**的极简场景（但装饰器写法也可以做到，且更简洁）
+- **定制化 Check 逻辑**：需要自己实现检查策略而非用 SDK 内置 Check 时（极少见）
+
+**示例代码**：`oldInstanceCircuitBreakerCaller/consumer/main.go:235-267`
+
+---
+
+### 四、选型速查表
+
+| 你的场景 | 推荐写法 | 对应目录 |
+|---|---|---|
+| 标准 HTTP / gRPC Unary 同步调用 | **装饰器** | `newCircuitBreakerCaller` |
+| 需要同时覆盖服务级 + 接口级 + 实例级 | **装饰器** | `newCircuitBreakerCaller` |
+| 只需服务级（无需关心实例） | **装饰器**（Method 留空） | `newCircuitBreakerCaller` |
+| gRPC interceptor / 自定义 middleware | **InvokeHandler** | `invokeHandlerCaller` |
+| 异步调用（MQ 消费 / 定时任务） | **InvokeHandler** | `invokeHandlerCaller` |
+| 需要先 Check 再决定是否发请求 | **InvokeHandler** | `invokeHandlerCaller` |
+| 存量代码兼容（仅实例级） | 旧版 Report | `oldInstanceCircuitBreakerCaller` |
+| 新项目 / 重构 | **装饰器** | `newCircuitBreakerCaller` |
+
+---
 
 ## 三种熔断级别速览
 
@@ -52,14 +252,15 @@ examples/circuitbreaker/
 - 每个块按 `BlockConfig × TriggerCondition` 笛卡尔积建立独立 trigger counter；
 - 任一块的任一 trigger 触发即让整个资源进入 Open——块**不维护**自己的状态机，资源级状态机统一调度。
 
-## 4xx vs 5xx：两条独立的判错链路
+## 4xx vs 5xx：三条独立的路径
 
-demo 与 SDK 之间存在两条**完全独立**的判错链路，处理 HTTP 状态码时必须分开看：
+处理 HTTP 状态码时需要区分三条**完全独立**的路径：
 
-| 链路 | 入口 | 谁来决定"是否失败" | 4xx 行为 |
+| 路径 | 入口 | 谁来决定"是否失败" | 4xx 行为 |
 |---|---|---|---|
 | **熔断器** | `customCodeConvert` → `commonReport` → `BlockConfig.ErrorConditions` | **完全由你配置的规则决定**（`RANGE 500~599` / `EXACT` / `IN/NOT_IN` / `REGEX` / `DELAY`） | 默认规则配 `500~599` 时不计入；用户可显式配 `IN [400,500]` 把 4xx 也纳入 |
-| **LB / 健康检查** | `ConsumerAPI.UpdateServiceCallResult` 的 `RetStatus` | **demo 自己决定**（影响 weightedrandom 等 LB 插件的实例权重 + 健康检查切换） | demo 默认**只把 5xx 标 `RetFail`**；4xx 视为成功（4xx 通常是请求侧参数 / 鉴权问题，不应摘除实例） |
+| **调用结果指标** | `ConsumerAPI.UpdateServiceCallResult` 的 `RetStatus` / `RetCode` / `Delay` | demo 自己决定（仅用于 Prometheus 等指标打点，**不影响 LB 权重和健康检查**） | demo 默认**只把 5xx 标 `RetFail`**；4xx 视为成功（4xx 通常是请求侧参数 / 鉴权问题，不应计入失败率） |
+| **LB 权重 / 健康检查** | SDK 自管理（`weightAdjuster` 链 + `healthCheck` 插件链） | SDK 内部自动处理 | 与本 demo 无关，调用方无需感知 |
 
 **约定**：
 
@@ -90,11 +291,12 @@ demo 与 SDK 之间存在两条**完全独立**的判错链路，处理 HTTP 状
 
 ```bash
 chmod +x verify_circuitbreaker.sh
-./verify_circuitbreaker.sh                                              # 跑全部 6 个用例
+./verify_circuitbreaker.sh                                              # 跑全部用例（默认 9 个）
 ./verify_circuitbreaker.sh --polaris-server 10.0.0.1                    # 指定北极星地址
 ./verify_circuitbreaker.sh --only instance                              # 仅跑实例级
 ./verify_circuitbreaker.sh --only service,interface,http_status         # 多个用例组合
 ./verify_circuitbreaker.sh --only default_rule                          # 仅跑默认规则兜底用例
+./verify_circuitbreaker.sh --only protocol_method,pathtype              # 仅跑高级匹配维度用例
 ```
 
 ### 关键选项
@@ -105,7 +307,7 @@ chmod +x verify_circuitbreaker.sh
 | `--polaris-token <令牌>`    | 北极星鉴权令牌                                                     |
 | `--namespace <ns>`          | 命名空间（默认 `default`）                                         |
 | `--service <name>`          | 被调服务名（默认 `CircuitBreakerCallee`）                          |
-| `--only <列表>`             | 仅运行指定用例：`instance`, `service`, `interface`, `old_instance`, `http_status`, `default_rule` |
+| `--only <列表>`             | 仅运行指定用例：`instance`, `service`, `interface`, `old_instance`, `http_status`, `default_rule`, `modify_rule`, `protocol_method`, `pathtype` |
 | `--trigger-count <次数>`    | 触发阶段请求次数（默认 15，越大越容易触发熔断）                    |
 | `--recovery-count <次数>`   | 验证 / 恢复阶段请求次数（默认 10）                                 |
 | `--wait-half-open <秒数>`   | 服务级用例等待 sleepWindow 进入半开的秒数（默认 35）               |
@@ -160,19 +362,36 @@ chmod +x cleanup.sh
 
 详见 [test.md](test.md)。
 
+## 高级匹配维度（用例 8 / 用例 10）
+
+`BlockConfig.api` 的三字段（protocol / method / path）每字段都支持独立匹配，验证 SDK 能否按业务侧元数据精确隔离熔断范围。
+
+| 维度 | 字段 | 验证目标 | 用例编号 |
+|---|---|---|---|
+| 接口协议 + HTTP 方法合并 | `BlockConfig.api.protocol` + `BlockConfig.api.method` | 1 条规则 13 个 BC：4 个 protocol + 9 个 HTTP method 各自独立命中；`protocol="http"` 不会命中 `protocol="dubbo"` 的 BC | 用例 8 `case_protocol_method` |
+| 路径匹配方式 | `BlockConfig.api.path`（5 种 MatchString）| EXACT（精确）/ REGEX（正则）/ NOT_EQUALS（不等于）/ IN（包含）/ NOT_IN（不包含）各自正向+反向匹配行为 | 用例 10 `case_pathtype` |
+
+**consumer 端**：`newCircuitBreakerCaller` 在 `makeDecorator` 内通过 `inferProtocolMethod` 根据 path 段（`/api/protocol/{proto}` / `/api/method/{method}` / `/api/pathtype/...`）自动填 `RequestContext.Protocol` / `HTTPMethod`，无需在业务代码里硬编码。
+
+**SDK 匹配逻辑**（`pkg/flow/circuitbreaker_flow.go::buildMethodResource`）：Path 非空时构造 (protocol, httpMethod, path) 三元组 MethodResource，逐字段用 `matchProtocolOrMethod` + `MatchString` 与 BlockConfig.api 三元组匹配，**任一字段不匹配即该 BC 不适用**（独立 trigger counter，不影响其他 BC 统计）。
+
+**对应 `_gen_rule.py` 扩展**：4 个新环境变量 `BC_API_PROTOCOL` / `BC_API_METHOD` / `BC_API_PATH_TYPE` / `BC_API_PATH_VALUE[_LIST]` 支持任意 (protocol, method, path type) 组合；旧的 `BC_API_PATH`（EXACT 单值）继续可用，向后兼容。
+
 ## 子 demo 独立运行
 
 每个子目录也可独立运行（参考各子目录的 `README.md`）：
 
 ```bash
-# 统一装饰器写法（推荐，一份 demo 同时覆盖 SERVICE/METHOD/INSTANCE 三种级别）
-cd callee/provider-a && make run                    # 一个终端
-cd callee/provider-b && make run                    # 另一个终端
-cd newCircuitBreakerCaller/consumer && make run     # 第三个终端
-# 在控制台手工创建熔断规则后（任意级别），curl http://127.0.0.1:18080/<echo|order|info|slow> 即可观察熔断行为
+# 1. 统一装饰器写法（推荐，一份 demo 同时覆盖 SERVICE/METHOD/INSTANCE 三种级别）
+cd callee/provider-a && make run                    # 终端 1
+cd callee/provider-b && make run                    # 终端 2
+cd newCircuitBreakerCaller/consumer && make run     # 终端 3
+# 在控制台手工创建熔断规则后，curl http://127.0.0.1:18080/<echo|order|info|slow> 即可观察
 
-# 旧版散装写法（保留兼容；存量客户使用 CircuitBreakerAPI.Check / Report
-# + ConsumerAPI.UpdateServiceCallResult 时的代码示范）
+# 2. InvokeHandler 手动编排写法（gRPC interceptor / 自定义 middleware / 异步模型）
+cd invokeHandlerCaller/consumer && make run         # 终端 3（端口 18081，和装饰器不冲突）
+
+# 3. 旧版散装写法（保留兼容；仅实例级）
 cd oldInstanceCircuitBreakerCaller/consumer && make run
 ```
 

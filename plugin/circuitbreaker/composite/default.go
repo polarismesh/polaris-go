@@ -54,6 +54,13 @@ func (c *RuleContainer) getCircuitBreakerRule(object *model.ServiceRuleResponse)
 		c.log.Debugf("[CircuitBreaker] found matched rule: %s for resource: %s", rule.Name, c.res.String())
 		return rule
 	}
+	// 对齐 Java shouldFilled: 如果服务下存在任意 Level 的 enabled 规则，说明用户已有明确的
+	// 熔断策略，不再注入默认 INSTANCE 规则，避免默认规则与用户规则并存的非预期行为。
+	if hasAnyEnabledRule(object, c.res) {
+		c.log.Debugf("[CircuitBreaker] other level enabled rules exist, skip default instance rule injection "+
+			"for resource: %s", c.res.String())
+		return nil
+	}
 	if !c.breaker.defaultInstanceCircuitBreakerConfig.defaultRuleEnable || c.res.GetLevel() !=
 		fault_tolerance.Level_INSTANCE {
 		c.log.Debugf("[CircuitBreaker] default rule disabled or level mismatch (defaultRuleEnable=%v, level=%s), "+
@@ -127,4 +134,64 @@ func (c *RuleContainer) getCircuitBreakerRule(object *model.ServiceRuleResponse)
 		"default rule details: %s", defaultInstanceCircuitBreakerRule.Name, c.res.String(),
 		defaultInstanceCircuitBreakerRule.String())
 	return defaultInstanceCircuitBreakerRule
+}
+
+// hasAnyEnabledRule 检查服务下是否存在任意 Level 的 enabled 规则
+// 对齐 Java CircuitBreakerUtils.shouldFilled: 遍历服务下所有规则，任一 enabled 且 Level 合法
+// 则返回 true，用于拦截默认 INSTANCE 规则的注入。
+// hasAnyEnabledRule 检查服务下是否存在与当前资源的主调服务匹配的 enabled 规则。
+// 仅当存在匹配当前 caller service（或 source=*）的 enabled 规则时返回 true，
+// 避免被调服务下存在其他主调的规则时误判为"用户已有明确的熔断策略"。
+func hasAnyEnabledRule(object *model.ServiceRuleResponse, res model.Resource) bool {
+	if object == nil || object.Value == nil {
+		return false
+	}
+	cb, ok := object.Value.(*fault_tolerance.CircuitBreaker)
+	if !ok || cb == nil {
+		return false
+	}
+	callerNamespace := ""
+	callerName := ""
+	if res != nil {
+		callerService := res.GetCallerService()
+		if callerService != nil {
+			callerNamespace = callerService.Namespace
+			callerName = callerService.Service
+		}
+	}
+	for _, r := range cb.Rules {
+		if !r.GetEnable() {
+			continue
+		}
+		switch r.GetLevel() {
+		case fault_tolerance.Level_SERVICE, fault_tolerance.Level_METHOD, fault_tolerance.Level_INSTANCE:
+			// 检查规则是否匹配当前 caller service
+			if ruleMatchesCaller(r, callerNamespace, callerName) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ruleMatchesCaller 判断规则是否匹配给定的主调服务。
+// 规则 source 为 nil（未设置）或 source=* 或与 caller service 匹配时返回 true。
+func ruleMatchesCaller(rule *fault_tolerance.CircuitBreakerRule, namespace, service string) bool {
+	rm := rule.GetRuleMatcher()
+	if rm == nil {
+		// 规则未设置 RuleMatcher，视为匹配所有 caller（兼容老规则/测试用例）
+		return true
+	}
+	src := rm.GetSource()
+	if src == nil {
+		// source 未设置，视为匹配所有 caller
+		return true
+	}
+	srcNs := src.GetNamespace()
+	srcSvc := src.GetService()
+	// source=* 匹配所有 caller
+	if srcSvc == "*" && srcNs == "*" {
+		return true
+	}
+	return srcNs == namespace && srcSvc == service
 }

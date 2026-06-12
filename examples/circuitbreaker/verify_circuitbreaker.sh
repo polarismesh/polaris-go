@@ -76,6 +76,11 @@ HTTP_STATUS_CALLER="${HTTP_STATUS_CALLER:-CircuitBreakerHttpStatusCaller}"
 DEFAULT_RULE_CALLER="${DEFAULT_RULE_CALLER:-CircuitBreakerDefaultRuleCaller}"
 # 用例 7：修改熔断参数生效验证（通过 update_circuitbreaker_rule 变更阈值）
 MODIFY_RULE_CALLER="${MODIFY_RULE_CALLER:-CircuitBreakerModifyRuleCaller}"
+# 用例 8：接口协议+HTTP方法维度合并在 1 条规则的 13 个 BlockConfig 里
+# 共享同一 caller service，避免规则 source.service 相互干扰。
+PM_CALLER="${PM_CALLER:-CircuitBreakerPMCaller}"
+# 用例 9：路径匹配方式维度（5 种 MatchString 类型）独立 1 条规则 5 个 BlockConfig
+PATHTYPE_CALLER="${PATHTYPE_CALLER:-CircuitBreakerPathTypeCaller}"
 
 # 端口规划（避免冲突）：
 #   provider-a: 28081
@@ -94,6 +99,10 @@ HTTP_STATUS_CONSUMER_PORT="${HTTP_STATUS_CONSUMER_PORT:-18085}"
 DEFAULT_RULE_CONSUMER_PORT="${DEFAULT_RULE_CONSUMER_PORT:-18086}"
 # 用例 7（modify_rule）专用 consumer 端口；selfService=CircuitBreakerModifyRuleCaller
 MODIFY_RULE_CONSUMER_PORT="${MODIFY_RULE_CONSUMER_PORT:-18087}"
+# 用例 8（接口协议+HTTP方法 合并）专用 consumer 端口；selfService=$PM_CALLER
+PM_CONSUMER_PORT="${PM_CONSUMER_PORT:-18088}"
+# 用例 9（路径匹配方式）专用 consumer 端口
+PATHTYPE_CONSUMER_PORT="${PATHTYPE_CONSUMER_PORT:-18089}"
 
 # 触发熔断所需的请求次数（单实例失败计数）
 # 默认实例熔断规则：连续错误数 / 错误率，10 次足够触发
@@ -108,7 +117,7 @@ WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-8}"
 WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-15}"
 
 # 默认运行的子用例集合（逗号分隔），可通过 --only 缩小范围
-RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule}"
+RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -490,7 +499,10 @@ def normalize_keys(obj):
     return obj
 
 def strip_semantic(d):
-    '''提取熔断器语义字段：仅保留会影响熔断行为的字段'''
+    '''提取熔断器语义字段：仅保留会影响熔断行为的字段。
+    服务端会保留我们写入时的 snake_case 字段名（如 block_configs），同时也会
+    保留 camelCase 字段；这里 wanted 同时包含两种命名，由 normalize_keys 统一
+    转 camelCase 后再做 strip，避免命名差异触发误判。'''
     if not isinstance(d, dict):
         return d
     wanted = {
@@ -498,10 +510,19 @@ def strip_semantic(d):
         'ruleMatcher', 'rule_matcher',
         'errorConditions', 'error_conditions',
         'triggerCondition', 'trigger_condition',
-        'recoverCondition', 'recoverCondition',
+        'recoverCondition', 'recover_condition',
         'blockConfigs', 'block_configs',
     }
-    return {k: v for k, v in d.items() if k in wanted}
+    res = {k: v for k, v in d.items() if k in wanted}
+    # ruleMatcher.destination.method 字段已 deprecated，匹配语义改由
+    # blockConfigs[].api 表达；但服务端对 METHOD 级规则会自动把 destination.method.value
+    # 改写为 BlockConfig.api.path.value（如 "/echo"），而 _gen_rule.py 始终写 "*" 占位
+    # → 两边永远 diff。剥离该字段避免误判。
+    if isinstance(res.get('ruleMatcher'), dict):
+        dst = res['ruleMatcher'].get('destination')
+        if isinstance(dst, dict) and 'method' in dst:
+            del dst['method']
+    return res
 
 existing_raw = os.environ.get('EXISTING', '{}')
 expected_raw = os.environ.get('EXPECTED', '{}')
@@ -522,7 +543,10 @@ try:
 except Exception:
     sys.exit(0)
 
-# 期望 body 是 snake_case，归一化到 camelCase 以对齐服务端返回格式
+# 两边都归一化到 camelCase：服务端 GET 既会返回 snake_case（写入时的原始命名，
+# 如 block_configs / error_conditions）也会返回 camelCase，expected 也用 snake_case 写
+# → 不归一化 existing 会因为键名大小写不一致永远 diff
+existing = normalize_keys(existing)
 expected = normalize_keys(expected)
 
 e_sem = strip_semantic(existing)
@@ -686,7 +710,21 @@ print('STRANGER\t' + ','.join(strangers))
 " <<< "$resp" 2>/dev/null || true)
 
     local table_part stranger_part
-    table_part=$(echo "$parsed" | awk -F'\t' '/^TABLE/{print substr($0, index($0, "\t")+1); exit}')
+    # table_part 必须捕获所有命中行：Python 把规则用 \n 嵌在 TABLE 那一行后，
+    # awk 按 \n 切 record 后会得到 "TABLE\ton1" / "on2" / "on3" 等多条 record。
+    # 用状态机在 TABLE 行打印 tab 后内容、in_t 段打印其余行、STRANGER 行退出，
+    # 避免早 exit 丢掉 on2/on3/...。
+    table_part=$(echo "$parsed" | awk -F'\t' '
+        BEGIN { in_t = 0 }
+        /^TABLE/ {
+            print substr($0, index($0, "\t")+1)
+            in_t = 1
+            next
+        }
+        /^STRANGER/ { in_t = 0; next }
+        in_t { print }
+    ')
+    # STRANGER 行只有一行规则名（逗号分隔），单行提取无影响
     stranger_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER/{print substr($0, index($0, "\t")+1); exit}')
 
     if [[ -z "$table_part" ]]; then
@@ -851,6 +889,72 @@ build_rule_body_service() {
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
+# 接口级合并规则：1 条 METHOD 规则 + 3 个 BlockConfig（/echo + /order + /slow）。
+# /echo  block 用 RANGE/EXACT/REGEX/IN/NOT_IN 多 MatchString 演示
+# /order block 阈值极高确保不触发
+# /slow  block 用 DELAY 错误条件
+# 三个 block 通过 $BCS 传入，SDK 在 dispatch 时按 api.path 过滤隔离。
+build_rule_body_interface_merged() {
+    local bcs
+    bcs=$(python3 -c '
+import json
+bcs = []
+# /echo block: 多 MatchString 演示
+echo_err = [
+    {"inputType":"RET_CODE","condition":{"type":"RANGE","value":"500~599"}},
+    {"inputType":"RET_CODE","condition":{"type":"EXACT","value":"500"}},
+    {"inputType":"RET_CODE","condition":{"type":"REGEX","value":"^5[0-9]{2}$"}},
+    {"inputType":"RET_CODE","condition":{"type":"IN","value":"500,502,503,504"}},
+    {"inputType":"RET_CODE","condition":{"type":"NOT_IN","value":"200,201,204,400,401,403,404"}},
+]
+bcs.append({
+    "name": "echo-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/echo"}},
+    "error_conditions": echo_err,
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 5},
+        {"triggerType": "ERROR_RATE", "errorPercent": 50, "interval": 30, "minimumRequest": 10},
+    ],
+})
+# /order block: 阈值极高确保不触发
+bcs.append({
+    "name": "order-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/order"}},
+    "error_conditions": [
+        {"inputType": "RET_CODE", "condition": {"type": "RANGE", "value": "500~599"}},
+    ],
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 100},
+        {"triggerType": "ERROR_RATE", "errorPercent": 99, "interval": 30, "minimumRequest": 200},
+    ],
+})
+# /slow block: DELAY 错误条件
+bcs.append({
+    "name": "slow-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/slow"}},
+    "error_conditions": [
+        {"inputType": "DELAY", "condition": {"type": "EXACT", "value": "200"}},
+    ],
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 5},
+        {"triggerType": "ERROR_RATE", "errorPercent": 50, "interval": 30, "minimumRequest": 10},
+    ],
+})
+print(json.dumps(bcs))
+')
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$INTERFACE_CALLER" \
+        RULE_NAME="cb-interface-${INTERFACE_CALLER}" \
+        LEVEL="METHOD" \
+        BC_NAME="echo-block" \
+        BCS="$bcs" \
+        CONSECUTIVE_ERROR="5" \
+        ERROR_PERCENT="50" \
+        ERROR_INTERVAL="30" \
+        MINIMUM_REQUEST="10" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
 build_rule_body_interface() {
     # 接口级 /echo 规则：CONSECUTIVE_ERROR=5；用于触发"配置规则的接口被熔断"。
     #
@@ -935,6 +1039,112 @@ build_rule_body_modify_rule() {
         CONSECUTIVE_ERROR="$consecutive_error" \
         ERROR_PERCENT="100" \
         MINIMUM_REQUEST="9999" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例 8：接口协议 + HTTP 方法维度合并在 1 条规则的 13 个 BlockConfig 里
+# 4 个 protocol（http/dubbo/grpc/thrift）+ 9 个 method（GET/POST/PUT/PATCH/DELETE/HEAD/
+# OPTIONS/TRACE/CONNECT）= 13 个 BC，共享 caller=$PM_CALLER。
+# 13 个 BC 互不重叠：4 个 protocol 用 path="/api/protocol/{proto}"（path 含 proto 标识），
+# 9 个 method 用 path="/api/method/{method}"（path 含 method 标识），
+# SDK 端 matchMethodWithAPI 逐字段匹配，任一字段不匹配即该 BC 不适用。
+# threshold 收紧 (CONSECUTIVE_ERROR=3) 加快验证。
+build_rule_body_protocol_method() {
+    # 构造 BCS JSON 数组：4 protocol + 9 method = 13 个 BC
+    local bcs='['
+    local first=1
+    # 4 个 protocol BC
+    for proto in http dubbo grpc thrift; do
+        if [[ $first -eq 0 ]]; then bcs+=','; fi
+        first=0
+        bcs+='{"name":"proto-block-'"$proto"'","api":{"protocol":"'"$proto"'","method":"*","path":{"type":"EXACT","value":"/api/protocol/'"$proto"'"}},"error_conditions":[{"inputType":"RET_CODE","condition":{"type":"RANGE","value":"500~599"}}],"trigger_conditions":[{"triggerType":"CONSECUTIVE_ERROR","errorCount":3},{"triggerType":"ERROR_RATE","errorPercent":50,"interval":30,"minimumRequest":5}]}'
+    done
+    # 9 个 method BC
+    for meth in GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT; do
+        if [[ $first -eq 0 ]]; then bcs+=','; fi
+        first=0
+        bcs+='{"name":"meth-block-'"$meth"'","api":{"protocol":"*","method":"'"$meth"'","path":{"type":"EXACT","value":"/api/method/'"$meth"'"}},"error_conditions":[{"inputType":"RET_CODE","condition":{"type":"RANGE","value":"500~599"}}],"trigger_conditions":[{"triggerType":"CONSECUTIVE_ERROR","errorCount":3},{"triggerType":"ERROR_RATE","errorPercent":50,"interval":30,"minimumRequest":5}]}'
+    done
+    bcs+=']'
+
+    BCS="$bcs" \
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+    SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$PM_CALLER" \
+    RULE_NAME="cb-proto-meth-${PM_CALLER}" \
+    RULE_DESCRIPTION="case_protocol_method: 4 protocol + 9 method in 13 BlockConfigs" \
+    LEVEL="METHOD" \
+    python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例 10：路径匹配方式维度 5 条规则（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）
+# 1 条规则 = 1 个 BlockConfig（按 path MatchString 类型区分）
+# 第一个参数是 ptype，第二个是 path_value
+#   - EXACT:        /api/pathtype/exact
+#   - REGEX:        ^/api/pathtype/regex/.*  （消费者用 /api/pathtype/regex/abc 触发匹配）
+#   - NOT_EQUALS:   /api/pathtype/never_match  （消费者用任何不等于该值的 path 触发匹配）
+#   - IN:           /api/pathtype/in1,/api/pathtype/in2  （消费者用 in1 触发匹配）
+#   - NOT_IN:       /api/pathtype/forbidden1,/api/pathtype/forbidden2  （消费者用 /api/pathtype/allowed 触发匹配）
+# 合并版：通过 $BCS 将 5 种 path-type 合为 1 条 METHOD 规则 + 5 个 BlockConfig。
+# 每个 block 独立持有 api（path 匹配）和共享的 error/trigger 条件；SDK 在 dispatch 时按 api 过滤。
+build_rule_body_pathtype_merged() {
+    local bcs
+    bcs=$(python3 -c '
+import json
+pts = [
+    ("EXACT",      "/api/pathtype/exact"),
+    ("REGEX",      "^/api/pathtype/regex/.*"),
+    ("NOT_EQUALS", "/api/pathtype/never_match_anything"),
+    ("IN",         "/api/pathtype/in1,/api/pathtype/in2"),
+    ("NOT_IN",     "/api/pathtype/forbidden1,/api/pathtype/forbidden2"),
+]
+bcs = []
+for pt, pv in pts:
+    bcs.append({
+        "name": "pathtype-{}-block".format(pt.lower()),
+        "api": {"protocol": "*", "method": "*", "path": {"type": pt, "value": pv}},
+        "error_conditions": [
+            {"inputType": "RET_CODE", "condition": {"type": "RANGE", "value": "500~599"}}
+        ],
+        "trigger_conditions": [
+            {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 3},
+            {"triggerType": "ERROR_RATE", "errorPercent": 50, "interval": 30, "minimumRequest": 5},
+        ],
+    })
+print(json.dumps(bcs))
+')
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$PATHTYPE_CALLER" \
+        RULE_NAME="cb-pathtype-${PATHTYPE_CALLER}" \
+        LEVEL="METHOD" \
+        BC_NAME="pathtype-merged" \
+        BCS="$bcs" \
+        CONSECUTIVE_ERROR="3" \
+        ERROR_PERCENT="50" \
+        ERROR_INTERVAL="30" \
+        MINIMUM_REQUEST="5" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+build_rule_body_pathtype() {
+    local ptype="$1"
+    local pvalue="$2"
+    # macOS bash 3.2 不支持 ${var,,} 大写转小写，改用 tr 跨平台兼容。
+    local ptype_lc
+    ptype_lc=$(echo "$ptype" | tr '[:upper:]' '[:lower:]')
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$PATHTYPE_CALLER" \
+        RULE_NAME="cb-pathtype-${PATHTYPE_CALLER}-${ptype_lc}" \
+        LEVEL="METHOD" \
+        BC_NAME="pathtype-${ptype_lc}-block" \
+        BC_API_PROTOCOL="*" \
+        BC_API_METHOD="*" \
+        BC_API_PATH_TYPE="$ptype" \
+        BC_API_PATH_VALUE="$pvalue" \
+        BC_API_PATH_VALUE_LIST="$pvalue" \
+        CONSECUTIVE_ERROR="3" \
+        ERROR_PERCENT="50" \
+        ERROR_INTERVAL="30" \
+        MINIMUM_REQUEST="5" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
@@ -1032,7 +1242,7 @@ trigger_conditions = [
 
 # BlockConfig：现行字段，SDK 通过 GetBlockConfigs() 读取
 bc = {
-    'name': os.environ['BC_NAME'],
+    'name': os.environ.get('BC_NAME', 'default-bc'),
     'error_conditions': err_conditions,
     'trigger_conditions': trigger_conditions,
 }
@@ -1040,24 +1250,48 @@ bc = {
 # 接口级规则：携带 api（path EXACT 匹配）；非接口级也带一个空 path 占位，
 # 与控制台导出的 backup 结构保持一致。
 api_path = os.environ.get('BC_API_PATH', '')
-if level == 'METHOD' and api_path:
+api_protocol = os.environ.get('BC_API_PROTOCOL', '*')
+api_method = os.environ.get('BC_API_METHOD', '*')
+api_path_type = os.environ.get('BC_API_PATH_TYPE', 'EXACT')
+api_path_value = os.environ.get('BC_API_PATH_VALUE', '') or api_path
+api_path_value_list = os.environ.get('BC_API_PATH_VALUE_LIST', '')
+if level == 'METHOD' and (api_path_value or api_path_value_list):
+    path_value = api_path_value_list if api_path_type in ('IN', 'NOT_IN') else api_path_value
     bc['api'] = {
-        'protocol': '*',
-        'method': '*',
+        'protocol': api_protocol,
+        'method': api_method,
         'path': {
-            'type': 'EXACT',
-            'value': api_path,
+            'type': api_path_type,
+            'value': path_value,
         },
     }
 else:
     bc['api'] = {'path': {'value': ''}}
+
+# block_configs：默认 1 个 BC（用上面的 bc）；可通过 BCS 环境变量传入 JSON 数组覆盖，
+# 用于在同一条规则下表达多个 (protocol, method, path) 维度组合。
+# BCS 数组每个元素是 BlockConfig dict（含 name/api/error_conditions/trigger_conditions，
+# 缺省字段会用本生成器的默认值——api 需传入完整结构）。
+bcs_env = os.environ.get('BCS', '').strip()
+if bcs_env:
+    try:
+        parsed_bcs = json.loads(bcs_env)
+    except Exception as e:
+        sys.stderr.write(f"BCS must be valid JSON: {e}\n")
+        sys.exit(2)
+    if not isinstance(parsed_bcs, list):
+        sys.stderr.write("BCS must be a JSON array\n")
+        sys.exit(2)
+    bcs = parsed_bcs
+else:
+    bcs = [bc]
 
 rule = {
     'name': os.environ['RULE_NAME'],
     'namespace': os.environ['NAMESPACE'],
     'enable': True,
     'level': level,
-    'description': 'auto-created by verify_circuitbreaker.sh',
+    'description': os.environ.get('RULE_DESCRIPTION', 'auto-created by verify_circuitbreaker.sh'),
     'rule_matcher': {
         'source': {
             'namespace': os.environ['SOURCE_NAMESPACE'],
@@ -1079,7 +1313,7 @@ rule = {
         'sleep_window': 12,
         'consecutiveSuccess': 1,
     },
-    'block_configs': [bc],
+    'block_configs': bcs,
 }
 
 sys.stdout.write(json.dumps(rule))
@@ -1474,8 +1708,10 @@ case_instance() {
     sleep "$WAIT_RULE_READY_SECONDS"
 
     # ───── 第 1 轮 ─────
-    log_step "用例1.4 [轮1] 触发：发 ${TRIGGER_REQUEST_COUNT} 次让 provider-b 被摘除"
-    run_burst "$INSTANCE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "实例级触发-轮1"
+    # 轮 1 也加大 burst：50/50 LB 下 15 次请求 b 最长连续 fail 可能 < CONSECUTIVE_ERROR=5
+    local INSTANCE_R1_TRIGGER_COUNT=30
+    log_step "用例1.4 [轮1] 触发：发 ${INSTANCE_R1_TRIGGER_COUNT} 次让 provider-b 被摘除"
+    run_burst "$INSTANCE_CONSUMER_PORT" "$INSTANCE_R1_TRIGGER_COUNT" "实例级触发-轮1"
     local r1_trigger_fail=$CASE_FAIL
 
     log_step "用例1.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
@@ -1490,9 +1726,11 @@ case_instance() {
     local r1_recover_ok=$CASE_OK
 
     # ───── 第 2 轮 ─────
-    log_step "用例1.7 [轮2] 再次触发：provider-b 重新置 500，发 ${TRIGGER_REQUEST_COUNT} 次"
+    # 轮 2 加大 burst：50/50 LB 下 15 次请求 b 最长连续 fail 可能 < CONSECUTIVE_ERROR=5
+    local INSTANCE_R2_TRIGGER_COUNT=30
+    log_step "用例1.7 [轮2] 再次触发：provider-b 重新置 500，发 ${INSTANCE_R2_TRIGGER_COUNT} 次"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$INSTANCE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "实例级触发-轮2"
+    run_burst "$INSTANCE_CONSUMER_PORT" "$INSTANCE_R2_TRIGGER_COUNT" "实例级触发-轮2"
     local r2_trigger_fail=$CASE_FAIL
 
     log_step "用例1.8 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
@@ -1762,11 +2000,9 @@ case_interface() {
     local consumer_pid="$_STARTED_PID"
 
     # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定。
-    # 接口级用例预期的三条规则名都列在 expected 里。
+    # 接口级用例合并为 1 条规则，预期只有 cb-interface-${INTERFACE_CALLER}。
     if ! inspect_caller_rules "$INTERFACE_CALLER" "$NAMESPACE" \
-        "cb-interface-${INTERFACE_CALLER}" \
-        "cb-interface-${INTERFACE_CALLER}-order" \
-        "cb-interface-${INTERFACE_CALLER}-slow"; then
+        "cb-interface-${INTERFACE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
@@ -1774,41 +2010,21 @@ case_interface() {
 
     # 巡检被调维度的熔断规则
     if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INTERFACE_CALLER" \
-        "cb-interface-${INTERFACE_CALLER}" \
-        "cb-interface-${INTERFACE_CALLER}-order" \
-        "cb-interface-${INTERFACE_CALLER}-slow"; then
+        "cb-interface-${INTERFACE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
     fi
 
-    # 3.3 创建三条 METHOD 级规则：
-    #   /echo  阈值低（应熔断），ErrorConditions 演示 RET_CODE 的 5 种 MatchString
-    #   /order 阈值高（不应熔断）
-    #   /slow  使用 input_type=DELAY，延迟 > 200ms 视为失败
-    log_step "用例3.3 创建 METHOD 级规则：/echo + /order + /slow（DELAY）"
-    local echo_body order_body slow_body
-    echo_body=$(build_rule_body_interface)
-    order_body=$(build_rule_body_interface_order)
-    slow_body=$(build_rule_body_interface_slow)
-
-    local echo_rule_id order_rule_id slow_rule_id
-    echo_rule_id=$(create_circuitbreaker_rule "interface" "$echo_body") || {
-        log_error "[用例3.3] /echo 规则创建失败"
-        stop_consumer "$consumer_pid"
-        echo "FAIL"
-        return 1
-    }
-
-    order_rule_id=$(create_circuitbreaker_rule "interface-order" "$order_body") || {
-        log_error "[用例3.3] /order 规则创建失败"
-        stop_consumer "$consumer_pid"
-        echo "FAIL"
-        return 1
-    }
-
-    slow_rule_id=$(create_circuitbreaker_rule "interface-slow" "$slow_body") || {
-        log_error "[用例3.3] /slow 规则创建失败"
+    # 3.3 创建 1 条 METHOD 级规则（内含 3 个 BlockConfig：/echo + /order + /slow）
+    #   /echo  block 用 5 种 MatchString 演示 RET_CODE 错误条件
+    #   /order block 阈值极高确保不触发
+    #   /slow  block 用 DELAY 错误条件
+    log_step "用例3.3 创建 METHOD 级合并规则（3 个 BlockConfig）"
+    local rule_body rule_id
+    rule_body=$(build_rule_body_interface_merged)
+    rule_id=$(create_circuitbreaker_rule "interface" "$rule_body") || {
+        log_error "[用例3.3] 接口级合并规则创建失败"
         stop_consumer "$consumer_pid"
         echo "FAIL"
         return 1
@@ -2026,8 +2242,10 @@ case_old_instance() {
     sleep "$WAIT_RULE_READY_SECONDS"
 
     # ───── 第 1 轮 ─────
-    log_step "用例4.4 [轮1] 触发：发 ${TRIGGER_REQUEST_COUNT} 次让 provider-b 被摘除"
-    run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "旧版实例级触发-轮1"
+    # 轮 1 也加大 burst：50/50 LB 下 15 次请求 b 最长连续 fail 可能 < CONSECUTIVE_ERROR=5
+    local OLD_INSTANCE_R1_TRIGGER_COUNT=30
+    log_step "用例4.4 [轮1] 触发：发 ${OLD_INSTANCE_R1_TRIGGER_COUNT} 次让 provider-b 被摘除"
+    run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$OLD_INSTANCE_R1_TRIGGER_COUNT" "旧版实例级触发-轮1"
     local r1_trigger_fail=$CASE_FAIL
 
     log_step "用例4.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
@@ -2042,9 +2260,11 @@ case_old_instance() {
     local r1_recover_ok=$CASE_OK
 
     # ───── 第 2 轮 ─────
-    log_step "用例4.7 [轮2] 再次触发：provider-b 重新置 500，发 ${TRIGGER_REQUEST_COUNT} 次"
+    # 轮 2 加大 burst：50/50 LB 下 15 次请求 b 最长连续 fail 可能 < CONSECUTIVE_ERROR=5
+    local OLD_INSTANCE_R2_TRIGGER_COUNT=30
+    log_step "用例4.7 [轮2] 再次触发：provider-b 重新置 500，发 ${OLD_INSTANCE_R2_TRIGGER_COUNT} 次"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "旧版实例级触发-轮2"
+    run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$OLD_INSTANCE_R2_TRIGGER_COUNT" "旧版实例级触发-轮2"
     local r2_trigger_fail=$CASE_FAIL
 
     log_step "用例4.8 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
@@ -2375,7 +2595,9 @@ case_default_rule() {
     sleep "$WAIT_RULE_READY_SECONDS"
 
     log_step "用例6.4 触发：发 ${TRIGGER_REQUEST_COUNT} 次让默认规则触发熔断"
-    run_burst "$DEFAULT_RULE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "默认规则触发"
+    # 默认规则 CONSECUTIVE_ERROR=5，15 次请求在 50/50 LB 下 b 最长连续 fail 可能 <5
+    local DEFAULT_RULE_TRIGGER_COUNT=30
+    run_burst "$DEFAULT_RULE_CONSUMER_PORT" "$DEFAULT_RULE_TRIGGER_COUNT" "默认规则触发"
     local trigger_fail=$CASE_FAIL
 
     log_step "用例6.5 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200（流量走 a）"
@@ -2559,6 +2781,327 @@ case_modify_rule() {
     return 1
 }
 
+# ======================== 用例 8：接口协议维度 ========================
+# 验证 SDK 按 BlockConfig.api.protocol 维度匹配：4 个 protocol（http/dubbo/grpc/thrift）
+# 各 1 个独立 BC，验证每个 (protocol, BC) 都能被独立 trigger / verify abort / recover。
+#
+# 实现：consumer 端根据 path 段（/api/protocol/{proto}）填 RequestContext.Protocol，
+# 触发时让对应 provider 5xx，验证 SDK 端 protocol=proto 的 BC 触发。
+case_protocol_method() {
+    log_step "用例8：接口协议+HTTP方法维度（4 protocol + 9 method = 13 BC 整合到 1 条规则）"
+
+    print_block "用例8：接口协议+HTTP方法维度" \
+        "Caller 写法（统一装饰器，selfService=${PM_CALLER}）:" \
+        "  · consumer 端按 path 段推断 RequestContext.Protocol / HTTPMethod" \
+        "  · 1 条规则 13 个 BlockConfig（4 protocol + 9 method），共享 caller service" \
+        "" \
+        "规则配置:" \
+        "  · Level=METHOD, name=cb-proto-meth-${PM_CALLER}" \
+        "  · source=*/${PM_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
+        "  · 4 个 protocol BC: api.protocol={http|dubbo|grpc|thrift}, method='*', path=EXACT /api/protocol/{proto}" \
+        "  · 9 个 method BC:   api.protocol='*', method={GET|POST|...|CONNECT}, path=EXACT /api/method/{method}" \
+        "  · CONSECUTIVE_ERROR=3 (收紧阈值便于快速验证)" \
+        "" \
+        "验证步骤 (13 个 BC 各跑 3 阶段):" \
+        "  8.1 启动 PM consumer（端口 ${PM_CONSUMER_PORT}）" \
+        "  8.2 创建 1 条规则（13 个 BlockConfig）" \
+        "  8.{proto|meth}.trigger : provider-a=500, 发 3 次对应 path → 触发对应 BC" \
+        "  8.{proto|meth}.verify  : 再发 3 次 → 期望全部 abort" \
+        "  8.{proto|meth}.recover : provider-a=200, 等 12s → 再发 3 次 → 全 200" \
+        "" \
+        "判定标准: 13 个 BC 各自 trigger fail≥1 / verify abort=3 / recover ok=3 → PASS"
+
+    log_step "用例8.1 启动 PM consumer"
+    # 复用 newCircuitBreakerCaller 二进制 + inferProtocolMethod 自动推断 Protocol/Method
+    if ! start_consumer "pm_consumer" "$CALLER_CONSUMER_DIR" \
+        "$PM_CALLER" "$PM_CONSUMER_PORT" "${LOG_DIR}/pm_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local consumer_pid="$_STARTED_PID"
+
+    # 巡检 1 条规则（含 13 BC），caller 维度只有 1 条
+    if ! inspect_caller_rules "$PM_CALLER" "$NAMESPACE" \
+        "cb-proto-meth-${PM_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$PM_CALLER" \
+        "cb-proto-meth-${PM_CALLER}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例8.2 创建 1 条规则（13 个 BlockConfig）"
+    local body rid
+    body=$(build_rule_body_protocol_method) || {
+        log_error "[用例8.2] build_rule_body_protocol_method 失败"
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    }
+    rid=$(create_circuitbreaker_rule "protocol-method" "$body") || {
+        log_error "[用例8.2] create 协议+方法 规则失败"
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    }
+
+    log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
+    sleep "$WAIT_RULE_READY_SECONDS"
+
+    # 13 个 BC 共享同一 sleepWindow 但需要独立 trigger：
+    # 50/50 LB 下只有 ~50% 命中 error provider，CONSECUTIVE_ERROR=3 需要
+    # 至少 10 次 burst 才能有高概率连续 3 次命中 a
+    local all_pass=true
+    local summary=""
+    local PM_TRIGGER_COUNT=20
+    local PM_VERIFY_COUNT=3
+    local PM_RECOVER_COUNT=3
+    # 4 个 protocol BC
+    for proto in http dubbo grpc thrift; do
+        log_step "用例8.proto-$proto: trigger / verify / recover"
+
+        provider_set_error "$PROVIDER_A_PORT" "true"
+        run_burst "$PM_CONSUMER_PORT" "$PM_TRIGGER_COUNT" "8.proto-$proto-trigger" "/api/protocol/$proto"
+        local t_fail=$CASE_FAIL
+        local t_abort=$CASE_ABORT
+
+        sleep 2
+        run_burst "$PM_CONSUMER_PORT" "$PM_VERIFY_COUNT" "8.proto-$proto-verify" "/api/protocol/$proto"
+        local v_ok=$CASE_OK
+        local v_abort=$CASE_ABORT
+
+        provider_set_error "$PROVIDER_A_PORT" "false"
+        sleep "$WAIT_HALF_OPEN_SECONDS"
+        run_burst "$PM_CONSUMER_PORT" "$PM_RECOVER_COUNT" "8.proto-$proto-recover" "/api/protocol/$proto"
+        local r_ok=$CASE_OK
+
+        local passed
+        if [[ "$t_fail" -ge 1 || "$t_abort" -ge 1 ]] \
+            && [[ $((v_ok + v_abort)) -eq 3 ]] \
+            && [[ "$r_ok" -eq 3 ]]; then
+            passed="✅"
+        else
+            passed="❌"
+            all_pass=false
+        fi
+        summary+="  proto-$proto: trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"$'\n'
+        log_info "[用例8.proto-$proto] trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"
+    done
+
+    # 9 个 method BC
+    local methods=(GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT)
+    for meth in "${methods[@]}"; do
+        log_step "用例8.meth-$meth: trigger / verify / recover"
+
+        provider_set_error "$PROVIDER_A_PORT" "true"
+        run_burst "$PM_CONSUMER_PORT" "$PM_TRIGGER_COUNT" "8.meth-$meth-trigger" "/api/method/$meth"
+        local t_fail=$CASE_FAIL
+        local t_abort=$CASE_ABORT
+
+        sleep 2
+        run_burst "$PM_CONSUMER_PORT" "$PM_VERIFY_COUNT" "8.meth-$meth-verify" "/api/method/$meth"
+        local v_ok=$CASE_OK
+        local v_abort=$CASE_ABORT
+
+        provider_set_error "$PROVIDER_A_PORT" "false"
+        sleep "$WAIT_HALF_OPEN_SECONDS"
+        run_burst "$PM_CONSUMER_PORT" "$PM_RECOVER_COUNT" "8.meth-$meth-recover" "/api/method/$meth"
+        local r_ok=$CASE_OK
+
+        local passed
+        if [[ "$t_fail" -ge 1 || "$t_abort" -ge 1 ]] \
+            && [[ $((v_ok + v_abort)) -eq 3 ]] \
+            && [[ "$r_ok" -eq 3 ]]; then
+            passed="✅"
+        else
+            passed="❌"
+            all_pass=false
+        fi
+        summary+="  meth-$meth: trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"$'\n'
+        log_info "[用例8.meth-$meth] trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"
+    done
+
+    stop_consumer "$consumer_pid"
+
+    if $all_pass; then
+        log_info "✅ 用例8 PASS (13 个 BC 整合 1 条规则 独立 trigger/verify/recover):"$'\n'"$summary"
+        echo "PASS"
+        return 0
+    fi
+    log_error "❌ 用例8 FAIL:"$'\n'"$summary"
+    echo "FAIL"
+    return 1
+}
+
+# ======================== 用例 10：路径匹配方式维度 ========================
+# 验证 SDK 按 BlockConfig.api.path 维度匹配：5 种 MatchString 类型
+# （EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）各 1 个 BC，独立 trigger / verify / recover。
+#
+# 实现：consumer 端按 path 段（/api/pathtype/{...}）填 RequestContext.Path，
+# 消费者用 path 是否匹配规则决定是否触发。
+case_pathtype() {
+    log_step "用例10：路径匹配方式维度（EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
+
+    print_block "用例10：路径匹配方式维度" \
+        "Caller 写法（统一装饰器，selfService=${PATHTYPE_CALLER}）:" \
+        "  · 5 种 MatchString 类型各 1 条规则 / 1 个 BC" \
+        "" \
+        "规则配置 + 消费者触发 path:" \
+        "  · EXACT       path=EXACT /api/pathtype/exact,  消费者请求 /api/pathtype/exact 触发" \
+        "  · REGEX       path=REGEX ^/api/pathtype/regex/.*, 消费者请求 /api/pathtype/regex/abc 触发" \
+        "  · NOT_EQUALS  path=NOT_EQUALS /api/pathtype/never_match, 消费者请求 /api/pathtype/anything_else 触发" \
+        "  · IN          path=IN /api/pathtype/in1,/api/pathtype/in2, 消费者请求 /api/pathtype/in1 触发" \
+        "  · NOT_IN      path=NOT_IN /api/pathtype/forbidden1,/api/pathtype/forbidden2, 消费者请求 /api/pathtype/allowed 触发" \
+        "" \
+        "验证步骤 (5 种 path type 各跑 6 阶段: 正向 3 阶段 + 反向 3 阶段):" \
+        "  10.1 启动 pathtype consumer" \
+        "  10.2 创建 5 条 path-type 规则" \
+        "  10.{ptype}.trigger  : provider-a=500, 发 3 次对应 path → 触发对应 BC" \
+        "  10.{ptype}.verify   : 再发 3 次 → 期望全部 abort" \
+        "  10.{ptype}.recover  : provider-a=200, 等 12s → 再发 3 次 → 全 200" \
+        "  10.{ptype}.rev-trigger : provider-a=500, 发 3 次反向 path → 期望 fail=3 abort=0" \
+        "  10.{ptype}.rev-verify  : 再发 3 次 5xx 反向 path → 累计 6 次 5xx 仍 abort=0" \
+        "  10.{ptype}.rev-recover : provider-a=200, 发 3 次反向 path → 全 200" \
+        "" \
+        "判定标准: 5 种 path type 各自正向 trigger fail≥1 / verify abort=3 / recover ok=3，" \
+        "  且反向 rev-trigger fail=3 abort=0 / rev-verify fail=3 abort=0 / rev-recover ok=3 → PASS" \
+        "  (反向用例用来证明 SDK 不会把不匹配规则的 5xx 累计进熔断统计)"
+
+    log_step "用例10.1 启动 pathtype consumer"
+    if ! start_consumer "pathtype_consumer" "$CALLER_CONSUMER_DIR" \
+        "$PATHTYPE_CALLER" "$PATHTYPE_CONSUMER_PORT" "${LOG_DIR}/pathtype_consumer.log"; then
+        echo "FAIL"
+        return 1
+    fi
+    local consumer_pid="$_STARTED_PID"
+
+    local expected_rules=(
+        "cb-pathtype-${PATHTYPE_CALLER}"
+    )
+    if ! inspect_caller_rules "$PATHTYPE_CALLER" "$NAMESPACE" "${expected_rules[@]}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+    if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$PATHTYPE_CALLER" "${expected_rules[@]}"; then
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例10.2 创建 1 条 METHOD 规则（内含 5 个 BlockConfig，覆盖 EXACT/REGEX/NOT_EQUALS/IN/NOT_IN）"
+    local pathtype_body
+    pathtype_body=$(build_rule_body_pathtype_merged)
+    create_circuitbreaker_rule "pathtype" "$pathtype_body" >/dev/null || {
+        log_error "[用例10.2] create pathtype 合并规则失败"
+        stop_consumer "$consumer_pid"
+        echo "FAIL"
+        return 1
+    }
+
+    log_info "等待 ${WAIT_RULE_READY_SECONDS}s 让 SDK 拉取规则..."
+    sleep "$WAIT_RULE_READY_SECONDS"
+
+    # 每种 path type 的：规则名、消费者 path（必须命中规则）、pattype 显示名
+    local ptypes=(
+        "EXACT|/api/pathtype/exact|EXACT"
+        "REGEX|/api/pathtype/regex/abc|REGEX"
+        "NOT_EQUALS|/api/pathtype/something|NOT_EQUALS"
+        "IN|/api/pathtype/in1|IN"
+        "NOT_IN|/api/pathtype/allowed|NOT_IN"
+    )
+    # 反向 path：与 ptypes 一一对应，故意不命中对应规则的 path 配置。
+    # 这些请求会被 SDK 视作"未匹配规则"，5xx 不应累计进 BlockConfig 统计。
+    local rev_paths=(
+        "/api/pathtype/exact_miss"
+        "/api/pathtype/noregex/foo"
+        "/api/pathtype/never_match"
+        "/api/pathtype/in_miss"
+        "/api/pathtype/forbidden1"
+    )
+
+    local all_pass=true
+    local summary=""
+    local PATHTYPE_TRIGGER_COUNT=20
+    local PATHTYPE_VERIFY_COUNT=3
+    local PATHTYPE_RECOVER_COUNT=3
+    local IFS='|'
+    local idx=0
+    for entry in "${ptypes[@]}"; do
+        set -- $entry
+        local ptype="$1"
+        local req_path="$2"
+        local ptype_label="$3"
+        local rev_path="${rev_paths[$idx]}"
+        idx=$((idx + 1))
+        log_step "用例10.$ptype_label: trigger / verify / recover / rev-trigger / rev-verify / rev-recover"
+
+        provider_set_error "$PROVIDER_A_PORT" "true"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_TRIGGER_COUNT" "10.$ptype_label-trigger" "$req_path"
+        local t_fail=$CASE_FAIL
+        local t_abort=$CASE_ABORT
+
+        sleep 2
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_VERIFY_COUNT" "10.$ptype_label-verify" "$req_path"
+        local v_ok=$CASE_OK
+        local v_abort=$CASE_ABORT
+
+        provider_set_error "$PROVIDER_A_PORT" "false"
+        sleep "$WAIT_HALF_OPEN_SECONDS"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_RECOVER_COUNT" "10.$ptype_label-recover" "$req_path"
+        local r_ok=$CASE_OK
+
+        # 反向 3 阶段：发 5xx 到反向 path（不匹配规则），SDK 不应累计 fail/abort。
+        # - rev_trigger: 3 次 5xx → fail=3 abort=0（证明 SDK 没把 5xx 算进 BC 统计）
+        # - rev_verify : 再 3 次 5xx → fail=3 abort=0（累计 6 次 5xx 仍 abort=0）
+        # - rev_recover: provider 翻 200 + 再 3 次 → ok=3 abort=0
+        provider_set_error "$PROVIDER_A_PORT" "true"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-trigger" "$rev_path"
+        local rt_fail=$CASE_FAIL
+        local rt_abort=$CASE_ABORT
+
+        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-verify" "$rev_path"
+        local rv_fail=$CASE_FAIL
+        local rv_abort=$CASE_ABORT
+
+        provider_set_error "$PROVIDER_A_PORT" "false"
+        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-recover" "$rev_path"
+        local rr_ok=$CASE_OK
+        local rr_abort=$CASE_ABORT
+
+        local passed
+        if [[ "$t_fail" -ge 1 || "$t_abort" -ge 1 ]] \
+            && [[ $((v_ok + v_abort)) -eq 3 ]] \
+            && [[ "$r_ok" -eq 3 ]] \
+            && [[ "$rt_fail" -eq 3 && "$rt_abort" -eq 0 ]] \
+            && [[ "$rv_fail" -eq 3 && "$rv_abort" -eq 0 ]] \
+            && [[ "$rr_ok" -eq 3 && "$rr_abort" -eq 0 ]]; then
+            passed="✅"
+        else
+            passed="❌"
+            all_pass=false
+        fi
+        summary+="  $ptype_label: fwd trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  |  rev trigger fail=$rt_fail abort=$rt_abort  rev-verify fail=$rv_fail abort=$rv_abort  rev-recover ok=$rr_ok abort=$rr_abort  $passed"$'\n'
+        log_info "[用例10.$ptype_label] fwd(trigger fail=$t_fail abort=$t_abort, verify ok=$v_ok abort=$v_abort, recover ok=$r_ok)  rev(trigger fail=$rt_fail abort=$rt_abort, verify fail=$rv_fail abort=$rv_abort, recover ok=$rr_ok abort=$rr_abort)  $passed"
+    done
+    unset IFS
+
+    stop_consumer "$consumer_pid"
+
+    if $all_pass; then
+        log_info "✅ 用例10 PASS (5 种 path type 正向 3 阶段 + 反向 3 阶段):"$'\n'"$summary"
+        echo "PASS"
+        return 0
+    fi
+    log_error "❌ 用例10 FAIL:"$'\n'"$summary"
+    echo "FAIL"
+    return 1
+}
+
 # ======================== 主流程 ========================
 main() {
     setup_test_log "$@"
@@ -2686,6 +3229,18 @@ main() {
                 r=$(case_modify_rule) || true
                 results+=("$r")
                 case_keys+=("modify_rule")
+                ;;
+            protocol_method)
+                local r
+                r=$(case_protocol_method) || true
+                results+=("$r")
+                case_keys+=("protocol_method")
+                ;;
+            pathtype)
+                local r
+                r=$(case_pathtype) || true
+                results+=("$r")
+                case_keys+=("pathtype")
                 ;;
             *)
                 log_warn "未知用例: $c (跳过)"

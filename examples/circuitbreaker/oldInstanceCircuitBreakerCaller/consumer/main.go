@@ -18,9 +18,12 @@
 package main
 
 import (
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -49,6 +52,10 @@ var (
 	configPath      string
 	debug           bool
 )
+
+// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+// 入口优先从 header 读；没有则本地生成；向下游发请求时显式注入。
+const reqIDHeader = "X-Request-ID"
 
 func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
@@ -114,24 +121,42 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 
 func (svr *PolarisClient) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
+		reqID := r.Header.Get(reqIDHeader)
+		if reqID == "" {
+			reqID = newReqID()
+		}
+		logIncomingRequest(reqID, r, "/echo")
+		log.Printf("[%s] start to invoke getOneInstance operation", reqID)
 		instance, err := svr.discoverInstance()
 		if err != nil || instance == nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			instanceIsNil := instance == nil
 			msg := fmt.Sprintf("fail to getOneInstance, err is %v, instance is nil:%v", err, instanceIsNil)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] discover instance fail : %s", msg)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, msg)
 			return
 		}
 		start := time.Now()
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		upstreamReq, httpErr := http.NewRequestWithContext(r.Context(), http.MethodGet,
+			fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
+		if httpErr != nil {
+			log.Printf("[%s] build upstream req fail: %s", reqID, httpErr)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] build upstream req fail : %s", httpErr)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, httpErr.Error())
+			return
+		}
+		// 显式注入 reqID，让下游 provider 能在日志中串联同一条请求的处理链
+		upstreamReq.Header.Set(reqIDHeader, reqID)
+		resp, err := http.DefaultClient.Do(upstreamReq)
 
 		if err != nil {
-			log.Printf("[error] send request to %s:%d fail : %s",
+			log.Printf("[%s] [error] send request to %s:%d fail : %s", reqID,
 				instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
 				instance.GetHost(), instance.GetPort(), err)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, err.Error())
 
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
@@ -179,14 +204,17 @@ func (svr *PolarisClient) runWebServer() {
 
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[%s] [error] read resp from %s:%d fail : %s", reqID,
+				instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s",
 				instance.GetHost(), instance.GetPort(), err)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, err.Error())
 			return
 		}
-		log.Printf("echo success, resp: %+v", string(data))
+		log.Printf("[%s] echo success, resp: %+v", reqID, string(data))
 		rw.WriteHeader(http.StatusOK)
+		logReply(reqID, r.RemoteAddr, http.StatusOK, string(data))
 		_, _ = rw.Write(data)
 	})
 
@@ -319,6 +347,7 @@ func (svr *PolarisClient) deregisterService() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(calleeNamespace) == 0 || len(calleeService) == 0 {
@@ -375,4 +404,71 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+// newReqID 生成 8 字符唯一 ID，作为整条请求处理链的追踪标识。
+func newReqID() string {
+	var b [4]byte
+	if _, err := cryptorand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// logIncomingRequest 单行打印收到的请求：reqID、客户端地址、path、method、URL、
+// query、headers、body。handler 入口处调用一次即可贯穿全函数日志。
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(),
+		formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印返回给客户端的响应：reqID、remoteAddr、status、body。
+// 在 rw.Write 之前调用，避免 rw.Write 失败后日志与实际不一致。
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
+}
+
+// formatHeaders 压缩 http.Header 为单行字符串，便于日志展示。
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range h {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, sanitizeHeaderValue(v)))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// formatQuery 压缩 query 参数为单行字符串。
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range q {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// sanitizeHeaderValue 过滤 header 注入风险字符（CR/LF/空格），避免日志被伪造换行切断。
+func sanitizeHeaderValue(v string) string {
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, " ", "_")
+	return v
 }

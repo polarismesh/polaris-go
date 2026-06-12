@@ -233,7 +233,8 @@ func (h *DefaultInvokeHandler) OnError(respCtx *model.ResponseContext) {
 }
 
 // commonCheck 业务调用前的统一熔断检查
-// 按 polaris-java 的优先级顺序：先检查服务级，未通过即短路；通过后再检查接口级。
+// 按服务级 → 接口级顺序短路检查，任一级拒绝即放行 CheckResult；
+// 服务级先检查是为了让"全服务不可用"信号优先于"单接口不可用"。
 // 接口级 Resource 的构造规则：
 //  1. 若 reqCtx.Path 非空，使用完整四元组（protocol/httpMethod/path）；
 //  2. 否则若 reqCtx.Method 非空，沿用旧逻辑把 Method 视作 path（向后兼容）；

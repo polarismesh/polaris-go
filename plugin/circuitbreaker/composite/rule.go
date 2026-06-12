@@ -109,8 +109,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 			c.log.Debugf("[CircuitBreaker] rule unchanged for resource: %s, skipping update", c.res.String())
 			return
 		}
-		c.log.Infof("[CircuitBreaker] rule changed for resource: %s, old rule: %s (revision: %s), new rule: %s "+
-			"(revision: %s)", c.res.String(), activeRule.Name, activeRule.Revision, cbRule.Name, cbRule.Revision)
+		c.log.Infof("[CircuitBreaker] rule changed for resource: %s, old rule: %s (id: %s, revision: %s), "+
+			"new rule: %s (id: %s, revision: %s)", c.res.String(), activeRule.Name, activeRule.Id,
+			activeRule.Revision, cbRule.Name, cbRule.Id, cbRule.Revision)
 	}
 	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
 	if err != nil {
@@ -220,7 +221,9 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: api/method mismatch", cbRule.Name)
 			continue
 		}
-		cbLogger.Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
+		// 命中路径：每条业务请求 CheckResource 都会执行到这里，因此降级为 Debug
+		// 避免 INFO 被请求级日志刷屏淹没真正的状态机切换 / 规则变更事件。
+		cbLogger.Debugf("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
 		return cbRule
 	}
 	return nil
@@ -253,6 +256,9 @@ func matchRuleAPI(res model.Resource, cbRule *fault_tolerance.CircuitBreakerRule
 	return matchMethod(res, destination.GetMethod(), regexFunc)
 }
 
+// sortCircuitBreakerRules 对熔断规则按优先级排序，数值越小优先级越高。
+// 排序优先级：rule.Priority → destination service（精确匹配优先于通配匹配）→ rule.Id（字典序保证确定性）。
+// 与 polaris-java CircuitBreakerRuleDictionary.sortCircuitBreakerRules 三级比较器语义一致。
 func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fault_tolerance.CircuitBreakerRule {
 	ret := make([]*fault_tolerance.CircuitBreakerRule, 0, len(rules))
 	ret = append(ret, rules...)
@@ -260,34 +266,23 @@ func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fau
 		rule1 := ret[i]
 		rule2 := ret[j]
 
-		// 1. compare destination service
-		destNamespace1 := rule1.RuleMatcher.Destination.Namespace
-		destService1 := rule1.RuleMatcher.Destination.Service
+		// 1. compare priority（数值越小优先级越高）
+		if rule1.Priority != rule2.Priority {
+			return rule1.Priority < rule2.Priority
+		}
 
-		destNamespace2 := rule2.RuleMatcher.Destination.Namespace
-		destService2 := rule2.RuleMatcher.Destination.Service
-
-		svcResult := compareService(destNamespace1, destService1, destNamespace2, destService2)
+		// 2. compare destination service（精确匹配优先于通配匹配）
+		destNs1 := rule1.RuleMatcher.GetDestination().GetNamespace()
+		destSvc1 := rule1.RuleMatcher.GetDestination().GetService()
+		destNs2 := rule2.RuleMatcher.GetDestination().GetNamespace()
+		destSvc2 := rule2.RuleMatcher.GetDestination().GetService()
+		svcResult := compareService(destNs1, destSvc1, destNs2, destSvc2)
 		if svcResult != 0 {
 			return svcResult < 0
 		}
-		if rule1.Level == rule2.Level {
-			if rule1.Level == fault_tolerance.Level_METHOD {
-				destMethod1 := rule1.RuleMatcher.Destination.Method.Value.Value
-				destMethod2 := rule2.RuleMatcher.Destination.Method.Value.Value
-				methodResult := compareStringValue(destMethod1, destMethod2)
-				if methodResult != 0 {
-					return methodResult < 0
-				}
-			}
-		}
 
-		// 2. compare source service
-		srcNamespace1 := rule1.RuleMatcher.Source.Namespace
-		srcService1 := rule1.RuleMatcher.Source.Service
-		srcNamespace2 := rule2.RuleMatcher.Source.Namespace
-		srcService2 := rule2.RuleMatcher.Source.Service
-		return compareService(srcNamespace1, srcService1, srcNamespace2, srcService2) < 0
+		// 3. compare rule ID（字典序保证确定性）
+		return strings.Compare(rule1.Id, rule2.Id) < 0
 	})
 	return ret
 }

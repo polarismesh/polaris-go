@@ -24,6 +24,7 @@ import (
 	"strconv"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 
 	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -39,6 +40,9 @@ type blockCounter struct {
 	// errorConditions 本块独立持有的错误条件列表
 	// 优先级：块自身 ErrorConditions 非空时取自身；为空则在构造期回退至规则顶层；都空时留空
 	errorConditions []*fault_tolerance.ErrorCondition
+	// api 块级 API 匹配配置，非 nil 时仅当请求的 path/protocol/method 匹配才会计入本块
+	// 为 nil 时表示无 API 限制，所有请求都计入（兼容老规则和非 METHOD 级规则）
+	api *apimodel.API
 	// counters 触发计数器列表，每个 TriggerCondition 对应一个
 	counters []trigger.TriggerCounter
 	// rc 反向引用 ResourceCounters，用于复用 regex 缓存与状态切换 handler
@@ -47,13 +51,15 @@ type blockCounter struct {
 
 // newBlockCounter 构造一个块级计数器
 // name           计数器名，作为状态切换时的标识
+// api            块级 API 匹配配置，非 nil 时仅匹配该 API 的请求才计入本块，用于同一规则内多 path 独立计数
 // errorConditions 该块生效的错误条件列表（已按优先级解析过）
 // conditions     该块的触发条件列表，决定建几个 trigger counter
-func newBlockCounter(rc *ResourceCounters, name string,
+func newBlockCounter(rc *ResourceCounters, name string, api *apimodel.API,
 	errorConditions []*fault_tolerance.ErrorCondition,
 	conditions []*fault_tolerance.TriggerCondition) *blockCounter {
 	bc := &blockCounter{
 		name:            name,
+		api:             api,
 		errorConditions: errorConditions,
 		rc:              rc,
 	}
@@ -64,6 +70,8 @@ func newBlockCounter(rc *ResourceCounters, name string,
 			StatusHandler: rc,
 			DelayExecutor: rc.executor.DelayExecute,
 			Log:           rc.logStat,
+			RuleID:        rc.activeRule.Id,
+			RuleRevision:  rc.activeRule.Revision,
 		}
 		switch condition.GetTriggerType() {
 		case fault_tolerance.TriggerCondition_CONSECUTIVE_ERROR:
@@ -125,6 +133,29 @@ func (b *blockCounter) parseRetStatus(stat *model.ResourceStat) model.RetStatus 
 		}
 	}
 	return model.RetSuccess
+}
+
+// matchAPI 判断当前请求的资源是否匹配本块的 API 配置
+// api 为 nil 或无 path 限制时返回 true（兼容老规则和遗留路径）
+// 仅 METHOD 级资源才做 path/protocol/method 组合匹配；非 METHOD 级直接放行
+func (b *blockCounter) matchAPI(res model.Resource) bool {
+	if b.api == nil {
+		return true
+	}
+	if res.GetLevel() != fault_tolerance.Level_METHOD {
+		return true
+	}
+	if b.api.GetPath() == nil {
+		return true
+	}
+	methodRes := res.(*model.MethodResource)
+	if !matchProtocolOrMethod(methodRes.Protocol, b.api.GetProtocol()) {
+		return false
+	}
+	if !matchProtocolOrMethod(methodRes.Method, b.api.GetMethod()) {
+		return false
+	}
+	return match.MatchString(methodRes.Path, b.api.GetPath(), b.rc.regexFunction)
 }
 
 // Report 把一次调用结果按本块的判错语义喂给本块内所有 trigger counter

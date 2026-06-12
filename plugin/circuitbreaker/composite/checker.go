@@ -267,8 +267,8 @@ func matchMethod(res model.Resource, val *apimodel.MatchString, regexFunc func(s
 }
 
 // matchMethodWithAPI 接口级熔断 BlockConfig.Api 匹配
-// 与 polaris-java MatchUtils.matchMethod 等价：按 protocol + method + path 三个维度
-// 同时验证，任一维度不匹配则失败；api 为 nil 时视为通配匹配所有接口
+// 按 protocol + method + path 三维度联合验证，任一维度不匹配即失败；
+// api 为 nil 时视为通配匹配所有接口
 // res     被检查的资源；非 METHOD 级直接放行
 // api     BlockConfig.Api 配置块，承载 protocol/method/path 三元组
 // regexFunc 正则编译缓存函数
@@ -295,7 +295,6 @@ func matchMethodWithAPI(res model.Resource, api *apimodel.API, regexFunc func(st
 
 // matchProtocolOrMethod 单字段协议/HTTP 方法匹配
 // target 为空或通配符（*）时视为放行；否则与 source 忽略大小写比较
-// 与 polaris-java MatchUtils.matchProtocolOrMethod 行为一致
 func matchProtocolOrMethod(source, target string) bool {
 	if target == "" || match.IsMatchAll(target) {
 		return true

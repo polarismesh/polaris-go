@@ -44,9 +44,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -74,6 +77,13 @@ var (
 	configPath      string
 	debug           bool
 )
+
+// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+// 入口优先从 header 读；没有则本地生成；向下游发请求时显式注入。
+const reqIDHeader = "X-Request-ID"
+
+// reqIDCtxKey ctx 上挂载的 reqID 键名，避免与其它 context value 冲突。
+type reqIDCtxKey struct{}
 
 func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
@@ -213,7 +223,29 @@ func (svr *PolarisClient) reportServiceCallResult(instance model.Instance, retSt
 //   - 服务级 ServiceResource         （Caller→Callee）
 //   - 接口级 MethodResource (path)   （RequestContext.Method 非空时）
 //   - 实例级 InstanceResource        （customer func 调用 SetInstance 时）
+//
+// 根据 path 推断 protocol/method 的字
+//
+//	/api/protocol/{proto}    → protocol = {proto} , method = "*"
+//	/api/method/{method}     → protocol = "*"      , method = {method}
+//	/api/pathtype/...        → protocol = "*"      , method = "*"（规则按 path type 区分）
+//	其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
+//   其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
+func inferProtocolMethod(path string) (protocol, method string) {
+	switch {
+	case strings.HasPrefix(path, "/api/protocol/"):
+		return strings.TrimPrefix(path, "/api/protocol/"), "*"
+	case strings.HasPrefix(path, "/api/method/"):
+		return "*", strings.TrimPrefix(path, "/api/method/")
+	case strings.HasPrefix(path, "/api/pathtype/"):
+		return "*", "*"
+	default:
+		return "*", "*"
+	}
+}
+
 func (svr *PolarisClient) makeDecorator(path string) model.DecoratorFunction {
+	protocol, method := inferProtocolMethod(path)
 	return svr.circuitBreaker.MakeFunctionDecorator(
 		func(ctx context.Context, args interface{}) (interface{}, error) {
 			instance, err := svr.discoverInstance()
@@ -227,7 +259,15 @@ func (svr *PolarisClient) makeDecorator(path string) model.DecoratorFunction {
 			}
 			url := fmt.Sprintf("http://%s:%d%s", instance.GetHost(), instance.GetPort(), path)
 			start := time.Now()
-			resp, httpErr := http.Get(url)
+			// 从 ctx 取 reqID（由入口 handler 注入），构造带 X-Request-ID header 的请求，
+			// 实现 consumer→provider 全链路日志串联
+			reqID, _ := ctx.Value(reqIDCtxKey{}).(string)
+			upstreamReq, httpErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if httpErr != nil {
+				return nil, httpErr
+			}
+			upstreamReq.Header.Set(reqIDHeader, reqID)
+			resp, httpErr := http.DefaultClient.Do(upstreamReq)
 			delay := time.Since(start)
 			if resp != nil {
 				defer resp.Body.Close()
@@ -268,6 +308,8 @@ func (svr *PolarisClient) makeDecorator(path string) model.DecoratorFunction {
 				},
 				CodeConvert: &customCodeConvert{},
 				Path:        path,
+				Protocol:    protocol,
+				HTTPMethod:  method,
 			},
 		},
 	)
@@ -281,32 +323,39 @@ func (svr *PolarisClient) makeDecorator(path string) model.DecoratorFunction {
 //     code / headers / body 透传；
 //  2. 规则未配置 fallback（含半开态配额耗尽路径）：abort.HasFallback()==false，
 //     此时统一返回 503 + "circuit breaker open" 文案，避免 0 状态码引发上游误判。
-func writeResult(rw http.ResponseWriter, ret interface{}, abort *model.CallAborted, err error) {
+//
+// 返回 (status, body) 便于调用方在 logReply 中按 HTTP 真实响应记录。
+func writeResult(rw http.ResponseWriter, ret interface{}, abort *model.CallAborted, err error) (int, string) {
 	if err != nil {
+		body := fmt.Sprintf("[error] fail : %s", err)
 		rw.WriteHeader(http.StatusInternalServerError)
-		_, _ = rw.Write([]byte(fmt.Sprintf("[error] fail : %s", err)))
-		return
+		_, _ = rw.Write([]byte(body))
+		return http.StatusInternalServerError, body
 	}
 	if abort != nil {
 		if abort.HasFallback() {
 			// 服务端下发了 fallback 响应：透传状态码 / headers / body
-			rw.WriteHeader(abort.GetFallbackCode())
+			status := abort.GetFallbackCode()
+			fbBody := abort.GetFallbackBody()
+			rw.WriteHeader(status)
 			for k, v := range abort.GetFallbackHeaders() {
 				rw.Header().Add(k, v)
 			}
-			_, _ = rw.Write([]byte(abort.GetFallbackBody()))
-			return
+			_, _ = rw.Write([]byte(fbBody))
+			return status, fbBody
 		}
 		// 无 fallback 时（含半开配额耗尽）：返回 503 默认响应
+		body := "circuit breaker open: " + abort.GetError().Error()
 		rw.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = rw.Write([]byte("circuit breaker open: " + abort.GetError().Error()))
-		return
+		_, _ = rw.Write([]byte(body))
+		return http.StatusServiceUnavailable, body
 	}
 	resp, _ := ret.(commonResponse)
 	// 透传 provider 的真实状态码与 body：脚本/curl 据此能直接区分 200/5xx，
 	// 不必额外解析 body。
 	rw.WriteHeader(resp.code)
 	_, _ = rw.Write([]byte(resp.body))
+	return resp.code, resp.body
 }
 
 // runWebServer 给四种 demo 接口各挂一个装饰器，再注册到 net/http。
@@ -318,6 +367,41 @@ func (svr *PolarisClient) runWebServer() {
 	// /forbidden 用于"4xx 不触发熔断"的端到端验证：provider 永远返回 403，
 	// 在默认 RANGE 500~599 规则下，连续访问应全部 fail 但不出现 abort。
 	dealForbidden := svr.makeDecorator("/forbidden")
+	// 用例 8/9/10 演示端点：path 段编码 protocol / method / 路径匹配方式。
+	// makeDecorator 内部通过 inferProtocolMethod 自动从 path 推断
+	// RequestContext.Protocol / HTTPMethod，避免在 main.go 硬编码 18 条规则。
+	dealProtoHTTP := svr.makeDecorator("/api/protocol/http")
+	dealProtoDUBBO := svr.makeDecorator("/api/protocol/dubbo")
+	dealProtoGRPC := svr.makeDecorator("/api/protocol/grpc")
+	dealProtoTHRIFT := svr.makeDecorator("/api/protocol/thrift")
+	dealMethGET := svr.makeDecorator("/api/method/GET")
+	dealMethPOST := svr.makeDecorator("/api/method/POST")
+	dealMethPUT := svr.makeDecorator("/api/method/PUT")
+	dealMethPATCH := svr.makeDecorator("/api/method/PATCH")
+	dealMethDELETE := svr.makeDecorator("/api/method/DELETE")
+	dealMethHEAD := svr.makeDecorator("/api/method/HEAD")
+	dealMethOPTIONS := svr.makeDecorator("/api/method/OPTIONS")
+	dealMethTRACE := svr.makeDecorator("/api/method/TRACE")
+	dealMethCONNECT := svr.makeDecorator("/api/method/CONNECT")
+	// 路径匹配方式维度：5 个端点各匹配一种 MatchString
+	dealPathEXACT := svr.makeDecorator("/api/pathtype/exact")
+	dealPathREGEX := svr.makeDecorator("/api/pathtype/regex/abc")
+	dealPathNOTEQUALS := svr.makeDecorator("/api/pathtype/never_match_anything")
+	dealPathIN := svr.makeDecorator("/api/pathtype/in1")
+	dealPathNOTIN := svr.makeDecorator("/api/pathtype/allowed")
+	// 路径匹配方式反向：5 个端点各故意不匹配对应规则的 path 配置。
+	// SDK 应该把它们视作"未匹配规则"的请求，无论下游返回 5xx 还是 200，
+	// 都不应累计进 BlockConfig 的 failRatio / consecutiveError 统计。
+	//  - EXACT     反向：/api/pathtype/exact_miss  ≠ 规则 value /api/pathtype/exact
+	//  - REGEX     反向：/api/pathtype/noregex/foo 不匹配 regex ^/api/pathtype/regex/.*
+	//  - NOT_EQUALS 反向：/api/pathtype/never_match == value，条件不满足
+	//  - IN        反向：/api/pathtype/in_miss  不在 IN list
+	//  - NOT_IN    反向：/api/pathtype/forbidden1 在 NOT_IN list 内，条件不满足
+	dealPathEXACTMiss := svr.makeDecorator("/api/pathtype/exact_miss")
+	dealPathREGEXMiss := svr.makeDecorator("/api/pathtype/noregex/foo")
+	dealPathNOTEQUALSMiss := svr.makeDecorator("/api/pathtype/never_match")
+	dealPathINMiss := svr.makeDecorator("/api/pathtype/in_miss")
+	dealPathNOTINMiss := svr.makeDecorator("/api/pathtype/forbidden1")
 
 	for path, deal := range map[string]model.DecoratorFunction{
 		"/echo":      dealEcho,
@@ -325,13 +409,48 @@ func (svr *PolarisClient) runWebServer() {
 		"/info":      dealInfo,
 		"/slow":      dealSlow,
 		"/forbidden": dealForbidden,
+		// 用例 8：协议维度（4 个 protocol 各 1 个端点）
+		"/api/protocol/http":   dealProtoHTTP,
+		"/api/protocol/dubbo":  dealProtoDUBBO,
+		"/api/protocol/grpc":   dealProtoGRPC,
+		"/api/protocol/thrift": dealProtoTHRIFT,
+		// 用例 9：方法维度（9 个 HTTP method 各 1 个端点）
+		"/api/method/GET":     dealMethGET,
+		"/api/method/POST":    dealMethPOST,
+		"/api/method/PUT":     dealMethPUT,
+		"/api/method/PATCH":   dealMethPATCH,
+		"/api/method/DELETE":  dealMethDELETE,
+		"/api/method/HEAD":    dealMethHEAD,
+		"/api/method/OPTIONS": dealMethOPTIONS,
+		"/api/method/TRACE":   dealMethTRACE,
+		"/api/method/CONNECT": dealMethCONNECT,
+		"/api/pathtype/exact":                dealPathEXACT,
+		"/api/pathtype/regex/abc":            dealPathREGEX,
+		"/api/pathtype/regex/abc":          dealPathREGEX,
+		"/api/pathtype/in1":                  dealPathIN,
+		"/api/pathtype/allowed":              dealPathNOTIN,
+		"/api/pathtype/allowed":            dealPathNOTIN,
+		// 用例 10 反向：5 个故意不命中规则的 path（详见 dealPath*Miss 注释），
+		"/api/pathtype/exact_miss":  dealPathEXACTMiss,
+		"/api/pathtype/noregex/foo": dealPathREGEXMiss,
+		"/api/pathtype/never_match": dealPathNOTEQUALSMiss,
+		"/api/pathtype/in_miss":     dealPathINMiss,
+		"/api/pathtype/forbidden1":  dealPathNOTINMiss,
+		"/api/pathtype/forbidden1":   dealPathNOTINMiss,
 	} {
 		path := path
 		deal := deal
 		http.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
-			log.Printf("[%s] received from %s", path, r.RemoteAddr)
-			ret, abort, err := deal(context.Background(), nil)
-			writeResult(rw, ret, abort, err)
+			reqID := r.Header.Get(reqIDHeader)
+			if reqID == "" {
+				reqID = newReqID()
+			}
+			logIncomingRequest(reqID, r, path)
+			// 用 ctx 把 reqID 透传给 deal 内部的下游 HTTP 调用，便于全链路日志串联
+			ctx := context.WithValue(context.Background(), reqIDCtxKey{}, reqID)
+			ret, abort, err := deal(ctx, nil)
+			status, body := writeResult(rw, ret, abort, err)
+			logReply(reqID, r.RemoteAddr, status, body)
 		})
 	}
 
@@ -457,4 +576,71 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+// newReqID 生成 8 字符唯一 ID，作为整条请求处理链的追踪标识。
+func newReqID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// logIncomingRequest 单行打印收到的请求：reqID、客户端地址、path、method、URL、
+// query、headers、body。handler 入口处调用一次即可贯穿全函数日志。
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(),
+		formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印返回给客户端的响应：reqID、remoteAddr、status、body。
+// 在 rw.Write 之前调用，避免 rw.Write 失败后日志与实际不一致。
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
+}
+
+// formatHeaders 压缩 http.Header 为单行字符串，便于日志展示。
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range h {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, sanitizeHeaderValue(v)))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// formatQuery 压缩 query 参数为单行字符串。
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range q {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// sanitizeHeaderValue 过滤 header 注入风险字符（CR/LF/空格），避免日志被伪造换行切断。
+func sanitizeHeaderValue(v string) string {
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, " ", "_")
+	return v
 }

@@ -61,7 +61,7 @@ type ResourceCounters struct {
 	regexFunction func(string) *regexp.Regexp
 	// engineFlow SDK 引擎入口
 	engineFlow sdk.Engine
-	// logStat 供 trigger 计数器和自身状态变化日志使用，统一输出到 stat 目录
+	// logStat 供 trigger 计数器和自身状态变化日志使用，统一输出到 circuitbreaker 目录
 	logStat log.Logger
 	// isInsRes 是否实例级资源；为 true 时状态切换会回写 localCache
 	isInsRes bool
@@ -84,7 +84,7 @@ func newResourceCounters(res model.Resource, activeRule *fault_tolerance.Circuit
 		circuitBreaker: circuitBreaker,
 		statusRef:      atomic.Value{},
 		fallbackInfo:   buildFallbackInfo(activeRule),
-		logStat:        circuitBreaker.logCtx.GetStatLogger(),
+		logStat:        circuitBreaker.logCtx.GetCircuitBreakerLogger(),
 		isInsRes:       isInsRes,
 		executor:       circuitBreaker.executor,
 	}
@@ -110,11 +110,12 @@ func (rc *ResourceCounters) init() error {
 			ruleName = ruleName + "#" + bc.GetName()
 		}
 		errConditions := resolveBlockErrorConditions(rc.activeRule, bc)
-		rc.blocks = append(rc.blocks, newBlockCounter(rc, ruleName, errConditions, bc.GetTriggerConditions()))
+		rc.blocks = append(rc.blocks, newBlockCounter(rc, ruleName, bc.GetApi(),
+			errConditions, bc.GetTriggerConditions()))
 	}
 	// 老规则兼容路径：BlockConfigs 为空时直接拿顶层 TriggerCondition / ErrorConditions
 	if len(rc.blocks) == 0 {
-		rc.legacyBlock = newBlockCounter(rc, rc.activeRule.Name,
+		rc.legacyBlock = newBlockCounter(rc, rc.activeRule.Name, nil,
 			rc.activeRule.GetErrorConditions(), rc.activeRule.GetTriggerCondition())
 	}
 	return nil
@@ -158,8 +159,9 @@ func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name strin
 		})
 	rc.updateCircuitBreakerStatus(newStatus)
 	rc.reportCircuitStatus(newStatus)
-	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s)",
-		before.GetStatus(), newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		before.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
+		before.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
 	delay := time.Duration(sleepWindow) * time.Second
 
@@ -176,8 +178,9 @@ func (rc *ResourceCounters) OpenToHalfOpen() {
 	}
 	consecutiveSuccess := rc.activeRule.GetRecoverCondition().ConsecutiveSuccess
 	halfOpenStatus := model.NewHalfOpenStatus(status.GetCircuitBreaker(), time.Now(), int(consecutiveSuccess))
-	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s)",
-		status.GetStatus(), halfOpenStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		status.GetStatus(), halfOpenStatus.GetStatus(), rc.resource.String(),
+		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 	rc.updateCircuitBreakerStatus(halfOpenStatus)
 	rc.reportCircuitStatus(halfOpenStatus)
 }
@@ -192,9 +195,9 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	}
 	newStatus := model.NewCircuitBreakerStatus(status.GetCircuitBreaker(), model.Close, time.Now())
 	rc.updateCircuitBreakerStatus(newStatus)
-	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s)",
-		status.GetStatus(), newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
-	rc.reportCircuitStatus(newStatus)
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		status.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
+		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 
 	rc.resumeAllBlocks()
 }
@@ -245,6 +248,9 @@ func (rc *ResourceCounters) handleHalfOpenReport(stat *model.ResourceStat,
 func (rc *ResourceCounters) dispatchToBlocks(stat *model.ResourceStat) {
 	if len(rc.blocks) > 0 {
 		for _, b := range rc.blocks {
+			if !b.matchAPI(stat.Resource) {
+				continue
+			}
 			b.Report(stat)
 		}
 		return
@@ -256,9 +262,15 @@ func (rc *ResourceCounters) dispatchToBlocks(stat *model.ResourceStat) {
 
 // evaluateSuccess HalfOpen 态用块级判错合并视图判定本次调用是否成功
 // 任一块判失败即视为整体失败，确保资源级状态机能即时反应错误条件
+// 注意：RetReject / RetFlowControl 已在 CompositeCircuitBreaker.Report 入口被提前
+// return（见 breaker.go doReport），不会进入本函数，因此本函数只关心 RetFail /
+// RetTimeout 两种错误。
 func (rc *ResourceCounters) evaluateSuccess(stat *model.ResourceStat) bool {
 	if len(rc.blocks) > 0 {
 		for _, b := range rc.blocks {
+			if !b.matchAPI(stat.Resource) {
+				continue
+			}
 			ret := b.parseRetStatus(stat)
 			if ret == model.RetFail || ret == model.RetTimeout {
 				return false
