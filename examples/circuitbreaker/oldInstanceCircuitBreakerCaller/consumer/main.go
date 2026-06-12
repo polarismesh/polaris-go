@@ -347,7 +347,7 @@ func (svr *PolarisClient) deregisterService() {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(calleeNamespace) == 0 || len(calleeService) == 0 {

@@ -27,6 +27,67 @@ examples/circuitbreaker/
 └── README.md                            # 本文件
 ```
 
+## customer func 返回值如何决定是否熔断
+
+这是理解三种用法的核心。熔断判定链如下：
+
+```
+customer func 返回 (result, err)
+       │
+       ├─ err != nil  ──→ 调用 CodeConvert.OnError(err) → 得到 retCode（demo 返回 "-1"）
+       │
+       └─ err == nil  ──→ 调用 CodeConvert.OnSuccess(result) → 得到 retCode（demo 返回状态码字符串）
+                               │
+                               └─ 然后 SDK 内部用这个 retCode 去匹配规则的 BlockConfig.ErrorCondition.RET_CODE：
+                                  · 命中 → 该次调用计为失败，累加 failRatio/consecutiveError
+                                  · 未命中 → 计为成功（即使 HTTP 状态码是 400）
+```
+
+**关键设计意图**：
+
+| 场景 | customer func 返回 | 走哪个 CodeConvert | retCode 值 | 默认 RANGE 500~599 是否命中 |
+|------|-------------------|-------------------|------------|--------------------------|
+| 网络错（TCP 断连 / DNS 失败） | `return nil, err` | `OnError(err)` | `"-1"` | **否**（-1 不在 500~599 范围） |
+| HTTP 5xx（如 500 / 502 / 503） | `return nil, err` | `OnError(err)` | `"-1"` | **否**（-1 不在 500~599 范围） |
+| HTTP 4xx（如 400 / 403 / 404） | `return commonResponse{code: 403}, nil` | `OnSuccess(resp)` | `"403"` | **否**（403 不在 500~599 范围） |
+| HTTP 2xx（如 200 / 201） | `return commonResponse{code: 200}, nil` | `OnSuccess(resp)` | `"200"` | **否**（200 不在 500~599 范围） |
+
+> **问题来了**：既然 5xx 返回 error → OnError → retCode="-1"，而 "-1" 也不在 RANGE 500~599 内，那 **5xx 是如何触发熔断的**？
+
+**答案**：SDK 内部对 retCode="-1" 有**特殊处理**。当 `OnError` 返回的 retCode 以 "-1" 开头（即 `block_counter.parseRetStatus` 逻辑），SDK 会**直接将该次调用计为 RetFail**，不依赖 RET_CODE 类条件匹配。这是"网络错 / 服务端故障"的兜底路径。
+
+**完整判定链（修正版）**：
+
+```
+customer func 返回 (result, err)
+       │
+       ├─ err != nil
+       │    └─ OnError(err) → retCode = "-1"
+       │         └─ SDK 看到 retCode="-1" → 直接计为 RetFail（走兜底路径，不依赖 RET_CODE 条件）
+       │
+       └─ err == nil
+            └─ OnSuccess(result) → retCode = 真实状态码字符串（如 "200"、"403"、"500"）
+                 └─ SDK 用 retCode 匹配规则 ErrorCondition.RET_CODE：
+                    · 命中 → 计为 RetFail
+                    · 未命中 → 计为 RetSuccess
+```
+
+**两种写法下 retCode 的来源对比**：
+
+| 写法 | OnError retCode 来源 | OnSuccess retCode 来源 |
+|------|---------------------|----------------------|
+| 装饰器 + InvokeHandler | `customCodeConvert.OnError(err)` | `customCodeConvert.OnSuccess(result)` |
+| 旧版散装 Report | 直接传字符串给 `ResourceStat.RetCode` | 直接传字符串给 `ResourceStat.RetCode` |
+
+**实践建议**：
+
+- **让 5xx 触发熔断**：customer func 对 5xx 返回 `error`，OnError 返回 "-1"，SDK 自动计为失败
+- **让 4xx 不触发熔断**：customer func 对 4xx 返回 `(commonResponse, nil)`，OnSuccess 透传状态码，默认规则不命中 4xx
+- **让特定 4xx（如 429）也触发熔断**：customer func 对 429 返回 `error`，OnError 返回 "-1"；或返回 `(commonResponse, nil)`，然后规则配 `IN ["429"]`
+- **让网络错触发熔断**：无需特殊处理，return error 自然走 OnError → "-1" 兜底路径
+
+---
+
 ## 三种编程模型详解
 
 polaris-go SDK 提供三种接入熔断的方式，按推荐程度排序：
@@ -35,39 +96,106 @@ polaris-go SDK 提供三种接入熔断的方式，按推荐程度排序：
 
 通过 `CircuitBreakerAPI.MakeFunctionDecorator` 将"熔断检查 → 业务调用 → 熔断上报"封装为**一个 `DecoratorFunction`**，业务只需写好 customer func 即可。
 
-**核心调用链**：
+#### 快速上手步骤
+
+**第 1 步**：定义返回值类型和 CodeConvert
+
+```go
+// 自定义返回值，CodeConvert 从中抽取 retCode
+type commonResponse struct {
+    code int
+    body string
+}
+
+type customCodeConvert struct{}
+
+// 成功路径：透传 HTTP 状态码
+func (c *customCodeConvert) OnSuccess(val interface{}) string {
+    resp, _ := val.(commonResponse)
+    return strconv.Itoa(resp.code)
+}
+
+// 失败路径：返回 "-1" 哨兵值
+func (c *customCodeConvert) OnError(err error) string {
+    return "-1"
+}
+```
+
+**第 2 步**：构造装饰器
 
 ```go
 decorator := svr.circuitBreaker.MakeFunctionDecorator(
-    // ① 业务回调：服务发现 + HTTP 调用 + 回填 Instance
+    // customer func：服务发现 + 业务调用 + 回填 Instance
     func(ctx context.Context, args interface{}) (interface{}, error) {
         instance, _ := svr.discoverInstance()
-        model.GetInvokeContext(ctx).SetInstance(instance)  // ← 关键：触发实例级
+        // 关键：SetInstance 触发实例级熔断
+        model.GetInvokeContext(ctx).SetInstance(instance)
         resp, err := http.Get(url)
-        // 5xx 返回 error → 走 OnError；2xx/4xx 返回 commonResponse → 走 OnSuccess
-        ...
+        if err != nil {
+            // 网络错 → return error → OnError → retCode="-1" → 兜底计为失败
+            return nil, err
+        }
+        defer resp.Body.Close()
+        data, _ := io.ReadAll(resp.Body)
+        if resp.StatusCode >= 500 {
+            // 5xx → return error → OnError → retCode="-1" → 兜底计为失败
+            return nil, fmt.Errorf("upstream returned %d", resp.StatusCode)
+        }
+        // 4xx/2xx → return (commonResponse, nil) → OnSuccess → retCode 透传状态码
+        return commonResponse{code: resp.StatusCode, body: string(data)}, nil
     },
-    // ② RequestContext：Method 非空 → 启用接口级
     &api.RequestContext{
         RequestContext: model.RequestContext{
-            Caller: &model.ServiceKey{...},
-            Callee: &model.ServiceKey{...},
-            CodeConvert: &customCodeConvert{},  // ← 从 commonResponse 抽取 retCode
-            Method: "/echo",                    // ← 触发接口级
+            Caller:      &model.ServiceKey{Namespace: "default", Service: "myApp"},
+            Callee:      &model.ServiceKey{Namespace: "default", Service: "downstream"},
+            CodeConvert: &customCodeConvert{},
+            Method:      "/echo",   // 非空 → 启用接口级熔断
         },
     },
 )
-// ③ 调用 decorator：一行代码完成"检查→执行→上报"
+```
+
+**第 3 步**：在 handler 中调用
+
+```go
+// 一行代码完成"熔断检查 → 执行业务 → 熔断上报"
 ret, abort, err := decorator(context.Background(), nil)
+
+// 处理三种返回
+if err != nil {
+    // 业务执行失败（网络错 / 5xx），不是熔断拦截
+    rw.WriteHeader(http.StatusInternalServerError)
+    return
+}
+if abort != nil {
+    // 被熔断拦截：abort.HasFallback() 判断是否有 fallback 响应
+    if abort.HasFallback() {
+        // 透传服务端下发的 fallback
+        rw.WriteHeader(abort.GetFallbackCode())
+        rw.Write([]byte(abort.GetFallbackBody()))
+    } else {
+        // 无 fallback：返回 503
+        rw.WriteHeader(http.StatusServiceUnavailable)
+        rw.Write([]byte("circuit breaker open"))
+    }
+    return
+}
+// 正常响应：透传 provider 的返回
+resp := ret.(commonResponse)
+rw.WriteHeader(resp.code)
+rw.Write([]byte(resp.body))
 ```
 
 **生命周期（完全自动）**：
 
 ```
-DecoratorFunction()
-  ├─ [自动] Check          ← 服务级 → 接口级 短路检查
-  ├─ [自动] customer func  ← 用户业务逻辑
+DecoratorFunction(ctx, nil)
+  ├─ [自动] Check          ← 服务级 → 接口级 短路检查；熔断打开时返回 abort != nil
+  ├─ [自动] customer func  ← 用户业务逻辑；返回 (result, error)
   └─ [自动] Report         ← 按 ServiceResource → MethodResource → InstanceResource 三级上报
+       │
+       ├─ customer func 返回 error → 调 OnError → retCode="-1" → 计为失败
+       └─ customer func 返回 (result, nil) → 调 OnSuccess → retCode 透传 → 规则匹配
 ```
 
 **覆盖熔断级别**：
@@ -83,9 +211,9 @@ DecoratorFunction()
 - **标准同步调用**（HTTP RPC / gRPC Unary）：天然适合，一行 `decorator(ctx, nil)` 搞定
 - **只需服务级熔断**：Method 留空 + 不调 `SetInstance`，零额外开销
 - **同时要服务级 + 接口级**：填 Method 即可，多接口隔离
-- **要对齐 4xx/5xx 语义**：`5xx → return error`（走 OnError → SDK 用 retCode="-1" 哨兵命中规则），`2xx/4xx → return (commonResponse, nil)`（走 OnSuccess → retCode 透传真实状态码，由规则 ErrorCondition 决定）
+- **要对齐 4xx/5xx 语义**：`5xx → return error`（走 OnError → SDK 用 retCode="-1" 哨兵兜底计为失败），`2xx/4xx → return (commonResponse, nil)`（走 OnSuccess → retCode 透传真实状态码，由规则 ErrorCondition 决定）
 
-**示例代码**：`newCircuitBreakerCaller/consumer/main.go:216-274`
+**示例代码**：`newCircuitBreakerCaller/consumer/main.go:247-316`
 
 ---
 
@@ -93,39 +221,101 @@ DecoratorFunction()
 
 通过 `CircuitBreakerAPI.MakeInvokeHandler` 获取 `InvokeHandler`，它暴露 **三个生命周期钩子**，由调用方自行编排检查 → 执行 → 上报的顺序。
 
-**核心调用链**：
+#### 快速上手步骤
+
+**第 1 步**：创建 InvokeHandler（初始化时一次性完成）
 
 ```go
-handler := svr.circuitBreaker.MakeInvokeHandler(&api.RequestContext{...})
+// 每个 path 独立一个 handler
+handler := svr.circuitBreaker.MakeInvokeHandler(&api.RequestContext{
+    RequestContext: model.RequestContext{
+        Caller:      &model.ServiceKey{Namespace: "default", Service: "myApp"},
+        Callee:      &model.ServiceKey{Namespace: "default", Service: "downstream"},
+        CodeConvert: &customCodeConvert{},   // 同装饰器写法
+        Method:      "/echo",                // 非空 → 启用接口级熔断
+    },
+})
+```
 
-// ── 第一步：熔断检查 ──
+**第 2 步**：在每次请求中手动编排三步
+
+```go
+// ── 第一步：熔断检查（可在业务调用前任意时刻）──
 pass, aborted, err := handler.AcquirePermission()
-if !pass { /* 被熔断拦截，处理 fallback 或返回 503 */ }
+if err != nil {
+    // SDK 内部异常
+    rw.WriteHeader(http.StatusInternalServerError)
+    return
+}
+if !pass {
+    // 被熔断拦截：aborted.HasFallback() 判断是否有 fallback
+    if aborted.HasFallback() {
+        rw.WriteHeader(aborted.GetFallbackCode())
+        rw.Write([]byte(aborted.GetFallbackBody()))
+    } else {
+        rw.WriteHeader(http.StatusServiceUnavailable)
+        rw.Write([]byte("circuit breaker open"))
+    }
+    return
+}
 
 // ── 第二步：业务调用（服务发现 + HTTP）──
 instance, _ := svr.discoverInstance()
 resp, err := http.Get(url)
 
 // ── 第三步：熔断上报 ──
+// Instance 字段传入实际命中的实例 → 触发实例级熔断统计
 if err != nil {
     handler.OnError(&model.ResponseContext{
-        Duration: delay, Err: err, Instance: instance,
-    })
-} else {
-    handler.OnSuccess(&model.ResponseContext{
         Duration: delay,
-        Result:   commonResponse{code: resp.StatusCode, body: string(data)},
+        Err:      err,       // ← 非 nil → SDK 内部调 CodeConvert.OnError → retCode="-1"
         Instance: instance,
     })
+} else {
+    defer resp.Body.Close()
+    data, _ := io.ReadAll(resp.Body)
+    if resp.StatusCode >= 500 {
+        // 5xx：走 OnError → SDK 调 OnError → retCode="-1" → 兜底计为失败
+        handler.OnError(&model.ResponseContext{
+            Duration: delay,
+            Err:      fmt.Errorf("upstream returned %d", resp.StatusCode),
+            Instance: instance,
+        })
+    } else {
+        // 4xx/2xx：走 OnSuccess → SDK 调 OnSuccess → retCode 透传状态码
+        handler.OnSuccess(&model.ResponseContext{
+            Duration: delay,
+            Result:   commonResponse{code: resp.StatusCode, body: string(data)},
+            Instance: instance,
+        })
+    }
 }
-
-// ── 附加：调用结果指标上报（Prometheus 等）──
-// 注意：与 LB 权重 / 健康检查 / 熔断均无关；
-//   LB 动态权重由 weightAdjuster（warmup）管理，
-//   健康检查由 healthCheck 插件链独立周期探测，
-//   熔断由 CircuitBreakerAPI.Report() 上报。
-svr.consumer.UpdateServiceCallResult(...)
 ```
+
+**生命周期（手动控制）**：
+
+```
+【你控制】 handler.AcquirePermission()  ← 服务级 → 接口级 短路检查；熔断打开时返回 pass=false
+【你控制】 服务发现 + HTTP 调用
+【你控制】 handler.OnSuccess() 或 OnError()
+           ├─ OnError(ResponseContext{Err: err, ...}) → SDK 调 CodeConvert.OnError(err) → retCode="-1" → 计为失败
+           └─ OnSuccess(ResponseContext{Result: resp, ...}) → SDK 调 CodeConvert.OnSuccess(resp) → retCode 透传 → 规则匹配
+```
+
+**OnError 与 OnSuccess 的返回值如何决定熔断**：
+
+与装饰器写法完全一致：
+- `OnError` 中 `ResponseContext.Err` 非 nil → SDK 调 `CodeConvert.OnError(err)` → retCode="-1" → 兜底计为失败
+- `OnSuccess` 中 `ResponseContext.Result` 非 nil → SDK 调 `CodeConvert.OnSuccess(result)` → retCode 透传 → 规则匹配
+
+区别仅在于：装饰器中 customer func 返回 `error` 即自动触发 OnError；InvokeHandler 中你**显式调用** `handler.OnError()` 来触发。
+
+**适用场景**：
+
+- **gRPC interceptor**：UnaryServerInterceptor 中先 `AcquirePermission()` → `handler(ctx, req)` → 根据结果调 `OnSuccess/OnError`
+- **自定义中间件**：`http.Handler` middleware 中在 `next.ServeHTTP` 前后分别做检查/上报
+- **异步调用模型**：消息消费、定时任务，先检查再异步执行，最后异步回调上报
+- **需要先预检再决定是否发起请求**：资源有限时先 `AcquirePermission` 再 `GetOneInstance`
 
 **生命周期（手动控制）**：
 
@@ -161,38 +351,66 @@ svr.consumer.UpdateServiceCallResult(...)
 
 通过 `CircuitBreakerAPI.Report()` + `ConsumerAPI.UpdateServiceCallResult()` 手动构造 `InstanceResource` 上报。
 
-**核心调用链**：
+#### 快速上手步骤
+
+**第 1 步**：服务发现 + HTTP 调用（无熔断检查）
 
 ```go
-// ── 服务发现 ──
+// 注意：旧版写法没有熔断检查，即使实例已被熔断，请求仍会发出
 instance, _ := svr.consumer.GetOneInstance(...)
+resp, err := http.Get(url)
+```
 
-// ── HTTP 调用 ──
-resp, err := http.Get(...)
+**第 2 步**：上报服务调用结果（LB / 健康检查路径）
 
-// ── 调用结果指标上报（Prometheus 等）──
-svr.consumer.UpdateServiceCallResult(...)
+```go
+svr.consumer.UpdateServiceCallResult(&polaris.ServiceCallResult{
+    ServiceCallResult: model.ServiceCallResult{
+        CalledInstance: instance,
+        RetStatus:      retStatus,   // RetSuccess 或 RetFail
+    },
+})
+```
 
-// ── 熔断上报（手动构造 Resource）──
+**第 3 步**：手动构造 InstanceResource 上报熔断
+
+```go
 insRes, _ := model.NewInstanceResource(
     &model.ServiceKey{Namespace: calleeNs, Service: calleeSvc},
     &model.ServiceKey{Namespace: callerNs, Service: callerSvc},
     "http", instance.GetHost(), instance.GetPort())
 svr.circuitBreaker.Report(&model.ResourceStat{
     Delay:     time.Since(start),
-    RetStatus: retStatus,
-    RetCode:   retCode,
+    RetStatus: retStatus,   // RetFail / RetSuccess
+    RetCode:   retCode,     // 直接传字符串，无 CodeConvert
     Resource:  insRes,
 })
 ```
 
-**与装饰器 / InvokeHandler 的关键差异**：
+**retCode 如何决定熔断（无 CodeConvert，直接传字符串）**：
+
+```go
+// 网络错：直接传 "-1" → SDK 兜底计为失败
+svr.reportCircuitBreak(instance, model.RetFail, "-1", start)
+
+// HTTP 5xx：RetFail + 真实状态码字符串
+svr.reportCircuitBreak(instance, model.RetFail, "500", start)
+
+// HTTP 4xx：RetSuccess + 真实状态码 → 规则不命中 → 不计入熔断
+svr.reportCircuitBreak(instance, model.RetSuccess, "403", start)
+
+// HTTP 2xx：RetSuccess + 真实状态码 → 规则不命中 → 计为成功
+svr.reportCircuitBreak(instance, model.RetSuccess, "200", start)
+```
+
+**核心差异**：
 
 | 维度 | 装饰器 / InvokeHandler | 旧版散装 Report |
 |---|---|---|
-| 覆盖级别 | SERVICE / METHOD / INSTANCE 三级 | **仅 INSTANCE**（实例级） |
 | 熔断检查 | SDK 自动 Check | **无**（只能上报，不会主动拦截） |
-| 半开配额管理 | SDK 自动管理 | **不参与**（上报即计入，无配额限制下的放行/拒绝逻辑） |
+| 半开配额管理 | SDK 自动管理 | **不参与** |
+| 覆盖级别 | SERVICE / METHOD / INSTANCE 三级 | **仅 INSTANCE**（实例级） |
+| retCode 来源 | CodeConvert.OnSuccess/OnError 转换 | **直接传字符串**给 ResourceStat.RetCode |
 | Resource 构造 | SDK 内部自动 | **手动 NewInstanceResource** |
 | 代码量 | 一/三个钩子 | 需完整拼接 ServiceKey + host:port + caller |
 
@@ -204,7 +422,7 @@ svr.circuitBreaker.Report(&model.ResourceStat{
 - **仅需实例级熔断**的极简场景（但装饰器写法也可以做到，且更简洁）
 - **定制化 Check 逻辑**：需要自己实现检查策略而非用 SDK 内置 Check 时（极少见）
 
-**示例代码**：`oldInstanceCircuitBreakerCaller/consumer/main.go:235-267`
+**示例代码**：`oldInstanceCircuitBreakerCaller/consumer/main.go:263-295`
 
 ---
 
@@ -220,6 +438,19 @@ svr.circuitBreaker.Report(&model.ResourceStat{
 | 需要先 Check 再决定是否发请求 | **InvokeHandler** | `invokeHandlerCaller` |
 | 存量代码兼容（仅实例级） | 旧版 Report | `oldInstanceCircuitBreakerCaller` |
 | 新项目 / 重构 | **装饰器** | `newCircuitBreakerCaller` |
+
+---
+
+## 三种写法中 retCode 的转换链对比
+
+| 步骤 | 装饰器（newCircuitBreakerCaller） | InvokeHandler（invokeHandlerCaller） | 旧版散装 Report |
+|------|----------------------------------|--------------------------------------|-----------------|
+| 业务调用结果 | customer func 返回 `(result, error)` | 业务代码自行判断 | 业务代码自行判断 |
+| retCode 获取方式 | 自动：err != nil → `OnError(err)`；err == nil → `OnSuccess(result)` | 手动：调 `OnError(ResponseContext{Err: ...})` 或 `OnSuccess(ResponseContext{Result: ...})` | 手动：直接传字符串给 `ResourceStat.RetCode` |
+| OnError 触发条件 | customer func `return nil, err` | 显式调用 `handler.OnError(...)` 且 `ResponseContext.Err != nil` | 无 OnError 概念 |
+| OnSuccess 触发条件 | customer func `return result, nil` | 显式调用 `handler.OnSuccess(...)` | 无 OnSuccess 概念 |
+| "-1" 哨兵含义 | "非 HTTP 状态码"，SDK 直接计为失败 | 同左 | 同左 |
+| 是否自动上报 | ✅ 装饰器结束自动上报 | ❌ 需手动调用 OnSuccess/OnError | ❌ 需手动调用 Report |
 
 ---
 
@@ -379,20 +610,61 @@ chmod +x cleanup.sh
 
 ## 子 demo 独立运行
 
-每个子目录也可独立运行（参考各子目录的 `README.md`）：
+每个子目录可独立编译运行。以下是三种写法的启动步骤：
+
+### 1. 装饰器写法（推荐，同时覆盖 SERVICE/METHOD/INSTANCE 三级）
 
 ```bash
-# 1. 统一装饰器写法（推荐，一份 demo 同时覆盖 SERVICE/METHOD/INSTANCE 三种级别）
-cd callee/provider-a && make run                    # 终端 1
-cd callee/provider-b && make run                    # 终端 2
-cd newCircuitBreakerCaller/consumer && make run     # 终端 3
-# 在控制台手工创建熔断规则后，curl http://127.0.0.1:18080/<echo|order|info|slow> 即可观察
+# 终端 1：启动 provider-a（默认返回 200）
+cd callee/provider-a && make run
 
-# 2. InvokeHandler 手动编排写法（gRPC interceptor / 自定义 middleware / 异步模型）
-cd invokeHandlerCaller/consumer && make run         # 终端 3（端口 18081，和装饰器不冲突）
+# 终端 2：启动 provider-b（默认返回 500）
+cd callee/provider-b && make run
 
-# 3. 旧版散装写法（保留兼容；仅实例级）
+# 终端 3：启动 consumer（端口 18080）
+cd newCircuitBreakerCaller/consumer && make run
+
+# 在北极星控制台创建熔断规则后：
+curl http://127.0.0.1:18080/echo      # 正常请求，走装饰器自动 Check→Execute→Report
+curl http://127.0.0.1:18080/order     # 不同接口，独立熔断统计
+curl http://127.0.0.1:18080/info      # 同上
+curl http://127.0.0.1:18080/slow      # 同上
+```
+
+### 2. InvokeHandler 手动编排写法
+
+```bash
+# 前提：provider-a 和 provider-b 已启动（同上）
+
+# 终端 3：启动 consumer（端口 18081，和装饰器不冲突）
+cd invokeHandlerCaller/consumer && make run
+
+# 手动编排三阶段：AcquirePermission → 业务调用 → OnSuccess/OnError
+curl http://127.0.0.1:18081/echo
+```
+
+### 3. 旧版散装写法（仅实例级）
+
+```bash
+# 前提：provider-a 和 provider-b 已启动
+
+# 终端 3：启动 consumer（端口 18080，注意与装饰器端口冲突，不要同时启动）
 cd oldInstanceCircuitBreakerCaller/consumer && make run
+
+# 只有实例级上报，没有熔断检查
+curl http://127.0.0.1:18080/echo
+```
+
+### 对比验证
+
+同时启动装饰器写法（端口 18080）和 InvokeHandler 写法（端口 18081），对同一个被调服务发请求，观察：
+
+```bash
+# 观察装饰器行为：熔断打开后直接返回 abort，不会实际发请求
+curl http://127.0.0.1:18080/echo
+
+# 观察 InvokeHandler 行为：熔断打开后 AcquirePermission 返回 pass=false，同样拦截
+curl http://127.0.0.1:18081/echo
 ```
 
 ## 故障排查

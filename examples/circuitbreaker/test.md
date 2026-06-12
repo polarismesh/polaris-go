@@ -97,11 +97,12 @@
 - 1.2 启动 instance consumer
 - 1.3 创建/更新规则
 - ── 第 1 轮 ──
-- 1.4 触发：连发 `TRIGGER_REQUEST_COUNT`（默认 15）次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
+- 1.4 触发：连发 `INSTANCE_R1_TRIGGER_COUNT=30` 次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
+  - **说明**：50/50 LB 下默认 burst=15 时 b 最长连续 fail 可能 < CONSECUTIVE_ERROR=5，提高 burst 到 30 确保稳定触发
 - 1.5 验证：再发 `RECOVERY_REQUEST_COUNT`（默认 10）次，流量应全部走 a
 - 1.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`（默认 15s）进半开 → b 重新加入 LB
 - ── 第 2 轮 ──
-- 1.7 再次触发：b 重新置 500
+- 1.7 再次触发：b 重新置 500，发 `INSTANCE_R2_TRIGGER_COUNT=30` 次
 - 1.8 再次验证：流量再次全部走 a
 - 1.9 再次恢复：b 翻回 200
 
@@ -222,11 +223,12 @@
 - 4.2 启动 old-instance consumer
 - 4.3 创建/更新规则
 - ── 第 1 轮 ──
-- 4.4 触发：连发 `TRIGGER_REQUEST_COUNT`（默认 15）次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
+- 4.4 触发：连发 `OLD_INSTANCE_R1_TRIGGER_COUNT=30` 次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
+  - **说明**：与用例1 同理，提高 burst 到 30 确保在 50/50 LB 下 b 能连续 5 次被选中
 - 4.5 验证：再发 `RECOVERY_REQUEST_COUNT`（默认 10）次，流量应全部走 a
 - 4.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`（默认 15s）进半开 → b 重新加入 LB
 - ── 第 2 轮 ──
-- 4.7 再次触发：b 重新置 500
+- 4.7 再次触发：b 重新置 500，发 `OLD_INSTANCE_R2_TRIGGER_COUNT=30` 次
 - 4.8 再次验证：流量再次全部走 a
 - 4.9 再次恢复：b 翻回 200
 
@@ -257,35 +259,33 @@
 ### 验证步骤
 - 5.1 复位 provider：a=200 / b=200
 - 5.2 启动 http_status consumer
-- 5.3 创建/更新规则
+- 5.3 创建 INSTANCE 级规则
 - ── A 段：4xx 不熔断 ──
 - 5.4 连发 `TRIGGER_REQUEST_COUNT` 次 `/forbidden`（provider 永远返回 403）
 - ── B 段：5xx 熔断 ──
 - 5.5 provider-b=500，连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → b 累计 3 次 5xx 触发熔断
-- 5.6 验证：再发 `RECOVERY_REQUEST_COUNT` 次 `/echo` 应全部走 a → 200
+- 5.6 验证：再发 `RECOVERY_REQUEST_COUNT` 次 `/echo`，SDK 拦截（abort）或路由到 a（ok），总计 = RECOVERY_REQUEST_COUNT
 - 5.7 恢复：provider-b=200，等 `WAIT_HALF_OPEN_SECONDS` → 半开探测 → 关闭
+- ── 规则切换（INSTANCE → SERVICE） ──
+- 5.(7→8) 删除 INSTANCE 级规则，创建 SERVICE 级规则（`cb-service-CircuitBreakerHttpStatusCaller`）
+  - **说明**：网络错场景需要 SERVICE 级熔断——当所有实例从注册中心剔除后，INSTANCE 级无法再命中任何实例返回 ABORT（GetOneInstance 失败→ErrCodeAPIInstanceNotFound→HTTP 500，不走 abort 分支）。SERVICE 级在 `AcquirePermission()` 阶段即可拦截，不依赖实例是否在线。
 - ── C 段：网络错熔断（-1 哨兵） ──
 - 5.8 关停 provider-a / provider-b 制造网络错
-- 5.9 连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → SDK 内部 retCode="-1" 命中 RANGE 类条件
-- 5.10 case 5 C 段把 provider 全杀了，恢复由主 shell 在 case 5 退出后接管：主 shell
-       通过 `lsof -ti :28081 / :28082` 检测端口，按需 `start_provider` 重新拉起两个
-       provider（PID 落到主 shell 全局 `PROVIDER_A_PID/PROVIDER_B_PID`），等
-       `WAIT_HALF_OPEN_SECONDS` 让 sleepWindow 过期
-- 5.8 实现细节：`lsof -ti :28081` 默认匹配所有 (LISTEN + ESTABLISHED) 占用 28081 端口的进程，
-       SDK keep-alive 期间 consumer 跟 28081 端口有 ESTABLISHED 连接，会同时返回 consumer PID。
-       必须用 `-sTCP:LISTEN` 只匹配 LISTEN 状态，确保杀的是 provider 进程不是 consumer 进程。
-       否则 5.9 跑 curl 时 consumer 已被误杀，全部 connection refused，走不到 SDK 路由 / -1 哨兵路径。
+- 5.9 连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → SDK 内部 retCode="-1" 命中规则触发 SERVICE 级熔断
+- 5.10 恢复由主 shell 在 case 5 退出后接管：主 shell 通过 `lsof -ti :28081/:28082 -sTCP:LISTEN` 检测端口，按需 `start_provider` 重新拉起两个 provider（PID 落到主 shell 全局 `PROVIDER_A_PID/PROVIDER_B_PID`），等 `WAIT_HALF_OPEN_SECONDS` 让 sleepWindow 过期
+- 5.8 实现细节：`lsof -ti :28081` 默认匹配所有 (LISTEN + ESTABLISHED) 占用 28081 端口的进程，SDK keep-alive 期间 consumer 跟 28081 端口有 ESTABLISHED 连接，会同时返回 consumer PID。必须用 `-sTCP:LISTEN` 只匹配 LISTEN 状态，确保杀的是 provider 进程不是 consumer 进程。否则 5.9 跑 curl 时 consumer 已被误杀，全部 connection refused，走不到 SDK 路由 / -1 哨兵路径。
 
 ### 通过条件（3 段独立判定）
 - A 段：`a_fail ≥ 1` 且 `a_abort == 0`（4xx 全部 fail 但永不熔断 —— 关键约束）
-- B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok == RECOVERY_REQUEST_COUNT` 且
-       `b_recover_ok == RECOVERY_REQUEST_COUNT`（INSTANCE 级熔断后流量全部转移到健康的 provider-a）
-- C 段：`c_fail ≥ 1` 且 `c_abort ≥ 1`（网络错触发熔断 —— 验证 -1 哨兵生效）
+- B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok + b_verify_abort == RECOVERY_REQUEST_COUNT` 且 `b_recover_ok == RECOVERY_REQUEST_COUNT`
+  - **说明**：verify 阶段允许 abort + ok = RECOVERY_REQUEST_COUNT，因为若测试环境残留了之前用例的 SERVICE 规则（DELETE 403 无法清理），5.5 trigger 同时触发 SERVICE OPEN，5.6 verify 期间 `acquirePermission` 在 SERVICE 维度直接 abort 全部请求。这与 INSTANCE 维度单独 OPEN 行为不同（SERVICE OPEN 全 abort vs INSTANCE OPEN 仅 LB 排除该实例），但都正确反映了"5.5 触发的熔断在 5.6 仍生效"。
+- C 段：`c_fail ≥ 1` 且 `c_abort ≥ 1`（网络错触发熔断 —— 验证 -1 哨兵 + SERVICE 级规则生效）
 
 ### 验证目的
 1. 验证 4xx 在默认 `RANGE 500~599` 规则下不被熔断（demo 端 4xx 走 OnSuccess）
 2. 验证 5xx 通过 OnError 路径累计 3 次后正常触发熔断
 3. 验证 SDK 内部 `-1` 哨兵能让网络错被熔断器拦截，无需依赖具体规则配置
+4. 验证网络错场景下 SERVICE 级规则在 `AcquirePermission()` 阶段即可拦截，不依赖实例是否在线（INSTANCE 级无法处理全实例离线的场景）
 
 ---
 
@@ -314,7 +314,8 @@
 - 6.1 复位 provider：a=200 / b=500
 - 6.2 启动 default-rule consumer（启用 `defaultRuleEnable=true`）
 - 6.3 跳过规则创建（关键：不向服务端创建任何熔断规则）
-- 6.4 触发：连发 `TRIGGER_REQUEST_COUNT` 次 → b 累计 3 次 5xx 触发熔断
+- 6.4 触发：连发 `DEFAULT_RULE_TRIGGER_COUNT=30` 次 → b 累计 3 次 5xx 触发熔断
+  - **说明**：默认规则 CONSECUTIVE_ERROR=3，50/50 LB 下 15 次请求 b 最长连续 fail 可能 < 3，提高 burst 到 30 确保触发
 - 6.5 验证：再发 `RECOVERY_REQUEST_COUNT` 次，流量应全部走 a → 200
 - 6.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS` 进半开 → b 重新加入 LB
 
@@ -394,15 +395,17 @@
 
 ### 验证步骤
 对 13 个 BlockConfig 各跑 3 阶段：
-- `trigger`：provider-a=500，连发 3 次对应协议/method 的 endpoint → 触发对应 BC 熔断
-- `verify`：再发 3 次 → 期望全部 abort
-- `recover`：provider-a=200，等 `WAIT_HALF_OPEN_SECONDS`（15s）→ 再发 3 次 → 期望全部 200
+- `trigger`：provider-a=500 / provider-b=500，发 `PM_TRIGGER_COUNT=30` 次对应 protocol/method 的 endpoint → 触发对应 BC 熔断
+  - **说明**：50/50 LB 下 CONSECUTIVE_ERROR=3 + ERROR_RATE=50%@30s/minReq=5，burst=15 时 fail≈45% 易擦边失败。提到 30 让 fail≈50% 稳过 ERROR_RATE，且连续 3 次命中概率显著上升
+- `verify`：再发 3 次 → 期望 SDK 拦截（abort）或路由到健康实例（ok），总计 = 3
+- `recover`：provider-a=200 / provider-b=200（同步翻回），等 `WAIT_HALF_OPEN_SECONDS`（15s）→ 再发 3 次 → 期望全部 200
+  - **说明**：METHOD 级熔断半开探测会随机命中 a 或 b，若 b 仍为 500 则探测失败 → 熔断重新 OPEN。因此必须同步复位 provider-b
 
 ### 通过条件（共 13 × 3 = 39 项指标）
 每个 BlockConfig 各自：
 - `trigger fail >= 1` 或 `abort >= 1`（若首次触发时前一个 BC 已打开，直接 abort 也算）
-- `verify ok + abort == 3`（熔断生效期间全部被拦截或直接成功）
-- `recover ok == 3`（半开探测一次成功 → 关闭）
+- `verify ok + abort == 3`（熔断生效期间被拦截或路由到健康实例，总计 3 次）
+- `recover ok == 3`（半开探测成功 → 关闭，两个 provider 同步翻回 200）
 
 ### 验证目的
 1. 验证 4 个 protocol 和 9 个 HTTP method 的 BC 在**同一条规则**内独立匹配，互不干扰
@@ -411,7 +414,7 @@
 
 ---
 
-## 用例 10：路径匹配方式维度（5 种 MatchString，含反向验证）
+## 用例 10：路径匹配方式维度（5 种 MatchString，仅正向验证）
 
 ### Caller 写法
 - 共享 `newCircuitBreakerCaller/consumer`
@@ -430,30 +433,32 @@
 每条 BC 共用 `CONSECUTIVE_ERROR=3`，`sleepWindow=12s`，`consecutiveSuccess=1`。
 
 ### 验证步骤
-对 5 种 MatchString 各跑 **6 阶段**（正向 3 阶段 + 反向 3 阶段）：
+对 5 种 MatchString 各跑 **正向 3 阶段**（不包含反向验证）：
 
-**正向验证（匹配 path 触发熔断）**：
-- `trigger`：provider-a=500，发 3 次匹配 endpoint → 触发对应 BC 熔断
-- `verify`：再发 3 次 → 期望全部 abort
-- `recover`：provider-a=200，等 `WAIT_HALF_OPEN_SECONDS`（15s）→ 再发 3 次 → 期望全部 200
-
-**反向验证（不匹配 path 不被熔断）**：
-- `rev-trigger`：发 3 次**不匹配该 BC path 的请求**（均 500），应全部 fail 但 abort=0（不会被该 BC 熔断）
-- `rev-verify`：再发 3 次不匹配 path 的请求，应全部 fail 但 abort=0
-- `rev-recover`：翻回 200，发 3 次 → 期望全部 200 且 abort=0
+- `trigger`：provider-a=500 / provider-b=500，发 `PATHTYPE_TRIGGER_COUNT=30` 次匹配 endpoint → 触发对应 BC 熔断
+- `verify`：再发 3 次 → 期望 SDK 拦截（abort）或路由到健康实例（ok），总计 = 3
+- `recover`：provider-a=200 / provider-b=200（同步翻回），等 `WAIT_HALF_OPEN_SECONDS`（15s）→ 再发 3 次 → 期望全部 200
 
 > **注意**：脚本中该函数标注为"用例10"，跳过了用例编号 9。
 
-### 通过条件（共 5 × 6 = 30 项指标）
+### 为什么移除了反向验证？
+
+5 种 path-type 已合并到 **1 条规则**的 5 个 BlockConfig。每个请求会对所有 BC 做 matchAPI 派发：
+- `NOT_EQUALS`（≠某值即匹配）和 `NOT_IN`（∉列表即匹配）这两个否定匹配 BC 会吃掉几乎所有 path
+- **不存在**"对全部 5 个 BC 都不匹配"的反向 path——任何反向 path 必被 NOT_EQUALS 或 NOT_IN BC 命中并熔断（这是 SDK 的正确行为）
+- 因此在合并规则结构下反向验证逻辑不成立，已移除
+
+正向 3 阶段已充分证明 5 种 MatchString 类型各自的 path 匹配 + 熔断生效。
+
+### 通过条件（共 5 × 3 = 15 项指标）
 每种 path type 各自：
-- 正向：`trigger fail >= 1` 或 `abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
-- 反向：`rev-trigger fail == 3 且 abort == 0`，`rev-verify fail == 3 且 abort == 0`，`rev-recover ok == 3 且 abort == 0`
+- `trigger fail >= 1` 或 `abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
 
 ### 验证目的
 1. 验证 `BlockConfig.api.path` 5 种 MatchString 各自的匹配语义
 2. 验证 SDK 端 `MatchString` 在 path 维度的全部 5 种类型正确实现
 3. 验证 EXACT 严格相等、REGEX 正则匹配、NOT_EQUALS 不等于、IN 包含、NOT_IN 不包含各自的行为
-4. 通过**反向验证**确保不匹配的 path 不会被错误熔断（关键防回归）
+4. 验证 5 个 BC 合并到 1 条规则时各 BC 独立匹配，互不干扰
 
 ---
 
@@ -474,7 +479,7 @@
 | 用例 7 轮 2 verify=9 (期望 10) | CONSECUTIVE_ERROR=7 阈值下 burst=15 不够，b 没被连续选 7 次触发熔断 | 确认轮 2 用了 case-local `MODIFY_R2_TRIGGER_COUNT=30`；如仍未触发，再加 burst 或降阈值 |
 | 规则 `circuitbreaker_rule_needs_update` 永远报"参数不一致" | `_gen_rule.py` 输出的 snake_case 键名与服务端 GET 返回的 camelCase 键名不匹配；或服务端给 `blockConfigs[].api` 补了 `protocol/method/path.type` 等默认字段 | 确认脚本已用归一化 + subset 语义（`existing ⊇ expected`）修复 |
 | 用例 8/10 trigger 阶段 protocol/method 维度未命中 | `RequestContext.Protocol` / `HTTPMethod` 未正确推断；或 BlockConfig.api 字段不匹配 | 查 `pm_consumer.log` / `pathtype_consumer.log` 确认 `inferProtocolMethod` 输出；检查 `_gen_rule.py` 的 `BC_API_PROTOCOL` / `BC_API_METHOD` 环境变量是否与 consumer path 一致 |
-| 用例 10 反向验证阶段 abort > 0 | 不匹配 path 的请求被其他 BC 的错误条件命中（如其他用例残留规则） | 查 `pathtype_consumer.log` 确认是否被非当前测试的规则拦截；执行前运行 `inspect_caller_rules` 巡检 |
+| 用例 10 某个 BC 的 verify/recover 阶段预期外 abort | NOT_EQUALS/NOT_IN BC 的否定匹配吃掉了其他 BC 的匹配路径 | 检查 BlockConfig 匹配顺序；这种场景下 SDK 行为正确（否定匹配 BC 拦截了不匹配其他 BC 的 path） |
 
 ## 与 polaris-go 代码改造的对应关系
 
@@ -492,11 +497,11 @@
 | `HalfOpenStatus.Release` 归集判定（任一失败 → Open / 全成功 → Close） | 用例 1/2/3 的恢复阶段：放行结果决定下一状态 |
 | `CircuitBreakerRuleDictionary` 三级索引（Level→ServiceKey→Rules） | 用例 3 多接口隔离（同 service 下三条 METHOD 规则按各自 path 独立命中） |
 | 周期性规则复检 `checkRules`（默认 60s） | 用例 1/2/3：长时间运行时若 push 通道丢失，规则仍能在下一周期被字典更新 |
-| `blockCounter.parseRetStatus` 的 `-1` 哨兵识别 | 用例 5 C 段：网络错路径下 SDK 默认 `code="-1"`，哨兵直接命中 RANGE 类条件触发熔断 |
+| `blockCounter.parseRetStatus` 的 `-1` 哨兵识别 | 用例 5 C 段：网络错路径下 SDK 默认 `code="-1"`，哨兵命中 RANGE 类条件；C 段切 SERVICE 级规则验证 `AcquirePermission()` 阶段拦截（不依赖实例在线） |
 | demo 端 4xx → OnSuccess、5xx → OnError 的分流 | 用例 5 A 段：4xx 透传真实状态码后不命中 RANGE 500~599，永不熔断；用例 5 B 段：5xx 走 OnError 触发熔断 |
 | `default.go` dictionary lookup miss + `defaultRuleEnable=true` 兜底默认规则 | 用例 6：服务端 0 规则时，本地默认实例级熔断按 RANGE 500~599 + CONSECUTIVE_ERROR=3 触发 |
 | `update_circuitbreaker_rule` API 热改 trigger 阈值后 SDK 感知 | 用例 7：两轮不同 CONSECUTIVE_ERROR 阈值（3 → 7）下，熔断均按新阈值触发与恢复 |
 | `matchProtocolOrMethod` 多维度独立匹配（protocol / method / path） | 用例 8：1 条规则 13 个 BC，4 个 protocol + 9 个 HTTP method 维度各自独立命中，`protocol="http"` 不命中 `protocol="dubbo"` 的 BC |
-| `MatchString` 5 种类型正向+反向验证 | 用例 10：EXACT / REGEX / NOT_EQUALS / IN / NOT_IN 各自正向触发熔断 + 反向确认不匹配 path 不被误熔断 |
-| verify 脚本：`r=$(case_xxx)` subshell 必杀内部 disown 的 bg process | 用例 5 C 段：subshell 退出时即便 disown 也无法保住 case 5.10 启动的 provider；改为在主 shell 接管（`lsof -ti` 检测端口 + `start_provider` 重建） |
+| `MatchString` 5 种类型正向验证 | 用例 10：EXACT / REGEX / NOT_EQUALS / IN / NOT_IN 各自正向触发熔断（5 BC 合并到 1 条规则），反向验证因 NOT_EQUALS/NOT_IN 否定匹配语义在合并规则下不适用 |
+| verify 脚本：`r=$(case_xxx)` subshell 必杀内部 disown 的 bg process | 用例 5 C 段：subshell 退出时即便 disown 也无法保住新启动的 provider；改为在主 shell 接管（`lsof -ti :PORT -sTCP:LISTEN` 检测 + `start_provider` 重建）；C 段切 SERVICE 级规则可拦截全实例离线场景 |
 | verify 脚本：键名归一化 + `existing ⊇ expected` subset 语义 | 用例 5/6/7 每次创建规则前 `_gen_rule.py` 输出与 polaris 服务端 GET 返回格式不同时，避免无意义 PUT 更新 |

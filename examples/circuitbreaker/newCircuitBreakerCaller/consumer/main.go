@@ -226,11 +226,11 @@ func (svr *PolarisClient) reportServiceCallResult(instance model.Instance, retSt
 //
 // 根据 path 推断 protocol/method 的字
 //
-//	/api/protocol/{proto}    → protocol = {proto} , method = "*"
-//	/api/method/{method}     → protocol = "*"      , method = {method}
-//	/api/pathtype/...        → protocol = "*"      , method = "*"（规则按 path type 区分）
-//	其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
-//   其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
+//		/api/protocol/{proto}    → protocol = {proto} , method = "*"
+//		/api/method/{method}     → protocol = "*"      , method = {method}
+//		/api/pathtype/...        → protocol = "*"      , method = "*"（规则按 path type 区分）
+//		其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
+//	  其它 /echo /order /info /slow /forbidden   → protocol = "*" , method = "*"（向后兼容）
 func inferProtocolMethod(path string) (protocol, method string) {
 	switch {
 	case strings.HasPrefix(path, "/api/protocol/"):
@@ -384,24 +384,16 @@ func (svr *PolarisClient) runWebServer() {
 	dealMethTRACE := svr.makeDecorator("/api/method/TRACE")
 	dealMethCONNECT := svr.makeDecorator("/api/method/CONNECT")
 	// 路径匹配方式维度：5 个端点各匹配一种 MatchString
+	//  · EXACT      请求 /api/pathtype/exact      == 规则 value /api/pathtype/exact
+	//  · REGEX      请求 /api/pathtype/regex/abc  匹配 ^/api/pathtype/regex/.*
+	//  · NOT_EQUALS 请求 /api/pathtype/something  != 规则 value /api/pathtype/never_match_anything
+	//  · IN         请求 /api/pathtype/in1        ∈ {in1,in2}
+	//  · NOT_IN     请求 /api/pathtype/allowed    ∉ {forbidden1,forbidden2}
 	dealPathEXACT := svr.makeDecorator("/api/pathtype/exact")
 	dealPathREGEX := svr.makeDecorator("/api/pathtype/regex/abc")
-	dealPathNOTEQUALS := svr.makeDecorator("/api/pathtype/never_match_anything")
+	dealPathNOTEQUALS := svr.makeDecorator("/api/pathtype/something")
 	dealPathIN := svr.makeDecorator("/api/pathtype/in1")
 	dealPathNOTIN := svr.makeDecorator("/api/pathtype/allowed")
-	// 路径匹配方式反向：5 个端点各故意不匹配对应规则的 path 配置。
-	// SDK 应该把它们视作"未匹配规则"的请求，无论下游返回 5xx 还是 200，
-	// 都不应累计进 BlockConfig 的 failRatio / consecutiveError 统计。
-	//  - EXACT     反向：/api/pathtype/exact_miss  ≠ 规则 value /api/pathtype/exact
-	//  - REGEX     反向：/api/pathtype/noregex/foo 不匹配 regex ^/api/pathtype/regex/.*
-	//  - NOT_EQUALS 反向：/api/pathtype/never_match == value，条件不满足
-	//  - IN        反向：/api/pathtype/in_miss  不在 IN list
-	//  - NOT_IN    反向：/api/pathtype/forbidden1 在 NOT_IN list 内，条件不满足
-	dealPathEXACTMiss := svr.makeDecorator("/api/pathtype/exact_miss")
-	dealPathREGEXMiss := svr.makeDecorator("/api/pathtype/noregex/foo")
-	dealPathNOTEQUALSMiss := svr.makeDecorator("/api/pathtype/never_match")
-	dealPathINMiss := svr.makeDecorator("/api/pathtype/in_miss")
-	dealPathNOTINMiss := svr.makeDecorator("/api/pathtype/forbidden1")
 
 	for path, deal := range map[string]model.DecoratorFunction{
 		"/echo":      dealEcho,
@@ -424,19 +416,12 @@ func (svr *PolarisClient) runWebServer() {
 		"/api/method/OPTIONS": dealMethOPTIONS,
 		"/api/method/TRACE":   dealMethTRACE,
 		"/api/method/CONNECT": dealMethCONNECT,
-		"/api/pathtype/exact":                dealPathEXACT,
-		"/api/pathtype/regex/abc":            dealPathREGEX,
-		"/api/pathtype/regex/abc":          dealPathREGEX,
-		"/api/pathtype/in1":                  dealPathIN,
-		"/api/pathtype/allowed":              dealPathNOTIN,
-		"/api/pathtype/allowed":            dealPathNOTIN,
-		// 用例 10 反向：5 个故意不命中规则的 path（详见 dealPath*Miss 注释），
-		"/api/pathtype/exact_miss":  dealPathEXACTMiss,
-		"/api/pathtype/noregex/foo": dealPathREGEXMiss,
-		"/api/pathtype/never_match": dealPathNOTEQUALSMiss,
-		"/api/pathtype/in_miss":     dealPathINMiss,
-		"/api/pathtype/forbidden1":  dealPathNOTINMiss,
-		"/api/pathtype/forbidden1":   dealPathNOTINMiss,
+		// 用例 10：路径匹配方式维度（5 种 MatchString 各 1 个正向端点）
+		"/api/pathtype/exact":     dealPathEXACT,
+		"/api/pathtype/regex/abc": dealPathREGEX,
+		"/api/pathtype/something": dealPathNOTEQUALS,
+		"/api/pathtype/in1":       dealPathIN,
+		"/api/pathtype/allowed":   dealPathNOTIN,
 	} {
 		path := path
 		deal := deal
@@ -520,7 +505,7 @@ func (svr *PolarisClient) deregisterService() {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if debug {

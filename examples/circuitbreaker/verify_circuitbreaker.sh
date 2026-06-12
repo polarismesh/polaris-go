@@ -2857,14 +2857,20 @@ case_protocol_method() {
     # 至少 10 次 burst 才能有高概率连续 3 次命中 a
     local all_pass=true
     local summary=""
-    local PM_TRIGGER_COUNT=20
+    # 50/50 LB 下 error provider 命中约 50%，CONSECUTIVE_ERROR=3 要求连续 3 次命中，
+    # ERROR_RATE=50%@30s/minRequest=5 要求滑窗内错误率达 50%。burst=20 时 fail≈9/20=45%
+    # 两个条件都易在临界擦边失败（如 proto-http fail=9 最长连续仅 2）。提到 30 让
+    # fail≈15/30=50% 稳过 ERROR_RATE，且连续 3 次命中的概率显著上升。
+    local PM_TRIGGER_COUNT=30
     local PM_VERIFY_COUNT=3
     local PM_RECOVER_COUNT=3
     # 4 个 protocol BC
     for proto in http dubbo grpc thrift; do
         log_step "用例8.proto-$proto: trigger / verify / recover"
 
+        # trigger：a、b 都置 500（b 默认即 500，这里显式确保），让 service 级熔断触发。
         provider_set_error "$PROVIDER_A_PORT" "true"
+        provider_set_error "$PROVIDER_B_PORT" "true"
         run_burst "$PM_CONSUMER_PORT" "$PM_TRIGGER_COUNT" "8.proto-$proto-trigger" "/api/protocol/$proto"
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
@@ -2874,7 +2880,11 @@ case_protocol_method() {
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
 
+        # recover：a、b 都翻回 200。METHOD/service 级熔断半开探测会随机命中 a 或 b，
+        # 若 b 仍为 500 则探测失败导致熔断重新 OPEN，recover 阶段出现 fail/abort。
+        # 因此必须同步复位 provider-b，否则 recover 永远无法稳定全 200。
         provider_set_error "$PROVIDER_A_PORT" "false"
+        provider_set_error "$PROVIDER_B_PORT" "false"
         sleep "$WAIT_HALF_OPEN_SECONDS"
         run_burst "$PM_CONSUMER_PORT" "$PM_RECOVER_COUNT" "8.proto-$proto-recover" "/api/protocol/$proto"
         local r_ok=$CASE_OK
@@ -2897,7 +2907,9 @@ case_protocol_method() {
     for meth in "${methods[@]}"; do
         log_step "用例8.meth-$meth: trigger / verify / recover"
 
+        # trigger：a、b 都置 500，确保 service 级熔断触发。
         provider_set_error "$PROVIDER_A_PORT" "true"
+        provider_set_error "$PROVIDER_B_PORT" "true"
         run_burst "$PM_CONSUMER_PORT" "$PM_TRIGGER_COUNT" "8.meth-$meth-trigger" "/api/method/$meth"
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
@@ -2907,7 +2919,9 @@ case_protocol_method() {
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
 
+        # recover：a、b 同步翻回 200，避免半开探测命中仍为 500 的 b 导致熔断重新 OPEN。
         provider_set_error "$PROVIDER_A_PORT" "false"
+        provider_set_error "$PROVIDER_B_PORT" "false"
         sleep "$WAIT_HALF_OPEN_SECONDS"
         run_burst "$PM_CONSUMER_PORT" "$PM_RECOVER_COUNT" "8.meth-$meth-recover" "/api/method/$meth"
         local r_ok=$CASE_OK
@@ -2948,28 +2962,25 @@ case_pathtype() {
 
     print_block "用例10：路径匹配方式维度" \
         "Caller 写法（统一装饰器，selfService=${PATHTYPE_CALLER}）:" \
-        "  · 5 种 MatchString 类型各 1 条规则 / 1 个 BC" \
+        "  · 5 种 MatchString 类型合并到 1 条 METHOD 规则的 5 个 BlockConfig" \
         "" \
         "规则配置 + 消费者触发 path:" \
         "  · EXACT       path=EXACT /api/pathtype/exact,  消费者请求 /api/pathtype/exact 触发" \
         "  · REGEX       path=REGEX ^/api/pathtype/regex/.*, 消费者请求 /api/pathtype/regex/abc 触发" \
-        "  · NOT_EQUALS  path=NOT_EQUALS /api/pathtype/never_match, 消费者请求 /api/pathtype/anything_else 触发" \
+        "  · NOT_EQUALS  path=NOT_EQUALS /api/pathtype/never_match_anything, 消费者请求 /api/pathtype/something 触发" \
         "  · IN          path=IN /api/pathtype/in1,/api/pathtype/in2, 消费者请求 /api/pathtype/in1 触发" \
         "  · NOT_IN      path=NOT_IN /api/pathtype/forbidden1,/api/pathtype/forbidden2, 消费者请求 /api/pathtype/allowed 触发" \
         "" \
-        "验证步骤 (5 种 path type 各跑 6 阶段: 正向 3 阶段 + 反向 3 阶段):" \
+        "验证步骤 (5 种 path type 各跑正向 3 阶段):" \
         "  10.1 启动 pathtype consumer" \
-        "  10.2 创建 5 条 path-type 规则" \
-        "  10.{ptype}.trigger  : provider-a=500, 发 3 次对应 path → 触发对应 BC" \
+        "  10.2 创建 1 条 METHOD 规则（5 个 BlockConfig）" \
+        "  10.{ptype}.trigger  : provider a/b=500, 发 ${PATHTYPE_TRIGGER_COUNT:-30} 次对应 path → 触发对应 BC" \
         "  10.{ptype}.verify   : 再发 3 次 → 期望全部 abort" \
-        "  10.{ptype}.recover  : provider-a=200, 等 12s → 再发 3 次 → 全 200" \
-        "  10.{ptype}.rev-trigger : provider-a=500, 发 3 次反向 path → 期望 fail=3 abort=0" \
-        "  10.{ptype}.rev-verify  : 再发 3 次 5xx 反向 path → 累计 6 次 5xx 仍 abort=0" \
-        "  10.{ptype}.rev-recover : provider-a=200, 发 3 次反向 path → 全 200" \
+        "  10.{ptype}.recover  : provider a/b=200, 等 ${WAIT_HALF_OPEN_SECONDS}s → 再发 3 次 → 全 200" \
         "" \
-        "判定标准: 5 种 path type 各自正向 trigger fail≥1 / verify abort=3 / recover ok=3，" \
-        "  且反向 rev-trigger fail=3 abort=0 / rev-verify fail=3 abort=0 / rev-recover ok=3 → PASS" \
-        "  (反向用例用来证明 SDK 不会把不匹配规则的 5xx 累计进熔断统计)"
+        "判定标准: 5 种 path type 各自 trigger fail≥1(或 abort≥1) / verify abort=3 / recover ok=3 → PASS" \
+        "  注: 5 个 BC 合并在 1 条规则,NOT_EQUALS/NOT_IN 等否定匹配会吃掉几乎所有 path," \
+        "      不存在对全部 BC 都不匹配的'反向 path',故反向验证不适用于合并规则结构。"
 
     log_step "用例10.1 启动 pathtype consumer"
     if ! start_consumer "pathtype_consumer" "$CALLER_CONSUMER_DIR" \
@@ -3014,33 +3025,25 @@ case_pathtype() {
         "IN|/api/pathtype/in1|IN"
         "NOT_IN|/api/pathtype/allowed|NOT_IN"
     )
-    # 反向 path：与 ptypes 一一对应，故意不命中对应规则的 path 配置。
-    # 这些请求会被 SDK 视作"未匹配规则"，5xx 不应累计进 BlockConfig 统计。
-    local rev_paths=(
-        "/api/pathtype/exact_miss"
-        "/api/pathtype/noregex/foo"
-        "/api/pathtype/never_match"
-        "/api/pathtype/in_miss"
-        "/api/pathtype/forbidden1"
-    )
 
     local all_pass=true
     local summary=""
-    local PATHTYPE_TRIGGER_COUNT=20
+    # 与用例8 同理：CONSECUTIVE_ERROR=3 + ERROR_RATE=50%@30s/minRequest=5，50/50 LB 下
+    # burst=30 让 fail≈15/30=50% 稳过 ERROR_RATE，连续 3 次命中概率也更高。
+    local PATHTYPE_TRIGGER_COUNT=30
     local PATHTYPE_VERIFY_COUNT=3
     local PATHTYPE_RECOVER_COUNT=3
-    local IFS='|'
-    local idx=0
     for entry in "${ptypes[@]}"; do
-        set -- $entry
-        local ptype="$1"
-        local req_path="$2"
-        local ptype_label="$3"
-        local rev_path="${rev_paths[$idx]}"
-        idx=$((idx + 1))
-        log_step "用例10.$ptype_label: trigger / verify / recover / rev-trigger / rev-verify / rev-recover"
+        # 仅在拆分 entry 时临时改 IFS，拆完立即恢复，避免污染 run_burst 内
+        # `for i in $(seq 1 N)` 的换行符分词（IFS='|' 会让 seq 输出被当成单个词，
+        # 导致 burst 循环只跑 1 次 → total=1）。
+        local ptype req_path ptype_label
+        IFS='|' read -r ptype req_path ptype_label <<< "$entry"
+        log_step "用例10.$ptype_label: trigger / verify / recover"
 
+        # trigger：a、b 都置 500（b 默认即 500，这里显式确保），让对应 BC 熔断触发。
         provider_set_error "$PROVIDER_A_PORT" "true"
+        provider_set_error "$PROVIDER_B_PORT" "true"
         run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_TRIGGER_COUNT" "10.$ptype_label-trigger" "$req_path"
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
@@ -3050,50 +3053,39 @@ case_pathtype() {
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
 
+        # recover：a、b 同步翻回 200，避免半开探测命中仍为 500 的 b 导致熔断重新 OPEN。
         provider_set_error "$PROVIDER_A_PORT" "false"
+        provider_set_error "$PROVIDER_B_PORT" "false"
         sleep "$WAIT_HALF_OPEN_SECONDS"
         run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_RECOVER_COUNT" "10.$ptype_label-recover" "$req_path"
         local r_ok=$CASE_OK
 
-        # 反向 3 阶段：发 5xx 到反向 path（不匹配规则），SDK 不应累计 fail/abort。
-        # - rev_trigger: 3 次 5xx → fail=3 abort=0（证明 SDK 没把 5xx 算进 BC 统计）
-        # - rev_verify : 再 3 次 5xx → fail=3 abort=0（累计 6 次 5xx 仍 abort=0）
-        # - rev_recover: provider 翻 200 + 再 3 次 → ok=3 abort=0
-        provider_set_error "$PROVIDER_A_PORT" "true"
-        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-trigger" "$rev_path"
-        local rt_fail=$CASE_FAIL
-        local rt_abort=$CASE_ABORT
-
-        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-verify" "$rev_path"
-        local rv_fail=$CASE_FAIL
-        local rv_abort=$CASE_ABORT
-
-        provider_set_error "$PROVIDER_A_PORT" "false"
-        run_burst "$PATHTYPE_CONSUMER_PORT" "3" "10.$ptype_label-rev-recover" "$rev_path"
-        local rr_ok=$CASE_OK
-        local rr_abort=$CASE_ABORT
+        # 说明：原先这里有"反向 path"3 阶段，意图证明不匹配规则的 5xx 不计入熔断。
+        # 但 5 种 path-type 已合并到 1 条规则的 5 个 BlockConfig，每个请求会对所有 BC
+        # 做 matchAPI 派发。NOT_EQUALS(≠某值即匹配) / NOT_IN(∉列表即匹配) 这两个否定
+        # 匹配 BC 会吃掉几乎所有 path——不存在"对全部 5 个 BC 都不匹配"的反向 path，
+        # 任何反向 path 必被 NOT_EQUALS/NOT_IN BC 命中并熔断（SDK 行为正确）。
+        # 因此反向验证在合并规则结构下逻辑不成立，已移除；正向 3 阶段已充分证明
+        # 5 种 MatchString 类型各自的 path 匹配 + 熔断生效。
 
         local passed
         if [[ "$t_fail" -ge 1 || "$t_abort" -ge 1 ]] \
             && [[ $((v_ok + v_abort)) -eq 3 ]] \
-            && [[ "$r_ok" -eq 3 ]] \
-            && [[ "$rt_fail" -eq 3 && "$rt_abort" -eq 0 ]] \
-            && [[ "$rv_fail" -eq 3 && "$rv_abort" -eq 0 ]] \
-            && [[ "$rr_ok" -eq 3 && "$rr_abort" -eq 0 ]]; then
+            && [[ "$r_ok" -eq 3 ]]; then
             passed="✅"
         else
             passed="❌"
             all_pass=false
         fi
-        summary+="  $ptype_label: fwd trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  |  rev trigger fail=$rt_fail abort=$rt_abort  rev-verify fail=$rv_fail abort=$rv_abort  rev-recover ok=$rr_ok abort=$rr_abort  $passed"$'\n'
-        log_info "[用例10.$ptype_label] fwd(trigger fail=$t_fail abort=$t_abort, verify ok=$v_ok abort=$v_abort, recover ok=$r_ok)  rev(trigger fail=$rt_fail abort=$rt_abort, verify fail=$rv_fail abort=$rv_abort, recover ok=$rr_ok abort=$rr_abort)  $passed"
+        summary+="  $ptype_label: trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"$'\n'
+        log_info "[用例10.$ptype_label] trigger fail=$t_fail abort=$t_abort  verify ok=$v_ok abort=$v_abort  recover ok=$r_ok  $passed"
     done
     unset IFS
 
     stop_consumer "$consumer_pid"
 
     if $all_pass; then
-        log_info "✅ 用例10 PASS (5 种 path type 正向 3 阶段 + 反向 3 阶段):"$'\n'"$summary"
+        log_info "✅ 用例10 PASS (5 种 path type 正向 3 阶段):"$'\n'"$summary"
         echo "PASS"
         return 0
     fi
