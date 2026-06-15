@@ -111,7 +111,7 @@ func recovery(logCtx *log.ContextLogger) {
 	if r := recover(); r != nil {
 		buf := make([]byte, 1<<18)
 		n := runtime.Stack(buf, false)
-		logCtx.GetBaseLogger().Errorf("[CircuitBreaker] panic recovered: %v\nruntime stack: %s", r, buf[0:n])
+		logCtx.GetCircuitBreakerLogger().Errorf("[CircuitBreaker] panic recovered: %v\nruntime stack: %s", r, buf[0:n])
 	}
 }
 

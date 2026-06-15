@@ -1,0 +1,510 @@
+# examples/circuitbreaker — 用例清单
+
+本文档罗列 `verify_circuitbreaker.sh` 执行的全部用例及其判定准则。脚本中所有 `用例N.M` 编号必须与本文一致。
+
+## 测试拓扑
+
+```
+                  ┌──── provider-a (端口 28081，默认 200) ────┐
+                  │   /echo /order /info /slow + /switch       │
+   Polaris ◀──────┤                                            ├──── 注册到服务 CircuitBreakerCallee
+                  │   /echo /order /info /slow + /switch       │
+                  └──── provider-b (端口 28082，默认 500) ────┘
+                                       ▲
+                                       │
+   ┌── instance-consumer          (18081)  selfService=CircuitBreakerInstanceCaller
+   │   └─ instance-invoke-consumer (18091)  selfService=CircuitBreakerInstanceCaller（共用）
+   │
+   ├── service-consumer           (18082)  selfService=CircuitBreakerServiceCaller
+   │   └─ service-invoke-consumer  (18092)  selfService=CircuitBreakerServiceCaller（共用）
+   │
+   ├── interface-consumer         (18083)  selfService=CircuitBreakerInterfaceCaller
+   │   └─ interface-invoke-consumer(18093) selfService=CircuitBreakerInterfaceCaller（共用）
+   │
+   ├── old-instance-consumer      (18084)  selfService=CircuitBreakerOldInstanceCaller
+   │                                       （旧版散装写法，向后兼容验证）
+   ├── http_status-consumer       (18085)  selfService=CircuitBreakerHttpStatusCaller
+   │
+   ├── default_rule-consumer      (18086)  selfService=CircuitBreakerDefaultRuleCaller
+   │                                       （不依赖服务端规则，验证 SDK 本地默认规则）
+   ├── modify_rule-consumer       (18087)  selfService=CircuitBreakerModifyRuleCaller
+   │                                       （验证 update_circuitbreaker_rule 改参数后熔断按新阈值生效）
+   ├── pm-consumer                (18088)  selfService=CircuitBreakerPMCaller
+   │                                       （验证接口协议+HTTP方法维度合并匹配）
+   ├── pathtype-consumer          (18089)  selfService=CircuitBreakerPathTypeCaller
+   │                                       （验证 5 种 MatchString 路径匹配方式）
+   └── all-dead-*-consumer        (18090-18092)
+           selfService=CircuitBreakerAllDead{Decorator,Invoke,Report}Caller
+           （验证全死全活兜底策略，覆盖 Decorator / InvokeHandler / Bare Report 三种调用模式）
+```
+
+### Consumer 源码分布
+
+| 源码目录 | 调用模式 | 使用的用例 |
+|----------|---------|-----------|
+| `newCircuitBreakerCaller/consumer` | Decorator（`MakeFunctionDecorator` + `SetInstance`） | 1, 2, 3, 5, 6, 7, 8, 9, 10(A) |
+| `invokeHandlerCaller/consumer` | InvokeHandler（`MakeInvokeHandler` + `AcquirePermission`） | 1, 2, 3, 10(B) |
+| `oldInstanceCircuitBreakerCaller/consumer` | Bare Report（`CircuitBreakerAPI.Report` + `UpdateServiceCallResult`） | 4, 10(C) |
+
+三种调用模式的关键差异：
+
+- **Decorator**：通过 `MakeFunctionDecorator` 将"熔断检查 + 业务调用 + 熔断上报"三步封装为单一 `DecoratorFunction`。customer func 内 `SetInstance` 让装饰器自动按 `InstanceResource` 上报。
+- **InvokeHandler**：通过 `MakeInvokeHandler` 返回 `InvokeHandler`，暴露 `AcquirePermission / OnSuccess / OnError` 三个生命周期钩子，调用方手动编排。通过 `ResponseContext.Instance` 传入实例触发实例级上报。
+- **Bare Report**：完全不使用装饰器或 InvokeHandler，自行调用 `CircuitBreakerAPI.Report` + `ConsumerAPI.UpdateServiceCallResult`。
+
+用例 1/2/3 的 Decorator 和 InvokeHandler 子阶段**共用同一个 selfService 和熔断规则**（Decorator recover 后规则完全恢复，InvokeHandler 重新 trigger）。
+
+## Provider 暴露的接口
+
+| 路径    | 默认行为                | 控制开关                                      | 用途                                        |
+|---------|-------------------------|-----------------------------------------------|---------------------------------------------|
+| `/echo` | a=200, b=500            | `/switch?openError=true\|false`               | 用例 1/2/3 主链路                           |
+| `/order`| a=200, b=200            | `/switch?openErrorOrder=true\|false`          | 用例 3 多接口隔离对比                       |
+| `/info` | 恒 500                  | 无                                            | 用例 3 验证"未配置规则的接口不会被熔断"     |
+| `/slow` | 200，sleep `slowDelayMs`| `/switch?slowDelayMs=<int>`                   | 用例 3 验证"错误判断条件支持时延"           |
+| `/switch`| 200                    | `openError` / `openErrorOrder` / `slowDelayMs`| 运行时切换上述行为                          |
+| `/health`| 恒 200                 | 无                                            | 启动探针                                    |
+| `/api/` | a=200, b=500（随 needErr）| 同 `/switch?openError`                    | catch-all 覆盖 `/api/protocol/*` / `/api/method/*` / `/api/pathtype/*` 等路径 |
+
+## 熔断规则清单
+
+共 **8 条持久化规则**，按 Level 和用例分组：
+
+| 规则名 | Level | source.service | 用例 |
+|--------|-------|----------------|------|
+| cb-instance-CircuitBreakerInstanceCaller | INSTANCE | CircuitBreakerInstanceCaller | 1 Decorator + InvokeHandler |
+| cb-service-CircuitBreakerServiceCaller | SERVICE | CircuitBreakerServiceCaller | 2 Decorator + InvokeHandler |
+| cb-interface-CircuitBreakerInterfaceCaller | METHOD | CircuitBreakerInterfaceCaller | 3 Decorator + InvokeHandler |
+| cb-instance-CircuitBreakerOldInstanceCaller | INSTANCE | CircuitBreakerOldInstanceCaller | 4 |
+| cb-instance-CircuitBreakerHttpStatusCaller | INSTANCE | CircuitBreakerHttpStatusCaller | 5 A/B + 10（共用同名规则） |
+| cb-service-CircuitBreakerHttpStatusCaller | SERVICE | CircuitBreakerHttpStatusCaller | 5 C |
+| cb-instance-CircuitBreakerModifyRuleCaller | INSTANCE | CircuitBreakerModifyRuleCaller | 7 |
+| cb-proto-meth-CircuitBreakerPMCaller | METHOD | CircuitBreakerPMCaller | 8 |
+| cb-pathtype-CircuitBreakerPathTypeCaller | METHOD | CircuitBreakerPathTypeCaller | 9 |
+
+> 用例 6 不创建规则（验证 SDK 本地默认规则），不计入。
+> 用例 10 复用 `cb-instance-CircuitBreakerHttpStatusCaller`（`source=*/*`），与用例 5 的 INSTANCE 规则同名。首次创建时以先运行到的用例为准（用例 5 或用例 10），后运行的通过幂等创建（code=200001）复用已有规则。
+> 用例 10 的规则 `source=*/*`（通配所有 caller），与用例 5 的 `source.service=CircuitBreakerHttpStatusCaller` 不同。若先运行用例 10，则用例 5 的规则会被覆盖为 `source=*/*`，不影响用例 5 的验证（用例 5 的 caller 仍在匹配范围内）。
+
+## 公共流程
+
+每次运行 `verify_circuitbreaker.sh`：
+
+1. 步骤 A：环境准备（检查 Go/python3/curl，创建 `.build/`、`.logs/`，生成规则模板 `_gen_rule.py`）
+2. 步骤 B：启动 provider-a + provider-b
+3. 步骤 C：依次执行用例 1-10
+   - 默认 `RUN_CASES=instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback`，可通过 `--only` 缩小范围
+   - 每个用例开始时打印结构化 `print_block` 概览（Caller 写法 / 规则配置 / 验证步骤 / 预期结果 / 判定标准）
+   - 创建规则前会通过 `inspect_caller_rules` + `inspect_callee_rules` 巡检主调与被调维度的现有熔断规则
+     - 默认仅 WARN，列出陌生规则
+     - `STRICT_RULE_CHECK=true` 时遇到陌生规则直接 FAIL（避免规则污染）
+4. 步骤 D：结果汇总，trap EXIT 时自动删除创建的熔断规则并停止进程
+
+---
+
+## 用例 1：实例级（INSTANCE）熔断
+
+### Caller 写法
+- **Decorator 子阶段**：`newCircuitBreakerCaller/consumer`，`MakeFunctionDecorator` + `RequestContext.Method=/echo` + `SetInstance`
+- **InvokeHandler 子阶段**：`invokeHandlerCaller/consumer`，`MakeInvokeHandler` + `AcquirePermission` + `OnSuccess/OnError`
+- 两个子阶段共用 selfService=`CircuitBreakerInstanceCaller`，Decorator 端口 18081，InvokeHandler 端口 18091
+
+### 规则
+- `level=INSTANCE`，`name=cb-instance-CircuitBreakerInstanceCaller`
+- `rule_matcher.source.service=CircuitBreakerInstanceCaller`
+- `rule_matcher.destination.service=CircuitBreakerCallee`
+- `block_configs[0]`：
+  - `error_conditions`：`RET_CODE RANGE 500~599`（4xx 不计入熔断）
+  - `trigger_conditions`：`CONSECUTIVE_ERROR=5` + `ERROR_RATE 50%@30s, minRequest=10`
+- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+
+### 验证步骤
+- 1.1 复位 provider：a=200，b=500
+- 1.2 启动 instance consumer
+- 1.3 创建/更新规则
+- ── Decorator 第 1 轮 ──
+- 1.4 触发：连发 `INSTANCE_R1_TRIGGER_COUNT=30` 次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
+- 1.5 验证：再发 `RECOVERY_REQUEST_COUNT`（默认 10）次，流量应全部走 a
+- 1.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`（默认 15s）进半开 → b 重新加入 LB
+- ── Decorator 第 2 轮 ──
+- 1.7 再次触发：b 重新置 500，发 `INSTANCE_R2_TRIGGER_COUNT=30` 次
+- 1.8 再次验证：流量再次全部走 a
+- 1.9 再次恢复：b 翻回 200
+- ── InvokeHandler 子阶段（复用 Decorator 的规则）──
+- 1.10 启动 invokeHandler consumer（selfService 同 Decorator）
+- 1.11 触发：b=500，发 `INSTANCE_R1_TRIGGER_COUNT=30` 次
+- 1.12 验证：再发 10 次，流量全部走 a
+- 1.13 恢复：b 翻回 200，等 15s
+
+### 通过条件（共 9 项指标）
+- Decorator 两轮 `trigger_fail >= 1`
+- Decorator 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
+- Decorator 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
+- InvokeHandler `trigger_fail >= 1`，`verify_ok == RECOVERY_REQUEST_COUNT`，`recover_ok == RECOVERY_REQUEST_COUNT`
+
+---
+
+## 用例 2：服务级（SERVICE）熔断
+
+### Caller 写法
+- **Decorator 子阶段**：同 `newCircuitBreakerCaller/consumer`
+- **InvokeHandler 子阶段**：`invokeHandlerCaller/consumer`
+- 两个子阶段共用 selfService=`CircuitBreakerServiceCaller`，Decorator 端口 18082，InvokeHandler 端口 18092
+- 装饰器内 `commonCheck/commonReport` 会按 `ServiceResource` 上报 → 触发 SERVICE 级熔断
+
+### 规则
+- `level=SERVICE`，`name=cb-service-CircuitBreakerServiceCaller`
+- 其他字段同用例 1
+
+### 验证步骤
+- 2.1 复位 provider：a=500，b=500（模拟整服务不可用）
+- 2.2 启动 service consumer
+- 2.3 创建/更新规则
+- ── Decorator 第 1 轮 ──
+- 2.4 触发：连发 `TRIGGER_REQUEST_COUNT` 次累计错误率达阈值
+- 2.5 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 `call aborted`
+- 2.6 恢复：a/b 都翻回 200，等 `WAIT_HALF_OPEN_SECONDS` → 半开探测一次成功 → 关闭
+- ── Decorator 第 2 轮 ──
+- 2.7 再置 a/b=500 → 再次熔断
+- 2.8 再次出现 abort
+- 2.9 再次翻 200 → 再次恢复
+- ── InvokeHandler 子阶段（复用 Decorator 的规则）──
+- 2.10 启动 invokeHandler consumer
+- 2.11 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
+- 2.12 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 2.13 恢复：a/b 翻回 200，等 15s
+
+### 通过条件（共 9 项指标）
+- Decorator 两轮 `trigger_fail >= 1`
+- Decorator 两轮 `verify_abort >= 1`
+- Decorator 两轮 `recover_ok >= 1`
+- InvokeHandler `trigger_fail >= 1`，`verify_abort >= 1`，`recover_ok >= 1`
+
+---
+
+## 用例 3：接口级（METHOD）熔断 + 多接口隔离 + DELAY + 多 MatchString
+
+### Caller 写法
+- **Decorator 子阶段**：`newCircuitBreakerCaller/consumer`，暴露 4 个端点 `/echo /order /info /slow`
+- **InvokeHandler 子阶段**：`invokeHandlerCaller/consumer`，只验证 `/echo` 路径
+- 两个子阶段共用 selfService=`CircuitBreakerInterfaceCaller`，Decorator 端口 18083，InvokeHandler 端口 18093
+
+### 规则（1 条 METHOD 级规则，3 个 BlockConfig）
+- `name=cb-interface-CircuitBreakerInterfaceCaller`
+- `/echo` block：
+  - `api.path=/echo` (EXACT)
+  - `error_conditions`：5 条 RET_CODE 同时挂，覆盖 `RANGE / EXACT / REGEX / IN / NOT_IN`
+  - `trigger`: `CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minReq=10`
+- `/order` block：
+  - `api.path=/order` (EXACT)
+  - 阈值故意调高：`CONSECUTIVE_ERROR=100 / ERROR_RATE=99%@30s, minReq=200`
+- `/slow` block：
+  - `api.path=/slow` (EXACT)
+  - `error_conditions`：`input_type=DELAY, value=200`（毫秒）
+- `/info` 无规则 + consumer 侧 `defaultRuleEnable=false`
+
+### 验证步骤
+- 3.1 复位 provider：a/b 的 `/echo /order` 都 500；`/info` 恒 500；`/slow` 默认 0ms
+- 3.2 启动 interface consumer
+- 3.3 创建规则
+- ── /echo Decorator 第 1 轮 ──
+- 3.4 触发：发 `TRIGGER_REQUEST_COUNT` 次 `/echo` 累计 5 次失败
+- 3.5 验证：`RECOVERY_REQUEST_COUNT` 次 `/echo` 应出现 abort
+- 3.6 恢复：a/b 的 `/echo` 翻 200，等 `WAIT_HALF_OPEN_SECONDS`
+- ── /echo Decorator 第 2 轮 ──
+- 3.7 再置 500 → 再次触发熔断
+- 3.8 再次 abort
+- 3.9 再次翻 200 → 再次恢复
+- ── 多接口隔离 ──
+- 3.10 `/order`：发 `TRIGGER_REQUEST_COUNT` 次，应全部失败但无 abort
+- 3.11 `/info`：发 `TRIGGER_REQUEST_COUNT` 次，应全部失败但无 abort
+- ── /slow DELAY 熔断 ──
+- 3.12 触发：`/slow` 延迟设 500ms，发 `TRIGGER_REQUEST_COUNT` 次
+- 3.13 验证：再发 `RECOVERY_REQUEST_COUNT` 次，应出现 abort
+- 3.14 恢复：延迟清零，等 `WAIT_HALF_OPEN_SECONDS` → 全部 200
+- ── InvokeHandler 子阶段（复用 Decorator 的规则，只验证 /echo）──
+- 3.15 启动 invokeHandler consumer
+- 3.16 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
+- 3.17 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 3.18 恢复：a/b 翻回 200，等 15s
+
+### 通过条件（共 14 项指标）
+- `/echo` Decorator 两轮 trigger ≥1 fail / verify ≥1 abort / recover 全 200
+- `/order` 整批失败但 `abort == 0`
+- `/info` 整批失败但 `abort == 0`
+- `/slow` trigger 阶段成功完成 ≥1 / verify ≥1 abort / recover 全 200
+- InvokeHandler trigger ≥1 fail / verify ≥1 abort / recover ≥1 ok
+
+---
+
+## 用例 4：存量散装写法（旧版 API）的实例级熔断
+
+### Caller 写法
+- 旧版散装路径，源码：`oldInstanceCircuitBreakerCaller/consumer/main.go`
+- 直接调用 `CircuitBreakerAPI.Report(InstanceResource)` → 上报熔断结果
+- 直接调用 `ConsumerAPI.UpdateServiceCallResult` → 上报调用结果指标
+- **不**使用 `MakeFunctionDecorator / RequestContext / SetInstance`
+- selfService=`CircuitBreakerOldInstanceCaller`，端口 18084
+
+### 验证目的
+- 保证存量客户在新版 SDK 中沿用旧版散装写法依旧能触发实例级熔断
+- 即「向后兼容」语义不被破坏（与用例 1 行为对齐）
+
+### 规则
+- `level=INSTANCE`，`name=cb-instance-CircuitBreakerOldInstanceCaller`
+- 触发/恢复条件与用例 1 完全一致：`CONSECUTIVE_ERROR=5`
+
+### 验证步骤
+- 4.1 复位 provider：a=200，b=500
+- 4.2 启动 old-instance consumer
+- 4.3 创建/更新规则
+- ── 第 1 轮 ──
+- 4.4 触发：连发 `OLD_INSTANCE_R1_TRIGGER_COUNT=30` 次 `/echo`
+- 4.5 验证：再发 10 次，流量应全部走 a
+- 4.6 恢复：b 翻回 200，等 15s
+- ── 第 2 轮 ──
+- 4.7 再次触发：b 重新置 500，发 `OLD_INSTANCE_R2_TRIGGER_COUNT=30` 次
+- 4.8 再次验证：流量再次全部走 a
+- 4.9 再次恢复：b 翻回 200
+
+### 通过条件（共 6 项指标，与用例 1 对齐）
+- 两轮 `trigger_fail >= 1`
+- 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
+- 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
+
+---
+
+## 用例 5：HTTP 状态码区分（4xx 不熔断 / 5xx 熔断 / 网络错熔断）
+
+### Caller 写法
+- 同 `newCircuitBreakerCaller/consumer`，selfService=`CircuitBreakerHttpStatusCaller`，端口 18085
+- 装饰器内部按 HTTP 状态码分流：5xx → OnError（retCode="-1"），4xx → OnSuccess（透传真实状态码）
+
+### 规则
+- A/B 段：`level=INSTANCE`，`name=cb-instance-CircuitBreakerHttpStatusCaller`，`CONSECUTIVE_ERROR=3`
+- C 段：`level=SERVICE`，`name=cb-service-CircuitBreakerHttpStatusCaller`，`CONSECUTIVE_ERROR=3`
+
+### 验证步骤
+- 5.1 复位 provider：a=200 / b=200
+- 5.2 启动 http_status consumer
+- 5.3 创建 INSTANCE 级规则
+- ── A 段：4xx 不熔断 ──
+- 5.4 连发 `TRIGGER_REQUEST_COUNT` 次 `/forbidden`（provider 永远返回 403）
+- ── B 段：5xx 熔断 ──
+- 5.5 provider-b=500，连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → b 累计 3 次 5xx 触发熔断
+- 5.6 验证：再发 `RECOVERY_REQUEST_COUNT` 次 `/echo`，abort 或路由到 a，总计 = RECOVERY_REQUEST_COUNT
+- 5.7 恢复：provider-b=200，等 `WAIT_HALF_OPEN_SECONDS`
+- ── 规则切换（INSTANCE → SERVICE） ──
+- 5.(7→8) 删除 INSTANCE 级规则，创建 SERVICE 级规则
+- ── C 段：网络错熔断（-1 哨兵） ──
+- 5.8 关停 provider-a / provider-b 制造网络错
+- 5.9 连发 `TRIGGER_REQUEST_COUNT` 次 `/echo` → SDK retCode="-1" 触发 SERVICE 级熔断
+- 5.10 provider 重启由主 shell 接管
+
+### 通过条件（3 段独立判定）
+- A 段：`a_fail ≥ 1` 且 `a_abort == 0`（4xx 全部 fail 但永不熔断）
+- B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok + b_verify_abort == RECOVERY_REQUEST_COUNT` 且 `b_recover_ok == RECOVERY_REQUEST_COUNT`
+- C 段：`c_fail ≥ 1` 且 `c_abort ≥ 1`（网络错触发熔断）
+
+---
+
+## 用例 6：默认实例级熔断兜底（服务端无规则）
+
+### Caller 写法
+- 同 `newCircuitBreakerCaller/consumer`，selfService=`CircuitBreakerDefaultRuleCaller`，端口 18086
+- consumer 启动时通过 `polaris.yaml` 启用 `defaultRuleEnable: true`
+
+### 默认规则（由 SDK 本地生成）
+- `level=INSTANCE`，`name=default-polaris-instance-circuit-breaker`
+- `CONSECUTIVE_ERROR=3` + `ERROR_RATE 50%@30s, minRequest=3`（脚本侧 yaml 收紧阈值）
+
+### 与用例 1 的根本区别
+- **不向服务端创建任何规则**；不调用 `create_circuitbreaker_rule`
+- selfService 独立，避免被其它用例的规则误命中
+
+### 验证步骤
+- 6.1 复位 provider：a=200 / b=500
+- 6.2 启动 default-rule consumer
+- 6.3 跳过规则创建
+- 6.4 触发：连发 `DEFAULT_RULE_TRIGGER_COUNT=30` 次 → b 累计 3 次 5xx 触发熔断
+- 6.5 验证：再发 `RECOVERY_REQUEST_COUNT` 次，流量应全部走 a → 200
+- 6.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`
+
+### 通过条件
+- `trigger_fail ≥ 3`
+- `verify_ok == RECOVERY_REQUEST_COUNT`
+- `recover_ok == RECOVERY_REQUEST_COUNT`
+
+---
+
+## 用例 7：修改熔断参数生效（CONSECUTIVE_ERROR=3 → 7）
+
+### Caller 写法
+- 同 `newCircuitBreakerCaller/consumer`，selfService=`CircuitBreakerModifyRuleCaller`，端口 18087
+
+### 规则
+- `level=INSTANCE`，`name=cb-instance-CircuitBreakerModifyRuleCaller`
+- `CONSECUTIVE_ERROR` 阈值在两轮间变化：轮 1=3，轮 2=7
+
+### 验证步骤
+- 7.1 复位 provider：a=200 / b=500
+- 7.2 启动 modify_rule consumer
+- 7.3 创建规则（`CONSECUTIVE_ERROR=3`）
+- ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
+- 7.4-7.6 trigger → verify → recover
+- ── 规则更新 ──
+- 7.7 调用 `update_circuitbreaker_rule` API 将 `CONSECUTIVE_ERROR` 改为 7
+- 7.8 等待 `WAIT_RULE_READY_SECONDS`
+- ── 第 2 轮（CONSECUTIVE_ERROR=7） ──
+- 7.9 触发：发 `MODIFY_R2_TRIGGER_COUNT=30` 次
+- 7.10-7.11 verify → recover
+
+### 通过条件（共 6 项指标）
+- 两轮 `trigger_fail >= 1`
+- 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
+- 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
+
+---
+
+## 用例 8：接口协议+HTTP方法维度合并（1 条规则 13 个 BlockConfig）
+
+### Caller 写法
+- 共享 `newCircuitBreakerCaller/consumer`
+- consumer 端按 path 段推断 `RequestContext.Protocol` / `HTTPMethod`
+- selfService=`CircuitBreakerPMCaller`，端口 18088
+
+### 规则（1 条 METHOD 级规则，13 个 BlockConfig）
+- `name=cb-proto-meth-CircuitBreakerPMCaller`
+- 4 个协议 BC + 9 个 HTTP 方法 BC
+- 每条 BC 共用 `CONSECUTIVE_ERROR=3`
+
+### 验证步骤
+对 13 个 BlockConfig 各跑 3 阶段：
+- `trigger`：发 `PM_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
+- `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
+- `recover`：provider 翻回 200，等 15s → 再发 3 次 → 全 200
+
+### 通过条件（共 13 × 3 = 39 项指标）
+每个 BC：`trigger fail >= 1 || abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
+
+---
+
+## 用例 9：路径匹配方式维度（5 种 MatchString）
+
+### Caller 写法
+- 共享 `newCircuitBreakerCaller/consumer`
+- selfService=`CircuitBreakerPathTypeCaller`，端口 18089
+
+### 规则（1 条 METHOD 级规则，5 个 BlockConfig）
+| path.type | path.value | 消费者触发 path |
+|---|---|---|
+| EXACT | `/api/pathtype/exact` | `/api/pathtype/exact` |
+| REGEX | `^/api/pathtype/regex/.*` | `/api/pathtype/regex/abc` |
+| NOT_EQUALS | `/api/pathtype/never_match_anything` | `/api/pathtype/something` |
+| IN | `/api/pathtype/in1,/api/pathtype/in2` | `/api/pathtype/in1` |
+| NOT_IN | `/api/pathtype/forbidden1,/api/pathtype/forbidden2` | `/api/pathtype/allowed` |
+
+每条 BC 共用 `CONSECUTIVE_ERROR=3`。
+
+### 验证步骤
+对 5 种 MatchString 各跑正向 3 阶段：
+- `trigger`：发 `PATHTYPE_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
+- `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
+- `recover`：provider 翻回 200，等 15s → 再发 3 次 → 全 200
+
+### 为什么移除了反向验证？
+5 种 path-type 已合并到 1 条规则的 5 个 BlockConfig。`NOT_EQUALS` 和 `NOT_IN` 否定匹配 BC 会吃掉几乎所有 path，不存在"对全部 5 个 BC 都不匹配"的反向 path。正向 3 阶段已充分证明 5 种 MatchString 各自的匹配语义。
+
+### 通过条件（共 5 × 3 = 15 项指标）
+每种 path type：`trigger fail >= 1 || abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
+
+---
+
+## 用例 10：全死全活兜底策略验证（三种调用模式）
+
+### 验证目的
+验证当所有实例都被 INSTANCE 级熔断 OPEN 后，FilterOnlyRouter 的全死全活兜底策略：
+- **全死全活开启**（`enableRecoverAll=true`，默认）：`GetOneInstance` 仍能选到 OPEN 实例，请求可透传至 provider
+- **全死全活关闭**（`enableRecoverAll=false`）：`GetOneInstance` 直接失败
+
+覆盖三种 SDK 调用模式，每种各跑一轮 enableRecoverAll 开启/关闭对比。
+
+### Caller 写法
+| 子阶段 | 源码 | 调用模式 | selfService | 端口 |
+|--------|------|---------|-------------|------|
+| A | `newCircuitBreakerCaller/consumer` | Decorator | CircuitBreakerAllDeadDecoratorCaller | 18090 |
+| B | `invokeHandlerCaller/consumer` | InvokeHandler | CircuitBreakerAllDeadInvokeCaller | 18091 |
+| C | `oldInstanceCircuitBreakerCaller/consumer` | Bare Report | CircuitBreakerAllDeadReportCaller | 18092 |
+
+三个子阶段共用同一条规则 `cb-instance-CircuitBreakerHttpStatusCaller`（`source=*/*`，`CONSECUTIVE_ERROR=3`），与用例 5 的 INSTANCE 规则同名。
+
+### 规则
+- `level=INSTANCE`，`name=cb-instance-CircuitBreakerHttpStatusCaller`，`source=*/*`（通配所有 caller）
+- `CONSECUTIVE_ERROR=3`（收紧阈值加快验证）
+- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+
+### 验证步骤（每个子阶段执行相同流程）
+- ── 全死全活开启 ──
+- .1 启动 consumer（`enableRecoverAll=true`）
+- .2 创建规则
+- .3 trigger：provider-a=500 / provider-b=500，发 60 次让两个实例都被熔断 OPEN
+- .4 verify：provider 翻回 200，立即发 10 次 → 全死全活让请求透传到 provider → 返回 200
+- .5 recover：等 sleepWindow 进入半开 → 探测成功恢复
+- ── 全死全活关闭 ──
+- .6 重启 consumer（`enableRecoverAll=false`）
+- .7 trigger：重新触发熔断（a/b=500，发 60 次）
+- .8 verify：provider 翻回 200，发 10 次 → 全死全活关闭 → GetOneInstance 失败 → 500
+- .9 recover：重启 consumer（恢复 `enableRecoverAll=true`），等 sleepWindow
+
+### 通过条件（每个子阶段 6 项指标，共 18 项）
+- 全死全活开启：`trigger_fail >= 5`，`verify_ok >= 1`，`recover_ok >= 1`
+- 全死全活关闭：`trigger_fail >= 5`，`verify_fail >= 1`，`recover_ok >= 1`
+
+### 验证原理
+- INSTANCE 级熔断不经过 `AcquirePermission`（只检查 SERVICE/METHOD 级），请求可透传至 provider
+- 全死全活触发时 FilterOnlyRouter 设置 `HasLimitedInstances=true`，LB 从 `selectableInstancesWithoutUnhealthy` 中选择 OPEN 实例
+- 全死全活关闭时 LB 从 `healthyInstances`（空集）中选择 → `GetOneInstance` 失败
+
+---
+
+## 失败诊断
+
+每个用例失败时脚本会输出统计变量值，常见原因：
+
+| 现象 | 可能原因 | 排查 |
+|------|---------|------|
+| `trigger_fail=0` | provider-b/`/switch` 未生效；或 5 次 `CONSECUTIVE_ERROR` 之间穿插了来自 provider-a 的 200 | 查 `provider_b.log`；增大 `--trigger-count` |
+| `verify_abort=0`（仅服务级 / 接口级） | SDK 未应用 BlockConfig；或规则未启用；或被陌生规则干扰 | 查 consumer 日志；看"规则巡检"输出；增大 `WAIT_RULE_READY_SECONDS` |
+| `verify_ok < RECOVERY_REQUEST_COUNT`（仅实例级） | 流量未完全转移；或 GetOneInstance 把 cb=Open 实例仍然返回 | 查 `instance_consumer.log` 中 `printAllInstances` 输出 |
+| `recover_ok=0`（服务级/接口级/实例级） | sleepWindow 不够；或半开探测打到仍 500 的实例 | 增大 `--wait-half-open`；服务级用例必须把所有实例同步翻回 200 |
+| `inspect_caller_rules` 警告"陌生规则" | 上一次脚本运行未清理干净 | 登录控制台清理；或设 `STRICT_RULE_CHECK=true` |
+| 用例 6/7 verify 阶段全 EOF | case 5 C 段关 provider 后未正确重启 | 确认脚本已用主 shell `start_provider` 接管 |
+| 用例 7 轮 2 verify=9 (期望 10) | CONSECUTIVE_ERROR=7 阈值下 burst=15 不够 | 确认轮 2 用了 case-local `MODIFY_R2_TRIGGER_COUNT=30` |
+| 用例 8/10 trigger 阶段未命中 | `RequestContext.Protocol/HTTPMethod` 未正确推断 | 查 `pm_consumer.log` / `pathtype_consumer.log` |
+| 用例 10 verify 阶段全 500（全死全活未生效） | trigger burst 不够，只有一个实例被熔断 | 确认 burst=60 |
+| InvokeHandler 子阶段 trigger 不够 | 50/50 LB 下连续命中概率不足 | 确认 burst 值与 Decorator 阶段一致（30） |
+
+## 与 polaris-go 代码改造的对应关系
+
+| 改造点 | 由哪个用例验证 |
+|--------|----------------|
+| `MethodResource` 三元组（Protocol/Method/Path） | 用例 3 / 用例 8 |
+| `selectCircuitBreakerRule` 遍历 `BlockConfigs.Api` | 用例 3 / 用例 8 |
+| `ResourceCounters.init` 走 `BlockConfigs × TriggerConditions` | 用例 1/2/3 共同依赖 |
+| `blockCounter.parseRetStatus` 块级独立判错 + 多种 MatchString | 用例 3 |
+| `blockCounter.parseRetStatus` 处理 `INPUT_TYPE=DELAY` | 用例 3 `/slow` |
+| `commonCheck/commonReport` 多级分发（SERVICE / METHOD） | 用例 2 + 用例 3 |
+| `InvokeContext.SetInstance` + `commonReport` 实例级分支 | 用例 1 |
+| 旧 `CircuitBreakerAPI.Report(InstanceResource)` 散装路径不破坏 | 用例 4 |
+| `HalfOpenStatus.AcquirePermission` 精确发放配额 | 用例 1/2/3 恢复阶段 |
+| `HalfOpenStatus.Release` 归集判定 | 用例 1/2/3 恢复阶段 |
+| `CircuitBreakerRuleDictionary` 三级索引 | 用例 3 多接口隔离 |
+| `blockCounter.parseRetStatus` 的 `-1` 哨兵识别 | 用例 5 C 段 |
+| demo 端 4xx → OnSuccess、5xx → OnError 的分流 | 用例 5 A/B 段 |
+| `default.go` dictionary lookup miss + `defaultRuleEnable=true` 兜底 | 用例 6 |
+| `update_circuitbreaker_rule` API 热改 trigger 阈值 | 用例 7 |
+| `matchProtocolOrMethod` 多维度独立匹配 | 用例 8 |
+| `MatchString` 5 种类型正向验证 | 用例 9 |
+| `FilterOnlyRouter` 全死全活兜底（`enableRecoverAll`） | 用例 10 |
+| `MakeInvokeHandler` + `AcquirePermission` 手动编排模式 | 用例 1/2/3 InvokeHandler 子阶段 + 用例 10(B) |
+| 三种调用模式行为一致性 | 用例 10（Decorator / InvokeHandler / Bare Report） |

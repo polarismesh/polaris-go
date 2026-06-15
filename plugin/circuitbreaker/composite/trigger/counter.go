@@ -46,6 +46,10 @@ type Options struct {
 	StatusHandler StatusChangeHandler
 	Log           log.Logger
 	DelayExecutor func(delay time.Duration, f func())
+	// RuleID 关联的熔断规则 ID，用于 INFO 日志追踪规则版本
+	RuleID string
+	// RuleRevision 关联的熔断规则 revision，用于 INFO 日志追踪规则版本
+	RuleRevision string
 }
 
 // TriggerCounter .
@@ -65,6 +69,8 @@ func newBaseCounter(rule string, opt *Options) *baseCounter {
 		suspended:        0,
 		log:              opt.Log,
 		delayExecutor:    opt.DelayExecutor,
+		ruleID:           opt.RuleID,
+		ruleRevision:     opt.RuleRevision,
 	}
 }
 
@@ -76,6 +82,10 @@ type baseCounter struct {
 	suspended        int32
 	log              log.Logger
 	delayExecutor    func(delay time.Duration, f func())
+	// ruleID 关联的熔断规则 ID，用于 INFO 日志追踪规则版本
+	ruleID string
+	// ruleRevision 关联的熔断规则 revision，用于 INFO 日志追踪规则版本
+	ruleRevision string
 }
 
 func (bc *baseCounter) isSuspend() bool {

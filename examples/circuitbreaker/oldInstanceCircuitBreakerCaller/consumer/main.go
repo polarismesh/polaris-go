@@ -18,9 +18,12 @@
 package main
 
 import (
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -49,6 +52,10 @@ var (
 	configPath      string
 	debug           bool
 )
+
+// reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
+// 入口优先从 header 读；没有则本地生成；向下游发请求时显式注入。
+const reqIDHeader = "X-Request-ID"
 
 func initArgs() {
 	flag.StringVar(&selfNamespace, "selfNamespace", "default", "selfNamespace")
@@ -114,68 +121,100 @@ func (svr *PolarisClient) discoverInstance() (model.Instance, error) {
 
 func (svr *PolarisClient) runWebServer() {
 	http.HandleFunc("/echo", func(rw http.ResponseWriter, r *http.Request) {
-		log.Printf("start to invoke getOneInstance operation")
+		reqID := r.Header.Get(reqIDHeader)
+		if reqID == "" {
+			reqID = newReqID()
+		}
+		logIncomingRequest(reqID, r, "/echo")
+		log.Printf("[%s] start to invoke getOneInstance operation", reqID)
 		instance, err := svr.discoverInstance()
 		if err != nil || instance == nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			instanceIsNil := instance == nil
 			msg := fmt.Sprintf("fail to getOneInstance, err is %v, instance is nil:%v", err, instanceIsNil)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] discover instance fail : %s", msg)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, msg)
 			return
 		}
 		start := time.Now()
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()))
+		upstreamReq, httpErr := http.NewRequestWithContext(r.Context(), http.MethodGet,
+			fmt.Sprintf("http://%s:%d/echo", instance.GetHost(), instance.GetPort()), nil)
+		if httpErr != nil {
+			log.Printf("[%s] build upstream req fail: %s", reqID, httpErr)
+			rw.WriteHeader(http.StatusInternalServerError)
+			_, _ = rw.Write([]byte(fmt.Sprintf("[error] build upstream req fail : %s", httpErr)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, httpErr.Error())
+			return
+		}
+		// 显式注入 reqID，让下游 provider 能在日志中串联同一条请求的处理链
+		upstreamReq.Header.Set(reqIDHeader, reqID)
+		resp, err := http.DefaultClient.Do(upstreamReq)
 
 		if err != nil {
-			log.Printf("[error] send request to %s:%d fail : %s",
+			log.Printf("[%s] [error] send request to %s:%d fail : %s", reqID,
 				instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] send request to %s:%d fail : %s",
 				instance.GetHost(), instance.GetPort(), err)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, err.Error())
 
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
-			// 上报服务调用结果
+			// 上报服务调用结果（LB / 健康检查路径）
 			delay := time.Since(start)
 			svr.reportServiceCallResult(instance, model.RetFail, http.StatusInternalServerError, delay)
 
-			// 上报熔断结果，用于熔断计算
-			svr.reportCircuitBreak(instance, model.RetFail, strconv.Itoa(http.StatusInternalServerError), start)
+			// 上报熔断结果（熔断器路径）：使用 SDK 内部约定的 "-1" 哨兵值，
+			// SDK 端 block_counter.parseRetStatus 会在挂有 RET_CODE 类条件的块中
+			// 直接将 -1 计为 RetFail，无需依赖具体规则配置。
+			svr.reportCircuitBreak(instance, model.RetFail, "-1", start)
 			return
 		}
 		time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 
 		defer resp.Body.Close()
 
-		// 上报服务调用结果
+		// 上报服务调用结果（LB / 健康检查路径）
+		// 只把 5xx 当作"实例侧故障"，4xx（参数 / 鉴权类）不应让 LB 降低实例权重
+		// 或健康检查摘除实例。429 仍按 RetFlowControl 表达限流路径。
+		// 与熔断器路径独立：熔断由后续 reportCircuitBreak 携带的 retCode + 规则决定。
 		delay := time.Since(start)
 		retStatus := model.RetSuccess
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retStatus = model.RetFlowControl
-		} else if resp.StatusCode != http.StatusOK {
+		} else if resp.StatusCode >= http.StatusInternalServerError {
 			retStatus = model.RetFail
 		}
 		svr.reportServiceCallResult(instance, retStatus, resp.StatusCode, delay)
 
-		// 上报熔断结果，用于熔断计算
-		if resp.StatusCode != http.StatusOK {
+		// 上报熔断结果（熔断器路径）：按 5xx / 4xx / 2xx 三类分别上报，
+		// 让"区分 4xx/5xx"语义与统一装饰器写法的 demo 对齐：
+		//   - 5xx：RetFail + 真实状态码 → 命中规则的 RANGE/EXACT/REGEX/IN/NOT_IN 类
+		//   - 4xx：RetSuccess + 真实状态码 → 不计入熔断（用户可显式配 IN [400,500] 纳入）
+		//   - 2xx：RetSuccess + 真实状态码 → 规则不命中，计为成功
+		// 实际是否计入熔断完全由用户配置的 BlockConfig.ErrorConditions 决定。
+		switch {
+		case resp.StatusCode >= http.StatusInternalServerError:
 			svr.reportCircuitBreak(instance, model.RetFail,
 				strconv.Itoa(resp.StatusCode), start)
-		} else {
+		default:
 			svr.reportCircuitBreak(instance, model.RetSuccess,
-				strconv.Itoa(http.StatusOK), start)
+				strconv.Itoa(resp.StatusCode), start)
 		}
 
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("[error] read resp from %s:%d fail : %s", instance.GetHost(), instance.GetPort(), err)
+			log.Printf("[%s] [error] read resp from %s:%d fail : %s", reqID,
+				instance.GetHost(), instance.GetPort(), err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			_, _ = rw.Write([]byte(fmt.Sprintf("[error] read resp from %s:%d fail : %s",
 				instance.GetHost(), instance.GetPort(), err)))
+			logReply(reqID, r.RemoteAddr, http.StatusInternalServerError, err.Error())
 			return
 		}
-		log.Printf("echo success, resp: %+v", string(data))
+		log.Printf("[%s] echo success, resp: %+v", reqID, string(data))
 		rw.WriteHeader(http.StatusOK)
+		logReply(reqID, r.RemoteAddr, http.StatusOK, string(data))
 		_, _ = rw.Write(data)
 	})
 
@@ -196,8 +235,9 @@ func (svr *PolarisClient) runWebServer() {
 func (svr *PolarisClient) printAllInstances() {
 	req := &polaris.GetInstancesRequest{
 		GetInstancesRequest: model.GetInstancesRequest{
-			Service:   calleeService,
-			Namespace: calleeNamespace,
+			Service:         calleeService,
+			Namespace:       calleeNamespace,
+			SkipRouteFilter: true,
 		},
 	}
 	instancesResp, err := svr.consumer.GetInstances(req)
@@ -209,10 +249,14 @@ func (svr *PolarisClient) printAllInstances() {
 
 	for _, ins := range instancesResp.GetInstances() {
 		cbStatus := "close"
+		isHealthy := ins.IsHealthy()
+		isIsolated := ins.IsIsolated()
 		if ins.GetCircuitBreakerStatus() != nil {
 			cbStatus = ins.GetCircuitBreakerStatus().GetStatus().String()
+
 		}
-		log.Printf("%s:%d. cb status: %s\n", ins.GetHost(), ins.GetPort(), cbStatus)
+		log.Printf("  %s:%d cb_status=%s healthy:%v, isolated:%v", ins.GetHost(), ins.GetPort(), cbStatus, isHealthy,
+			isIsolated)
 	}
 }
 
@@ -303,6 +347,7 @@ func (svr *PolarisClient) deregisterService() {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	initArgs()
 	flag.Parse()
 	if len(calleeNamespace) == 0 || len(calleeService) == 0 {
@@ -359,4 +404,71 @@ func getLocalHost(serverAddr string) (string, error) {
 		return localAddr[:colonIdx], nil
 	}
 	return localAddr, nil
+}
+
+// newReqID 生成 8 字符唯一 ID，作为整条请求处理链的追踪标识。
+func newReqID() string {
+	var b [4]byte
+	if _, err := cryptorand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// logIncomingRequest 单行打印收到的请求：reqID、客户端地址、path、method、URL、
+// query、headers、body。handler 入口处调用一次即可贯穿全函数日志。
+func logIncomingRequest(reqID string, r *http.Request, method string) {
+	var bodyStr string
+	if r.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			bodyStr = string(bodyBytes)
+		}
+		_ = r.Body.Close()
+	}
+	log.Printf("[%s] <<< recv from %s | path=%s method=%s url=%s query=%s headers=%s body=%s",
+		reqID, r.RemoteAddr, method, r.Method, r.URL.String(),
+		formatQuery(r.URL.Query()), formatHeaders(r.Header), bodyStr)
+}
+
+// logReply 单行打印返回给客户端的响应：reqID、remoteAddr、status、body。
+// 在 rw.Write 之前调用，避免 rw.Write 失败后日志与实际不一致。
+func logReply(reqID, remoteAddr string, status int, body string) {
+	log.Printf("[%s] >>> reply to client %s: status=%d body=%s", reqID, remoteAddr, status, body)
+}
+
+// formatHeaders 压缩 http.Header 为单行字符串，便于日志展示。
+func formatHeaders(h http.Header) string {
+	if len(h) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range h {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, sanitizeHeaderValue(v)))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// formatQuery 压缩 query 参数为单行字符串。
+func formatQuery(q map[string][]string) string {
+	if len(q) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, vs := range q {
+		for _, v := range vs {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// sanitizeHeaderValue 过滤 header 注入风险字符（CR/LF/空格），避免日志被伪造换行切断。
+func sanitizeHeaderValue(v string) string {
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, " ", "_")
+	return v
 }

@@ -1,4 +1,4 @@
-module github.com/polarismesh/polaris-go-circuitbreaker-consumer
+module github.com/polarismesh/polaris-go-circuitbreaker-invokehandler-consumer
 
 go 1.24
 

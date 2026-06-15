@@ -81,23 +81,56 @@ func NewServiceResource(svc, caller *ServiceKey) (*ServiceResource, error) {
 	return res, nil
 }
 
+// MethodResource 接口级（方法级）熔断资源
+// 承载 protocol/method/path 三元组，三个维度共同决定 counter bucket 的唯一 key
+// Protocol 协议（http、grpc 等），空串规范化为 "*"
+// Method   HTTP 方法（GET、POST 等），gRPC 场景填 "*"，空串规范化为 "*"
+// Path     接口路径（HTTP 的 URL Path 或 gRPC 的 fullMethod）
+// 兼容说明：旧构造 NewMethodResource(svc, caller, method) 把 method 视作 path，
+// 此时 Protocol/Method 自动设为 "*"，避免破坏现有用户代码
 type MethodResource struct {
 	*abstractResource
-	Method string
+	Protocol string
+	Method   string
+	Path     string
 }
 
+// String 输出全部字段，确保 counters bucket 的 map key 唯一
+// 不同 protocol/method/path 的接口不会共用一个 counter
 func (r *MethodResource) String() string {
 	callerSvc := r.callerService
 	if callerSvc == nil {
 		callerSvc = EmptyServiceKey
 	}
-	return fmt.Sprintf("level=%s|method=%s|service=%s|caller=%s", r.level.String(), r.Method,
-		r.service.String(), callerSvc.String())
+	return fmt.Sprintf("level=%s|protocol=%s|method=%s|path=%s|service=%s|caller=%s",
+		r.level.String(), r.Protocol, r.Method, r.Path, r.service.String(), callerSvc.String())
 }
 
+// NewMethodResource 创建接口级熔断资源（兼容旧调用，method 参数被视为 path）
+// svc     被调服务
+// caller  主调服务
+// method  接口路径；空串返回错误
+// 返回的 Resource 中 Protocol 与 Method 字段被规范化为 "*"
 func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource, error) {
-	if method == "" {
-		return nil, errors.New("method can not be empty")
+	return NewMethodResourceWithAPI(svc, caller, "", "", method)
+}
+
+// NewMethodResourceWithAPI 创建接口级熔断资源（完整四元组）
+// svc        被调服务
+// caller     主调服务
+// protocol   协议名（http、grpc 等），空串自动转为 "*"
+// httpMethod HTTP 方法名（GET、POST 等），空串自动转为 "*"
+// path       接口路径，不能为空
+// 返回值的 Level 固定为 fault_tolerance.Level_METHOD
+func NewMethodResourceWithAPI(svc, caller *ServiceKey, protocol, httpMethod, path string) (*MethodResource, error) {
+	if path == "" {
+		return nil, errors.New("path can not be empty")
+	}
+	if protocol == "" {
+		protocol = "*"
+	}
+	if httpMethod == "" {
+		httpMethod = "*"
 	}
 	abstractRes, err := newAbstractResource(svc, caller)
 	if err != nil {
@@ -106,7 +139,9 @@ func NewMethodResource(svc, caller *ServiceKey, method string) (*MethodResource,
 	abstractRes.level = fault_tolerance.Level_METHOD
 	res := &MethodResource{
 		abstractResource: abstractRes,
-		Method:           method,
+		Protocol:         protocol,
+		Method:           httpMethod,
+		Path:             path,
 	}
 	return res, nil
 }
@@ -299,10 +334,22 @@ type CheckResult struct {
 	FallbackInfo *FallbackInfo
 }
 
+// RequestContext 业务调用上下文，由 CircuitBreakerAPI.MakeFunctionDecorator/MakeInvokeHandler 使用
+// Caller      主调服务
+// Callee      被调服务
+// Method      旧字段，保持向后兼容；新业务建议改用 Protocol/HTTPMethod/Path 三元组
+// Protocol    协议名（http、grpc 等），可选；提供时优先使用四元组构造 MethodResource
+// HTTPMethod  HTTP 方法名（GET、POST 等），可选
+// Path        接口路径，可选；非空时启用接口级熔断
+// CodeConvert 业务返回值转错误码的转换器
+// 当 Path 为空但 Method 非空时，沿用旧逻辑把 Method 视作 path
 type RequestContext struct {
 	Caller      *ServiceKey
 	Callee      *ServiceKey
 	Method      string
+	Protocol    string
+	HTTPMethod  string
+	Path        string
 	CodeConvert ResultToErrorCode
 }
 
@@ -310,6 +357,63 @@ type ResponseContext struct {
 	Duration time.Duration
 	Result   interface{}
 	Err      error
+	// Instance 业务回调通过 InvokeContext 回填的本次实际调用实例。
+	// 装饰器 OnSuccess/OnError 据此可触发实例级 Resource 上报；为 nil 时跳过。
+	// 仅装饰器内部使用，业务一般不需要手动设置。
+	Instance Instance
+}
+
+// InvokeContext 装饰器内部传给业务回调的可变载体。
+// 业务在 customer func 内拿到所选实例后调用 SetInstance，
+// 装饰器在 OnSuccess/OnError 阶段会自动按该实例发起 InstanceResource 上报，
+// 从而让"实例级熔断"用例和"服务级 / 接口级"用例共享同一套装饰器写法。
+//
+// 兼容性：业务不调 SetInstance 时（即 instance 仍为 nil），装饰器跳过实例级上报，
+// 行为与历史完全一致；存量调用方零改动。
+type InvokeContext struct {
+	instance Instance
+}
+
+// SetInstance 由业务在 customer func 内回填本次实际调用的实例。
+func (ic *InvokeContext) SetInstance(ins Instance) {
+	if ic == nil {
+		return
+	}
+	ic.instance = ins
+}
+
+// Instance 返回业务此前回填的实例；未回填时返回 nil。
+func (ic *InvokeContext) Instance() Instance {
+	if ic == nil {
+		return nil
+	}
+	return ic.instance
+}
+
+// invokeCtxKey 是 ctx.WithValue 用的 key 类型，避免与外部 key 冲突。
+type invokeCtxKey struct{}
+
+// WithInvokeContext 在 ctx 上挂载 InvokeContext；装饰器内部调用，业务一般不直接使用。
+func WithInvokeContext(ctx context.Context, ic *InvokeContext) context.Context {
+	return context.WithValue(ctx, invokeCtxKey{}, ic)
+}
+
+// GetInvokeContext 取出装饰器在 ctx 上挂载的 InvokeContext。
+// 业务在 customer func 内调用：
+//
+//	if ic := model.GetInvokeContext(ctx); ic != nil { ic.SetInstance(chosenInstance) }
+//
+// 仅在通过 MakeFunctionDecorator 启动的调用链路里返回非 nil。
+func GetInvokeContext(ctx context.Context) *InvokeContext {
+	if ctx == nil {
+		return nil
+	}
+	v := ctx.Value(invokeCtxKey{})
+	if v == nil {
+		return nil
+	}
+	ic, _ := v.(*InvokeContext)
+	return ic
 }
 
 // InvokeHandler .
@@ -422,13 +526,29 @@ func (c *BaseCircuitBreakerStatus) IsAvailable() bool {
 	return true
 }
 
+// HalfOpenStatus 半开状态
+// 状态机进入半开后会按 maxRequest 的额度精确放行调用：
+//   - AcquirePermission：请求阶段调用，按发放配额扣减；超额返回 false 视作熔断拒绝
+//   - Release：响应归集阶段调用，按结果累计 calledResult，触发条件满足时执行状态判定
+//
+// 同时保留 Report 入口供未走装饰器的旧路径（ResourceCounters.Report）继续使用，
+// 二者互斥使用：装饰器路径用 AcquirePermission/Release；非装饰器路径仍走 Report。
 type HalfOpenStatus struct {
 	BaseCircuitBreakerStatus
-	maxRequest   int // 半开后请求总数, 存储半开到关闭所必须的最少成功请求数
-	scheduled    int32
+	// maxRequest 半开后请求总数；从 Close 切回需归集的最少成功请求数
+	maxRequest int
+	// allocated 已发放配额，atomic 维护
+	allocated int64
+	// finished 已归集结果数，atomic 维护
+	finished int64
+	// scheduled 状态切换调度去重标记，atomic 维护
+	scheduled int32
+	// calledResult 归集到的调用结果序列，受 lock 保护
 	calledResult []bool
-	triggered    bool
-	lock         sync.Mutex
+	// triggered 状态判定触发标记，受 lock 保护
+	triggered bool
+	// lock 保护 calledResult 与 triggered，归集阶段必须串行
+	lock sync.Mutex
 }
 
 func NewHalfOpenStatus(name string, start time.Time, maxRequest int) CircuitBreakerStatus {
@@ -457,6 +577,53 @@ func (c *HalfOpenStatus) Report(success bool) bool {
 	return false
 }
 
+// AcquirePermission 申请一次半开放行配额
+// 热路径无锁，使用 atomic.AddInt64 自增 allocated；超过 maxRequest 立即回退并返回 false。
+// 当 maxRequest <= 0 时表示规则未配置或恢复条件无效，按拒绝处理避免半开态下无限放行。
+func (c *HalfOpenStatus) AcquirePermission() bool {
+	if c.maxRequest <= 0 {
+		return false
+	}
+	if atomic.AddInt64(&c.allocated, 1) > int64(c.maxRequest) {
+		atomic.AddInt64(&c.allocated, -1)
+		return false
+	}
+	return true
+}
+
+// Release 归集一次半开放行结果
+// 由装饰器在 OnSuccess/OnError 阶段调用；返回值表示是否需要立即执行状态判定（与 Report 行为一致）。
+// 任意一次失败 OR 累计结果数达到 maxRequest 时设置 triggered，调用方据此决定是否调度切换。
+func (c *HalfOpenStatus) Release(success bool) bool {
+	atomic.AddInt64(&c.finished, 1)
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.calledResult = append(c.calledResult, success)
+	needTrigger := !success || len(c.calledResult) >= c.maxRequest
+	if needTrigger && !c.triggered {
+		c.triggered = true
+		return true
+	}
+	return false
+}
+
+// AllocatedCount 仅用于测试观察发放配额数
+func (c *HalfOpenStatus) AllocatedCount() int64 {
+	return atomic.LoadInt64(&c.allocated)
+}
+
+// FinishedCount 仅用于测试观察归集结果数
+func (c *HalfOpenStatus) FinishedCount() int64 {
+	return atomic.LoadInt64(&c.finished)
+}
+
+// MaxRequest 仅用于测试与日志展示半开态可放行的最大配额数
+func (c *HalfOpenStatus) MaxRequest() int {
+	return c.maxRequest
+}
+
 func (c *HalfOpenStatus) Schedule() bool {
 	return atomic.CompareAndSwapInt32(&c.scheduled, 0, 1)
 }
@@ -478,16 +645,6 @@ func (c *HalfOpenStatus) CalNextStatus() Status {
 	}
 	// 连续成功数达到最大请求数，熔断器关闭
 	return Close
-}
-
-func (c *HalfOpenStatus) IsAvailable() bool {
-	if c.status == Close {
-		return true
-	}
-	if c.status == Open {
-		return false
-	}
-	return true
 }
 
 var ErrorCallAborted = errors.New("call aborted")

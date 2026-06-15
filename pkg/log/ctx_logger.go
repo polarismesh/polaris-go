@@ -22,17 +22,18 @@ package log
 // 使得日志输出能够区分不同的 SDK 实例。不可序列化（yaml/json 标签为 "-"）。
 // 所有 logger 字段均为私有，仅通过 getter 方法暴露，以保证 label 注入的一致性。
 type ContextLogger struct {
-	baseLogger       Logger
-	networkLogger    Logger
-	cacheLogger      Logger
-	statLogger       Logger
-	statReportLogger Logger
-	detectLogger     Logger
-	eventLogger      Logger
-	losslessLogger   Logger
-	routeLogger      Logger
-	authLogger       Logger
-	rateLimitLogger  Logger
+	baseLogger           Logger
+	networkLogger        Logger
+	cacheLogger          Logger
+	statLogger           Logger
+	statReportLogger     Logger
+	detectLogger         Logger
+	eventLogger          Logger
+	losslessLogger       Logger
+	routeLogger          Logger
+	authLogger           Logger
+	rateLimitLogger      Logger
+	circuitBreakerLogger Logger
 }
 
 // Init 获取基础日志记录器.
@@ -48,6 +49,7 @@ func (c *ContextLogger) Init() {
 	c.routeLogger = GetRouteLogger()
 	c.authLogger = GetAuthLogger()
 	c.rateLimitLogger = GetRateLimitLogger()
+	c.circuitBreakerLogger = GetCircuitBreakerLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -72,6 +74,7 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	c.routeLogger = LoggerWithFields(c.routeLogger, kvs...)
 	c.authLogger = LoggerWithFields(c.authLogger, kvs...)
 	c.rateLimitLogger = LoggerWithFields(c.rateLimitLogger, kvs...)
+	c.circuitBreakerLogger = LoggerWithFields(c.circuitBreakerLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -160,4 +163,12 @@ func (c *ContextLogger) GetRateLimitLogger() Logger {
 		return GetRateLimitLogger()
 	}
 	return c.rateLimitLogger
+}
+
+// GetCircuitBreakerLogger 获取熔断日志记录器.
+func (c *ContextLogger) GetCircuitBreakerLogger() Logger {
+	if c == nil {
+		return GetCircuitBreakerLogger()
+	}
+	return c.circuitBreakerLogger
 }

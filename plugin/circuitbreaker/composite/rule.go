@@ -53,6 +53,9 @@ type RuleContainer struct {
 	executor *TaskExecutor
 }
 
+// newRuleContainer 仅构造 RuleContainer，不产生任何副作用。
+// 首次拉取规则的调度由调用方在确认其被存入 sync.Map 后显式调用 scheduleCircuitBreaker() 触发，
+// 避免并发场景下构造了多余实例却仍触发一次无用的远程规则刷新。
 func newRuleContainer(ctx context.Context, res model.Resource, breaker *CompositeCircuitBreaker) *RuleContainer {
 	c := &RuleContainer{
 		res:     res,
@@ -61,10 +64,9 @@ func newRuleContainer(ctx context.Context, res model.Resource, breaker *Composit
 			return breaker.loadOrStoreCompiledRegex(s)
 		},
 		engineFlow: breaker.engineFlow,
-		log:        breaker.logCtx.GetStatLogger(),
+		log:        breaker.logCtx.GetCircuitBreakerLogger(),
 		executor:   breaker.executor,
 	}
-	c.scheduleCircuitBreaker()
 	return c
 }
 
@@ -87,6 +89,10 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 		c.log.Errorf("[CircuitBreaker] get %s rule fail: %+v", c.res.GetService().String(), err)
 		return
 	}
+	// 同步刷新三级索引：以服务为粒度替换旧规则集合，便于其他资源 Lookup 复用
+	if c.breaker.ruleDict != nil {
+		c.breaker.ruleDict.PutServiceRule(*c.res.GetService(), resp)
+	}
 	resourceCounters := c.breaker.getLevelResourceCounters(c.res.GetLevel())
 	cbRule := c.getCircuitBreakerRule(resp)
 	if cbRule == nil {
@@ -105,8 +111,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 			c.log.Debugf("[CircuitBreaker] rule unchanged for resource: %s, skipping update", c.res.String())
 			return
 		}
-		c.log.Infof("[CircuitBreaker] rule changed for resource: %s, old rule: %s (revision: %s), new rule: %s "+
-			"(revision: %s)", c.res.String(), activeRule.Name, activeRule.Revision, cbRule.Name, cbRule.Revision)
+		c.log.Infof("[CircuitBreaker] rule changed for resource: %s, old rule: %s (id: %s, revision: %s), "+
+			"new rule: %s (id: %s, revision: %s)", c.res.String(), activeRule.Name, activeRule.Id,
+			activeRule.Revision, cbRule.Name, cbRule.Id, cbRule.Revision)
 	}
 	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
 	if err != nil {
@@ -174,7 +181,7 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 }
 
 func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleResponse,
-	regexFunc func(string) *regexp.Regexp, baseLogger log.Logger) *fault_tolerance.CircuitBreakerRule {
+	regexFunc func(string) *regexp.Regexp, cbLogger log.Logger) *fault_tolerance.CircuitBreakerRule {
 	if object == nil || object.Value == nil {
 		return nil
 	}
@@ -190,38 +197,77 @@ func selectCircuitBreakerRule(res model.Resource, object *model.ServiceRuleRespo
 	for i := range sortedRules {
 		cbRule := sortedRules[i]
 		if !cbRule.Enable {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: disabled", cbRule.Name)
 			continue
 		}
 		if cbRule.Level != res.GetLevel() {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: level mismatch (rule level: %v, resource "+
 				"level: %v, resource: %s)", cbRule.Name, cbRule.Level, res.GetLevel(), res.String())
 			continue
 		}
 		ruleMatcher := cbRule.RuleMatcher
+		if ruleMatcher == nil {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: nil rule matcher", cbRule.Name)
+			continue
+		}
 		destination := ruleMatcher.Destination
+		source := ruleMatcher.Source
+		if destination == nil || source == nil {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: nil destination or source in rule matcher", cbRule.Name)
+			continue
+		}
 		if !match.MatchService(res.GetService(), destination.Namespace, destination.Service) {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: destination service mismatch (rule: %s/%s, "+
 				"resource: %s)",
 				cbRule.Name, destination.Namespace, destination.Service, res.GetService().String())
 			continue
 		}
-		source := ruleMatcher.Source
 		if !match.MatchService(res.GetCallerService(), source.Namespace, source.Service) {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: source service mismatch (rule: %s/%s, "+
 				"resource caller: %s)", cbRule.Name, source.Namespace, source.Service, res.GetCallerService().String())
 			continue
 		}
-		if ok := matchMethod(res, destination.GetMethod(), regexFunc); !ok {
-			baseLogger.Debugf("[CircuitBreaker] rule %s skipped: method mismatch", cbRule.Name)
+		if !matchRuleAPI(res, cbRule, destination, regexFunc) {
+			cbLogger.Debugf("[CircuitBreaker] rule %s skipped: api/method mismatch", cbRule.Name)
 			continue
 		}
-		baseLogger.Infof("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
+		// 命中路径：每条业务请求 CheckResource 都会执行到这里，因此降级为 Debug
+		// 避免 INFO 被请求级日志刷屏淹没真正的状态机切换 / 规则变更事件。
+		cbLogger.Debugf("[CircuitBreaker] rule %s matched for resource: %s", cbRule.Name, res.String())
 		return cbRule
 	}
 	return nil
 }
 
+// matchRuleAPI 判定一条规则的接口/方法维度是否命中当前资源
+// 对 METHOD 级规则：优先遍历 BlockConfigs.Api，任一 BlockConfig 与资源匹配即命中；
+// 若 BlockConfigs 为空（兼容老规则），回退到 destination.Method 单字段匹配。
+// 对 SERVICE / INSTANCE 级规则：方法维度不参与匹配，直接放行。
+// res         待匹配资源
+// cbRule      候选熔断规则
+// destination 规则的目标服务匹配块（用于回退路径取 destination.Method）
+// regexFunc   正则编译缓存函数
+func matchRuleAPI(res model.Resource, cbRule *fault_tolerance.CircuitBreakerRule,
+	destination *fault_tolerance.RuleMatcher_DestinationService,
+	regexFunc func(string) *regexp.Regexp) bool {
+	if cbRule.Level != fault_tolerance.Level_METHOD {
+		return true
+	}
+	blockConfigs := cbRule.GetBlockConfigs()
+	if len(blockConfigs) > 0 {
+		for _, bc := range blockConfigs {
+			if matchMethodWithAPI(res, bc.GetApi(), regexFunc) {
+				return true
+			}
+		}
+		return false
+	}
+	// 兼容老规则：BlockConfigs 为空时回退到 destination.method 单字段匹配
+	return matchMethod(res, destination.GetMethod(), regexFunc)
+}
+
+// sortCircuitBreakerRules 对熔断规则按优先级排序，数值越小优先级越高。
+// 排序优先级：rule.Priority → destination service（精确匹配优先于通配匹配）→ rule.Id（字典序保证确定性）。
 func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fault_tolerance.CircuitBreakerRule {
 	ret := make([]*fault_tolerance.CircuitBreakerRule, 0, len(rules))
 	ret = append(ret, rules...)
@@ -229,34 +275,23 @@ func sortCircuitBreakerRules(rules []*fault_tolerance.CircuitBreakerRule) []*fau
 		rule1 := ret[i]
 		rule2 := ret[j]
 
-		// 1. compare destination service
-		destNamespace1 := rule1.RuleMatcher.Destination.Namespace
-		destService1 := rule1.RuleMatcher.Destination.Service
+		// 1. compare priority（数值越小优先级越高）
+		if rule1.Priority != rule2.Priority {
+			return rule1.Priority < rule2.Priority
+		}
 
-		destNamespace2 := rule2.RuleMatcher.Destination.Namespace
-		destService2 := rule2.RuleMatcher.Destination.Service
-
-		svcResult := compareService(destNamespace1, destService1, destNamespace2, destService2)
+		// 2. compare destination service（精确匹配优先于通配匹配）
+		destNs1 := rule1.RuleMatcher.GetDestination().GetNamespace()
+		destSvc1 := rule1.RuleMatcher.GetDestination().GetService()
+		destNs2 := rule2.RuleMatcher.GetDestination().GetNamespace()
+		destSvc2 := rule2.RuleMatcher.GetDestination().GetService()
+		svcResult := compareService(destNs1, destSvc1, destNs2, destSvc2)
 		if svcResult != 0 {
 			return svcResult < 0
 		}
-		if rule1.Level == rule2.Level {
-			if rule1.Level == fault_tolerance.Level_METHOD {
-				destMethod1 := rule1.RuleMatcher.Destination.Method.Value.Value
-				destMethod2 := rule2.RuleMatcher.Destination.Method.Value.Value
-				methodResult := compareStringValue(destMethod1, destMethod2)
-				if methodResult != 0 {
-					return methodResult < 0
-				}
-			}
-		}
 
-		// 2. compare source service
-		srcNamespace1 := rule1.RuleMatcher.Source.Namespace
-		srcService1 := rule1.RuleMatcher.Source.Service
-		srcNamespace2 := rule2.RuleMatcher.Source.Namespace
-		srcService2 := rule2.RuleMatcher.Source.Service
-		return compareService(srcNamespace1, srcService1, srcNamespace2, srcService2) < 0
+		// 3. compare rule ID（字典序保证确定性）
+		return strings.Compare(rule1.Id, rule2.Id) < 0
 	})
 	return ret
 }

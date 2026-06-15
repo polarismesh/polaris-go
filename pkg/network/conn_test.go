@@ -37,14 +37,14 @@ func (f *fakeClosableConn) Close() error {
 // noopLogger 在测试中替代未初始化的全局日志。
 type noopLogger struct{}
 
-func (noopLogger) Tracef(string, ...interface{})       {}
-func (noopLogger) Debugf(string, ...interface{})       {}
-func (noopLogger) Infof(string, ...interface{})        {}
-func (noopLogger) Warnf(string, ...interface{})        {}
-func (noopLogger) Errorf(string, ...interface{})       {}
-func (noopLogger) Fatalf(string, ...interface{})       {}
-func (noopLogger) IsLevelEnabled(int) bool             { return false }
-func (noopLogger) SetLogLevel(int) error               { return nil }
+func (noopLogger) Tracef(string, ...interface{}) {}
+func (noopLogger) Debugf(string, ...interface{}) {}
+func (noopLogger) Infof(string, ...interface{})  {}
+func (noopLogger) Warnf(string, ...interface{})  {}
+func (noopLogger) Errorf(string, ...interface{}) {}
+func (noopLogger) Fatalf(string, ...interface{}) {}
+func (noopLogger) IsLevelEnabled(int) bool       { return false }
+func (noopLogger) SetLogLevel(int) error         { return nil }
 
 var _ log.Logger = noopLogger{}
 

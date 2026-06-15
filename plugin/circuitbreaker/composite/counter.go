@@ -18,7 +18,6 @@
 package composite
 
 import (
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,12 +25,10 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
 
-	"github.com/polarismesh/polaris-go/pkg/algorithm/match"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
-	"github.com/polarismesh/polaris-go/plugin/circuitbreaker/composite/trigger"
 )
 
 const (
@@ -41,29 +38,34 @@ const (
 	_stateHalfOpenToClose
 )
 
-// ResourceCounters .
+// ResourceCounters 资源级状态机
+// 资源（service / method / instance）只持有单一 Open/HalfOpen/Close 状态机；
+// 错误条件下沉到 blockCounter 层各自独立计数，任一块的任一 trigger 触发即让资源进入 Open。
+// HalfOpen → Close 切换时会遍历所有块的 trigger counter 复位。
 type ResourceCounters struct {
 	circuitBreaker *CompositeCircuitBreaker
 	lock           sync.RWMutex
-	// activeRuleRef
+	// activeRule 当前生效的熔断规则
 	activeRule *fault_tolerance.CircuitBreakerRule
-	// counters
-	counters []trigger.TriggerCounter
-	// resource
+	// blocks 块级计数器列表，每个 BlockConfig 一个
+	blocks []*blockCounter
+	// legacyBlock BlockConfigs 为空时构造的兜底块，承载顶层弃用字段（兼容老规则与默认实例规则）
+	legacyBlock *blockCounter
+	// resource 当前规则作用的资源
 	resource model.Resource
-	// statusRef
+	// statusRef 状态机原子引用，承载 *model.CircuitBreakerStatusWrapper
 	statusRef atomic.Value
-	// fallbackInfo
+	// fallbackInfo 降级响应信息（保留字段，本期不下发 body/headers）
 	fallbackInfo *model.FallbackInfo
-	// regexFunction
+	// regexFunction 正则编译函数，复用 CompositeCircuitBreaker 的 regex 缓存
 	regexFunction func(string) *regexp.Regexp
-	// engineFlow
+	// engineFlow SDK 引擎入口
 	engineFlow sdk.Engine
-	// logStat
+	// logStat 供 trigger 计数器和自身状态变化日志使用，统一输出到 circuitbreaker 目录
 	logStat log.Logger
-	// isInsRes
+	// isInsRes 是否实例级资源；为 true 时状态切换会回写 localCache
 	isInsRes bool
-	//
+	// executor 任务执行器，负责状态切换的延迟与亲和性调度
 	executor *TaskExecutor
 }
 
@@ -82,7 +84,7 @@ func newResourceCounters(res model.Resource, activeRule *fault_tolerance.Circuit
 		circuitBreaker: circuitBreaker,
 		statusRef:      atomic.Value{},
 		fallbackInfo:   buildFallbackInfo(activeRule),
-		logStat:        circuitBreaker.logCtx.GetStatLogger(),
+		logStat:        circuitBreaker.logCtx.GetCircuitBreakerLogger(),
 		isInsRes:       isInsRes,
 		executor:       circuitBreaker.executor,
 	}
@@ -96,24 +98,25 @@ func newResourceCounters(res model.Resource, activeRule *fault_tolerance.Circuit
 	return counters, nil
 }
 
+// init 初始化块级计数器列表
+// 遍历规则中的每个 BlockConfig，按 BlockConfig × TriggerCondition 的笛卡尔积建立独立的
+// trigger counter；每个块持有自身解析后的 errorConditions（块非空优先块、否则回退顶层）。
+// counter 名称格式为 ruleName 或 ruleName#blockConfigName（当 blockConfigName 非空时）。
+// 兼容老规则：当 BlockConfigs 为空时，使用顶层弃用字段构造单一 legacyBlock 兜底。
 func (rc *ResourceCounters) init() error {
-	conditions := rc.activeRule.GetTriggerCondition()
-	for i := range conditions {
-		condition := conditions[i]
-		opt := trigger.Options{
-			Resource:      rc.resource,
-			Condition:     condition,
-			StatusHandler: rc,
-			DelayExecutor: rc.executor.DelayExecute,
-			Log:           rc.logStat,
+	for _, bc := range rc.activeRule.GetBlockConfigs() {
+		ruleName := rc.activeRule.Name
+		if bc.GetName() != "" {
+			ruleName = ruleName + "#" + bc.GetName()
 		}
-
-		switch condition.GetTriggerType() {
-		case fault_tolerance.TriggerCondition_CONSECUTIVE_ERROR:
-			rc.counters = append(rc.counters, trigger.NewConsecutiveCounter(rc.activeRule.Name, &opt))
-		case fault_tolerance.TriggerCondition_ERROR_RATE:
-			rc.counters = append(rc.counters, trigger.NewErrRateCounter(rc.activeRule.Name, &opt))
-		}
+		errConditions := resolveBlockErrorConditions(rc.activeRule, bc)
+		rc.blocks = append(rc.blocks, newBlockCounter(rc, ruleName, bc.GetApi(),
+			errConditions, bc.GetTriggerConditions()))
+	}
+	// 老规则兼容路径：BlockConfigs 为空时直接拿顶层 TriggerCondition / ErrorConditions
+	if len(rc.blocks) == 0 {
+		rc.legacyBlock = newBlockCounter(rc, rc.activeRule.Name, nil,
+			rc.activeRule.GetErrorConditions(), rc.activeRule.GetTriggerCondition())
 	}
 	return nil
 }
@@ -156,8 +159,9 @@ func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name strin
 		})
 	rc.updateCircuitBreakerStatus(newStatus)
 	rc.reportCircuitStatus(newStatus)
-	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", before.GetStatus(),
-		newStatus.GetStatus(), rc.resource.String(), before.GetCircuitBreaker())
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		before.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
+		before.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
 	delay := time.Duration(sleepWindow) * time.Second
 
@@ -174,8 +178,9 @@ func (rc *ResourceCounters) OpenToHalfOpen() {
 	}
 	consecutiveSuccess := rc.activeRule.GetRecoverCondition().ConsecutiveSuccess
 	halfOpenStatus := model.NewHalfOpenStatus(status.GetCircuitBreaker(), time.Now(), int(consecutiveSuccess))
-	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
-		halfOpenStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		status.GetStatus(), halfOpenStatus.GetStatus(), rc.resource.String(),
+		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 	rc.updateCircuitBreakerStatus(halfOpenStatus)
 	rc.reportCircuitStatus(halfOpenStatus)
 }
@@ -190,13 +195,12 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 	}
 	newStatus := model.NewCircuitBreakerStatus(status.GetCircuitBreaker(), model.Close, time.Now())
 	rc.updateCircuitBreakerStatus(newStatus)
-	rc.logStat.Infof("previous status %s, current status %s, resource %s, rule %s", status.GetStatus(),
-		newStatus.GetStatus(), rc.resource.String(), status.GetCircuitBreaker())
 	rc.reportCircuitStatus(newStatus)
+	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
+		status.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
+		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 
-	for _, counter := range rc.counters {
-		counter.Resume()
-	}
+	rc.resumeAllBlocks()
 }
 
 func (rc *ResourceCounters) HalfOpenToOpen() {
@@ -210,54 +214,86 @@ func (rc *ResourceCounters) HalfOpenToOpen() {
 }
 
 func (rc *ResourceCounters) Report(stat *model.ResourceStat) {
-	retStatus := rc.parseRetStatus(stat)
-	isSuccess := retStatus != model.RetFail && retStatus != model.RetTimeout
 	curStatus := rc.CurrentCircuitBreakerStatus()
 	if curStatus != nil && curStatus.GetStatus() == model.HalfOpen {
-		halfOpenStatus := curStatus.(*model.HalfOpenStatus)
-		checked := halfOpenStatus.Report(isSuccess)
-		if !checked {
-			return
-		}
-		nextStatus := halfOpenStatus.CalNextStatus()
-		switch nextStatus {
-		case model.Close:
-			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToClose)
-		case model.Open:
-			rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToOpen)
-		}
-	} else {
-		rc.logStat.Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
-		for _, counter := range rc.counters {
-			counter.Report(isSuccess)
-		}
+		rc.handleHalfOpenReport(stat, curStatus)
+		return
+	}
+	rc.logStat.Debugf("[CircuitBreaker] report resource stat to counter %s", stat.Resource.String())
+	rc.dispatchToBlocks(stat)
+}
+
+// handleHalfOpenReport HalfOpen 态下使用资源级 isSuccess 判定，配额由 HalfOpenStatus 自身管理
+// 失败/数量达阈值任一条件触发 → 从 HalfOpen 切到 Open；全部成功且达阈值 → 切到 Close
+func (rc *ResourceCounters) handleHalfOpenReport(stat *model.ResourceStat,
+	curStatus model.CircuitBreakerStatus) {
+	isSuccess := rc.evaluateSuccess(stat)
+	halfOpenStatus, ok := curStatus.(*model.HalfOpenStatus)
+	if !ok {
+		return
+	}
+	if !halfOpenStatus.Report(isSuccess) {
+		return
+	}
+	switch halfOpenStatus.CalNextStatus() {
+	case model.Close:
+		rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToClose)
+	case model.Open:
+		rc.executor.AffinityExecute(rc.activeRule.Id, rc.HalfOpenToOpen)
 	}
 }
 
-func (rc *ResourceCounters) parseRetStatus(stat *model.ResourceStat) model.RetStatus {
-	errConditions := rc.activeRule.GetErrorConditions()
-	if len(errConditions) == 0 {
-		return stat.RetStatus
-	}
-	for i := range errConditions {
-		errCondition := errConditions[i]
-		condition := errCondition.GetCondition()
-		switch errCondition.GetInputType() {
-		case fault_tolerance.ErrorCondition_RET_CODE:
-			codeMatched := match.MatchString(stat.RetCode, condition, rc.regexFunction)
-			if codeMatched {
-				return model.RetFail
+// dispatchToBlocks 把一次调用结果按块独立判错并喂给各块的 trigger counter
+// 优先使用 blocks（BlockConfigs 解析出的块级计数器集合）；
+// 当 BlockConfigs 为空时使用 legacyBlock 兜底，保持对老规则与默认实例规则的兼容。
+func (rc *ResourceCounters) dispatchToBlocks(stat *model.ResourceStat) {
+	if len(rc.blocks) > 0 {
+		for _, b := range rc.blocks {
+			if !b.matchAPI(stat.Resource) {
+				continue
 			}
-		case fault_tolerance.ErrorCondition_DELAY:
-			delayVal, err := strconv.ParseInt(condition.GetValue().GetValue(), 10, 64)
-			if err == nil {
-				if stat.Delay.Milliseconds() > delayVal {
-					return model.RetTimeout
-				}
+			b.Report(stat)
+		}
+		return
+	}
+	if rc.legacyBlock != nil {
+		rc.legacyBlock.Report(stat)
+	}
+}
+
+// evaluateSuccess HalfOpen 态用块级判错合并视图判定本次调用是否成功
+// 任一块判失败即视为整体失败，确保资源级状态机能即时反应错误条件
+// 注意：RetReject / RetFlowControl 已在 CompositeCircuitBreaker.Report 入口被提前
+// return（见 breaker.go doReport），不会进入本函数，因此本函数只关心 RetFail /
+// RetTimeout 两种错误。
+func (rc *ResourceCounters) evaluateSuccess(stat *model.ResourceStat) bool {
+	if len(rc.blocks) > 0 {
+		for _, b := range rc.blocks {
+			if !b.matchAPI(stat.Resource) {
+				continue
+			}
+			ret := b.parseRetStatus(stat)
+			if ret == model.RetFail || ret == model.RetTimeout {
+				return false
 			}
 		}
+		return true
 	}
-	return model.RetSuccess
+	if rc.legacyBlock != nil {
+		ret := rc.legacyBlock.parseRetStatus(stat)
+		return ret != model.RetFail && ret != model.RetTimeout
+	}
+	return stat.RetStatus != model.RetFail && stat.RetStatus != model.RetTimeout
+}
+
+// resumeAllBlocks 让所有块内全部 trigger counter 退出 suspended 状态
+func (rc *ResourceCounters) resumeAllBlocks() {
+	for _, b := range rc.blocks {
+		b.Resume()
+	}
+	if rc.legacyBlock != nil {
+		rc.legacyBlock.Resume()
+	}
 }
 
 func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerStatus) {
@@ -279,7 +315,7 @@ func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerSt
 	}
 	// 调用 localCache
 	if err := rc.circuitBreaker.localCache.UpdateInstances(updateRequest); err != nil {
-		rc.circuitBreaker.logCtx.GetBaseLogger().Errorf("update instance circuitbreaker status fail, resource %s, "+
+		rc.circuitBreaker.logCtx.GetCircuitBreakerLogger().Errorf("update instance circuitbreaker status fail, resource %s, "+
 			"rule %s, err %s", insRes.String(), rc.activeRule.Id, err.Error())
 	}
 }
