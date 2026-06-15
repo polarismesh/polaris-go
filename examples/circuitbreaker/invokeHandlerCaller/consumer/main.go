@@ -283,10 +283,11 @@ func (svr *PolarisClient) runWebServer() {
 				if aborted.HasFallback() {
 					replyStatus = aborted.GetFallbackCode()
 					replyBody = aborted.GetFallbackBody()
-					rw.WriteHeader(replyStatus)
+					// 必须先写 header 再 WriteHeader：net/http 在 WriteHeader 后追加的 header 会被丢弃。
 					for k, v := range aborted.GetFallbackHeaders() {
 						rw.Header().Add(k, v)
 					}
+					rw.WriteHeader(replyStatus)
 					_, _ = rw.Write([]byte(replyBody))
 					return
 				}

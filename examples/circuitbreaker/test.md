@@ -441,7 +441,7 @@
 ### 规则
 - `level=INSTANCE`，`name=cb-instance-CircuitBreakerHttpStatusCaller`，`source=*/*`（通配所有 caller）
 - `CONSECUTIVE_ERROR=3`（收紧阈值加快验证）
-- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+- `recover_condition.sleep_window=6s`，`consecutiveSuccess=1`
 
 ### 验证步骤（每个子阶段执行相同流程）
 - ── 全死全活开启 ──
@@ -464,6 +464,52 @@
 - INSTANCE 级熔断不经过 `AcquirePermission`（只检查 SERVICE/METHOD 级），请求可透传至 provider
 - 全死全活触发时 FilterOnlyRouter 设置 `HasLimitedInstances=true`，LB 从 `selectableInstancesWithoutUnhealthy` 中选择 OPEN 实例
 - 全死全活关闭时 LB 从 `healthyInstances`（空集）中选择 → `GetOneInstance` 失败
+
+---
+
+## 用例 11：自定义降级（CustomFallback）
+
+### 验证目的
+验证服务端规则配置的降级响应（`FallbackConfig`）端到端生效：熔断 OPEN 后，SDK 通过
+`CallAborted` 携带规则配置的 `code` / `body` / `headers`，demo 在 `abort.HasFallback()==true`
+时透传该降级响应，`==false`（或规则未配 fallback）时回 503 兜底。
+
+仅 **SERVICE / METHOD** 级规则支持 fallback（INSTANCE 级不支持，与 polaris-java 一致）。
+
+### Caller 写法
+| 子阶段 | level | enable | selfService | 端口 | 期望 |
+|--------|-------|--------|-------------|------|------|
+| A | SERVICE | true  | CircuitBreakerSvcFallbackCaller       | 18101 | HTTP 599 + body `degraded` |
+| B | SERVICE | false | CircuitBreakerSvcFallbackOffCaller    | 18102 | 503 `circuit breaker open` |
+| C | METHOD  | true  | CircuitBreakerMethodFallbackCaller    | 18103 | HTTP 599 + body `degraded` |
+| D | METHOD  | false | CircuitBreakerMethodFallbackOffCaller | 18104 | 503 `circuit breaker open` |
+
+四个子阶段各用独立 caller + 独立规则名，避免熔断状态残留干扰。consumer 复用
+`newCircuitBreakerCaller/consumer`（Decorator 模式），请求路径统一 `/echo`。
+
+### 规则（4 条，均持久化）
+- A `cb-service-CircuitBreakerSvcFallbackCaller`：`level=SERVICE`，`fallbackConfig.enable=true`，
+  `response.code=599`，`body="degraded by circuitbreaker"`，`headers=[X-Fallback=true]`，`CONSECUTIVE_ERROR=5`
+- B `cb-service-CircuitBreakerSvcFallbackOffCaller`：同上但 `fallbackConfig.enable=false`
+- C `cb-method-CircuitBreakerMethodFallbackCaller`：`level=METHOD`，`api.path=/echo`，`fallbackConfig.enable=true`
+- D `cb-method-CircuitBreakerMethodFallbackOffCaller`：`level=METHOD`，`api.path=/echo`，`fallbackConfig.enable=false`
+
+### 验证步骤（每个子阶段执行相同流程，单轮）
+- .1 启动 consumer（独立 selfService）
+- .2 创建规则（带/不带 fallbackConfig）
+- .3 trigger：provider-a=500 / provider-b=500，发 30 次触发熔断（50/50 LB 下 `CONSECUTIVE_ERROR=5` 需足够 burst）
+- .4 verify：再发 10 次
+  - 正向（A/C）：期望 `CASE_FALLBACK >= 1`（HTTP 599 + body `degraded`）
+  - 反向（B/D）：期望 `CASE_ABORT >= 1`（503 + `circuit breaker open`）
+
+### 通过条件
+- 4 个子阶段均满足 `trigger_fail >= 1` 且对应期望指标（fallback / abort）`>= 1`
+
+### 验证原理
+- `buildFallbackInfo`（counter.go）从规则的 `fallbackConfig` 解析 `FallbackInfo`，仅 `enable==true` 时构建
+- 熔断 `toOpen()` 时通过 `SetFallbackInfo` 注入 OPEN 状态 → `Check` 透传 → `CallAborted` 携带
+- 反向用例（B/D）专门验证 `buildFallbackInfo` 的 `GetEnable()` 短路：`enable=false` 时不返回 fallback，业务回 503
+- `run_burst` 按 HTTP 599 + body `degraded` 识别 FALLBACK，按 `circuit breaker open` 识别 ABORT
 
 ---
 
@@ -508,3 +554,6 @@
 | `FilterOnlyRouter` 全死全活兜底（`enableRecoverAll`） | 用例 10 |
 | `MakeInvokeHandler` + `AcquirePermission` 手动编排模式 | 用例 1/2/3 InvokeHandler 子阶段 + 用例 10(B) |
 | 三种调用模式行为一致性 | 用例 10（Decorator / InvokeHandler / Bare Report） |
+| `buildFallbackInfo` 解析规则降级响应（SERVICE/METHOD） | 用例 11 A/C |
+| `buildFallbackInfo` 的 `GetEnable()` 短路（enable=false 回 503） | 用例 11 B/D |
+| `CallAborted` 携带 fallback + demo `HasFallback()` 透传 | 用例 11 全部 |
