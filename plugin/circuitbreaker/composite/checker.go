@@ -72,7 +72,10 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 		},
 		healthCheckers: breaker.healthCheckers,
 		instances:      make(map[string]*ProtocolInstance, 16),
-		log:            breaker.logCtx.GetCircuitBreakerLogger(),
+		// executor 必须复用熔断器的全局任务调度器，否则 start() 中的 IntervalExecute 会对 nil 解引用 panic
+		executor:                   breaker.executor,
+		instanceExpireIntervalMill: breaker.healthCheckInstanceExpireInterval.Milliseconds(),
+		log:                        breaker.logCtx.GetCircuitBreakerLogger(),
 	}
 	if insRes, ok := res.(*model.InstanceResource); ok {
 		checker.addInstance(insRes, false)
@@ -82,6 +85,11 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 }
 
 func (c *ResourceHealthChecker) start() {
+	if c.executor == nil {
+		c.log.Errorf("[CircuitBreaker] health checker executor is nil, skip schedule for resource=%s",
+			c.resource.String())
+		return
+	}
 	protocol2Rules := c.selectFaultDetectRules(c.resource, c.faultDetector)
 	for protocol, rule := range protocol2Rules {
 		checkFunc := c.createCheckJob(protocol, rule)
@@ -202,7 +210,8 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 		Delay:     ret.GetDelay(),
 		RetStatus: ret.GetRetStatus(),
 	}
-	if err := c.circuitBreaker.Report(stat); err != nil {
+	// 探测结果走 record=false 上报：仅参与熔断状态机统计，不触发实例重新注册进探测集合
+	if err := c.circuitBreaker.reportFaultDetectStat(stat); err != nil {
 		c.log.Errorf("[CircuitBreaker] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
 	}
 	return stat.RetStatus == model.RetSuccess

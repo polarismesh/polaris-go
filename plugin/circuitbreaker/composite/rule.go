@@ -134,8 +134,11 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	if exist {
 		currentActiveRule = counters.CurrentActiveRule()
 	}
-	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFallbackConfig() != nil &&
-		currentActiveRule.GetFallbackConfig().Enable {
+	// 主动探测的启动门控：熔断规则启用 且 其 faultDetectConfig.enable=true。
+	// faultDetectConfig 是独立的主动探测开关，与 fallbackConfig（熔断后的降级响应）解耦；
+	// 仅配置降级而未开启探测时不应启动探测任务，反之亦然。
+	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFaultDetectConfig() != nil &&
+		currentActiveRule.GetFaultDetectConfig().GetEnable() {
 		engineFlow := c.engineFlow
 		resp, err := engineFlow.SyncGetServiceRule(model.EventFaultDetect, &model.GetServiceRuleRequest{
 			Namespace: c.res.GetService().Namespace,
@@ -307,8 +310,10 @@ func selectFaultDetector(res model.Resource, object *model.ServiceRuleResponse, 
 }
 
 func sortFaultDetectRules(srcRules []*fault_tolerance.FaultDetectRule) []*fault_tolerance.FaultDetectRule {
-	rules := make([]*fault_tolerance.FaultDetectRule, 0, len(srcRules))
-	copy(rules, srcRules)
+	// 复制一份待排序切片，避免就地修改入参底层数组。
+	// 注意：必须用 append（或先 make 出等长 slice 再 copy），不能用 make(..., 0, len)+copy——
+	// copy 的拷贝条数受目标 slice 的 len 限制，len=0 时会把规则全部丢弃。
+	rules := append([]*fault_tolerance.FaultDetectRule(nil), srcRules...)
 	sort.Slice(rules, func(i, j int) bool {
 		rule1 := rules[i]
 		rule2 := rules[j]

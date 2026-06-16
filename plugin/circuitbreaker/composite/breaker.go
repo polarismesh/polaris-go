@@ -200,6 +200,14 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 	return c.doReport(stat, true)
 }
 
+// reportFaultDetectStat 上报主动探测结果。
+// 与业务请求上报（Report）的区别在于 record=false：探测结果只参与熔断状态机统计，
+// 不再触发 addInstanceForHealthCheck 把实例重新注册进探测集合，避免探测自身扩充探测目标的自循环。
+// stat 探测结果统计；返回 doReport 的处理结果（当前恒为 nil，错误仅记录日志）。
+func (c *CompositeCircuitBreaker) reportFaultDetectStat(stat *model.ResourceStat) error {
+	return c.doReport(stat, false)
+}
+
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
 	// 第一层：检查 stat 是否为 nil
 	if stat == nil {

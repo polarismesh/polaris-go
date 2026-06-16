@@ -21,7 +21,8 @@ examples/circuitbreaker/
 ├── oldInstanceCircuitBreakerCaller/     # 旧版散装写法（保留兼容）
 │   └── consumer/                        #   CircuitBreakerAPI.Report + ConsumerAPI.UpdateServiceCallResult
 │                                        #   仅覆盖实例级熔断
-├── verify_circuitbreaker.sh             # 【主入口】一键 E2E 测试脚本
+├── verify_circuitbreaker.sh             # 【主入口】被动熔断一键 E2E 测试脚本
+├── verify_faultdetect.sh                # 主动探测（fault detect）端到端验证脚本
 ├── cleanup.sh                           # 进程与目录清理脚本
 ├── test.md                              # 用例清单
 └── README.md                            # 本文件
@@ -598,6 +599,62 @@ chmod +x cleanup.sh
 
 > 熔断规则在 `verify_circuitbreaker.sh` 退出时已自动删除，`cleanup.sh` 不会再删一次规则。
 > 若脚本被 `kill -9` 强制终止导致规则未清理，可手动登录北极星控制台搜索 `cb-instance-*` / `cb-service-*` / `cb-interface-*` 删除。
+
+## 主动探测验证 — `verify_faultdetect.sh`
+
+`verify_circuitbreaker.sh` 验证的是**业务请求触发的被动熔断**；主动探测（Fault Detect /
+Active Health Check）则是 SDK 在熔断打开后**周期性主动探活下游实例**、据此推动恢复的能力。
+这条链路由独立脚本 `verify_faultdetect.sh` 验证，与上面的熔断脚本解耦、互不干扰。
+
+### 验证的闭环
+
+```
+业务请求触发服务级熔断 OPEN
+  → provider 仍故障，主动探测 GET /echo 也失败 → 维持 OPEN（半开探测失败立即回 OPEN）
+  → 恢复 provider（业务与探测同时转绿）
+  → 主动探测探活成功，推动 HALF_OPEN → CLOSE
+```
+
+> **探测端点为何选 `/echo`**：provider 的 `/health` 固定返回 200，无法反映实例健康变化；
+> 一旦熔断进入半开就会被它立即拉回 CLOSE，验证不出探测与恢复的因果。`/echo` 受 provider
+> `needErr` 开关控制，挂时探测失败、恢复时探测成功，闭环可被稳定观察。
+
+### 触发条件
+
+主动探测的启动门控为「熔断规则 `faultDetectConfig.enable=true` 且存在匹配的 FaultDetectRule」。
+脚本会自动下发两条规则：
+- 一条 **SERVICE 级熔断规则**，顶层带 `faultDetectConfig.enable=true`
+- 一条 **HTTP FaultDetectRule**（`POST /naming/v1/faultdetectors`，探 `/echo`，`interval=2s`，
+  `port=0` 表示使用被探测实例自身端口）
+
+### 基本用法
+
+```bash
+chmod +x verify_faultdetect.sh
+POLARIS_SERVER=10.0.0.1 POLARIS_TOKEN=<token> ./verify_faultdetect.sh
+POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh --debug      # 打开 SDK DEBUG 日志便于排查
+```
+
+### 关键参数（环境变量）
+
+| 变量                     | 含义                                       | 默认值 |
+| ------------------------ | ------------------------------------------ | ------ |
+| `FD_TRIGGER_COUNT`       | 触发服务级熔断的 burst 次数                | 30     |
+| `FD_CONSECUTIVE_ERROR`   | 熔断规则连续错误阈值                       | 5      |
+| `FD_SLEEP_WINDOW`        | 熔断 sleepWindow（秒），进入半开的等待窗口 | 6      |
+| `FD_PROBE_INTERVAL`      | 主动探测间隔（秒）                         | 2      |
+| `WAIT_KEEP_OPEN_SECONDS` | 维持 OPEN 阶段等待（> sleepWindow）        | 12     |
+| `WAIT_RECOVER_SECONDS`   | 恢复阶段等待（sleepWindow + 多个探测周期） | 16     |
+
+### 判定指标
+
+- 触发阶段：`abort >= 1`（服务级熔断已 OPEN）
+- 维持阶段：`abort >= 1`（探测持续失败，未恢复）
+- 恢复阶段：`ok == FD_VERIFY_COUNT`（主动探测探活推动 CLOSE）
+- 日志佐证：consumer 日志出现 `[FaultDetect]` 探测调度与状态切换记录
+
+> 退出时自动删除创建的熔断规则与探测规则（`/naming/v1/circuitbreaker/rules/delete` 与
+> `/naming/v1/faultdetectors/delete`），并停止 provider/consumer 进程。
 
 ## 用例细节
 

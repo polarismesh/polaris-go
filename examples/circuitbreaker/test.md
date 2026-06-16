@@ -556,6 +556,50 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ---
 
+## 主动探测用例（独立脚本 `verify_faultdetect.sh`）
+
+> 本用例不在 `verify_circuitbreaker.sh` 中，由独立脚本 `verify_faultdetect.sh` 执行，
+> 验证 SDK 在熔断打开后**周期性主动探活下游实例并据此恢复**的能力。
+
+### 验证目的
+验证熔断主动探测（Fault Detect / Active Health Check）的完整闭环：
+业务触发熔断 OPEN → 主动探测随 provider 故障而失败、维持 OPEN → 恢复 provider 后探测探活成功 →
+推动 `HALF_OPEN → CLOSE`。
+
+### Caller / 服务
+- 主调服务：`CircuitBreakerFaultDetectCaller`（独立 caller，避免与其它用例规则干扰）
+- 被调服务：`CircuitBreakerCallee`（复用 provider-a / provider-b）
+- consumer：复用 `newCircuitBreakerCaller`，端口 `18095`
+
+### 规则（2 条）
+| 规则类型 | 名称 | 关键配置 |
+| --- | --- | --- |
+| 熔断规则（SERVICE 级） | `cb-faultdetect-CircuitBreakerFaultDetectCaller` | `CONSECUTIVE_ERROR=5`，`sleepWindow=6s`，**`faultDetectConfig.enable=true`**（探测门控） |
+| 探测规则（FaultDetectRule） | `fd-faultdetect-CircuitBreakerFaultDetectCaller` | `protocol=HTTP`，`GET /echo`，`interval=2s`，`timeout=1000ms`，`port=0`（用实例端口） |
+
+> 探测端点选 `/echo` 而非 `/health`：`/health` 固定 200 无法反映健康变化，会让半开态被立即拉回
+> CLOSE；`/echo` 受 provider `needErr` 开关控制，挂时探测失败、恢复时探测成功，闭环可验证。
+
+### 验证步骤
+1. 环境复位：provider-a/b 均 200
+2. 启动 consumer + 下发熔断规则（带 `faultDetectConfig.enable=true`）+ 探测规则，等待规则就绪
+3. 触发 OPEN：provider 全部置 500，burst `FD_TRIGGER_COUNT`(30) → 服务级熔断打开
+4. 维持 OPEN：保持 provider 500，等待 `WAIT_KEEP_OPEN_SECONDS`(12s) > sleepWindow，burst 验证仍 ABORT（探测打 `/echo` 也失败，半开探测失败立即回 OPEN）
+5. 探活恢复：provider 全部置 200，等待 `WAIT_RECOVER_SECONDS`(16s)，**不发业务请求**，纯靠主动探测探活推动 CLOSE，burst 验证全 OK
+6. 日志佐证：consumer 日志出现 `[FaultDetect]` 探测调度与状态切换记录
+
+### 通过条件（共 3 项指标）
+- 触发 OPEN：`abort >= 1`
+- 维持 OPEN：`abort >= 1`（探测失败不恢复）
+- 探活 CLOSE：`ok == FD_VERIFY_COUNT`（默认 10）
+
+### 验证原理
+- 熔断规则 `faultDetectConfig.enable=true` 是探测启动门控；门控关闭则 SDK 不创建 `ResourceHealthChecker`
+- 探测器按 `interval` 周期 GET `/echo`，结果经 `doReport(stat, record=false)` 上报，不触发实例重新注册
+- HALF_OPEN 态下探测结果与业务请求共用恢复判定：连续成功达 `consecutiveSuccess` 即 `HALF_OPEN → CLOSE`，任一失败回 `OPEN`
+
+---
+
 ## 失败诊断
 
 各用例对应的 SDK 日志目录见上方「SDK 日志目录映射」章节。每个用例失败时脚本会输出统计变量值，常见原因：
