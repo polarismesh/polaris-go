@@ -2991,6 +2991,19 @@ case_http_status() {
 
     stop_consumer "$consumer_pid"
 
+    # ── 禁用 SERVICE 级规则，避免残留干扰下次运行的 B 段 ──
+    # Polaris 控制台 DELETE 接口始终返回 403，无法直接删除规则。
+    # 在 C 段结束后通过 PUT enable=false 达到同等隔离：
+    #   下次 B 段 trigger 时 SERVICE 规则已 disabled，不会同时 OPEN 并阻断 recover。
+    log_step "用例5.11 禁用 SERVICE 级规则（PUT enable=false，避免残留干扰下次 B段）"
+    local svc_disable_body
+    svc_disable_body=$(echo "$svc_rule_body" | python3 -c 'import sys,json; r=json.load(sys.stdin); r["enable"]=False; print(json.dumps(r))' 2>/dev/null || echo "")
+    if [[ -n "$svc_disable_body" ]]; then
+        update_circuitbreaker_rule "http_status_service_disable" "$svc_rule_id" "$svc_disable_body" || true
+    else
+        log_error "[用例5.11] 拼装禁用 body 失败（非致命）"
+    fi
+
     # ── 判定 ──
     # A 段：4xx 全部 fail 但 abort==0（关键：abort 必须为 0，证明 4xx 没被熔断）
     # B 段：trigger 至少 3 次 5xx fail；verify 阶段 10 OK 或 10 abort 都算通过——

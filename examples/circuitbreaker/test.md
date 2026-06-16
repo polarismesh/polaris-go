@@ -54,6 +54,73 @@
 
 用例 1/2/3 的 Decorator 和 InvokeHandler 子阶段**共用同一个 selfService 和熔断规则**（Decorator recover 后规则完全恢复，InvokeHandler 重新 trigger）。
 
+## SDK 日志目录映射
+
+每次 consumer 启动时会在 `.build/<consumer_name>_run/` 下创建独立的 Polaris SDK 日志目录。
+每个 `_run` 目录的结构如下（以 `instance_consumer_run` 为例）：
+
+```
+.build/instance_consumer_run/polaris/log/
+├── auth/polaris-auth.log
+├── base/polaris.log                         ← 通用日志（版本号、连接状态）
+├── cache/polaris-cache.log
+├── circuitbreaker/polaris-circuitbreaker.log ← 熔断器日志（核心排查日志）
+├── lossless/polaris-lossless.log
+├── network/polaris-network.log
+├── route/polaris-route.log
+└── statReport/polaris-statReport.log
+```
+
+> **排查熔断问题时，优先看 `polaris-circuitbreaker.log`**（poleis-stat.log 已不再输出熔断日志）。
+> 该日志包含规则加载（`ruleName`/`ruleID`/`ruleRev`）、计数器初始化、状态切换（`close → open → half-open → close`）等完整链路信息。
+
+### 各用例对应的 `.build/` 目录
+
+| 用例 | 子阶段 | `.build/` 目录 |
+|------|--------|---------------|
+| 1 | Decorator | `instance_consumer_run/` |
+| 1 | InvokeHandler | `instance_invoke_consumer_run/` |
+| 2 | Decorator | `service_consumer_run/` |
+| 2 | InvokeHandler | `service_invoke_consumer_run/` |
+| 2 | fallback 正向 | `service_fallback_consumer_run/` |
+| 2 | fallback 反向 | `service_fallback_off_consumer_run/` |
+| 3 | Decorator | `interface_consumer_run/` |
+| 3 | InvokeHandler | `interface_invoke_consumer_run/` |
+| 3 | fallback 正向 | `interface_fallback_consumer_run/` |
+| 3 | fallback 反向 | `interface_fallback_off_consumer_run/` |
+| 4 | - | `old_instance_consumer_run/` |
+| 5 | A/B/C 段（共用 consumer） | `http_status_consumer_run/` |
+| 6 | - | `default_rule_consumer_run/` |
+| 7 | - | `modify_rule_consumer_run/` |
+| 8 | - | `pm_consumer_run/` |
+| 9 | - | `pathtype_consumer_run/` |
+| 10 | A Decorator | `decorator_consumer_run/` `decorator_consumer_b_run/` `decorator_consumer_c_run/` |
+| 10 | B InvokeHandler | `invoke_consumer_run/` `invoke_consumer_b_run/` `invoke_consumer_c_run/` |
+| 10 | C Bare Report | `report_consumer_run/` `report_consumer_b_run/` `report_consumer_c_run/` |
+| - | provider-a | `provider_a_run/` |
+| - | provider-b | `provider_b_run/` |
+
+> 用例 10 的三个子阶段各重启 consumer 三次（enableRecoverAll=true → false → true），
+> `_run` 为第一次启动（全死全活开启），`_b_run` 为第二次启动（全死全活关闭），
+> `_c_run` 为第三次启动（恢复全死全活开启）。
+
+### 排查示例
+
+```bash
+# 查看用例 5 B 段失败时 SDK 的熔断规则加载和状态切换
+grep -E "rule|counter|OPEN|close|half" \
+  .build/http_status_consumer_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log
+
+# 查看用例 10 Decorator 子阶段全死全活关闭时的实例选择
+grep -E "instance|healthy|isolated|fallback" \
+  .build/decorator_consumer_b_run/polaris/log/base/polaris.log
+
+# 查看 provider 端日志
+cat .build/provider_b_run/polaris/log/base/polaris.log
+```
+
+
+
 ## Provider 暴露的接口
 
 | 路径    | 默认行为                | 控制开关                                      | 用途                                        |
@@ -491,7 +558,7 @@
 
 ## 失败诊断
 
-每个用例失败时脚本会输出统计变量值，常见原因：
+各用例对应的 SDK 日志目录见上方「SDK 日志目录映射」章节。每个用例失败时脚本会输出统计变量值，常见原因：
 
 | 现象 | 可能原因 | 排查 |
 |------|---------|------|
