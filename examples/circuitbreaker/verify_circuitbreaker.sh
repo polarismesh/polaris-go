@@ -94,6 +94,10 @@ ALL_DEAD_DECORATOR_CALLER="${ALL_DEAD_DECORATOR_CALLER:-CircuitBreakerAllDeadDec
 ALL_DEAD_INVOKE_CALLER="${ALL_DEAD_INVOKE_CALLER:-CircuitBreakerAllDeadInvokeCaller}"
 ALL_DEAD_REPORT_CALLER="${ALL_DEAD_REPORT_CALLER:-CircuitBreakerAllDeadReportCaller}"
 
+# 自定义降级（fallback）验证已合并进用例2（SERVICE）/用例3（METHOD）末尾的子阶段：
+# 复用各自的 cb-service / cb-interface 规则，PUT 切换 fallbackConfig.enable 验证正向(599)+反向(503)，
+# 不再使用独立 caller / 独立规则。
+
 # 端口规划（避免冲突）：
 #   provider-a: 28081
 #   provider-b: 28082
@@ -125,6 +129,8 @@ PATHTYPE_CONSUMER_PORT="${PATHTYPE_CONSUMER_PORT:-18089}"
 ALL_DEAD_DECORATOR_PORT="${ALL_DEAD_DECORATOR_PORT:-18090}"
 ALL_DEAD_INVOKE_PORT="${ALL_DEAD_INVOKE_PORT:-18091}"
 ALL_DEAD_REPORT_PORT="${ALL_DEAD_REPORT_PORT:-18092}"
+# 注：fallback 验证复用用例2/3 的 consumer 端口（SERVICE_CONSUMER_PORT / INTERFACE_CONSUMER_PORT），
+# 不再单独分配端口。
 
 # 触发熔断所需的请求次数（单实例失败计数）
 # 默认实例熔断规则：连续错误数 / 错误率，10 次足够触发
@@ -132,11 +138,11 @@ TRIGGER_REQUEST_COUNT="${TRIGGER_REQUEST_COUNT:-15}"
 # 验证恢复时的请求次数
 RECOVERY_REQUEST_COUNT="${RECOVERY_REQUEST_COUNT:-10}"
 # 等待 SDK 拉取规则 + 缓存就绪的秒数
-WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-8}"
+WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-5}"
 # 等待熔断 sleepWindow 后进入半开（与下方规则模板的 sleep_window 配合）
 # 用例需要执行两轮"触发→熔断→恢复"，把等待时长压短可显著减少端到端耗时；
-# sleepWindow 由 _gen_rule.py 写为 12s，这里多给 3s buffer。
-WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-15}"
+# sleepWindow 由 _gen_rule.py 写为 6s，这里多给 2s buffer。
+WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-8}"
 
 # 默认运行的子用例集合（逗号分隔），可通过 --only 缩小范围
 RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback}"
@@ -536,6 +542,7 @@ def strip_semantic(d):
         'triggerCondition', 'trigger_condition',
         'recoverCondition', 'recover_condition',
         'blockConfigs', 'block_configs',
+        'fallbackConfig', 'fallback_config',
     }
     res = {k: v for k, v in d.items() if k in wanted}
     # ruleMatcher.destination.method 字段已 deprecated，匹配语义改由
@@ -848,7 +855,7 @@ enable_circuitbreaker_rule() {
 #     避免不同 case 之间相互触发。
 #   - block_configs 仅一个，trigger_conditions = ERROR_RATE 50%/30s/minimumRequest=10
 #     + CONSECUTIVE_ERROR=5；error_conditions = retCode 5xx
-#   - recover_condition.sleepWindow = 30s，consecutiveSuccess = 1（只要 1 次成功即恢复）
+#   - recover_condition.sleepWindow = 6s，consecutiveSuccess = 1（只要 1 次成功即恢复）
 
 # 用例1 Decorator 子阶段
 build_rule_body_instance() {
@@ -943,12 +950,55 @@ build_rule_body_http_status_service() {
 }
 
 # 用例2 Decorator 子阶段
+# 显式写 FALLBACK_ENABLE=false：本用例的 abort 子阶段（2.4~2.13）期望熔断 OPEN 回 503/ABORT，
+# 不应出现 fallback。而 fallback 子阶段（2.14~2.21）会把同一条规则 PUT 成 enable=true，跑完若
+# 不复位，下次运行 2.3 创建时会因服务端残留 fallbackConfig.enable=true 而误出 HTTP 599。基线
+# 显式带 enable=false 后，circuitbreaker_rule_needs_update 能检测到残留的 enable=true 差异并
+# 触发 PUT 复位（依赖 strip_semantic 的 wanted 已纳入 fallbackConfig）。
 build_rule_body_service() {
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$SERVICE_CALLER" \
         RULE_NAME="cb-service-${SERVICE_CALLER}" \
         LEVEL="SERVICE" \
         BC_NAME="service-block" \
+        FALLBACK_ENABLE="false" \
+        FALLBACK_CODE="599" \
+        FALLBACK_BODY="degraded by circuitbreaker" \
+        FALLBACK_HEADERS="X-Fallback=true" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例2 fallback 子阶段：在 cb-service-${SERVICE_CALLER} 原规则基础上打开自定义降级。
+# 规则名 / level / source 与 build_rule_body_service 完全一致，仅顶层追加 fallbackConfig
+# (enable=true, code=599, body 含 degraded, header X-Fallback=true)，通过 PUT 更新已有规则。
+# 熔断 OPEN 后 SDK 经 CallAborted 透传该降级响应，demo 在 HasFallback()==true 时回 599+body。
+build_rule_body_service_fallback_on() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$SERVICE_CALLER" \
+        RULE_NAME="cb-service-${SERVICE_CALLER}" \
+        LEVEL="SERVICE" \
+        BC_NAME="service-block" \
+        FALLBACK_ENABLE="true" \
+        FALLBACK_CODE="599" \
+        FALLBACK_BODY="degraded by circuitbreaker" \
+        FALLBACK_HEADERS="X-Fallback=true" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例2 fallback 反向子阶段：把已打开的自定义降级再 PUT 关闭（enable=false）。
+# 验证 buildFallbackInfo 的 enable 短路——fallbackConfig 存在但 enable=false 时不下发降级，
+# 熔断 OPEN 的响应回退为 ABORT(503 "circuit breaker open")。规则名/level/source 不变，仅
+# fallbackConfig.enable 翻为 false（response 内容保留但不应被透传，用于验证 enable 才是权威信号）。
+build_rule_body_service_fallback_off() {
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$SERVICE_CALLER" \
+        RULE_NAME="cb-service-${SERVICE_CALLER}" \
+        LEVEL="SERVICE" \
+        BC_NAME="service-block" \
+        FALLBACK_ENABLE="false" \
+        FALLBACK_CODE="599" \
+        FALLBACK_BODY="should-not-appear" \
+        FALLBACK_HEADERS="X-Fallback=true" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
 }
 
@@ -1005,6 +1055,9 @@ bcs.append({
 })
 print(json.dumps(bcs))
 ')
+    # 显式 FALLBACK_ENABLE=false：理由同 build_rule_body_service——fallback 子阶段会把本规则
+    # PUT 成 enable=true，基线带 enable=false 才能让 needs_update 检测残留并复位，避免 abort 子
+    # 阶段误出 HTTP 599。
     NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$INTERFACE_CALLER" \
         RULE_NAME="cb-interface-${INTERFACE_CALLER}" \
@@ -1015,7 +1068,94 @@ print(json.dumps(bcs))
         ERROR_PERCENT="50" \
         ERROR_INTERVAL="30" \
         MINIMUM_REQUEST="10" \
+        FALLBACK_ENABLE="false" \
+        FALLBACK_CODE="599" \
+        FALLBACK_BODY="degraded by circuitbreaker" \
+        FALLBACK_HEADERS="X-Fallback=true" \
         python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例3 fallback 子阶段：在 cb-interface-${INTERFACE_CALLER} 原 merged 规则基础上打开自定义降级。
+# 复用 build_rule_body_interface_merged 的三个 BlockConfig（echo/order/slow），结构完全一致，
+# 仅在规则顶层追加 fallbackConfig——fallbackConfig 是 Rule 级（非 BlockConfig 级）字段，整条规则
+# 共享，任一 block 熔断 OPEN 时 SDK 都经 CallAborted 透传该降级响应。通过 PUT 更新已有规则。
+# _build_rule_body_interface_fallback <enable> <body>
+# 复用 build_rule_body_interface_merged 的三个 BlockConfig（echo/order/slow），在规则顶层注入
+# fallbackConfig（enable 由 $1 控制）。on/off 两个对外 builder 都委托到这里，避免重复 BCS 定义。
+#   $1 = "true"  → 打开降级，熔断 OPEN 后透传 HTTP 599 + body
+#   $1 = "false" → enable 短路，fallbackConfig 存在但不下发，熔断 OPEN 回退为 503/ABORT
+_build_rule_body_interface_fallback() {
+    local fb_enable="$1"
+    local fb_body="$2"
+    local bcs
+    bcs=$(python3 -c '
+import json
+bcs = []
+echo_err = [
+    {"inputType":"RET_CODE","condition":{"type":"RANGE","value":"500~599"}},
+    {"inputType":"RET_CODE","condition":{"type":"EXACT","value":"500"}},
+    {"inputType":"RET_CODE","condition":{"type":"REGEX","value":"^5[0-9]{2}$"}},
+    {"inputType":"RET_CODE","condition":{"type":"IN","value":"500,502,503,504"}},
+    {"inputType":"RET_CODE","condition":{"type":"NOT_IN","value":"200,201,204,400,401,403,404"}},
+]
+bcs.append({
+    "name": "echo-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/echo"}},
+    "error_conditions": echo_err,
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 5},
+        {"triggerType": "ERROR_RATE", "errorPercent": 50, "interval": 30, "minimumRequest": 10},
+    ],
+})
+bcs.append({
+    "name": "order-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/order"}},
+    "error_conditions": [
+        {"inputType": "RET_CODE", "condition": {"type": "RANGE", "value": "500~599"}},
+    ],
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 100},
+        {"triggerType": "ERROR_RATE", "errorPercent": 99, "interval": 30, "minimumRequest": 200},
+    ],
+})
+bcs.append({
+    "name": "slow-block",
+    "api": {"protocol": "*", "method": "*", "path": {"type": "EXACT", "value": "/slow"}},
+    "error_conditions": [
+        {"inputType": "DELAY", "condition": {"type": "EXACT", "value": "200"}},
+    ],
+    "trigger_conditions": [
+        {"triggerType": "CONSECUTIVE_ERROR", "errorCount": 5},
+        {"triggerType": "ERROR_RATE", "errorPercent": 50, "interval": 30, "minimumRequest": 10},
+    ],
+})
+print(json.dumps(bcs))
+')
+    NAMESPACE="$NAMESPACE" SERVICE_NAME="$SERVICE_NAME" \
+        SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$INTERFACE_CALLER" \
+        RULE_NAME="cb-interface-${INTERFACE_CALLER}" \
+        LEVEL="METHOD" \
+        BC_NAME="echo-block" \
+        BCS="$bcs" \
+        CONSECUTIVE_ERROR="5" \
+        ERROR_PERCENT="50" \
+        ERROR_INTERVAL="30" \
+        MINIMUM_REQUEST="10" \
+        FALLBACK_ENABLE="$fb_enable" \
+        FALLBACK_CODE="599" \
+        FALLBACK_BODY="$fb_body" \
+        FALLBACK_HEADERS="X-Fallback=true" \
+        python3 "${SCRIPT_DIR}/.build/_gen_rule.py"
+}
+
+# 用例3 fallback 正向：打开自定义降级，熔断 OPEN 后透传 HTTP 599 + "degraded"
+build_rule_body_interface_fallback_on() {
+    _build_rule_body_interface_fallback "true" "degraded by circuitbreaker"
+}
+
+# 用例3 fallback 反向：关闭自定义降级（enable=false），验证 enable 短路 → 熔断 OPEN 回 503/ABORT
+build_rule_body_interface_fallback_off() {
+    _build_rule_body_interface_fallback "false" "should-not-appear"
 }
 
 # 用例3 InvokeHandler 子阶段：简化 METHOD 级规则，只验证 /echo 路径
@@ -1301,6 +1441,9 @@ consecutive_error = int(os.environ.get('CONSECUTIVE_ERROR', '5'))
 error_percent = int(os.environ.get('ERROR_PERCENT', '50'))
 error_interval = int(os.environ.get('ERROR_INTERVAL', '30'))
 minimum_request = int(os.environ.get('MINIMUM_REQUEST', '10'))
+# sleepWindow 默认 6s（压缩耗时）；用例10（全死全活）等"trigger 后需在 OPEN 窗口内立即 verify"
+# 的用例可通过 SLEEP_WINDOW 单独设大值，避免 60 次 burst 耗时超过窗口导致实例提前半开恢复。
+sleep_window = int(os.environ.get('SLEEP_WINDOW', '6'))
 
 # 触发条件：CONSECUTIVE_ERROR + ERROR_RATE，两者满足任一即触发熔断。
 trigger_conditions = [
@@ -1385,12 +1528,32 @@ rule = {
     'error_conditions': err_conditions,
     'trigger_condition': trigger_conditions,
     'recoverCondition': {
-        # sleepWindow 设小一点，便于一轮用例里跑两次"触发→熔断→恢复"。
-        'sleep_window': 12,
+        # sleepWindow 设小一点，便于一轮用例里跑两次"触发→熔断→恢复"，并压缩端到端耗时。
+        # 默认 6s，可由 SLEEP_WINDOW 环境变量覆盖（用例10 全死全活需更大窗口）。
+        'sleep_window': sleep_window,
         'consecutiveSuccess': 1,
     },
     'block_configs': bcs,
 }
+
+# 自定义降级（fallback）：仅当传入 FALLBACK_ENABLE 时才写 fallback_config，
+# 未传则完全不写，保证既有用例的规则体零变化。
+# FALLBACK_HEADERS 形如 "k1=v1,k2=v2"，按 = 分割（value 允许含 = 用 split 限 1 次）。
+fb_enable = os.environ.get('FALLBACK_ENABLE', '')
+if fb_enable != '':
+    fb_headers = []
+    for kv in os.environ.get('FALLBACK_HEADERS', '').split(','):
+        if '=' in kv:
+            k, v = kv.split('=', 1)
+            fb_headers.append({'key': k, 'value': v})
+    rule['fallbackConfig'] = {
+        'enable': fb_enable.lower() == 'true',
+        'response': {
+            'code': int(os.environ.get('FALLBACK_CODE', '599')),
+            'body': os.environ.get('FALLBACK_BODY', 'degraded by circuitbreaker'),
+            'headers': fb_headers,
+        },
+    }
 
 sys.stdout.write(json.dumps(rule))
 PYEOF
@@ -1423,7 +1586,7 @@ generate_consumer_polaris_yaml() {
         # 启用默认规则时收紧阈值，加快端到端验证速度：
         #   - defaultErrorCount=3：连续 3 次 5xx 即触发实例级熔断
         #   - defaultMinimumRequest=3：错误率统计的最小请求数也调到 3
-        #   - sleepWindow=12s：与其它用例的规则模板保持一致
+        #   - sleepWindow=6s：与其它用例的规则模板保持一致
         #   - successCountAfterHalfOpen=1：半开 1 次成功即恢复
         # 默认 errorCondition 为 RANGE 500~599（写在 default.go 中），4xx 不计入
         default_block=$(cat <<'YAML'
@@ -1432,7 +1595,7 @@ generate_consumer_polaris_yaml() {
     defaultErrorPercent: 50
     defaultInterval: 30s
     defaultMinimumRequest: 3
-    sleepWindow: 12s
+    sleepWindow: 6s
     successCountAfterHalfOpen: 1
 YAML
 )
@@ -1634,8 +1797,8 @@ do_request() {
     echo "${http_code}|${body}"
 }
 
-# 累计请求次数 + 统计 200 / 5xx / 熔断（call aborted）三类
-# 输出全局变量：CASE_TOTAL CASE_OK CASE_FAIL CASE_ABORT
+# 累计请求次数 + 统计 200 / 5xx / 熔断（call aborted）/ 降级（fallback）四类
+# 输出全局变量：CASE_TOTAL CASE_OK CASE_FAIL CASE_ABORT CASE_FALLBACK
 run_burst() {
     local consumer_port="$1"
     local count="$2"
@@ -1646,6 +1809,7 @@ run_burst() {
     CASE_OK=0
     CASE_FAIL=0
     CASE_ABORT=0
+    CASE_FALLBACK=0
 
     # 注意：`run_burst` 通常被 case_instance/case_service/case_interface 间接调用，
     # 而调用方用 `r=$(case_xxx)` 通过命令替换捕获用例结论 (PASS/FAIL)。
@@ -1665,16 +1829,25 @@ run_burst() {
         short_body=$(echo "$body" | head -c 80)
 
         # 判定优先级（从高到低）：
-        #   1) ABORT —— body 命中 "call aborted"，说明 polaris-go 拦截了调用
-        #   2) FAIL  —— 上游返回非 200，或 consumer 透传了 provider 的 5xx 状态
-        #               注意：当前 demo 中 consumer 在 provider 5xx 时仍 WriteHeader(200)，
-        #               把原 body（含 "status code: 500, Fatal, ..."）原样回写，因此必须
-        #               同时检测 body 中的 5xx 提示，避免把失败错算成 OK。
-        #   3) OK    —— provider 真正回了 200（body 含 "Hello" 或 "status code: 200"）
-        if echo "$body" | grep -q "call aborted"; then
+        #   1) ABORT    —— body 命中 "call aborted" 或 "circuit breaker open"
+        #                  （后者是 demo writeResult 在无 fallback 时的 503 兜底文案，
+        #                   反向用例 enable=false 走这条），说明 polaris-go 拦截了调用。
+        #   2) FALLBACK —— 命中规则配置的降级响应：HTTP=599 且 body 含 "degraded"
+        #                  （demo 在 abort.HasFallback() 时透传规则的 code/body/headers）。
+        #                  必须放在 FAIL(http!=200) 分支之前，否则 599 被误判为 FAIL。
+        #   3) FAIL     —— 上游返回非 200，或 consumer 透传了 provider 的 5xx 状态。
+        #                  注意：当前 demo 中 consumer 在 provider 5xx 时仍 WriteHeader(200)，
+        #                  把原 body（含 "status code: 500, Fatal, ..."）原样回写，因此必须
+        #                  同时检测 body 中的 5xx 提示，避免把失败错算成 OK。
+        #   4) OK       —— provider 真正回了 200（body 含 "Hello" 或 "status code: 200"）
+        if echo "$body" | grep -qE "call aborted|circuit breaker open"; then
             CASE_ABORT=$((CASE_ABORT + 1))
             verdict="ABORT"
             verdict_color="${YELLOW}"
+        elif [[ "$http_code" == "599" ]] && echo "$body" | grep -q "degraded"; then
+            CASE_FALLBACK=$((CASE_FALLBACK + 1))
+            verdict="FALLBACK"
+            verdict_color="${CYAN}"
         elif [[ "$http_code" != "200" ]] \
             || echo "$body" | grep -qE "status code: 5[0-9][0-9]" \
             || echo "$body" | grep -q "Fatal" \
@@ -1692,7 +1865,7 @@ run_burst() {
         sleep 0.05
     done
     echo "" >&2
-    log_info "[${label}] total=${CASE_TOTAL}, ok=${CASE_OK}, fail=${CASE_FAIL}, abort=${CASE_ABORT}"
+    log_info "[${label}] total=${CASE_TOTAL}, ok=${CASE_OK}, fail=${CASE_FAIL}, abort=${CASE_ABORT}, fallback=${CASE_FALLBACK}"
 }
 
 # ======================== 三个子用例 ========================
@@ -1728,7 +1901,7 @@ case_instance() {
         "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "" \
         "验证步骤:" \
         "  1.1 provider-a=200 / provider-b=500" \
@@ -1797,7 +1970,7 @@ case_instance() {
     local r1_trigger_fail=$CASE_FAIL
 
     log_step "用例1.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级验证-轮1"
     local r1_verify_ok=$CASE_OK
 
@@ -1816,7 +1989,7 @@ case_instance() {
     local r2_trigger_fail=$CASE_FAIL
 
     log_step "用例1.8 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级验证-轮2"
     local r2_verify_ok=$CASE_OK
 
@@ -1847,7 +2020,7 @@ case_instance() {
     local i_trigger_fail=$CASE_FAIL
 
     log_step "用例1.12 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$INSTANCE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级InvokeHandler验证"
     local i_verify_ok=$CASE_OK
 
@@ -1906,7 +2079,7 @@ case_service() {
         "  · source=*/${SERVICE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "" \
         "与实例级的差别:" \
         "  实例级摘单个故障实例，剩余实例继续承接流量；" \
@@ -2042,14 +2215,93 @@ case_service() {
 
     stop_consumer "$invoke_pid"
 
+    # ───── fallback 子阶段：在原 cb-service 规则上打开自定义降级，验证降级响应生效 ─────
+    # 复用 Decorator 阶段创建的同一条规则（id=$rule_id），通过 PUT 追加 fallbackConfig.enable=true。
+    # 打开后，熔断 OPEN 的响应从 ABORT(503) 变为 FALLBACK(HTTP 599 + body "degraded")——两者
+    # 都代表熔断已生效，只是有无 fallback 决定表现形态。规则 revision 变更会触发 SDK counter 重建，
+    # 因此 PUT 后需等待规则下发并重启 consumer，确保拿到带 fallback 的新规则。
+    local svc_fallback=0
+    local svc_fb_off_abort=0
+    if [[ -n "$rule_id" ]]; then
+        # ── 正向：enable=true → 熔断 OPEN 后透传 HTTP 599 ──
+        log_step "用例2.14 [fallback 正向] PUT 更新 cb-service-${SERVICE_CALLER} 打开自定义降级（enable=true, code=599）"
+        local fb_body
+        fb_body=$(build_rule_body_service_fallback_on)
+        if update_circuitbreaker_rule "service_fallback_on" "$rule_id" "$fb_body"; then
+            sleep "$WAIT_RULE_READY_SECONDS"
+
+            log_step "用例2.15 [fallback 正向] 重启 consumer（selfService=${SERVICE_CALLER}），加载带 fallback 的新规则"
+            if start_consumer "service_fallback_consumer" "$SERVICE_CONSUMER_DIR" \
+                "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" \
+                "${LOG_DIR}/service_fallback_consumer.log"; then
+                local fb_pid="$_STARTED_PID"
+
+                log_step "用例2.16 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次触发熔断"
+                provider_set_error "$PROVIDER_A_PORT" "true"
+                provider_set_error "$PROVIDER_B_PORT" "true"
+                run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback正向触发"
+
+                log_step "用例2.17 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 fallback（HTTP 599）"
+                sleep 1
+                run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback正向验证"
+                svc_fallback=$CASE_FALLBACK
+
+                provider_set_error "$PROVIDER_A_PORT" "false"
+                provider_set_error "$PROVIDER_B_PORT" "false"
+                stop_consumer "$fb_pid"
+            else
+                log_error "[用例2.15] fallback 正向 consumer 启动失败"
+            fi
+
+            # ── 反向：enable=false → enable 短路 → 熔断 OPEN 回退为 503/ABORT ──
+            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
+            log_step "用例2.18 [fallback 反向] PUT 更新 cb-service-${SERVICE_CALLER} 关闭自定义降级（enable=false）"
+            local fb_off_body
+            fb_off_body=$(build_rule_body_service_fallback_off)
+            if update_circuitbreaker_rule "service_fallback_off" "$rule_id" "$fb_off_body"; then
+                sleep "$WAIT_RULE_READY_SECONDS"
+
+                log_step "用例2.19 [fallback 反向] 重启 consumer，加载 enable=false 的规则"
+                if start_consumer "service_fallback_off_consumer" "$SERVICE_CONSUMER_DIR" \
+                    "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" \
+                    "${LOG_DIR}/service_fallback_off_consumer.log"; then
+                    local fb_off_pid="$_STARTED_PID"
+
+                    log_step "用例2.20 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次触发熔断"
+                    provider_set_error "$PROVIDER_A_PORT" "true"
+                    provider_set_error "$PROVIDER_B_PORT" "true"
+                    run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback反向触发"
+
+                    log_step "用例2.21 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望回退为 abort（503，不下发 599）"
+                    sleep 1
+                    run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback反向验证"
+                    svc_fb_off_abort=$CASE_ABORT
+
+                    provider_set_error "$PROVIDER_A_PORT" "false"
+                    provider_set_error "$PROVIDER_B_PORT" "false"
+                    stop_consumer "$fb_off_pid"
+                else
+                    log_error "[用例2.19] fallback 反向 consumer 启动失败"
+                fi
+            else
+                log_error "[用例2.18] PUT 关闭 fallback 失败"
+            fi
+        else
+            log_error "[用例2.14] PUT 打开 fallback 失败"
+        fi
+    else
+        log_warn "[用例2.14] 未取得 cb-service 规则 id，跳过 fallback 子阶段"
+    fi
+
     if [[ "$r1_trigger_fail" -ge 1 ]] && [[ "$r1_verify_abort" -ge 1 ]] && [[ "$r1_recover_ok" -ge 1 ]] \
         && [[ "$r2_trigger_fail" -ge 1 ]] && [[ "$r2_verify_abort" -ge 1 ]] && [[ "$r2_recover_ok" -ge 1 ]] \
-        && [[ "$i_trigger_fail" -ge 1 ]] && [[ "$i_verify_abort" -ge 1 ]] && [[ "$i_recover_ok" -ge 1 ]]; then
-        log_info "✅ 用例2 PASS: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
+        && [[ "$i_trigger_fail" -ge 1 ]] && [[ "$i_verify_abort" -ge 1 ]] && [[ "$i_recover_ok" -ge 1 ]] \
+        && [[ "$svc_fallback" -ge 1 ]] && [[ "$svc_fb_off_abort" -ge 1 ]]; then
+        log_info "✅ 用例2 PASS: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}] fallback[正向degraded=${svc_fallback} 反向abort=${svc_fb_off_abort}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例2 FAIL: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
+    log_error "❌ 用例2 FAIL: Decorator轮1[trigger=${r1_trigger_fail} abort=${r1_verify_abort} recover=${r1_recover_ok}] 轮2[trigger=${r2_trigger_fail} abort=${r2_verify_abort} recover=${r2_recover_ok}] InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}] fallback[正向degraded=${svc_fallback} 反向abort=${svc_fb_off_abort}]"
     echo "FAIL"
     return 1
 }
@@ -2058,7 +2310,7 @@ case_service() {
 # 验证三组语义：
 #
 #   A. /echo 完整生命周期（两轮：触发 → 熔断 → 恢复 → 再次触发 → 再次熔断 → 再次恢复）
-#      规则阈值 CONSECUTIVE_ERROR=5，sleepWindow=12s
+#      规则阈值 CONSECUTIVE_ERROR=5，sleepWindow=6s
 #      ErrorConditions 同时挂 5 条 RET_CODE 匹配，覆盖
 #      RANGE / EXACT / REGEX / IN / NOT_IN 五种 MatchString 类型，
 #      作为"返回码支持范围,全匹配,正则,包含,不包含"的演示。
@@ -2095,7 +2347,7 @@ case_interface() {
         "      · ErrorCondition: 5 条 RET_CODE 同时挂，覆盖 RANGE/EXACT/REGEX/" \
         "          IN/NOT_IN — 全部只命中 5xx，4xx 不计入熔断" \
         "      · Trigger: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minReq=10" \
-        "      · Recover: sleepWindow=12s, consecutiveSuccess=1" \
+        "      · Recover: sleepWindow=6s, consecutiveSuccess=1" \
         "      · BlockConfig /order : 极高阈值不触发" \
         "      · 阈值故意调高: CONSECUTIVE_ERROR=100 / ERROR_RATE=99%@30s, minReq=200" \
         "      · 演示\"两个接口配置不同的规则会按各自规则生效\"" \
@@ -2286,12 +2538,92 @@ case_interface() {
 
     stop_consumer "$invoke_pid"
 
+    # ───── fallback 子阶段：在原 cb-interface 规则上打开自定义降级，验证降级响应生效 ─────
+    # 复用 Decorator 阶段创建的同一条 merged 规则（id=$rule_id），通过 PUT 在顶层追加
+    # fallbackConfig.enable=true（fallbackConfig 是 Rule 级字段，三个 block 共享）。对 /echo
+    # trigger 触发 echo-block 熔断 OPEN 后，响应从 ABORT(503) 变为 FALLBACK(HTTP 599 + "degraded")。
+    # 规则 revision 变更触发 SDK counter 重建，故 PUT 后等待下发并重启 consumer。
+    local iface_fallback=0
+    local iface_fb_off_abort=0
+    if [[ -n "$rule_id" ]]; then
+        # ── 正向：enable=true → /echo 熔断 OPEN 后透传 HTTP 599 ──
+        log_step "用例3.19 [fallback 正向] PUT 更新 cb-interface-${INTERFACE_CALLER} 打开自定义降级（enable=true, code=599）"
+        local fb_body
+        fb_body=$(build_rule_body_interface_fallback_on)
+        if update_circuitbreaker_rule "interface_fallback_on" "$rule_id" "$fb_body"; then
+            sleep "$WAIT_RULE_READY_SECONDS"
+
+            log_step "用例3.20 [fallback 正向] 重启 consumer（selfService=${INTERFACE_CALLER}），加载带 fallback 的新规则"
+            if start_consumer "interface_fallback_consumer" "$INTERFACE_CONSUMER_DIR" \
+                "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" \
+                "${LOG_DIR}/interface_fallback_consumer.log"; then
+                local fb_pid="$_STARTED_PID"
+
+                log_step "用例3.21 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo 触发熔断"
+                provider_set_error "$PROVIDER_A_PORT" "true"
+                provider_set_error "$PROVIDER_B_PORT" "true"
+                run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback正向触发" "/echo"
+
+                log_step "用例3.22 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望出现 fallback（HTTP 599）"
+                sleep 1
+                run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback正向验证" "/echo"
+                iface_fallback=$CASE_FALLBACK
+
+                provider_set_error "$PROVIDER_A_PORT" "false"
+                provider_set_error "$PROVIDER_B_PORT" "false"
+                stop_consumer "$fb_pid"
+            else
+                log_error "[用例3.20] fallback 正向 consumer 启动失败"
+            fi
+
+            # ── 反向：enable=false → enable 短路 → /echo 熔断 OPEN 回退为 503/ABORT ──
+            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
+            log_step "用例3.23 [fallback 反向] PUT 更新 cb-interface-${INTERFACE_CALLER} 关闭自定义降级（enable=false）"
+            local fb_off_body
+            fb_off_body=$(build_rule_body_interface_fallback_off)
+            if update_circuitbreaker_rule "interface_fallback_off" "$rule_id" "$fb_off_body"; then
+                sleep "$WAIT_RULE_READY_SECONDS"
+
+                log_step "用例3.24 [fallback 反向] 重启 consumer，加载 enable=false 的规则"
+                if start_consumer "interface_fallback_off_consumer" "$INTERFACE_CONSUMER_DIR" \
+                    "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" \
+                    "${LOG_DIR}/interface_fallback_off_consumer.log"; then
+                    local fb_off_pid="$_STARTED_PID"
+
+                    log_step "用例3.25 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo 触发熔断"
+                    provider_set_error "$PROVIDER_A_PORT" "true"
+                    provider_set_error "$PROVIDER_B_PORT" "true"
+                    run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback反向触发" "/echo"
+
+                    log_step "用例3.26 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望回退为 abort（503，不下发 599）"
+                    sleep 1
+                    run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback反向验证" "/echo"
+                    iface_fb_off_abort=$CASE_ABORT
+
+                    provider_set_error "$PROVIDER_A_PORT" "false"
+                    provider_set_error "$PROVIDER_B_PORT" "false"
+                    stop_consumer "$fb_off_pid"
+                else
+                    log_error "[用例3.24] fallback 反向 consumer 启动失败"
+                fi
+            else
+                log_error "[用例3.23] PUT 关闭 fallback 失败"
+            fi
+        else
+            log_error "[用例3.19] PUT 打开 fallback 失败"
+        fi
+    else
+        log_warn "[用例3.19] 未取得 cb-interface 规则 id，跳过 fallback 子阶段"
+    fi
+
     # 通过条件：
     #   /echo 两轮 trigger / verify / recover 全部满足
     #   /order 整批失败且不应 abort
     #   /info  整批失败且不应 abort
     #   /slow  trigger 阶段有请求触发（OK 或 abort 都算），verify 阶段出现 abort，
     #         恢复阶段全部 200
+    #   fallback 正向：打开降级后 /echo 熔断出现 FALLBACK(HTTP 599)
+    #   fallback 反向：关闭降级（enable=false）后 /echo 熔断回退为 ABORT(503)
     if [[ "$r1_echo_trigger_fail" -ge 1 ]] \
         && [[ "$r1_echo_verify_abort" -ge 1 ]] \
         && [[ "$r1_echo_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
@@ -2305,12 +2637,14 @@ case_interface() {
         && [[ "$slow_recover_ok" -eq "$RECOVERY_REQUEST_COUNT" ]] \
         && [[ "$i_trigger_fail" -ge 1 ]] \
         && [[ "$i_verify_abort" -ge 1 ]] \
-        && [[ "$i_recover_ok" -ge 1 ]]; then
-        log_info "✅ 用例3 PASS: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
+        && [[ "$i_recover_ok" -ge 1 ]] \
+        && [[ "$iface_fallback" -ge 1 ]] \
+        && [[ "$iface_fb_off_abort" -ge 1 ]]; then
+        log_info "✅ 用例3 PASS: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}], fallback[正向degraded=${iface_fallback} 反向abort=${iface_fb_off_abort}]"
         echo "PASS"
         return 0
     fi
-    log_error "❌ 用例3 FAIL: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}]"
+    log_error "❌ 用例3 FAIL: /echo Decorator轮1[trigger=${r1_echo_trigger_fail} abort=${r1_echo_verify_abort} recover=${r1_echo_recover_ok}] 轮2[trigger=${r2_echo_trigger_fail} abort=${r2_echo_verify_abort} recover=${r2_echo_recover_ok}], /order fail=${order_fail} abort=${order_abort}, /info fail=${info_fail} abort=${info_abort}, /slow verify_abort=${slow_verify_abort} recover_ok=${slow_recover_ok}, InvokeHandler[trigger=${i_trigger_fail} abort=${i_verify_abort} recover=${i_recover_ok}], fallback[正向degraded=${iface_fallback} 反向abort=${iface_fb_off_abort}]"
     echo "FAIL"
     return 1
 }
@@ -2354,7 +2688,7 @@ case_old_instance() {
         "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=5 / ERROR_RATE=50%@30s, minRequest=10" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "" \
         "验证目的:" \
         "  · 保证存量客户在新版 SDK 中沿用旧版散装写法依旧可以触发实例级熔断" \
@@ -2426,7 +2760,7 @@ case_old_instance() {
     local r1_trigger_fail=$CASE_FAIL
 
     log_step "用例4.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "旧版实例级验证-轮1"
     local r1_verify_ok=$CASE_OK
 
@@ -2445,7 +2779,7 @@ case_old_instance() {
     local r2_trigger_fail=$CASE_FAIL
 
     log_step "用例4.8 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "旧版实例级验证-轮2"
     local r2_verify_ok=$CASE_OK
 
@@ -2505,7 +2839,7 @@ case_http_status() {
         "  · source=*/*, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=3 (收紧阈值便于快速验证)" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "" \
         "验证步骤:" \
         "  5.1 provider-a=200 / provider-b=200" \
@@ -2579,7 +2913,7 @@ case_http_status() {
     local b_trigger_fail=$CASE_FAIL
 
     log_step "用例5.6 [B段] 验证 ${RECOVERY_REQUEST_COUNT} 次 /echo 全部走 a"
-    sleep 2
+    sleep 1
     run_burst "$HTTP_STATUS_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "5xx 验证"
     local b_verify_ok=$CASE_OK
     local b_verify_abort=$CASE_ABORT
@@ -2657,6 +2991,19 @@ case_http_status() {
 
     stop_consumer "$consumer_pid"
 
+    # ── 禁用 SERVICE 级规则，避免残留干扰下次运行的 B 段 ──
+    # Polaris 控制台 DELETE 接口始终返回 403，无法直接删除规则。
+    # 在 C 段结束后通过 PUT enable=false 达到同等隔离：
+    #   下次 B 段 trigger 时 SERVICE 规则已 disabled，不会同时 OPEN 并阻断 recover。
+    log_step "用例5.11 禁用 SERVICE 级规则（PUT enable=false，避免残留干扰下次 B段）"
+    local svc_disable_body
+    svc_disable_body=$(echo "$svc_rule_body" | python3 -c 'import sys,json; r=json.load(sys.stdin); r["enable"]=False; print(json.dumps(r))' 2>/dev/null || echo "")
+    if [[ -n "$svc_disable_body" ]]; then
+        update_circuitbreaker_rule "http_status_service_disable" "$svc_rule_id" "$svc_disable_body" || true
+    else
+        log_error "[用例5.11] 拼装禁用 body 失败（非致命）"
+    fi
+
     # ── 判定 ──
     # A 段：4xx 全部 fail 但 abort==0（关键：abort 必须为 0，证明 4xx 没被熔断）
     # B 段：trigger 至少 3 次 5xx fail；verify 阶段 10 OK 或 10 abort 都算通过——
@@ -2701,7 +3048,7 @@ case_http_status() {
 # 默认规则的形态（来自 default.go）：
 #   Level=INSTANCE, ErrorCondition: RetCode RANGE 500~599
 #   Trigger: CONSECUTIVE_ERROR=3 + ERROR_RATE 50%@30s, minimumRequest=3（脚本侧 yaml 配置）
-#   Recover: sleepWindow=12s, consecutiveSuccess=1
+#   Recover: sleepWindow=6s, consecutiveSuccess=1
 #
 # 通过条件：
 #   - trigger 阶段 fail≥3（provider-b 持续 5xx，被默认规则计数）
@@ -2720,7 +3067,7 @@ case_default_rule() {
         "  · Level=INSTANCE, name=default-polaris-instance-circuit-breaker" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · TriggerCondition: CONSECUTIVE_ERROR=3 / ERROR_RATE=50%@30s, minRequest=3" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "  · 阈值通过 polaris.yaml 收紧（默认 SDK 是 10/10/30s/3）便于快速验证" \
         "" \
         "关键差别（与用例 1 对比）:" \
@@ -2776,7 +3123,7 @@ case_default_rule() {
     local trigger_fail=$CASE_FAIL
 
     log_step "用例6.5 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200（流量走 a）"
-    sleep 2
+    sleep 1
     run_burst "$DEFAULT_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "默认规则验证"
     local verify_ok=$CASE_OK
 
@@ -2827,7 +3174,7 @@ case_modify_rule() {
         "  · source=*/${MODIFY_RULE_CALLER}, destination=${NAMESPACE}/${SERVICE_NAME}" \
         "  · ErrorCondition: RET_CODE RANGE 500~599 (4xx 不计入熔断)" \
         "  · 轮1 CONSECUTIVE_ERROR=3，轮2 更新为 7" \
-        "  · RecoverCondition: sleepWindow=12s, consecutiveSuccess=1" \
+        "  · RecoverCondition: sleepWindow=6s, consecutiveSuccess=1" \
         "" \
         "验证步骤:" \
         "  7.1 provider-a=200 / provider-b=500" \
@@ -2890,7 +3237,7 @@ case_modify_rule() {
     local r1_trigger_fail=$CASE_FAIL
 
     log_step "用例7.5 [轮1] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则验证-轮1"
     local r1_verify_ok=$CASE_OK
 
@@ -2927,7 +3274,7 @@ case_modify_rule() {
     local r2_trigger_fail=$CASE_FAIL
 
     log_step "用例7.10 [轮2] 验证：再发 ${RECOVERY_REQUEST_COUNT} 次，期望全部 200"
-    sleep 2
+    sleep 1
     run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则验证-轮2"
     local r2_verify_ok=$CASE_OK
 
@@ -3048,7 +3395,7 @@ case_protocol_method() {
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
 
-        sleep 2
+        sleep 1
         run_burst "$PM_CONSUMER_PORT" "$PM_VERIFY_COUNT" "8.proto-$proto-verify" "/api/protocol/$proto"
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
@@ -3087,7 +3434,7 @@ case_protocol_method() {
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
 
-        sleep 2
+        sleep 1
         run_burst "$PM_CONSUMER_PORT" "$PM_VERIFY_COUNT" "8.meth-$meth-verify" "/api/method/$meth"
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
@@ -3221,7 +3568,7 @@ case_pathtype() {
         local t_fail=$CASE_FAIL
         local t_abort=$CASE_ABORT
 
-        sleep 2
+        sleep 1
         run_burst "$PATHTYPE_CONSUMER_PORT" "$PATHTYPE_VERIFY_COUNT" "9.$ptype_label-verify" "$req_path"
         local v_ok=$CASE_OK
         local v_abort=$CASE_ABORT
@@ -3289,7 +3636,7 @@ _run_all_dead_phase() {
     local rule_builder="$6"
 
     # ── 全死全活开启 ──
-    log_step "[${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
+    log_step "用例10 [${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
     if ! start_consumer "${phase_label}_consumer" "$consumer_dir" \
         "$caller" "$port" "$log_file" "false" "true"; then
         return 1
@@ -3305,41 +3652,41 @@ _run_all_dead_phase() {
         return 1
     fi
 
-    log_step "[${phase_label}.2] 创建 INSTANCE 级熔断规则"
+    log_step "用例10 [${phase_label}.2] 创建 INSTANCE 级熔断规则"
     local rule_body rule_id
     rule_body=$($rule_builder)
     rule_id=$(create_circuitbreaker_rule "${phase_label}" "$rule_body") || {
-        log_error "[${phase_label}.2] 规则创建失败"
+        log_error "用例10 [${phase_label}.2] 规则创建失败"
         stop_consumer "$consumer_pid"
         return 1
     }
     sleep "$WAIT_RULE_READY_SECONDS"
 
     # trigger: 两个 provider 都 500，发 60 次让两个实例都被熔断 OPEN
-    log_step "[${phase_label}.3] trigger: a/b=500, 发 60 次让两个实例都被熔断"
+    log_step "用例10 [${phase_label}.3] trigger: a/b=500, 发 60 次让两个实例都被熔断"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$port" "60" "${phase_label}触发"
     local a_trigger_fail=$CASE_FAIL
 
     # verify: provider 翻回 200，全死全活开启 → 请求透传到 provider → 200
-    log_step "[${phase_label}.4] verify: a/b 翻回 200，验证全死全活生效"
+    log_step "用例10 [${phase_label}.4] verify: a/b 翻回 200，验证全死全活生效"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
-    sleep 2
+    sleep 1
     run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}验证"
     local a_verify_ok=$CASE_OK
 
     # recover
-    log_step "[${phase_label}.5] recover: 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    log_step "用例10 [${phase_label}.5] recover: 等 ${WAIT_HALF_OPEN_SECONDS}s"
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}恢复"
     local a_recover_ok=$CASE_OK
 
     # ── 全死全活关闭 ──
-    log_step "[${phase_label}.6] 重启 consumer（enableRecoverAll=false）"
+    log_step "用例10 [${phase_label}.6] 重启 consumer（enableRecoverAll=false）"
     stop_consumer "$consumer_pid"
-    sleep 2
+    sleep 1
     if ! start_consumer "${phase_label}_consumer_b" "$consumer_dir" \
         "$caller" "$port" "${log_file%.log}_b.log" "false" "false"; then
         return 1
@@ -3347,24 +3694,29 @@ _run_all_dead_phase() {
     consumer_pid="$_STARTED_PID"
 
     # 重新触发熔断
-    log_step "[${phase_label}.7] trigger: a/b=500, 发 60 次重新触发熔断"
+    log_step "用例10 [${phase_label}.7] trigger: a/b=500, 发 60 次重新触发熔断"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$port" "60" "${phase_label}触发B"
     local b_trigger_fail=$CASE_FAIL
 
-    # verify: 全死全活关闭 → GetOneInstance 失败
-    log_step "[${phase_label}.8] verify: a/b 翻回 200，验证全死全活关闭"
-    provider_set_error "$PROVIDER_A_PORT" "false"
-    provider_set_error "$PROVIDER_B_PORT" "false"
-    sleep 2
+    # verify: 全死全活关闭 → 实例 OPEN 时 healthyInstances 为空 → GetOneInstance 失败
+    # 关键：此处必须保持 a/b=500（不翻回 200）。验证意图是"实例仍 OPEN + 全死全活关闭
+    # → 无可选实例 → 调用失败"，仅在实例 OPEN 时成立。若先翻回 200，且 B.7 的 60 次
+    # trigger burst 耗时超过 sleepWindow（压缩后 6s）导致实例已进半开，半开探测会命中
+    # 200 而恢复，verify 变成全 200，预期的 b_verify_fail 落空。保持 500 则即使进半开
+    # 探测也会失败重新 OPEN，验证结果稳定且与 sleepWindow/burst 耗时无关。
+    # provider 翻回 200 属于 B.9 recover 阶段的职责。
+    log_step "用例10 [${phase_label}.8] verify: 保持 a/b=500，验证全死全活关闭时实例不可选"
     run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}验证B"
     local b_verify_fail=$CASE_FAIL
 
-    # recover: 重启 consumer 恢复 enableRecoverAll=true
-    log_step "[${phase_label}.9] recover: 重启 consumer（恢复 enableRecoverAll=true）"
+    # recover: 把 provider 翻回 200（B.8 不再负责复位），重启 consumer 恢复 enableRecoverAll=true
+    log_step "用例10 [${phase_label}.9] recover: a/b 翻回 200，重启 consumer（恢复 enableRecoverAll=true）"
+    provider_set_error "$PROVIDER_A_PORT" "false"
+    provider_set_error "$PROVIDER_B_PORT" "false"
     stop_consumer "$consumer_pid"
-    sleep 2
+    sleep 1
     if ! start_consumer "${phase_label}_consumer_c" "$consumer_dir" \
         "$caller" "$port" "${log_file%.log}_c.log" "false" "true"; then
         return 1
@@ -3383,10 +3735,10 @@ _run_all_dead_phase() {
         && [[ "$b_trigger_fail" -ge 5 ]] \
         && [[ "$b_verify_fail" -ge 1 ]] \
         && [[ "$b_recover_ok" -ge 1 ]]; then
-        log_info "✅ [${phase_label}] PASS: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+        log_info "✅ 用例10 [${phase_label}] PASS: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
         return 0
     fi
-    log_error "❌ [${phase_label}] FAIL: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+    log_error "❌ 用例10 [${phase_label}] FAIL: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
     return 1
 }
 

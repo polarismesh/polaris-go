@@ -54,6 +54,73 @@
 
 用例 1/2/3 的 Decorator 和 InvokeHandler 子阶段**共用同一个 selfService 和熔断规则**（Decorator recover 后规则完全恢复，InvokeHandler 重新 trigger）。
 
+## SDK 日志目录映射
+
+每次 consumer 启动时会在 `.build/<consumer_name>_run/` 下创建独立的 Polaris SDK 日志目录。
+每个 `_run` 目录的结构如下（以 `instance_consumer_run` 为例）：
+
+```
+.build/instance_consumer_run/polaris/log/
+├── auth/polaris-auth.log
+├── base/polaris.log                         ← 通用日志（版本号、连接状态）
+├── cache/polaris-cache.log
+├── circuitbreaker/polaris-circuitbreaker.log ← 熔断器日志（核心排查日志）
+├── lossless/polaris-lossless.log
+├── network/polaris-network.log
+├── route/polaris-route.log
+└── statReport/polaris-statReport.log
+```
+
+> **排查熔断问题时，优先看 `polaris-circuitbreaker.log`**（poleis-stat.log 已不再输出熔断日志）。
+> 该日志包含规则加载（`ruleName`/`ruleID`/`ruleRev`）、计数器初始化、状态切换（`close → open → half-open → close`）等完整链路信息。
+
+### 各用例对应的 `.build/` 目录
+
+| 用例 | 子阶段 | `.build/` 目录 |
+|------|--------|---------------|
+| 1 | Decorator | `instance_consumer_run/` |
+| 1 | InvokeHandler | `instance_invoke_consumer_run/` |
+| 2 | Decorator | `service_consumer_run/` |
+| 2 | InvokeHandler | `service_invoke_consumer_run/` |
+| 2 | fallback 正向 | `service_fallback_consumer_run/` |
+| 2 | fallback 反向 | `service_fallback_off_consumer_run/` |
+| 3 | Decorator | `interface_consumer_run/` |
+| 3 | InvokeHandler | `interface_invoke_consumer_run/` |
+| 3 | fallback 正向 | `interface_fallback_consumer_run/` |
+| 3 | fallback 反向 | `interface_fallback_off_consumer_run/` |
+| 4 | - | `old_instance_consumer_run/` |
+| 5 | A/B/C 段（共用 consumer） | `http_status_consumer_run/` |
+| 6 | - | `default_rule_consumer_run/` |
+| 7 | - | `modify_rule_consumer_run/` |
+| 8 | - | `pm_consumer_run/` |
+| 9 | - | `pathtype_consumer_run/` |
+| 10 | A Decorator | `decorator_consumer_run/` `decorator_consumer_b_run/` `decorator_consumer_c_run/` |
+| 10 | B InvokeHandler | `invoke_consumer_run/` `invoke_consumer_b_run/` `invoke_consumer_c_run/` |
+| 10 | C Bare Report | `report_consumer_run/` `report_consumer_b_run/` `report_consumer_c_run/` |
+| - | provider-a | `provider_a_run/` |
+| - | provider-b | `provider_b_run/` |
+
+> 用例 10 的三个子阶段各重启 consumer 三次（enableRecoverAll=true → false → true），
+> `_run` 为第一次启动（全死全活开启），`_b_run` 为第二次启动（全死全活关闭），
+> `_c_run` 为第三次启动（恢复全死全活开启）。
+
+### 排查示例
+
+```bash
+# 查看用例 5 B 段失败时 SDK 的熔断规则加载和状态切换
+grep -E "rule|counter|OPEN|close|half" \
+  .build/http_status_consumer_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log
+
+# 查看用例 10 Decorator 子阶段全死全活关闭时的实例选择
+grep -E "instance|healthy|isolated|fallback" \
+  .build/decorator_consumer_b_run/polaris/log/base/polaris.log
+
+# 查看 provider 端日志
+cat .build/provider_b_run/polaris/log/base/polaris.log
+```
+
+
+
 ## Provider 暴露的接口
 
 | 路径    | 默认行为                | 控制开关                                      | 用途                                        |
@@ -116,7 +183,7 @@
 - `block_configs[0]`：
   - `error_conditions`：`RET_CODE RANGE 500~599`（4xx 不计入熔断）
   - `trigger_conditions`：`CONSECUTIVE_ERROR=5` + `ERROR_RATE 50%@30s, minRequest=10`
-- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+- `recover_condition.sleep_window=6s`，`consecutiveSuccess=1`
 
 ### 验证步骤
 - 1.1 复位 provider：a=200，b=500
@@ -125,7 +192,7 @@
 - ── Decorator 第 1 轮 ──
 - 1.4 触发：连发 `INSTANCE_R1_TRIGGER_COUNT=30` 次 `/echo`，让 b 累计 5 次失败 → 实例 b 被摘除
 - 1.5 验证：再发 `RECOVERY_REQUEST_COUNT`（默认 10）次，流量应全部走 a
-- 1.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`（默认 15s）进半开 → b 重新加入 LB
+- 1.6 恢复：b 翻回 200，等 `WAIT_HALF_OPEN_SECONDS`（默认 8s）进半开 → b 重新加入 LB
 - ── Decorator 第 2 轮 ──
 - 1.7 再次触发：b 重新置 500，发 `INSTANCE_R2_TRIGGER_COUNT=30` 次
 - 1.8 再次验证：流量再次全部走 a
@@ -134,7 +201,7 @@
 - 1.10 启动 invokeHandler consumer（selfService 同 Decorator）
 - 1.11 触发：b=500，发 `INSTANCE_R1_TRIGGER_COUNT=30` 次
 - 1.12 验证：再发 10 次，流量全部走 a
-- 1.13 恢复：b 翻回 200，等 15s
+- 1.13 恢复：b 翻回 200，等 8s
 
 ### 通过条件（共 9 项指标）
 - Decorator 两轮 `trigger_fail >= 1`
@@ -172,13 +239,24 @@
 - 2.10 启动 invokeHandler consumer
 - 2.11 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
 - 2.12 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 2.13 恢复：a/b 翻回 200，等 15s
+- 2.13 恢复：a/b 翻回 200，等 8s
+- ── fallback 子阶段（复用 Decorator 的规则 cb-service-CircuitBreakerServiceCaller，PUT 更新规则切换 fallbackConfig.enable）──
+- 2.14 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker" / header X-Fallback=true）
+- 2.15 重启 consumer（规则 revision 变更触发 SDK counter 重建，需重新加载）
+- 2.16 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次 `/echo`
+- 2.17 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"）
+- 2.18 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
+- 2.19 重启 consumer
+- 2.20 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
+- 2.21 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
 
-### 通过条件（共 9 项指标）
+### 通过条件（共 11 项指标）
 - Decorator 两轮 `trigger_fail >= 1`
 - Decorator 两轮 `verify_abort >= 1`
 - Decorator 两轮 `recover_ok >= 1`
 - InvokeHandler `trigger_fail >= 1`，`verify_abort >= 1`，`recover_ok >= 1`
+- fallback 正向 `svc_fallback >= 1`（enable=true → HTTP 599）
+- fallback 反向 `svc_fb_off_abort >= 1`（enable=false → 503 兜底）
 
 ---
 
@@ -226,14 +304,25 @@
 - 3.15 启动 invokeHandler consumer
 - 3.16 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
 - 3.17 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 3.18 恢复：a/b 翻回 200，等 15s
+- 3.18 恢复：a/b 翻回 200，等 8s
+- ── fallback 子阶段（复用 Decorator 的 merged 规则 cb-interface-CircuitBreakerInterfaceCaller，PUT 更新规则切换 fallbackConfig.enable）──
+- 3.19 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker"）
+- 3.20 重启 consumer（规则 revision 变更触发 SDK counter 重建，需重新加载）
+- 3.21 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
+- 3.22 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"，fallbackConfig 为 Rule 级字段，三个 block 共享）
+- 3.23 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
+- 3.24 重启 consumer
+- 3.25 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
+- 3.26 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
 
-### 通过条件（共 14 项指标）
+### 通过条件（共 16 项指标）
 - `/echo` Decorator 两轮 trigger ≥1 fail / verify ≥1 abort / recover 全 200
 - `/order` 整批失败但 `abort == 0`
 - `/info` 整批失败但 `abort == 0`
 - `/slow` trigger 阶段成功完成 ≥1 / verify ≥1 abort / recover 全 200
 - InvokeHandler trigger ≥1 fail / verify ≥1 abort / recover ≥1 ok
+- fallback 正向 `iface_fallback >= 1`（enable=true → HTTP 599）
+- fallback 反向 `iface_fb_off_abort >= 1`（enable=false → 503 兜底）
 
 ---
 
@@ -382,7 +471,7 @@
 对 13 个 BlockConfig 各跑 3 阶段：
 - `trigger`：发 `PM_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
 - `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
-- `recover`：provider 翻回 200，等 15s → 再发 3 次 → 全 200
+- `recover`：provider 翻回 200，等 8s → 再发 3 次 → 全 200
 
 ### 通过条件（共 13 × 3 = 39 项指标）
 每个 BC：`trigger fail >= 1 || abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
@@ -410,7 +499,7 @@
 对 5 种 MatchString 各跑正向 3 阶段：
 - `trigger`：发 `PATHTYPE_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
 - `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
-- `recover`：provider 翻回 200，等 15s → 再发 3 次 → 全 200
+- `recover`：provider 翻回 200，等 8s → 再发 3 次 → 全 200
 
 ### 为什么移除了反向验证？
 5 种 path-type 已合并到 1 条规则的 5 个 BlockConfig。`NOT_EQUALS` 和 `NOT_IN` 否定匹配 BC 会吃掉几乎所有 path，不存在"对全部 5 个 BC 都不匹配"的反向 path。正向 3 阶段已充分证明 5 种 MatchString 各自的匹配语义。
@@ -441,7 +530,7 @@
 ### 规则
 - `level=INSTANCE`，`name=cb-instance-CircuitBreakerHttpStatusCaller`，`source=*/*`（通配所有 caller）
 - `CONSECUTIVE_ERROR=3`（收紧阈值加快验证）
-- `recover_condition.sleep_window=12s`，`consecutiveSuccess=1`
+- `recover_condition.sleep_window=6s`，`consecutiveSuccess=1`
 
 ### 验证步骤（每个子阶段执行相同流程）
 - ── 全死全活开启 ──
@@ -469,7 +558,7 @@
 
 ## 失败诊断
 
-每个用例失败时脚本会输出统计变量值，常见原因：
+各用例对应的 SDK 日志目录见上方「SDK 日志目录映射」章节。每个用例失败时脚本会输出统计变量值，常见原因：
 
 | 现象 | 可能原因 | 排查 |
 |------|---------|------|
@@ -508,3 +597,7 @@
 | `FilterOnlyRouter` 全死全活兜底（`enableRecoverAll`） | 用例 10 |
 | `MakeInvokeHandler` + `AcquirePermission` 手动编排模式 | 用例 1/2/3 InvokeHandler 子阶段 + 用例 10(B) |
 | 三种调用模式行为一致性 | 用例 10（Decorator / InvokeHandler / Bare Report） |
+| `buildFallbackInfo` 解析规则降级响应（SERVICE/METHOD） | 用例 2/3 fallback 正向子阶段 |
+| `buildFallbackInfo` 的 `GetEnable()` 短路（enable=false 回 503） | 用例 2/3 fallback 反向子阶段 |
+| `CallAborted` 携带 fallback + demo `HasFallback()` 透传/回退 | 用例 2/3 fallback 子阶段 |
+| PUT 更新熔断规则 fallbackConfig.enable 触发 SDK counter 重建 | 用例 2/3 fallback 子阶段 |

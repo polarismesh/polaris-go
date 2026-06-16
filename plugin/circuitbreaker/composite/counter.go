@@ -55,7 +55,8 @@ type ResourceCounters struct {
 	resource model.Resource
 	// statusRef 状态机原子引用，承载 *model.CircuitBreakerStatusWrapper
 	statusRef atomic.Value
-	// fallbackInfo 降级响应信息（保留字段，本期不下发 body/headers）
+	// fallbackInfo 降级响应信息，构造时一次性从规则的 FallbackConfig 解析缓存，
+	// 仅在 toOpen() 注入到 OPEN 状态，含 code/body/headers
 	fallbackInfo *model.FallbackInfo
 	// regexFunction 正则编译函数，复用 CompositeCircuitBreaker 的 regex 缓存
 	regexFunction func(string) *regexp.Regexp
@@ -327,23 +328,24 @@ func buildFallbackInfo(rule *fault_tolerance.CircuitBreakerRule) *model.Fallback
 	if rule.GetLevel() != fault_tolerance.Level_METHOD && rule.GetLevel() != fault_tolerance.Level_SERVICE {
 		return nil
 	}
-	fallbackInfo := rule.GetFallbackConfig()
-	if fallbackInfo == nil {
+	// GetFallbackConfig() 在 proto 中即使规则未配置也会返回非 nil 零值 message，
+	// 因此必须显式判断 GetEnable()，否则 enable=false 的规则会被误当作启用的降级
+	// 配置，导致熔断时返回本不该返回的 code/body。
+	fallbackConfig := rule.GetFallbackConfig()
+	if fallbackConfig == nil || !fallbackConfig.GetEnable() {
 		return nil
 	}
-	if fallbackInfo.GetResponse() == nil {
+	resp := fallbackConfig.GetResponse()
+	if resp == nil {
 		return nil
 	}
 	ret := &model.FallbackInfo{
-		Code:    int(fallbackInfo.GetResponse().GetCode()),
-		Body:    fallbackInfo.GetResponse().GetBody(),
+		Code:    int(resp.GetCode()),
+		Body:    resp.GetBody(),
 		Headers: map[string]string{},
 	}
-
-	headers := fallbackInfo.GetResponse().GetHeaders()
-	for i := range headers {
-		header := headers[i]
-		ret.Headers[header.Key] = header.Value
+	for _, header := range resp.GetHeaders() {
+		ret.Headers[header.GetKey()] = header.GetValue()
 	}
 	return ret
 }

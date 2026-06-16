@@ -326,21 +326,19 @@ func (svr *PolarisClient) makeDecorator(path string) model.DecoratorFunction {
 //
 // 返回 (status, body) 便于调用方在 logReply 中按 HTTP 真实响应记录。
 func writeResult(rw http.ResponseWriter, ret interface{}, abort *model.CallAborted, err error) (int, string) {
-	if err != nil {
-		body := fmt.Sprintf("[error] fail : %s", err)
-		rw.WriteHeader(http.StatusInternalServerError)
-		_, _ = rw.Write([]byte(body))
-		return http.StatusInternalServerError, body
-	}
+	// 注意：熔断拦截时装饰器同时返回 abort != nil 且 err == ErrorCallAborted（非 nil），
+	// 因此必须先判 abort 再判 err，否则 fallback / 503 分支永远走不到，
+	// 会把熔断响应错当成普通业务错误返回（表现为 fallback 永远不下发）。
 	if abort != nil {
 		if abort.HasFallback() {
 			// 服务端下发了 fallback 响应：透传状态码 / headers / body
 			status := abort.GetFallbackCode()
 			fbBody := abort.GetFallbackBody()
-			rw.WriteHeader(status)
+			// 必须先写 header 再 WriteHeader：net/http 在 WriteHeader 后追加的 header 会被丢弃。
 			for k, v := range abort.GetFallbackHeaders() {
 				rw.Header().Add(k, v)
 			}
+			rw.WriteHeader(status)
 			_, _ = rw.Write([]byte(fbBody))
 			return status, fbBody
 		}
@@ -349,6 +347,13 @@ func writeResult(rw http.ResponseWriter, ret interface{}, abort *model.CallAbort
 		rw.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = rw.Write([]byte(body))
 		return http.StatusServiceUnavailable, body
+	}
+	// 非熔断的真实业务错误（abort 为 nil 但底层调用返回 err）
+	if err != nil {
+		body := fmt.Sprintf("[error] fail : %s", err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		_, _ = rw.Write([]byte(body))
+		return http.StatusInternalServerError, body
 	}
 	resp, _ := ret.(commonResponse)
 	// 透传 provider 的真实状态码与 body：脚本/curl 据此能直接区分 200/5xx，
