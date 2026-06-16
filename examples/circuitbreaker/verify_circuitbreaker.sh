@@ -3623,7 +3623,7 @@ _run_all_dead_phase() {
     local rule_builder="$6"
 
     # ── 全死全活开启 ──
-    log_step "[${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
+    log_step "用例10 [${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
     if ! start_consumer "${phase_label}_consumer" "$consumer_dir" \
         "$caller" "$port" "$log_file" "false" "true"; then
         return 1
@@ -3639,25 +3639,25 @@ _run_all_dead_phase() {
         return 1
     fi
 
-    log_step "[${phase_label}.2] 创建 INSTANCE 级熔断规则"
+    log_step "用例10 [${phase_label}.2] 创建 INSTANCE 级熔断规则"
     local rule_body rule_id
     rule_body=$($rule_builder)
     rule_id=$(create_circuitbreaker_rule "${phase_label}" "$rule_body") || {
-        log_error "[${phase_label}.2] 规则创建失败"
+        log_error "用例10 [${phase_label}.2] 规则创建失败"
         stop_consumer "$consumer_pid"
         return 1
     }
     sleep "$WAIT_RULE_READY_SECONDS"
 
     # trigger: 两个 provider 都 500，发 60 次让两个实例都被熔断 OPEN
-    log_step "[${phase_label}.3] trigger: a/b=500, 发 60 次让两个实例都被熔断"
+    log_step "用例10 [${phase_label}.3] trigger: a/b=500, 发 60 次让两个实例都被熔断"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$port" "60" "${phase_label}触发"
     local a_trigger_fail=$CASE_FAIL
 
     # verify: provider 翻回 200，全死全活开启 → 请求透传到 provider → 200
-    log_step "[${phase_label}.4] verify: a/b 翻回 200，验证全死全活生效"
+    log_step "用例10 [${phase_label}.4] verify: a/b 翻回 200，验证全死全活生效"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     sleep 1
@@ -3665,13 +3665,13 @@ _run_all_dead_phase() {
     local a_verify_ok=$CASE_OK
 
     # recover
-    log_step "[${phase_label}.5] recover: 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    log_step "用例10 [${phase_label}.5] recover: 等 ${WAIT_HALF_OPEN_SECONDS}s"
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}恢复"
     local a_recover_ok=$CASE_OK
 
     # ── 全死全活关闭 ──
-    log_step "[${phase_label}.6] 重启 consumer（enableRecoverAll=false）"
+    log_step "用例10 [${phase_label}.6] 重启 consumer（enableRecoverAll=false）"
     stop_consumer "$consumer_pid"
     sleep 1
     if ! start_consumer "${phase_label}_consumer_b" "$consumer_dir" \
@@ -3681,7 +3681,7 @@ _run_all_dead_phase() {
     consumer_pid="$_STARTED_PID"
 
     # 重新触发熔断
-    log_step "[${phase_label}.7] trigger: a/b=500, 发 60 次重新触发熔断"
+    log_step "用例10 [${phase_label}.7] trigger: a/b=500, 发 60 次重新触发熔断"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$port" "60" "${phase_label}触发B"
@@ -3694,12 +3694,12 @@ _run_all_dead_phase() {
     # 200 而恢复，verify 变成全 200，预期的 b_verify_fail 落空。保持 500 则即使进半开
     # 探测也会失败重新 OPEN，验证结果稳定且与 sleepWindow/burst 耗时无关。
     # provider 翻回 200 属于 B.9 recover 阶段的职责。
-    log_step "[${phase_label}.8] verify: 保持 a/b=500，验证全死全活关闭时实例不可选"
+    log_step "用例10 [${phase_label}.8] verify: 保持 a/b=500，验证全死全活关闭时实例不可选"
     run_burst "$port" "$RECOVERY_REQUEST_COUNT" "${phase_label}验证B"
     local b_verify_fail=$CASE_FAIL
 
     # recover: 把 provider 翻回 200（B.8 不再负责复位），重启 consumer 恢复 enableRecoverAll=true
-    log_step "[${phase_label}.9] recover: a/b 翻回 200，重启 consumer（恢复 enableRecoverAll=true）"
+    log_step "用例10 [${phase_label}.9] recover: a/b 翻回 200，重启 consumer（恢复 enableRecoverAll=true）"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     stop_consumer "$consumer_pid"
@@ -3722,10 +3722,10 @@ _run_all_dead_phase() {
         && [[ "$b_trigger_fail" -ge 5 ]] \
         && [[ "$b_verify_fail" -ge 1 ]] \
         && [[ "$b_recover_ok" -ge 1 ]]; then
-        log_info "✅ [${phase_label}] PASS: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+        log_info "✅ 用例10 [${phase_label}] PASS: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
         return 0
     fi
-    log_error "❌ [${phase_label}] FAIL: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
+    log_error "❌ 用例10 [${phase_label}] FAIL: A[trigger=$a_trigger_fail verify=$a_verify_ok recover=$a_recover_ok] B[trigger=$b_trigger_fail verify=$b_verify_fail recover=$b_recover_ok]"
     return 1
 }
 

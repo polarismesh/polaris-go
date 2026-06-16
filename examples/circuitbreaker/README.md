@@ -518,11 +518,11 @@ svr.reportCircuitBreak(instance, model.RetSuccess, "200", start)
 5. 通过 `/switch` 翻转 provider 状态验证恢复链路
 6. 退出时自动删除所创建的熔断规则并清理进程
 
-共 11 个用例（详见 `test.md`）：`instance` / `service` / `interface` / `old_instance` /
+共 10 个用例（详见 `test.md`）：`instance` / `service` / `interface` / `old_instance` /
 `http_status` / `default_rule` / `modify_rule` / `protocol_method` / `pathtype` /
-`all_dead_fallback` / `custom_fallback`。其中 **`custom_fallback`** 验证规则配置的自定义降级
-响应（`FallbackConfig`）：SERVICE/METHOD 级各跑正向（`enable=true` 返回 `code=599`/`body`/`headers`）
-和反向（`enable=false` 熔断回 503）。
+`all_dead_fallback`。其中用例 2/3 末尾各追加了 fallback 子阶段，通过 PUT 更新现有规则切换
+`fallbackConfig.enable` 验证自定义降级响应：正向（`enable=true` 返回 `code=599`/`body`/`headers`）
+和反向（`enable=false` 回退 503），无需创建独立规则。
 
 > 提速说明：规则 `sleepWindow` 已从 12s 收紧到 6s，`--wait-half-open` 默认 8s、
 > `--wait-rule-ready` 默认 5s，全量用例耗时显著下降。
@@ -531,13 +531,13 @@ svr.reportCircuitBreak(instance, model.RetSuccess, "200", start)
 
 ```bash
 chmod +x verify_circuitbreaker.sh
-./verify_circuitbreaker.sh                                              # 跑全部用例（默认 11 个）
+./verify_circuitbreaker.sh                                              # 跑全部用例（默认 10 个）
 ./verify_circuitbreaker.sh --polaris-server 10.0.0.1                    # 指定北极星地址
 ./verify_circuitbreaker.sh --only instance                              # 仅跑实例级
 ./verify_circuitbreaker.sh --only service,interface,http_status         # 多个用例组合
 ./verify_circuitbreaker.sh --only default_rule                          # 仅跑默认规则兜底用例
 ./verify_circuitbreaker.sh --only protocol_method,pathtype              # 仅跑高级匹配维度用例
-./verify_circuitbreaker.sh --only custom_fallback                       # 仅跑自定义降级用例（SERVICE/METHOD 正反向）
+./verify_circuitbreaker.sh --only all_dead_fallback                    # 仅跑全死全活兜底用例
 ```
 
 ### 关键选项
@@ -548,7 +548,7 @@ chmod +x verify_circuitbreaker.sh
 | `--polaris-token <令牌>`    | 北极星鉴权令牌                                                     |
 | `--namespace <ns>`          | 命名空间（默认 `default`）                                         |
 | `--service <name>`          | 被调服务名（默认 `CircuitBreakerCallee`）                          |
-| `--only <列表>`             | 仅运行指定用例：`instance`, `service`, `interface`, `old_instance`, `http_status`, `default_rule`, `modify_rule`, `protocol_method`, `pathtype`, `all_dead_fallback`, `custom_fallback` |
+| `--only <列表>`             | 仅运行指定用例：`instance`, `service`, `interface`, `old_instance`, `http_status`, `default_rule`, `modify_rule`, `protocol_method`, `pathtype`, `all_dead_fallback` |
 | `--trigger-count <次数>`    | 触发阶段请求次数（默认 15，越大越容易触发熔断）                    |
 | `--recovery-count <次数>`   | 验证 / 恢复阶段请求次数（默认 10）                                 |
 | `--wait-half-open <秒数>`   | 服务级用例等待 sleepWindow 进入半开的秒数（默认 8，规则 sleepWindow=6s + 2s buffer）   |
