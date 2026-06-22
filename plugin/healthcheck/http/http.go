@@ -116,10 +116,12 @@ func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.Faul
 		return "", false
 	}
 	defer resp.Body.Close()
-	if code := resp.StatusCode; code >= 200 && code < 500 {
-		return strconv.Itoa(resp.StatusCode), true
-	}
-	return strconv.Itoa(resp.StatusCode), false
+	code := resp.StatusCode
+	success := code >= 200 && code < 500
+	// 探测成功不属于失败事件，但每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
+	g.logCtx.GetDetectLogger().Debugf("[HealthCheck][http] detect done, url=%+v, code=%d, success=%t",
+		detReq.URL, code, success)
+	return strconv.Itoa(code), success
 }
 
 // Protocol .

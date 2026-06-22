@@ -200,11 +200,12 @@ func (w *worker) mainLoop(ctx context.Context) {
 						default:
 						}
 					case *tickTask:
+						// 周期任务：每次 ticker 触发后仅执行回调，绝不能 Stop 或从
+						// delayQueue 删除，否则周期任务会退化为一次性任务（探测/巡检只跑一次）。
+						// 任务的生命周期由 ctx.Done()（见上方分支统一 Stop 全部 ticker）控制。
 						select {
 						case <-t.ticker.C:
-							t.ticker.Stop()
 							t.f()
-							waitDel = append(waitDel, key)
 						default:
 						}
 					}

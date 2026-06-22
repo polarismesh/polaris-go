@@ -46,6 +46,11 @@ var (
 	port       int64
 	configPath string
 	debug      bool
+	// tcpProbePort/udpProbePort：独立的 TCP/UDP 主动探测端口（0=不启动）。
+	// 用于熔断主动探测验证：HTTP 的 /switch?openError 只改 HTTP 响应不关端口，TCP/UDP 探测对它不敏感，
+	// 故另起受 openTcpError/openUdpError 开关控制的探测端口，使 TCP/UDP 探测也能随故障变化。
+	tcpProbePort int64
+	udpProbePort int64
 )
 
 // reqIDHeader 全链路追踪请求 ID，贯穿所有中间跳。
@@ -60,6 +65,8 @@ func initArgs() {
 	flag.Int64Var(&port, "port", 0, "port")
 	flag.StringVar(&configPath, "config", "./polaris.yaml", "path for config file")
 	flag.BoolVar(&debug, "debug", false, "是否开启 Polaris SDK debug 日志")
+	flag.Int64Var(&tcpProbePort, "tcp-probe-port", 0, "独立 TCP 主动探测端口（0=不启动）")
+	flag.Int64Var(&udpProbePort, "udp-probe-port", 0, "独立 UDP 主动探测端口（0=不启动）")
 }
 
 // PolarisProvider is a provider for polaris
@@ -79,6 +86,11 @@ type PolarisProvider struct {
 	slowDelayMs int64
 	isShutdown  bool
 	webSvr      *http.Server
+	// TCP/UDP 主动探测端口的故障开关（1=探测失败/不回包，0=正常回包）。
+	needTcpErr int32
+	needUdpErr int32
+	tcpLn      net.Listener
+	udpConn    *net.UDPConn
 }
 
 // Run . execute
@@ -90,7 +102,83 @@ func (svr *PolarisProvider) Run() {
 
 	svr.host = tmpHost
 	svr.runWebServer()
+	svr.runTCPProbeServer()
+	svr.runUDPProbeServer()
 	svr.registerService()
+}
+
+// runTCPProbeServer 启动独立 TCP 主动探测端口（tcpProbePort>0 时）。
+// 探测器连上后发送 send 数据，本 server 在 needTcpErr=0 时回 "tcp-ok"，=1 时直接关闭连接不回包
+// （探测端读到空数据 ≠ 期望的 receive，判定探测失败），以此模拟"实例 TCP 探测故障"。
+func (svr *PolarisProvider) runTCPProbeServer() {
+	if tcpProbePort <= 0 {
+		return
+	}
+	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", tcpProbePort))
+	if err != nil {
+		log.Fatalf("[ERROR] fail to listen tcp probe port %d, err is %v", tcpProbePort, err)
+	}
+	svr.tcpLn = ln
+	log.Printf("[INFO] start tcp probe server, listen port is %d", tcpProbePort)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				if svr.isShutdown {
+					return
+				}
+				continue
+			}
+			go func(c net.Conn) {
+				defer func() { _ = c.Close() }()
+				buf := make([]byte, 256)
+				_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+				_, _ = c.Read(buf)
+				if atomic.LoadInt32(&svr.needTcpErr) == 1 {
+					// 故障：不回包，直接关闭
+					return
+				}
+				_, _ = c.Write([]byte("tcp-ok"))
+			}(conn)
+		}
+	}()
+}
+
+// runUDPProbeServer 启动独立 UDP 主动探测端口（udpProbePort>0 时）。
+// 探测器发来 send 数据，本 server 在 needUdpErr=0 时回 "udp-ok"，=1 时不回包（探测端读超时拿空 ≠
+// 期望的 receive，判定探测失败），以此模拟"实例 UDP 探测故障"。
+func (svr *PolarisProvider) runUDPProbeServer() {
+	if udpProbePort <= 0 {
+		return
+	}
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("0.0.0.0:%d", udpProbePort))
+	if err != nil {
+		log.Fatalf("[ERROR] fail to resolve udp probe addr %d, err is %v", udpProbePort, err)
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		log.Fatalf("[ERROR] fail to listen udp probe port %d, err is %v", udpProbePort, err)
+	}
+	svr.udpConn = conn
+	log.Printf("[INFO] start udp probe server, listen port is %d", udpProbePort)
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			n, remote, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				if svr.isShutdown {
+					return
+				}
+				continue
+			}
+			_ = n
+			if atomic.LoadInt32(&svr.needUdpErr) == 1 {
+				// 故障：不回包
+				continue
+			}
+			_, _ = conn.WriteToUDP([]byte("udp-ok"), remote)
+		}
+	}()
 }
 
 func (svr *PolarisProvider) runWebServer() {
@@ -217,6 +305,24 @@ func (svr *PolarisProvider) runWebServer() {
 				parts = append(parts, "order=200")
 			}
 		}
+		if val := r.URL.Query().Get("openTcpError"); val != "" {
+			if val == "true" {
+				atomic.StoreInt32(&svr.needTcpErr, 1)
+				parts = append(parts, "tcp=fail")
+			} else {
+				atomic.StoreInt32(&svr.needTcpErr, 0)
+				parts = append(parts, "tcp=ok")
+			}
+		}
+		if val := r.URL.Query().Get("openUdpError"); val != "" {
+			if val == "true" {
+				atomic.StoreInt32(&svr.needUdpErr, 1)
+				parts = append(parts, "udp=fail")
+			} else {
+				atomic.StoreInt32(&svr.needUdpErr, 0)
+				parts = append(parts, "udp=ok")
+			}
+		}
 		if val := r.URL.Query().Get("slowDelayMs"); val != "" {
 			if ms, err := strconv.ParseInt(val, 10, 64); err == nil && ms >= 0 {
 				atomic.StoreInt64(&svr.slowDelayMs, ms)
@@ -283,33 +389,53 @@ func (svr *PolarisProvider) runWebServer() {
 	}()
 }
 
+// serviceList 解析 --service 参数：支持逗号分隔的多个服务名，本实例会同时注册到每一个服务。
+// 用于让同一个 provider 进程为多个被调服务提供实例（例如熔断主动探测验证中 SERVICE/METHOD/INSTANCE
+// 三级用例各用独立被调服务，但共用同一组 provider 进程）。
+func serviceList() []string {
+	var out []string
+	for _, s := range strings.Split(service, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, service)
+	}
+	return out
+}
+
 func (svr *PolarisProvider) registerService() {
 	log.Printf("start to invoke register operation")
-	registerRequest := &polaris.InstanceRegisterRequest{}
-	registerRequest.Service = service
-	registerRequest.Namespace = namespace
-	registerRequest.Host = svr.host
-	registerRequest.Port = svr.port
-	registerRequest.ServiceToken = token
-	resp, err := svr.provider.RegisterInstance(registerRequest)
-	if err != nil {
-		log.Fatalf("fail to register instance, err is %v", err)
+	for _, svc := range serviceList() {
+		registerRequest := &polaris.InstanceRegisterRequest{}
+		registerRequest.Service = svc
+		registerRequest.Namespace = namespace
+		registerRequest.Host = svr.host
+		registerRequest.Port = svr.port
+		registerRequest.ServiceToken = token
+		resp, err := svr.provider.RegisterInstance(registerRequest)
+		if err != nil {
+			log.Fatalf("fail to register instance for service %s, err is %v", svc, err)
+		}
+		log.Printf("register response: service %s instanceId %s", svc, resp.InstanceID)
 	}
-	log.Printf("register response: instanceId %s", resp.InstanceID)
 }
 
 func (svr *PolarisProvider) deregisterService() {
 	log.Printf("start to invoke deregister operation")
-	deregisterRequest := &polaris.InstanceDeRegisterRequest{}
-	deregisterRequest.Service = service
-	deregisterRequest.Namespace = namespace
-	deregisterRequest.Host = svr.host
-	deregisterRequest.Port = svr.port
-	deregisterRequest.ServiceToken = token
-	if err := svr.provider.Deregister(deregisterRequest); err != nil {
-		log.Fatalf("fail to deregister instance, err is %v", err)
+	for _, svc := range serviceList() {
+		deregisterRequest := &polaris.InstanceDeRegisterRequest{}
+		deregisterRequest.Service = svc
+		deregisterRequest.Namespace = namespace
+		deregisterRequest.Host = svr.host
+		deregisterRequest.Port = svr.port
+		deregisterRequest.ServiceToken = token
+		if err := svr.provider.Deregister(deregisterRequest); err != nil {
+			log.Fatalf("fail to deregister instance for service %s, err is %v", svc, err)
+		}
+		log.Printf("deregister successfully for service %s", svc)
 	}
-	log.Printf("deregister successfully.")
 }
 
 func (svr *PolarisProvider) runMainLoop() {
@@ -324,6 +450,12 @@ func (svr *PolarisProvider) runMainLoop() {
 		svr.isShutdown = true
 		svr.deregisterService()
 		_ = svr.webSvr.Close()
+		if svr.tcpLn != nil {
+			_ = svr.tcpLn.Close()
+		}
+		if svr.udpConn != nil {
+			_ = svr.udpConn.Close()
+		}
 		return
 	}
 }

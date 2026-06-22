@@ -24,7 +24,8 @@ examples/circuitbreaker/
 ├── verify_circuitbreaker.sh             # 【主入口】被动熔断一键 E2E 测试脚本
 ├── verify_faultdetect.sh                # 主动探测（fault detect）端到端验证脚本
 ├── cleanup.sh                           # 进程与目录清理脚本
-├── test.md                              # 用例清单
+├── test.md                              # 被动熔断用例清单
+├── fault-detect.md                      # 主动探测验证说明
 └── README.md                            # 本文件
 ```
 
@@ -608,11 +609,32 @@ Active Health Check）则是 SDK 在熔断打开后**周期性主动探活下游
 
 ### 验证的闭环
 
+脚本覆盖 **SERVICE（服务级）/ METHOD（接口级）/ INSTANCE（实例级）三个 HTTP 探测级别 + TCP 探测 +
+UDP 探测共 5 个用例**，各用独立 caller + 独立 consumer 端口（18095/18096/18097/18098/18099）+
+**独立被调服务**（CircuitBreakerFDSvcCallee / FDMethodCallee / FDInstanceCallee / FDTcpCallee /
+FDUdpCallee，provider 通过 `--service` 逗号分隔同时注册到五个服务）+ 独立规则名（`cb-fd-<LEVEL>-<caller>`）。
+独立被调服务可避免被 verify_circuitbreaker.sh 残留的 `source=*/*` catch-all 规则按 id 字典序抢占
+（详见 fault-detect.md）。
+
+> **TCP/UDP 探测用例**：均为 SERVICE 级熔断规则（abort 型），探测规则 `protocol=TCP`(2)/`UDP`(3)，
+> 探测打 provider-a 的独立探测端口（TCP=28091 / UDP=28101，`tcp_config`/`udp_config` 的 `send="ping"` +
+> `receive="tcp-ok"`/`"udp-ok"` 内容匹配判健康）。因 `FaultDetectRule.port` 单值、同机两进程不能绑同一
+> TCP/UDP 端口，TCP/UDP 探测端口仅 provider-a 启动，故只用单实例 provider-a（SERVICE 级闭环不依赖多实例）。
+> 业务故障仍用 HTTP `/echo` 的 `openError` 触发熔断；探测故障用 `openTcpError`/`openUdpError` 让探测端口
+> 不回包（维持 OPEN 阶段需业务 500 + 探测端口故障双重保证，因 SERVICE 级 half-open 会放行业务探活）。
+
+SERVICE / METHOD 级闭环（都经 AcquirePermission，OPEN 时 abort）：
 ```
-业务请求触发服务级熔断 OPEN
-  → provider 仍故障，主动探测 GET /echo 也失败 → 维持 OPEN（半开探测失败立即回 OPEN）
-  → 恢复 provider（业务与探测同时转绿）
-  → 主动探测探活成功，推动 HALF_OPEN → CLOSE
+业务请求触发熔断 OPEN（abort）
+  → provider 仍故障，主动探测 GET /echo 也失败 → 维持 OPEN（半开探测失败立即回 OPEN，abort）
+  → 恢复 provider → 主动探测探活成功，推动 HALF_OPEN → CLOSE（ok）
+```
+
+INSTANCE 级闭环（不经 AcquirePermission，OPEN 实例被路由摘除、不 abort）：
+```
+仅 provider-b 故障 → 触发 b 实例熔断 OPEN
+  → b 被服务路由层摘除，业务请求落到健康的 a（ok，不是 abort）
+  → 恢复 provider-b → b 实例 half-open → close 重新可选（ok）
 ```
 
 > **探测端点为何选 `/echo`**：provider 的 `/health` 固定返回 200，无法反映实例健康变化；
@@ -622,43 +644,56 @@ Active Health Check）则是 SDK 在熔断打开后**周期性主动探活下游
 ### 触发条件
 
 主动探测的启动门控为「熔断规则 `faultDetectConfig.enable=true` 且存在匹配的 FaultDetectRule」。
-脚本会自动下发两条规则：
-- 一条 **SERVICE 级熔断规则**，顶层带 `faultDetectConfig.enable=true`
-- 一条 **HTTP FaultDetectRule**（`POST /naming/v1/faultdetectors`，探 `/echo`，`interval=2s`，
-  `port=0` 表示使用被探测实例自身端口）
+三个级别用例各自下发一条熔断规则（顶层带 `faultDetectConfig.enable=true`，仅含 `CONSECUTIVE_ERROR`、
+**不叠加 ERROR_RATE** 以避免恢复抖动）+ 一条 HTTP FaultDetectRule（探 `/echo`，`interval=2s`，`port=0`
+表示使用被探测实例自身端口）。METHOD 级额外把熔断规则 `destination.method`、`BlockConfig.api.path`
+与探测规则 `target_service.method` 都限定到 `/echo`。
 
 ### 基本用法
 
 ```bash
 chmod +x verify_faultdetect.sh
 POLARIS_SERVER=10.0.0.1 POLARIS_TOKEN=<token> ./verify_faultdetect.sh
-POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh --debug      # 打开 SDK DEBUG 日志便于排查
+POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh --debug                 # 打开 SDK DEBUG 日志便于排查
+RUN_FD_CASES=method,instance POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh   # 只跑部分级别
 ```
 
 ### 关键参数（环境变量）
 
 | 变量                     | 含义                                       | 默认值 |
 | ------------------------ | ------------------------------------------ | ------ |
-| `FD_TRIGGER_COUNT`       | 触发服务级熔断的 burst 次数                | 30     |
+| `RUN_FD_CASES`           | 选跑用例子集（逗号分隔 service/method/instance/tcp/udp），未选标 SKIP | service,method,instance,tcp,udp |
+| `FD_TRIGGER_COUNT`       | 触发熔断的 burst 次数                      | 30     |
 | `FD_CONSECUTIVE_ERROR`   | 熔断规则连续错误阈值                       | 5      |
 | `FD_SLEEP_WINDOW`        | 熔断 sleepWindow（秒），进入半开的等待窗口 | 6      |
 | `FD_PROBE_INTERVAL`      | 主动探测间隔（秒）                         | 2      |
 | `WAIT_KEEP_OPEN_SECONDS` | 维持 OPEN 阶段等待（> sleepWindow）        | 12     |
 | `WAIT_RECOVER_SECONDS`   | 恢复阶段等待（sleepWindow + 多个探测周期） | 16     |
 
-### 判定指标
+### 判定指标（按用例）
 
-- 触发阶段：`abort >= 1`（服务级熔断已 OPEN）
-- 维持阶段：`abort >= 1`（探测持续失败，未恢复）
-- 恢复阶段：`ok == FD_VERIFY_COUNT`（主动探测探活推动 CLOSE）
-- 日志佐证：consumer 日志出现 `[FaultDetect]` 探测调度与状态切换记录
+| 阶段 | SERVICE / METHOD / TCP / UDP（abort 型） | INSTANCE（ok 型，单实例故障） |
+|------|------|------|
+| 触发 | `abort >= 1`（熔断已 OPEN） | `fail >= 1`（b 被选中时 500，不要求 abort） |
+| 维持 OPEN | `abort >= 1`（探测失败不恢复） | `ok >= N-1`（b 被摘除，业务落 a） |
+| 探活 CLOSE | `ok == FD_VERIFY_COUNT` | `ok >= N-1`（b 恢复可选） |
+| 日志佐证 | 探测调度=yes 且 状态切换=yes | 探测调度=yes 且 **INSTANCE 级** half-open→close=yes |
 
-> 退出时自动删除创建的熔断规则与探测规则（`/naming/v1/circuitbreaker/rules/delete` 与
-> `/naming/v1/faultdetectors/delete`），并停止 provider/consumer 进程。
+> TCP/UDP 用例与 SERVICE 同为 abort 型，判定指标完全一致；区别仅在探测协议（TCP/UDP）、探测端口
+> （provider-a 的 28091/28101）与探测故障开关（`openTcpError`/`openUdpError`）。
+
+> 日志佐证 grep 的是各 consumer 独立的 SDK 日志文件
+> `.build/<consumer_name>_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log`（非 consumer stdout）。
+> 探测调度铁证用 `[CircuitBreaker] schedule task`（探测周期任务真正注册），**不用**宽松的
+> `[FaultDetect]`/`health check`（会被"is disabled, now stop the previous checker"关停日志误判）。
+
+> 退出时：**熔断规则删除**；**探测规则保留不删**（FaultDetectRule 无 enable 字段，改为跨运行幂等复用，
+> 下次存在则 PUT 更新复用）；停止 provider/consumer 进程。
 
 ## 用例细节
 
-详见 [test.md](test.md)。
+- 被动熔断用例清单：[test.md](test.md)
+- 主动探测验证说明：[fault-detect.md](fault-detect.md)
 
 ## 高级匹配维度（用例 8 / 用例 10）
 

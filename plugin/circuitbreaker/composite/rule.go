@@ -75,6 +75,8 @@ func (c *RuleContainer) scheduleCircuitBreaker() {
 }
 
 func (c *RuleContainer) scheduleHealthCheck() {
+	// 调度刷新探测规则，由规则变更/事件驱动（非每请求），使用 Debug 级别记录触发来源。
+	c.log.Debugf("[FaultDetect] schedule health check refresh for resource=%s", c.res.String())
 	c.executor.AffinityExecute(c.res.String(), c.realRefreshHealthCheck)
 }
 
@@ -149,14 +151,27 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 			c.executor.AffinityDelayExecute(c.res.String(), 5*time.Second, c.realRefreshHealthCheck)
 			return
 		}
-		if faultDetector := selectFaultDetector(c.res, resp, c.regexFunction); faultDetector != nil {
+		faultDetector := selectFaultDetector(c.res, resp, c.regexFunction)
+		if faultDetector == nil {
+			// 门控已开启但尚未匹配到 FaultDetectRule（常见于探测规则刚下发、SDK 还没拉取到），
+			// 周期级日志记录，便于排查"探测门控通过但 checker 未建立"。
+			c.log.Debugf("[FaultDetect] gate enabled but no matched fault detect rule yet for resource=%s",
+				c.res.String())
+		}
+		if faultDetector != nil {
 			if curChecker, ok := c.breaker.getResourceHealthChecker(c.res); ok {
 				curRule := curChecker.faultDetector
 				if curRule.Revision == faultDetector.Revision {
+					c.log.Debugf("[FaultDetect] health checker unchanged (revision=%s) for resource=%s, skip rebuild",
+						faultDetector.Revision, c.res.String())
 					return
 				}
+				c.log.Debugf("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
+					curRule.Revision, faultDetector.Revision, c.res.String())
 				curChecker.stop()
 			}
+			c.log.Debugf("[FaultDetect] build health checker for resource=%s, faultDetector revision=%s, rules=%d",
+				c.res.String(), faultDetector.Revision, len(faultDetector.GetRules()))
 			checker := NewResourceHealthChecker(c.res, faultDetector, c.breaker)
 			c.breaker.setResourceHealthChecker(c.res, checker)
 			if c.res.GetLevel() != fault_tolerance.Level_INSTANCE {

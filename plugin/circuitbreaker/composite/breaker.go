@@ -329,8 +329,14 @@ func (c *CompositeCircuitBreaker) addInstanceForHealthCheck(res model.Resource, 
 	}
 	checkers, exist := c.loadServiceHealthCheck(*insRes.GetService())
 	if !exist {
+		// 周期级/请求级日志：业务上报频繁触发，使用 Debug 级别。
+		// 服务无主动探测 checker 时直接返回，是 SERVICE/METHOD 级探测懒启动前的常态。
+		c.cbLog.Debugf("[FaultDetect] no health checker for service=%s, skip add instance node=%s",
+			insRes.GetService().String(), insRes.GetNode().String())
 		return
 	}
+	c.cbLog.Debugf("[FaultDetect] add instance for health check, service=%s, node=%s",
+		insRes.GetService().String(), insRes.GetNode().String())
 	checkers.foreach(func(rhc *ResourceHealthChecker) {
 		rhc.addInstance(insRes, true)
 	})

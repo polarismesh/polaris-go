@@ -558,45 +558,91 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ## 主动探测用例（独立脚本 `verify_faultdetect.sh`）
 
-> 本用例不在 `verify_circuitbreaker.sh` 中，由独立脚本 `verify_faultdetect.sh` 执行，
+> 本组用例不在 `verify_circuitbreaker.sh` 中，由独立脚本 `verify_faultdetect.sh` 执行，
 > 验证 SDK 在熔断打开后**周期性主动探活下游实例并据此恢复**的能力。
+> 完整说明见 [fault-detect.md](fault-detect.md)。
 
 ### 验证目的
-验证熔断主动探测（Fault Detect / Active Health Check）的完整闭环：
-业务触发熔断 OPEN → 主动探测随 provider 故障而失败、维持 OPEN → 恢复 provider 后探测探活成功 →
-推动 `HALF_OPEN → CLOSE`。
+验证熔断主动探测（Fault Detect / Active Health Check）在 **SERVICE / METHOD / INSTANCE 三个 HTTP 探测
+级别 + TCP 探测 + UDP 探测共 5 个用例**的完整闭环。各用独立 caller + 独立 consumer 端口
+（18095/18096/18097/18098/18099）+ 独立规则名（`cb-fd-<LEVEL>-<caller>` / `fd-fd-<LEVEL>-<caller>`），
+由 `RUN_FD_CASES` 控制选跑（默认全跑：`service,method,instance,tcp,udp`）。
 
-### Caller / 服务
-- 主调服务：`CircuitBreakerFaultDetectCaller`（独立 caller，避免与其它用例规则干扰）
-- 被调服务：`CircuitBreakerCallee`（复用 provider-a / provider-b）
-- consumer：复用 `newCircuitBreakerCaller`，端口 `18095`
+### 五个用例（共 10 条规则：各 1 熔断 + 1 探测）
+| 用例 | 主调 caller | 被调服务 | consumer 端口 | 探测协议 | 熔断规则 level / method | 探测端口 / method |
+| --- | --- | --- | --- | --- | --- | --- |
+| 服务级(SERVICE)  | `CircuitBreakerFaultDetectCaller` | `CircuitBreakerFDSvcCallee` | 18095 | HTTP(1) | SERVICE / `*` | 实例端口 `port=0` / `/echo`（`*`） |
+| 接口级(METHOD)   | `CircuitBreakerFDMethodCaller` | `CircuitBreakerFDMethodCallee` | 18096 | HTTP(1) | METHOD / `/echo`（BlockConfig.api.path=/echo） | 实例端口 `port=0` / `/echo` |
+| 实例级(INSTANCE) | `CircuitBreakerFDInstanceCaller` | `CircuitBreakerFDInstanceCallee` | 18097 | HTTP(1) | INSTANCE / `*` | 实例端口 `port=0` / `/echo`（`*`） |
+| TCP 探测(SERVICE) | `CircuitBreakerFDTcpCaller` | `CircuitBreakerFDTcpCallee` | 18098 | TCP(2) | SERVICE / `*` | provider-a `28091` / `send=ping,receive=tcp-ok` |
+| UDP 探测(SERVICE) | `CircuitBreakerFDUdpCaller` | `CircuitBreakerFDUdpCallee` | 18099 | UDP(3) | SERVICE / `*` | provider-a `28101` / `send=ping,receive=udp-ok` |
 
-### 规则（2 条）
-| 规则类型 | 名称 | 关键配置 |
-| --- | --- | --- |
-| 熔断规则（SERVICE 级） | `cb-faultdetect-CircuitBreakerFaultDetectCaller` | `CONSECUTIVE_ERROR=5`，`sleepWindow=6s`，**`faultDetectConfig.enable=true`**（探测门控） |
-| 探测规则（FaultDetectRule） | `fd-faultdetect-CircuitBreakerFaultDetectCaller` | `protocol=HTTP`，`GET /echo`，`interval=2s`，`timeout=1000ms`，`port=0`（用实例端口） |
+熔断规则公共：`CONSECUTIVE_ERROR=5`，`sleepWindow=6s`，`consecutiveSuccess=1`，
+**`faultDetectConfig.enable=true`**（探测门控），**仅 CONSECUTIVE_ERROR、不叠加 ERROR_RATE**（避免恢复抖动）。
+HTTP 探测规则公共：`protocol=HTTP`(1)，`GET /echo`，`interval=2s`，`timeout=1000ms`，`port=0`（用实例端口）。
+TCP/UDP 探测规则：`protocol=TCP`(2)/`UDP`(3)，用 `tcp_config`/`udp_config`（`{send,receive[]}`），
+`interval=2s`，`timeout=1000ms`，`port` 固定指向 provider-a 的探测端口（TCP=28091 / UDP=28101）。
+**五个用例各用独立被调服务**（provider-a 28081 / provider-b 28082 两进程通过 `--service` 逗号分隔同时注册
+到这五个服务）。独立被调服务可避免被 verify_circuitbreaker.sh 残留的 `source=*/*` catch-all 规则按
+id 字典序抢占导致探测门控失效（详见 fault-detect.md）。
+
+> **TCP/UDP 只用单实例 provider-a**：`FaultDetectRule.port` 单值、`port>0` 时所有被探测实例共用同一端口号，
+> 而同机两进程不能绑定同一 TCP/UDP 端口，故 TCP/UDP 探测端口仅 provider-a 启动（脚本只给 a 传
+> `--tcp-probe-port`/`--udp-probe-port`）。SERVICE 级闭环不依赖多实例，单实例足够。
 
 > 探测端点选 `/echo` 而非 `/health`：`/health` 固定 200 无法反映健康变化，会让半开态被立即拉回
 > CLOSE；`/echo` 受 provider `needErr` 开关控制，挂时探测失败、恢复时探测成功，闭环可验证。
 
-### 验证步骤
+### 用例一/二：SERVICE / METHOD 级（abort 型，共用 `_run_probe_abort_case`）
+都经 AcquirePermission，OPEN 时业务请求 abort。步骤：
 1. 环境复位：provider-a/b 均 200
-2. 启动 consumer + 下发熔断规则（带 `faultDetectConfig.enable=true`）+ 探测规则，等待规则就绪
-3. 触发 OPEN：provider 全部置 500，burst `FD_TRIGGER_COUNT`(30) → 服务级熔断打开
-4. 维持 OPEN：保持 provider 500，等待 `WAIT_KEEP_OPEN_SECONDS`(12s) > sleepWindow，burst 验证仍 ABORT（探测打 `/echo` 也失败，半开探测失败立即回 OPEN）
-5. 探活恢复：provider 全部置 200，等待 `WAIT_RECOVER_SECONDS`(16s)，**不发业务请求**，纯靠主动探测探活推动 CLOSE，burst 验证全 OK
-6. 日志佐证：consumer 日志出现 `[FaultDetect]` 探测调度与状态切换记录
+2. 启动 consumer + 下发熔断规则（带 `faultDetectConfig.enable=true`）+ 探测规则，等待就绪
+3. 触发 OPEN：provider 全部置 500，burst `FD_TRIGGER_COUNT`(30) → 熔断打开（abort）
+4. 维持 OPEN：保持 500，等 `WAIT_KEEP_OPEN_SECONDS`(12s) > sleepWindow，burst 验证仍 abort（探测 `/echo` 失败，半开回 OPEN）
+5. 探活恢复：provider 全部置 200，等 `WAIT_RECOVER_SECONDS`(16s)，主动探测探活推动 CLOSE，burst 验证全 ok
+6. 日志佐证：SDK 日志出现探测调度 + 状态切换记录
 
-### 通过条件（共 3 项指标）
-- 触发 OPEN：`abort >= 1`
-- 维持 OPEN：`abort >= 1`（探测失败不恢复）
-- 探活 CLOSE：`ok == FD_VERIFY_COUNT`（默认 10）
+**通过条件**：`trigger_abort>=1` 且 `keep_abort>=1` 且 `recover_ok==FD_VERIFY_COUNT` 且 探测调度=yes 且 状态切换=yes。
 
-### 验证原理
+### 用例三：INSTANCE 级（ok 型，单实例故障）
+INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落其余健康实例（不 abort）。步骤：
+1. 环境复位：a/b 均 200
+2. 启动 consumer + 下发 INSTANCE 级熔断规则 + 探测规则，等待就绪
+3. 触发 b OPEN：**仅 provider-b 置 500**（a 保持 200），burst 30 → 触发 b 实例熔断
+4. 维持 OPEN：b 保持 500，等 12s，burst 验证业务落 a（ok）
+5. 探活恢复：provider-b 置 200，等 16s，b 实例 half-open→close 重新可选，burst 验证全 ok
+6. 日志佐证：探测调度 + **INSTANCE 级** half-open→close
+
+**通过条件**：`trigger_fail>=1` 且 `keep_ok>=FD_VERIFY_COUNT-1` 且 `recover_ok>=FD_VERIFY_COUNT-1`
+且 探测调度=yes 且 INSTANCE状态切换=yes（ok 容忍 1 次 LB 抖动）。
+
+> INSTANCE 级恢复实测由 half-open 态业务请求探活推动（探测在 OPEN 期间也持续调度）；不用
+> "provider-b 探测请求增量"作铁证（provider 三用例共享、计数串扰），以 INSTANCE 级 half-open→close 为铁证。
+
+### 用例四/五：TCP / UDP 探测（abort 型，单实例 provider-a，共用 `_run_probe_tcpudp_case`）
+均为 SERVICE 级熔断规则（abort 型），闭环结构与 HTTP SERVICE 用例一致，区别在探测协议与探测端口。步骤：
+1. 环境复位：provider-a/b 的 `/echo` 置 200；TCP/UDP 探测端口正常回包
+2. 启动 consumer（TCP=18098 / UDP=18099）+ 下发 SERVICE 级熔断规则（带 `faultDetectConfig.enable=true`）+
+   TCP/UDP 探测规则（`protocol=2/3`，`tcp_config`/`udp_config`，`port` 指向 provider-a 的 28091/28101），等待就绪
+3. 触发 OPEN：provider-a/b 的 `/echo` 置 500，burst `FD_TRIGGER_COUNT`(30) → 熔断打开（abort）
+4. 维持 OPEN：`/echo` 保持 500 **且** 探测端口故障（`openTcpError`/`openUdpError` 让探测端口不回包 → 探测失败），
+   等 `WAIT_KEEP_OPEN_SECONDS`(12s) > sleepWindow，burst 验证仍 abort
+5. 探活恢复：`/echo` 与探测端口都恢复正常，等 `WAIT_RECOVER_SECONDS`(16s)，主动探测探活推动 CLOSE，burst 验证全 ok
+6. 日志佐证：SDK 日志出现探测调度 + 状态切换记录
+
+**通过条件**：`trigger_abort>=1` 且 `keep_abort>=1` 且 `recover_ok==FD_VERIFY_COUNT` 且 探测调度=yes 且 状态切换=yes。
+
+> **维持 OPEN 需业务 500 + 探测端口故障双重保证**：SERVICE 级 half-open 会放行业务请求探活，若维持阶段
+> 业务 `/echo` 恢复 200 会抢先 close。故维持阶段让业务 `/echo` 仍 500、同时让 TCP/UDP 探测端口故障，
+> 恢复阶段则业务与探测端口同时转绿。TCP/UDP 探测器各暴露并修复了 3 个 SDK bug（`Name()` 撞名、
+> `ReadAll` 无 read deadline 阻塞、`DetectResultImp` 缺 `Code` 哨兵），详见 fault-detect.md「与代码改造对应关系」。
+
+### 共同验证原理
 - 熔断规则 `faultDetectConfig.enable=true` 是探测启动门控；门控关闭则 SDK 不创建 `ResourceHealthChecker`
 - 探测器按 `interval` 周期 GET `/echo`，结果经 `doReport(stat, record=false)` 上报，不触发实例重新注册
 - HALF_OPEN 态下探测结果与业务请求共用恢复判定：连续成功达 `consecutiveSuccess` 即 `HALF_OPEN → CLOSE`，任一失败回 `OPEN`
+- 日志佐证 grep 各 consumer 独立 SDK 日志 `.build/<name>_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log`（非 stdout）：探测调度铁证用 `[CircuitBreaker] schedule task`（不用宽松 `[FaultDetect]`/`health check`，会被"is disabled"关停日志误判）；状态切换关键字小写 `status change: half-open -> close`
+- 退出时熔断规则删除、**探测规则保留复用**（FaultDetectRule 无 enable 字段）
 
 ---
 

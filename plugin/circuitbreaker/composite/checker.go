@@ -147,11 +147,16 @@ func (c *ResourceHealthChecker) cleanInstances() {
 }
 
 func (c *ResourceHealthChecker) createCheckJob(protocol string, rule *fault_tolerance.FaultDetectRule) func() {
+	// 周期性探测任务体：每个 interval 被调度器触发一次，属于周期级日志，使用 Debug 级别。
 	return func() {
 		if c.isStopped() {
+			c.log.Debugf("[FaultDetect] check job skipped (checker stopped), resource=%s, protocol=%s, rule=%s",
+				c.resource.String(), protocol, rule.GetName())
 			return
 		}
 		name := fault_tolerance.FaultDetectRule_Protocol_value[protocol]
+		c.log.Debugf("[FaultDetect] check job fired, resource=%s, protocol=%s, rule=%s",
+			c.resource.String(), protocol, rule.GetName())
 		c.checkResource(fault_tolerance.FaultDetectRule_Protocol(name), rule)
 	}
 }
@@ -162,6 +167,9 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 		hosts := map[string]struct{}{}
 		c.lock.RLock()
 		defer c.lock.RUnlock()
+		// 周期级日志：每次探测调度都会执行，统计待探实例数，使用 Debug 级别避免刷屏。
+		c.log.Debugf("[FaultDetect] checkResource start (fixed port=%d), resource=%s, protocol=%s, instance_count=%d",
+			port, c.resource.String(), protocol.String(), len(c.instances))
 		for k, v := range c.instances {
 			if _, ok := hosts[k]; ok {
 				continue
@@ -171,29 +179,42 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 				Host: wrapperspb.String(v.insRes.GetNode().Host),
 				Port: wrapperspb.UInt32(v.insRes.GetNode().Port),
 			}, defaultServiceKey(v.insRes.GetService()), nil)
-			isSuccess := c.doCheck(ins, v.protocol, rule)
+			// 探测器按探测规则的 protocol 注册到 healthCheckers，故 doCheck 必须传规则 protocol；
+			// 实例自身 protocol（v.protocol）通常为 UNKNOWN（注册时未声明），用它查 healthCheckers
+			// 会命中 plugin not found 而跳过探测。
+			isSuccess := c.doCheck(ins, protocol, rule)
 			v.setCheckResult(isSuccess)
 		}
 		return
 	}
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+	// 周期级日志：port=0 分支用实例自身端口探测，记录待探实例数。
+	c.log.Debugf("[FaultDetect] checkResource start (instance port), resource=%s, protocol=%s, instance_count=%d",
+		c.resource.String(), protocol.String(), len(c.instances))
 	for _, v := range c.instances {
 		curProtocol := v.protocol
+		// 实例 protocol 仅用于过滤：UNKNOWN（未声明）或与规则 protocol 一致的实例才参与本规则探测。
 		if !(curProtocol == fault_tolerance.FaultDetectRule_UNKNOWN || curProtocol == protocol) {
+			c.log.Debugf("[FaultDetect] skip instance for protocol mismatch, resource=%s, instance=%s:%d, instance_protocol=%s, rule_protocol=%s",
+				c.resource.String(), v.insRes.GetNode().Host, v.insRes.GetNode().Port, curProtocol.String(), protocol.String())
 			continue
 		}
 		ins := pb.NewInstanceInProto(&service_manage.Instance{
 			Host: wrapperspb.String(v.insRes.GetNode().Host),
 			Port: wrapperspb.UInt32(v.insRes.GetNode().Port),
 		}, defaultServiceKey(v.insRes.GetService()), nil)
-		isSuccess := c.doCheck(ins, v.protocol, rule)
+		// 同 port>0 分支：探测执行用规则 protocol 选取探测器，不能用实例 protocol（多为 UNKNOWN）。
+		isSuccess := c.doCheck(ins, protocol, rule)
 		v.setCheckResult(isSuccess)
 	}
 }
 
 func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol,
 	rule *fault_tolerance.FaultDetectRule) bool {
+	// 单次实例探测，周期级日志：记录探测发起，使用 Debug 级别。
+	c.log.Debugf("[FaultDetect] doCheck start, resource=%s, instance=%s:%d, protocol=%s, rule=%s",
+		c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(), rule.GetName())
 	checker, ok := c.healthCheckers[protocol]
 	if !ok {
 		c.log.Infof("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
@@ -202,6 +223,8 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 	}
 	ret, err := checker.DetectInstance(ins, rule)
 	if err != nil {
+		c.log.Debugf("[FaultDetect] doCheck failed, resource=%s, instance=%s:%d, protocol=%s, err=%v",
+			c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(), err)
 		return false
 	}
 	stat := &model.ResourceStat{
@@ -210,6 +233,10 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 		Delay:     ret.GetDelay(),
 		RetStatus: ret.GetRetStatus(),
 	}
+	// 探测结果，周期级日志：记录探测结论与上报，使用 Debug 级别。
+	c.log.Debugf("[FaultDetect] doCheck result, resource=%s, instance=%s:%d, protocol=%s, code=%s, delay=%+v, success=%t",
+		c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(),
+		ret.GetCode(), ret.GetDelay(), stat.RetStatus == model.RetSuccess)
 	// 探测结果走 record=false 上报：仅参与熔断状态机统计，不触发实例重新注册进探测集合
 	if err := c.circuitBreaker.reportFaultDetectStat(stat); err != nil {
 		c.log.Errorf("[CircuitBreaker] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
@@ -227,6 +254,10 @@ func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record 
 			insRes:          res,
 			lastReportMilli: clock.CurrentMillis(),
 		}
+		// 探测目标集合新增实例属于事件级（懒启动填充），但触发频率受业务请求驱动，
+		// 为避免高 QPS 下刷屏，统一用 Debug 级别。
+		c.log.Debugf("[FaultDetect] add instance into health check set, resource=%s, node=%s, total=%d",
+			c.resource.String(), res.GetNode().String(), len(c.instances))
 		return
 	}
 	if record {

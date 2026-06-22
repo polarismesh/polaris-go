@@ -19,8 +19,6 @@ package udp
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net"
 	"time"
 
@@ -57,7 +55,7 @@ func (g *Detector) Type() common.Type {
 
 // Name 插件名，一个类型下插件名唯一
 func (g *Detector) Name() string {
-	return config.DefaultTCPHealthCheck
+	return config.DefaultUDPHealthCheck
 }
 
 // Init 初始化插件
@@ -84,6 +82,15 @@ func (g *Detector) DetectInstance(ins model.Instance, rule *fault_tolerance.Faul
 		Success:        success,
 		DetectTime:     start,
 		DetectInstance: ins,
+		// 与 TCP 探测器一致：成功置 "0"、失败置 "-1"。"-1" 是熔断器 block_counter.parseRetStatus
+		// 的失败哨兵（RET_CODE 条件下 RetCode=="-1" 直接判 RetFail），否则探测失败的 stat
+		// 因 RetCode 为空不命中 RANGE 500~599 规则，会被误判为成功、无法维持 OPEN。
+		Code: func() string {
+			if success {
+				return "0"
+			}
+			return "-1"
+		}(),
 	}
 	return result, nil
 }
@@ -103,6 +110,8 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 	defer func() {
 		_ = conn.Close()
 	}()
+	// 探测连通成功，每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
+	g.logCtx.GetDetectLogger().Debugf("[HealthCheck][udp] connect success, address=%s", address)
 	if rule == nil || rule.GetUdpConfig() == nil {
 		return true
 	}
@@ -114,12 +123,24 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to write send body %s, err is %v", address, err)
 		return false
 	}
-	recvData, err := ioutil.ReadAll(conn)
-	if err != nil && err != io.EOF {
+	// UDP 无连接、无 EOF：
+	//   - 对端不回包时若用 ioutil.ReadAll 会永久阻塞、占死探测 goroutine；
+	//   - 用 ReadAll + deadline 时，即便读到了响应，ReadAll 也会一直等到 deadline 才返回，
+	//     且返回的 err 是 i/o timeout（非 io.EOF），导致"已收到正确响应"也被误判为失败。
+	// 因此改用单次 conn.Read：读到一个 UDP 响应包即返回，能区分"超时无响应（失败）"与
+	// "收到响应（按内容匹配）"。
+	if err = conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to set read deadline %s, err is %v", address, err)
+		return false
+	}
+	recvBuf := make([]byte, 1024)
+	n, err := conn.Read(recvBuf)
+	if err != nil {
+		// 超时（i/o timeout）或其它读错误：对端未在 timeout 内回包，探测失败。
 		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] fail to read receive data %s, err is %v", address, err)
 		return false
 	}
-	actualData := string(recvData)
+	actualData := string(recvBuf[:n])
 	found := false
 	for i := range udpCfg.Receive {
 		if udpCfg.Receive[i] == actualData {
