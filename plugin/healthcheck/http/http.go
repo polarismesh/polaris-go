@@ -115,6 +115,15 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
+// getDetectLog 获取探测日志记录器，若 logCtx 未初始化或全局 logger 未就绪则返回 nil。
+// 调用方需判空：nil 时直接跳过日志输出（仅发生在测试环境未初始化 logger 的场景）。
+func (g *Detector) getDetectLog() log.Logger {
+	if g.logCtx == nil {
+		return nil
+	}
+	return g.logCtx.GetDetectLogger()
+}
+
 // doHttpDetect 执行一次健康探测逻辑
 func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.FaultDetectRule) (string, bool) {
 	resp, err := g.client.Do(detReq)
@@ -129,7 +138,9 @@ func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.Faul
 		if lastErr, ok := g.lastDoErr[urlStr]; !ok || lastErr != errMsg {
 			g.lastDoErr[urlStr] = errMsg
 			g.lastDoErrMu.Unlock()
-			g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+			if l := g.getDetectLog(); l != nil {
+				l.Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+			}
 		} else {
 			g.lastDoErrMu.Unlock()
 		}
@@ -141,12 +152,21 @@ func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.Faul
 		delete(g.lastDoErr, detReq.URL.String())
 	}
 	g.lastDoErrMu.Unlock()
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			if l := g.getDetectLog(); l != nil {
+				l.Errorf("[HealthCheck][http] close resp body err, url=%+v, err=%v",
+					detReq.URL, err)
+			}
+		}
+	}()
 	code := resp.StatusCode
 	success := code >= 200 && code < 500
 	// 探测成功不属于失败事件，但每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
-	g.logCtx.GetDetectLogger().Debugf("[HealthCheck][http] detect done, url=%+v, code=%d, success=%t",
-		detReq.URL, code, success)
+	if l := g.getDetectLog(); l != nil {
+		l.Debugf("[HealthCheck][http] detect done, url=%+v, code=%d, success=%t",
+			detReq.URL, code, success)
+	}
 	return strconv.Itoa(code), success
 }
 
@@ -187,7 +207,9 @@ func (g *Detector) generateHttpRequest(ctx context.Context, ins model.Instance, 
 
 	request, err := http.NewRequestWithContext(ctx, rule.GetHttpConfig().Method, address, bytes.NewBufferString(rule.HttpConfig.GetBody()))
 	if err != nil {
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		if l := g.getDetectLog(); l != nil {
+			l.Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		}
 		return nil, err
 	}
 

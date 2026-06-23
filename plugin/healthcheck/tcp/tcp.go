@@ -118,7 +118,9 @@ func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetect
 		if lastErr, ok := g.lastDialErr[address]; !ok || lastErr != errMsg {
 			g.lastDialErr[address] = errMsg
 			g.lastDialErrMu.Unlock()
-			g.logCtx.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+			if l := g.logCtx.GetDetectLogger(); l != nil {
+				l.Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+			}
 		} else {
 			g.lastDialErrMu.Unlock()
 		}
@@ -134,7 +136,9 @@ func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetect
 		_ = conn.Close()
 	}()
 	// 探测连通成功，每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
-	g.logCtx.GetDetectLogger().Debugf("[HealthCheck][tcp] connect success, address=%s", address)
+	if l := g.logCtx.GetDetectLogger(); l != nil {
+		l.Debugf("[HealthCheck][tcp] connect success, address=%s", address)
+	}
 	if rule == nil || rule.GetTcpConfig() == nil {
 		return true
 	}

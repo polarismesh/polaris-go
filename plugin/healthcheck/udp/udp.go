@@ -117,7 +117,9 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 		_ = conn.Close()
 	}()
 	// 探测连通成功，每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
-	g.logCtx.GetDetectLogger().Debugf("[HealthCheck][udp] connect success, address=%s", address)
+	if l := g.logCtx.GetDetectLogger(); l != nil {
+		l.Debugf("[HealthCheck][udp] connect success, address=%s", address)
+	}
 	if rule == nil || rule.GetUdpConfig() == nil {
 		delete(g.lastErr, address+"|dial")
 		delete(g.lastErr, address+"|write")
@@ -182,7 +184,9 @@ func (g *Detector) logConvergedErr(address, stage string, err error, msg string)
 	errMsg := err.Error()
 	if lastErr, ok := g.lastErr[errKey]; !ok || lastErr != errMsg {
 		g.lastErr[errKey] = errMsg
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][udp] %s address=%s, err=%v", msg, address, err)
+		if l := g.logCtx.GetDetectLogger(); l != nil {
+			l.Errorf("[HealthCheck][udp] %s address=%s, err=%v", msg, address, err)
+		}
 	}
 }
 
