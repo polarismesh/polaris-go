@@ -6,10 +6,10 @@
 
 ```
                   ┌──── provider-a (端口 28081，默认 200) ────┐
-                  │   /echo /health + /switch                   │  一个进程同时注册到五个被调服务：
-                  │   TCP 探测端口 28091 / UDP 探测端口 28101    │      CircuitBreakerFDSvcCallee
-   Polaris ◀──────┤   （TCP/UDP 探测端口仅 provider-a 启动）     ├──── CircuitBreakerFDMethodCallee
-                  │   /echo /health + /switch                   │      CircuitBreakerFDInstanceCallee
+                  │   /echo /health + /switch               │  一个进程同时注册到五个被调服务：
+                  │   TCP 探测端口 28091 / UDP 探测端口 28101  │      CircuitBreakerFDSvcCallee
+   Polaris ◀──────┤   （TCP/UDP 探测端口仅 provider-a 启动）   ├──── CircuitBreakerFDMethodCallee
+                  │   /echo /health + /switch               │      CircuitBreakerFDInstanceCallee
                   └──── provider-b (端口 28082，默认 500) ────┘      CircuitBreakerFDTcpCallee
                                        ▲                              CircuitBreakerFDUdpCallee
                                        │
@@ -250,6 +250,52 @@ TCP / UDP 用例都是 **SERVICE 级熔断规则（abort 型）**，闭环结构
 
 ---
 
+## 用例六：协议/方法维度 + HTTP Headers 验证
+
+验证 `selectFaultDetectRules` 对 `target_service.method` 的过滤正确性，以及 `generateHttpRequest` 对 `http_config.headers` 的设置正确性。**复用已有 SERVICE consumer（18095）和 METHOD consumer（18096），不新增进程。**
+
+### 验证步骤
+
+#### 段 A：SERVICE 级 method 过滤
+
+| 步骤 | 动作 | 判定指标 |
+|------|------|---------|
+| [A.1] | 创建 `method.value=/api/protocol/http` 的探测规则（非通配） | `schedule task` 行数不变（SERVICE 级拒绝非通配 method） |
+| [A.2] | 创建 `method.value=*` 的探测规则（通配） | `schedule task` 行数增加（SERVICE 级接受通配 method） |
+
+> **原理**：SERVICE 级资源在 `selectFaultDetectRules` 中只接受 `method.value` 为空或 `*` 的探测规则（`match.IsMatchAll`），非通配值会被过滤。段 A 不触发熔断，仅验证规则过滤。
+
+#### 段 B：METHOD 级 method 过滤 + 完整闭环
+
+| 步骤 | 动作 | 判定指标 |
+|------|------|---------|
+| [B.1] | 创建 `method.value=/echo` + `method.value=/api/protocol/http` 两条探测规则 | 只有 `/echo` 的 `schedule task` 出现 |
+| [B.2] | 触发熔断 OPEN（复用 METHOD consumer `/echo` handler） | `trigger_abort >= 1` |
+| [B.3] | 维持 OPEN | `keep_abort >= 1` |
+| [B.4] | 探活恢复 | `recover_ok == FD_VERIFY_COUNT` |
+| [B.5] | 日志佐证 | 探测调度=yes, 状态切换=yes |
+
+> **原理**：METHOD 级资源在 `selectFaultDetectRules` 中调用 `matchMethod` 按 `resource.Path` 精确匹配 `targetService.method`。`/api/protocol/http` 不与 resource.Path（`/echo`）匹配，因此不被选中。
+
+#### 段 C：HTTP Headers 验证
+
+| 步骤 | 动作 | 判定指标 |
+|------|------|---------|
+| [C.1] | 创建 `http_config.headers=[{key:"X-Health-Probe", value:"true"}]` 的探测规则 | `schedule task` 出现 |
+| [C.2] | 等待探测周期，grep provider-a 日志 | `X-Health-Probe=true` 出现在探测请求中 |
+
+> **原理**：`generateHttpRequest` 从 `rule.GetHttpConfig().GetHeaders()` 读取 headers 并设置到 HTTP 请求。provider-a 的 `logIncomingRequest` 已打印完整 headers，grep 即可验证。
+
+### 通过条件
+
+- **段 A**：`has_a1=yes`（拒绝非通配）且 `has_a2=yes`（接受通配）
+- **段 B**：`has_b_filter=yes` 且 `trigger_abort>=1` 且 `keep_abort>=1` 且 `recover_ok==FD_VERIFY_COUNT` 且 `探测调度=yes` 且 `状态切换=yes`
+- **段 C**：`c_has_schedule=yes` 且 `c_has_header=yes`
+
+三段**全部满足**方为 PASS。
+
+---
+
 ## 步骤 6 日志佐证的实现要点
 
 SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 consumer 独立的 SDK 日志文件：
@@ -315,3 +361,5 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | UDP 探测改用 `conn.Read` + `SetReadDeadline`（原 `ReadAll` 无 read deadline，对端不回包时永久阻塞占死探测 goroutine） | 用例五 维持 OPEN（探测端口不回包时探测失败而非卡死） |
 | UDP `DetectResultImp` 失败置 `Code="-1"`、成功置 `"0"`（原缺 `Code`，探测失败 RetCode 为空、不命中规则 `RET_CODE RANGE 500~599` 被误判成功） | 用例五 维持 OPEN（探测失败正确命中失败哨兵，不误判恢复） |
 | `plugin.cfg` 补 `udp : healthcheck/udp`（`plugins.go` 本就 import 了 udp） | 用例五 UDP 探测器注册可用 |
+| 探测日志收敛：状态变化立即 INFO、连续失败 30s 定时 INFO、连续成功静默 | 三级用例步骤 4/6 日志佐证（`detect status change` / `detect still failing`） |
+| 探测器异常日志收敛：http/tcp/udp 首次 err 打印 Errorf，内容不变静默 | 三级用例维持 OPEN 阶段（探测持续异常不刷屏） |

@@ -610,7 +610,7 @@ Active Health Check）则是 SDK 在熔断打开后**周期性主动探活下游
 ### 验证的闭环
 
 脚本覆盖 **SERVICE（服务级）/ METHOD（接口级）/ INSTANCE（实例级）三个 HTTP 探测级别 + TCP 探测 +
-UDP 探测共 5 个用例**，各用独立 caller + 独立 consumer 端口（18095/18096/18097/18098/18099）+
+UDP 探测 + **协议/方法维度验证**共 **6 个用例**，各用独立 caller + 独立 consumer 端口（18095/18096/18097/18098/18099）+
 **独立被调服务**（CircuitBreakerFDSvcCallee / FDMethodCallee / FDInstanceCallee / FDTcpCallee /
 FDUdpCallee，provider 通过 `--service` 逗号分隔同时注册到五个服务）+ 独立规则名（`cb-fd-<LEVEL>-<caller>`）。
 独立被调服务可避免被 verify_circuitbreaker.sh 残留的 `source=*/*` catch-all 规则按 id 字典序抢占
@@ -662,11 +662,12 @@ RUN_FD_CASES=method,instance POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh   #
 
 | 变量                     | 含义                                       | 默认值 |
 | ------------------------ | ------------------------------------------ | ------ |
-| `RUN_FD_CASES`           | 选跑用例子集（逗号分隔 service/method/instance/tcp/udp），未选标 SKIP | service,method,instance,tcp,udp |
+| `RUN_FD_CASES`           | 选跑用例子集（逗号分隔 service/method/instance/tcp/udp/proto_method），未选标 SKIP | service,method,instance,tcp,udp,proto_method |
 | `FD_TRIGGER_COUNT`       | 触发熔断的 burst 次数                      | 30     |
 | `FD_CONSECUTIVE_ERROR`   | 熔断规则连续错误阈值                       | 5      |
 | `FD_SLEEP_WINDOW`        | 熔断 sleepWindow（秒），进入半开的等待窗口 | 6      |
 | `FD_PROBE_INTERVAL`      | 主动探测间隔（秒）                         | 2      |
+| `FD_PROBE_INTERVAL_UPDATED` | D 段 interval 热更新验证的目标探测间隔（秒） | 5  |
 | `WAIT_KEEP_OPEN_SECONDS` | 维持 OPEN 阶段等待（> sleepWindow）        | 12     |
 | `WAIT_RECOVER_SECONDS`   | 恢复阶段等待（sleepWindow + 多个探测周期） | 16     |
 
@@ -679,6 +680,19 @@ RUN_FD_CASES=method,instance POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh   #
 | 探活 CLOSE | `ok == FD_VERIFY_COUNT` | `ok >= N-1`（b 恢复可选） |
 | 日志佐证 | 探测调度=yes 且 状态切换=yes | 探测调度=yes 且 **INSTANCE 级** half-open→close=yes |
 
+### D 段：规则动态启停与热更新验证
+
+SERVICE 和 METHOD 用例在 A-C 段之后增加 D 段子步骤，验证规则变更是否实时生效，
+**复用已有 consumer、不增加进程启动**：
+
+| 用例 | D 段步骤 | 操作 | 日志铁证 |
+|------|----------|------|----------|
+| SERVICE | [7] 关闭探测 | PUT `faultDetectConfig.enable=false` | `[FaultDetect] health check ... is disabled, now stop` |
+| SERVICE | [8] 重新开启 | PUT `faultDetectConfig.enable=true` | `schedule task` 行数增加 |
+| METHOD | [7] 修改间隔 | PUT 探测规则 `interval=5s`（原 2s） | `schedule task.*interval=5s` 出现 |
+
+> D 段失败不影响 A-C 段判定结果（但整体仍 FAIL，指标表单独标注）。
+
 > TCP/UDP 用例与 SERVICE 同为 abort 型，判定指标完全一致；区别仅在探测协议（TCP/UDP）、探测端口
 > （provider-a 的 28091/28101）与探测故障开关（`openTcpError`/`openUdpError`）。
 
@@ -689,6 +703,19 @@ RUN_FD_CASES=method,instance POLARIS_SERVER=10.0.0.1 ./verify_faultdetect.sh   #
 
 > 退出时：**熔断规则删除**；**探测规则保留不删**（FaultDetectRule 无 enable 字段，改为跨运行幂等复用，
 > 下次存在则 PUT 更新复用）；停止 provider/consumer 进程。
+
+### 协议/方法维度验证（proto_method）
+
+用例 `proto_method` 验证 `selectFaultDetectRules` 对 `target_service.method` 的过滤正确性，
+以及 `generateHttpRequest` 对 `http_config.headers` 的设置正确性。分三段，**复用已有 SERVICE/METHOD consumer，不新增进程**：
+
+| 段 | 验证目标 | 操作 |
+|----|---------|------|
+| A | SERVICE 级 method 过滤 | 非通配 method 被拒绝、通配 method 被接受 |
+| B | METHOD 级 method 过滤 + 闭环 | 仅匹配的 method 被选中，走完整 trigger→maintain→recover |
+| C | HTTP headers 传递 | `X-Health-Probe=true` header 出现在探测请求中 |
+
+> 段 A/C 复用 SERVICE consumer（18095），段 B 复用 METHOD consumer（18096）。
 
 ## 用例细节
 

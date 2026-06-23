@@ -345,12 +345,26 @@ func (c *ResourceHealthChecker) selectFaultDetectRules(res model.Resource,
 		if !match.MatchService(res.GetService(), targetService.Namespace, targetService.Service) {
 			continue
 		}
+		// 探测规则匹配：优先使用 targetService.api（protocol + method + path 三维匹配），
+		// 对齐 polaris-java ResourceHealthChecker.matchResource。
+		// api 为空时回退到 deprecated 的 targetService.method 做兼容。
 		if res.GetLevel() == fault_tolerance.Level_METHOD {
-			if !matchMethod(res, targetService.GetMethod(), c.regexFunction) {
+			api := targetService.GetApi()
+			if api != nil {
+				if !matchMethodWithAPI(res, api, c.regexFunction) {
+					continue
+				}
+			} else if !matchMethod(res, targetService.GetMethod(), c.regexFunction) {
 				continue
 			}
 		} else {
-			if !match.IsMatchAll(targetService.GetMethod().GetValue().Value) {
+			// SERVICE / INSTANCE 级：优先用 api.path，回退 method.value
+			api := targetService.GetApi()
+			if api != nil && api.GetPath() != nil {
+				if !match.IsMatchAll(api.GetPath().GetValue().Value) {
+					continue
+				}
+			} else if !match.IsMatchAll(targetService.GetMethod().GetValue().Value) {
 				continue
 			}
 		}
