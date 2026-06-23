@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
@@ -48,6 +49,11 @@ type Detector struct {
 	client  HttpSender
 	// 上下文日志
 	logCtx *log.ContextLogger
+	// lastDoErr 记录每个探测地址的上一次 HTTP 请求错误信息，err 内容不变时静默不重复打印。
+	lastDoErr map[string]string
+	// lastDoErrMu 保护 lastDoErr 的并发访问：多个 ResourceHealthChecker 共享同一 detector 实例，
+	// 它们的 IntervalExecute 可能并发调用 doHttpDetect 读写该 map。
+	lastDoErrMu sync.Mutex
 }
 
 // Type 插件类型
@@ -68,6 +74,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 		g.cfg = cfgValue.(*Config)
 	}
 	g.client = &http.Client{}
+	g.lastDoErr = make(map[string]string, 16)
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
 	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
@@ -112,9 +119,28 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.FaultDetectRule) (string, bool) {
 	resp, err := g.client.Do(detReq)
 	if err != nil {
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+		errMsg := err.Error()
+		urlStr := detReq.URL.String()
+		// 探测异常收敛：err 内容不变时仅首次打印，避免连接超时/拒绝等重复刷屏。
+		g.lastDoErrMu.Lock()
+		if g.lastDoErr == nil {
+			g.lastDoErr = make(map[string]string, 8)
+		}
+		if lastErr, ok := g.lastDoErr[urlStr]; !ok || lastErr != errMsg {
+			g.lastDoErr[urlStr] = errMsg
+			g.lastDoErrMu.Unlock()
+			g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+		} else {
+			g.lastDoErrMu.Unlock()
+		}
 		return "", false
 	}
+	// err 恢复后清除记录，确保下次异常能重新打印。
+	g.lastDoErrMu.Lock()
+	if g.lastDoErr != nil {
+		delete(g.lastDoErr, detReq.URL.String())
+	}
+	g.lastDoErrMu.Unlock()
 	defer resp.Body.Close()
 	code := resp.StatusCode
 	success := code >= 200 && code < 500

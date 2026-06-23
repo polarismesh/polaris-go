@@ -18,6 +18,7 @@
 package composite
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,8 @@ import (
 
 const (
 	defaultCheckInterval = 10 * time.Second
+	// detectStatusReportPeriod 探测持续失败时的定时汇报周期（不打扰状态变化立即打印的即时性）。
+	detectStatusReportPeriod = 30 * time.Second
 )
 
 type ResourceHealthChecker struct {
@@ -59,6 +62,14 @@ type ResourceHealthChecker struct {
 	executor *TaskExecutor
 	// log
 	log log.Logger
+	// detectLastResult 记录每个实例的上一次探测结果（true=成功, false=失败），用于检测状态变化。
+	detectLastResult map[string]bool
+	// detectLastReportTime 记录每个实例上次定时打印失败日志的时间，用于收敛"连续失败"的汇报频率。
+	detectLastReportTime map[string]time.Time
+	// detectMu 保护 detectLastResult / detectLastReportTime 的并发访问。
+	detectMu sync.RWMutex
+	// lastDetectErr 记录每个实例的上一次探测底层异常错误信息，仅 err 内容变化时重新打印。
+	lastDetectErr map[string]string
 }
 
 func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance.FaultDetector,
@@ -76,6 +87,9 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 		executor:                   breaker.executor,
 		instanceExpireIntervalMill: breaker.healthCheckInstanceExpireInterval.Milliseconds(),
 		log:                        breaker.logCtx.GetCircuitBreakerLogger(),
+		detectLastResult:           make(map[string]bool, 16),
+		detectLastReportTime:       make(map[string]time.Time, 16),
+		lastDetectErr:              make(map[string]string, 16),
 	}
 	if insRes, ok := res.(*model.InstanceResource); ok {
 		checker.addInstance(insRes, false)
@@ -133,7 +147,8 @@ func (c *ResourceHealthChecker) cleanInstances() {
 			lastReportMilli := v.getLastReportMilli()
 			if curTimeMill-lastReportMilli >= expireIntervalMill {
 				waitDel = append(waitDel, k)
-				c.log.Infof("[CircuitBreaker] clean instance from health check tasks, resource=%s, expired node=%s, lastReportMilli=%d",
+				// 清理过期实例：周期任务内部状态，使用 Debug 级别避免实例大规模过期时刷屏。
+				c.log.Debugf("[CircuitBreaker] clean instance from health check tasks, resource=%s, expired node=%s, lastReportMilli=%d",
 					c.resource.String(), k, lastReportMilli)
 			}
 		}
@@ -141,8 +156,14 @@ func (c *ResourceHealthChecker) cleanInstances() {
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	for k := range waitDel {
-		delete(c.instances, waitDel[k])
+	for _, k := range waitDel {
+		delete(c.instances, k)
+		// 同步清理探测状态追踪 map，避免容器 IP 漂移/实例下线后旧 entry 永久残留。
+		c.detectMu.Lock()
+		delete(c.detectLastResult, k)
+		delete(c.detectLastReportTime, k)
+		delete(c.lastDetectErr, k)
+		c.detectMu.Unlock()
 	}
 }
 
@@ -210,38 +231,86 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 	}
 }
 
+// doCheck 执行一次实例探测并上报结果。
+// 探测日志收敛策略：
+//   - 状态变化（成功→失败、失败→成功）：立即 INFO 打印，便于运维感知实例健康翻转。
+//   - 状态不变：
+//   - 连续失败：按 detectStatusReportPeriod（30s）定时 INFO 汇总，避免每周期刷屏。
+//   - 连续成功：不打印（静默，避免噪声淹没关键事件）。
+//   - 探测底层异常（err != nil）与 plugin not found：保持 Debug/Warn 即时打印（不在收敛范围内）。
+//
+// 收敛状态以 instanceKey = host:port 为粒度独立追踪。
 func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_tolerance.FaultDetectRule_Protocol,
 	rule *fault_tolerance.FaultDetectRule) bool {
-	// 单次实例探测，周期级日志：记录探测发起，使用 Debug 级别。
-	c.log.Debugf("[FaultDetect] doCheck start, resource=%s, instance=%s:%d, protocol=%s, rule=%s",
-		c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(), rule.GetName())
 	checker, ok := c.healthCheckers[protocol]
 	if !ok {
-		c.log.Infof("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
+		c.log.Warnf("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
 			ins.GetHost(), ins.GetPort(), c.resource.String(), protocol.String())
 		return false
 	}
 	ret, err := checker.DetectInstance(ins, rule)
 	if err != nil {
-		c.log.Debugf("[FaultDetect] doCheck failed, resource=%s, instance=%s:%d, protocol=%s, err=%v",
-			c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(), err)
+		instanceKey := fmt.Sprintf("%s:%d", ins.GetHost(), ins.GetPort())
+		errMsg := err.Error()
+		// 探测底层异常收敛 + 状态追踪更新，合并为一次 Lock。
+		c.detectMu.Lock()
+		lastErr, hasErrRecord := c.lastDetectErr[instanceKey]
+		if !hasErrRecord || lastErr != errMsg {
+			c.lastDetectErr[instanceKey] = errMsg
+		}
+		c.detectLastResult[instanceKey] = false
+		c.detectMu.Unlock()
+		if !hasErrRecord || lastErr != errMsg {
+			c.log.Warnf("[FaultDetect] doCheck failed, resource=%s, instance=%s, protocol=%s, err=%v",
+				c.resource.String(), instanceKey, protocol.String(), err)
+		}
 		return false
 	}
+	isSuccess := ret.GetRetStatus() == model.RetSuccess
+	instanceKey := fmt.Sprintf("%s:%d", ins.GetHost(), ins.GetPort())
+	now := time.Now()
+
+	// 状态收敛逻辑
+	c.detectMu.Lock()
+	lastResult, hasRecord := c.detectLastResult[instanceKey]
+	changed := !hasRecord || lastResult != isSuccess
+	if changed {
+		c.detectLastResult[instanceKey] = isSuccess
+		delete(c.detectLastReportTime, instanceKey) // 状态变化后重置定时周期
+	}
+	c.detectMu.Unlock()
+
+	if changed {
+		c.log.Infof("[CircuitBreaker] detect status change: instance=%s, resource=%s, protocol=%s, "+
+			"success=%v, code=%s, delay=%+v",
+			instanceKey, c.resource.String(), protocol.String(), isSuccess, ret.GetCode(), ret.GetDelay())
+	} else if !isSuccess {
+		c.detectMu.Lock()
+		lastReport, hasReport := c.detectLastReportTime[instanceKey]
+		if !hasReport || now.Sub(lastReport) >= detectStatusReportPeriod {
+			c.detectLastReportTime[instanceKey] = now
+			c.detectMu.Unlock()
+			c.log.Infof("[CircuitBreaker] detect still failing: instance=%s, resource=%s, protocol=%s, "+
+				"code=%s, delay=%+v (reported every %v)",
+				instanceKey, c.resource.String(), protocol.String(), ret.GetCode(), ret.GetDelay(),
+				detectStatusReportPeriod)
+		} else {
+			c.detectMu.Unlock()
+		}
+	}
+	// 成功且状态不变 → 静默，不打印
+
 	stat := &model.ResourceStat{
 		Resource:  c.resource,
 		RetCode:   ret.GetCode(),
 		Delay:     ret.GetDelay(),
 		RetStatus: ret.GetRetStatus(),
 	}
-	// 探测结果，周期级日志：记录探测结论与上报，使用 Debug 级别。
-	c.log.Debugf("[FaultDetect] doCheck result, resource=%s, instance=%s:%d, protocol=%s, code=%s, delay=%+v, success=%t",
-		c.resource.String(), ins.GetHost(), ins.GetPort(), protocol.String(),
-		ret.GetCode(), ret.GetDelay(), stat.RetStatus == model.RetSuccess)
 	// 探测结果走 record=false 上报：仅参与熔断状态机统计，不触发实例重新注册进探测集合
 	if err := c.circuitBreaker.reportFaultDetectStat(stat); err != nil {
 		c.log.Errorf("[CircuitBreaker] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
 	}
-	return stat.RetStatus == model.RetSuccess
+	return isSuccess
 }
 
 func (c *ResourceHealthChecker) addInstance(res *model.InstanceResource, record bool) {

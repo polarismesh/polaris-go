@@ -162,10 +162,25 @@ METHOD 级把 `destination.method`、`BlockConfig.api.path`、探测 `target_ser
 | [4] 维持 OPEN | provider 保持 500，等 `WAIT_KEEP_OPEN_SECONDS`(12s, > sleepWindow)，burst `FD_VERIFY_COUNT`(10) | `keep_abort >= 1`（探测失败不恢复） |
 | [5] 探活恢复 | provider-a/b 翻回 200，等 `WAIT_RECOVER_SECONDS`(16s)，**不主动制造业务压力推动**，burst 验证 | `recover_ok == FD_VERIFY_COUNT`（恢复 CLOSE） |
 | [6] 日志佐证 | grep SDK 熔断日志（见下）确认探测调度 + 状态切换 | `探测调度=yes` 且 `状态切换=yes` |
+| ──── | **D 段：SERVICE 用例 — enable toggle 验证** | ──── |
+| [7] 关闭探测 | PUT 熔断规则 `faultDetectConfig.enable=false`，等待 SDK 感知规则变更 | `disabled_stop=yes`（日志含 `[FaultDetect] health check for resource=... is disabled, now stop`） |
+| [8] 重新开启探测 | PUT 熔断规则 `faultDetectConfig.enable=true`，等待 SDK 感知规则变更 | `resume_schedule=yes`（`schedule task` 行数增加） |
+| ──── | **D 段：METHOD 用例 — 规则参数热更新验证** | ──── |
+| [7] 修改探测间隔 | PUT 探测规则 `interval=5s`（原 2s），等待 SDK 感知规则变更 | `new_interval=yes`（日志出现 `schedule task ... interval=5s`） |
 
-### 通过条件（SERVICE / METHOD，5 项全满足）
+> **D 段说明**：SERVICE 用例验证 enable toggle 动态启停（`faultDetectConfig.enable` true→false→true），
+> METHOD 用例验证探测规则参数热更新（interval 2s→5s）。D 段复用 A-C 段已启动的 consumer，不增加进程启动。
+> D 段失败不影响 A-C 段判定结果（但整体仍报 FAIL，指标表中以 D 段列单独标注）。
 
-`trigger_abort >= 1` 且 `keep_abort >= 1` 且 `recover_ok == FD_VERIFY_COUNT` 且 `探测调度=yes` 且 `状态切换=yes`。
+### 通过条件（SERVICE / METHOD）
+
+**A-C 段**：`trigger_abort >= 1` 且 `keep_abort >= 1` 且 `recover_ok == FD_VERIFY_COUNT` 且 `探测调度=yes` 且 `状态切换=yes`。
+
+**D 段（SERVICE — toggle）**：`disabled_stop=yes` 且 `resume_schedule=yes`。
+
+**D 段（METHOD — interval）**：`new_interval=yes`。
+
+A-C 段与 D 段**全部满足**方为 PASS，任一失败即为 FAIL。
 
 ---
 
@@ -262,6 +277,8 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 4. **恢复判定**：HALF_OPEN 态下探测结果与业务请求共用恢复判定逻辑：连续成功达 `consecutiveSuccess`(1) → CLOSE，任一失败 → OPEN。
 5. **SERVICE/METHOD 维持 OPEN**：provider 仍 500，探测 `/echo` 失败，半开态回 OPEN，熔断不会意外恢复。
 6. **INSTANCE 单实例故障**：仅 b 故障，b 被路由摘除、业务无感落 a（维持 OPEN 阶段 ok=N）；恢复 b 后 b 重新可选。
+7. **D 段 — enable toggle 实时生效**：PUT 熔断规则 `faultDetectConfig.enable=false` → 服务端 push → SDK `OnEvent` → `scheduleHealthCheck` → `realRefreshHealthCheck` 门控重判不通过 → stop checker → 日志 `[FaultDetect] health check ... is disabled, now stop`。再 PUT `enable=true` → 同上链路门控通过 → 重建 checker → 新 `schedule task`。全程不需等周期调度，push 通道延迟在数百毫秒内。
+8. **D 段 — interval 热更新**：PUT 探测规则 `interval=5s` → 服务端 push → SDK `OnEvent(EventFaultDetect)` → `scheduleHealthCheck` → `realRefreshHealthCheck` 检测到 `faultDetector.Revision` 变化 → stop 旧 checker + 重建新 checker（新 interval）→ 新 `schedule task` 日志含 `interval=5s`。
 
 ---
 
@@ -277,6 +294,9 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | `探测调度=no` | grep 错文件（grep 了 consumer stdout 而非 SDK 日志）；或 `faultDetectConfig.enable` 未生效 | 确认 grep 的是 `.build/<name>_run/.../polaris-circuitbreaker.log` |
 | 规则创建失败 | Polaris 鉴权未通过或服务不存在 | 检查 `POLARIS_TOKEN`；确认 `CircuitBreakerCallee` 已注册 |
 | 端口占用 | 上次脚本未正常退出 | 执行 `./cleanup.sh -f` 后重试 |
+| D 段 `disabled_stop=no` | PUT `faultDetectConfig.enable=false` 后 SDK 未收到 push；或规则 id 错导致更新无效 | 检查 `polaris-circuitbreaker.log` 是否有 `[FaultDetect] start to pull fault detect rule`；确认 `cb_rule_id` 正确 |
+| D 段 `resume_schedule=no` | PUT `enable=true` 后 schedule task 行数未增加（可能旧 checker 的 stop 未执行或重建失败） | grep SDK 日志确认是否有新 `schedule task`；检查 `WAIT_RULE_READY_SECONDS` 是否够长 |
+| D 段 `new_interval=no` | PUT 探测规则 interval 后 SDK 未重建 checker（revision 未变？）；或等待时间不够 | 检查 `polaris-circuitbreaker.log` 是否有 `fault detect rule revision changed`；确认 PUT 是否成功（返回 200） |
 
 ## 与 polaris-go 代码改造的对应关系
 
@@ -289,6 +309,8 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | 探测结果 `record=false` 上报 | 步骤 4 探测失败不触发实例重新注册 |
 | HALF_OPEN 恢复判定（探测与业务共用） | SERVICE/METHOD 步骤 5 纯等待推动 CLOSE；INSTANCE 步骤 5 b 恢复可选 |
 | 三级（SERVICE/METHOD/INSTANCE）规则匹配与状态机 | 三个用例各自的 level 维度 |
+| `realRefreshHealthCheck` 门控重判 — enable toggle 实时关闭/开启探测 | **SERVICE 用例 D 段**：`faultDetectConfig.enable` true→false→true，验证 stop/rebuild checker |
+| `realRefreshHealthCheck` revision 检测 — 探测规则参数热更新 | **METHOD 用例 D 段**：PUT interval 2s→5s，验证 checker 重建且新 interval 生效 |
 | UDP 探测器 `Name()` 返回 `"udp"`（原误返回 `"tcp"` 与 TCP 探测器同名、插件 map 互相覆盖） | 用例五 UDP 探测调度=yes（探测器可被正确选取） |
 | UDP 探测改用 `conn.Read` + `SetReadDeadline`（原 `ReadAll` 无 read deadline，对端不回包时永久阻塞占死探测 goroutine） | 用例五 维持 OPEN（探测端口不回包时探测失败而非卡死） |
 | UDP `DetectResultImp` 失败置 `Code="-1"`、成功置 `"0"`（原缺 `Code`，探测失败 RetCode 为空、不命中规则 `RET_CODE RANGE 500~599` 被误判成功） | 用例五 维持 OPEN（探测失败正确命中失败哨兵，不误判恢复） |

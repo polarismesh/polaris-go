@@ -97,6 +97,8 @@ WAIT_KEEP_OPEN_SECONDS="${WAIT_KEEP_OPEN_SECONDS:-12}"
 # 恢复阶段等待（sleepWindow + 数个探测周期，纯靠主动探测推动 CLOSE）
 WAIT_RECOVER_SECONDS="${WAIT_RECOVER_SECONDS:-16}"
 
+# D 段热更新验证：修改探测间隔的目标值（秒）
+FD_PROBE_INTERVAL_UPDATED="${FD_PROBE_INTERVAL_UPDATED:-5}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # 颜色输出
@@ -294,6 +296,54 @@ rule = {
     # 主动探测门控：仅当 faultDetectConfig.enable=true 且存在匹配 FaultDetectRule，
     # SDK 才会启动 ResourceHealthChecker。
     'faultDetectConfig': {'enable': True},
+}
+print(json.dumps(rule))
+"
+}
+
+# build_circuitbreaker_rule_body_disable
+#   与 build_circuitbreaker_rule_body 相同但 faultDetectConfig.enable=false，
+#   用于 D 段 enable toggle 验证中关闭探测。接受相同的环境变量参数。
+build_circuitbreaker_rule_body_disable() {
+    python3 -c "
+import json, os
+consecutive = int(os.environ.get('FD_CONSECUTIVE_ERROR', '5'))
+sleep_window = int(os.environ.get('FD_SLEEP_WINDOW', '6'))
+level = os.environ.get('FD_RULE_LEVEL', 'SERVICE')
+method_type = os.environ.get('FD_RULE_METHOD_TYPE', 'EXACT')
+method_value = os.environ.get('FD_RULE_METHOD_VALUE', '*')
+bc_api_path = os.environ.get('FD_BC_API_PATH', '')
+err_conditions = [{'inputType': 'RET_CODE', 'condition': {'type': 'RANGE', 'value': '500~599'}}]
+trigger_conditions = [
+    {'triggerType': 'CONSECUTIVE_ERROR', 'errorCount': consecutive},
+]
+bc = {
+    'name': 'fault-detect-bc',
+    'api': {'path': {'value': bc_api_path}},
+    'error_conditions': err_conditions,
+    'trigger_conditions': trigger_conditions,
+}
+rule = {
+    'name': os.environ['RULE_NAME'],
+    'namespace': os.environ['NAMESPACE'],
+    'enable': True,
+    'level': level,
+    'description': 'auto-created by verify_faultdetect.sh (D段-disable)',
+    'rule_matcher': {
+        'source': {'namespace': os.environ['SOURCE_NAMESPACE'], 'service': os.environ['SOURCE_SERVICE']},
+        'destination': {
+            'namespace': os.environ['NAMESPACE'],
+            'service': os.environ['SERVICE_NAME'],
+            'method': {'type': method_type, 'value': method_value},
+        },
+    },
+    'error_conditions': err_conditions,
+    'trigger_condition': trigger_conditions,
+    'recoverCondition': {'sleep_window': sleep_window, 'consecutiveSuccess': 1},
+    'block_configs': [bc],
+    # D 段关闭探测：faultDetectConfig.enable=false，触发 SDK realRefreshHealthCheck
+    # 门控不通过 -> stop checker -> 日志 [FaultDetect] health check ... is disabled, now stop
+    'faultDetectConfig': {'enable': False},
 }
 print(json.dumps(rule))
 "
@@ -820,6 +870,8 @@ _run_probe_abort_case() {
     local rule_level="$6" method_path="$7"
     # $8 被调服务名（独立于其它级别用例，避免共享 destination 被残留规则抢占）
     local callee_service="${8:-$SERVICE_NAME}"
+    # $9 D 段类型（可选）：toggle=enable toggle 验证, interval=规则参数热更新验证, 空=不增加 D 段
+    local d_phase="${9:-}"
     _CASE_RESULT="FAIL"
     local consumer_log="${LOG_DIR}/${consumer_name}.log"
 
@@ -849,18 +901,20 @@ _run_probe_abort_case() {
         _CASE_RESULT="FAIL"; return
     }
 
-    local cb_body fd_body
-    cb_body=$(RULE_NAME="cb-fd-${rule_level}-${caller}" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
+    local cb_body fd_body cb_rule_name cb_rule_id fd_rule_name fd_rule_id
+    cb_rule_name="cb-fd-${rule_level}-${caller}"
+    cb_body=$(RULE_NAME="$cb_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
         SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$caller" \
         FD_CONSECUTIVE_ERROR="$FD_CONSECUTIVE_ERROR" FD_SLEEP_WINDOW="$FD_SLEEP_WINDOW" \
         FD_RULE_LEVEL="$rule_level" FD_RULE_METHOD_VALUE="$rule_method_value" FD_BC_API_PATH="$bc_api_path" \
         build_circuitbreaker_rule_body)
-    create_circuitbreaker_rule "$cb_body" > /dev/null || { _CASE_RESULT="FAIL"; return; }
+    cb_rule_id=$(create_circuitbreaker_rule "$cb_body" 2>/dev/null) || { _CASE_RESULT="FAIL"; return; }
 
-    fd_body=$(RULE_NAME="fd-fd-${rule_level}-${caller}" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
+    fd_rule_name="fd-fd-${rule_level}-${caller}"
+    fd_body=$(RULE_NAME="$fd_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
         FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="$probe_method_value" \
         build_fault_detect_rule_body)
-    create_fault_detect_rule "$fd_body" > /dev/null || { _CASE_RESULT="FAIL"; return; }
+    fd_rule_id=$(create_fault_detect_rule "$fd_body" 2>/dev/null) || { _CASE_RESULT="FAIL"; return; }
 
     wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
 
@@ -892,16 +946,90 @@ _run_probe_abort_case() {
     _probe_log_evidence "$sdk_cb_log" has_schedule has_statechg
     log_info "用例 ${case_tag} [6] 日志佐证：探测调度=${has_schedule}, 状态切换=${has_statechg} (来源 ${sdk_cb_log})"
 
-    # 判定
+    # ── D 段：规则动态启停 / 热更新验证 ──
+    local d_disabled_stop="-" d_resume_schedule="-" d_new_interval="-"
+
+    # D 段 - toggle：enable toggle 验证（关闭→重新开启探测）
+    if [[ "$d_phase" == "toggle" ]]; then
+        # 记录步骤6时刻的 schedule task 行数（用于步骤8判断恢复后是否新增）
+        local schedule_before_d
+        schedule_before_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
+
+        # 步骤7：PUT 熔断规则 faultDetectConfig.enable=false，验证探测停止
+        log_step "用例 ${case_tag} [7] D段-toggle：关闭探测（PUT faultDetectConfig.enable=false）"
+        local cb_body_disabled
+        cb_body_disabled=$(RULE_NAME="$cb_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
+            SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$caller" \
+            FD_CONSECUTIVE_ERROR="$FD_CONSECUTIVE_ERROR" FD_SLEEP_WINDOW="$FD_SLEEP_WINDOW" \
+            FD_RULE_LEVEL="$rule_level" FD_RULE_METHOD_VALUE="$rule_method_value" FD_BC_API_PATH="$bc_api_path" \
+            build_circuitbreaker_rule_body_disable)
+        update_circuitbreaker_rule "$cb_rule_id" "$cb_body_disabled"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [7] 等待 SDK 感知规则变更（探测应被停止）"
+        if grep -qE "\[FaultDetect\] health check for resource=.*is disabled, now stop" "$sdk_cb_log" 2>/dev/null; then
+            d_disabled_stop="yes"
+        else
+            d_disabled_stop="no"
+        fi
+        log_info "用例 ${case_tag} [7] 探测停止佐证：${d_disabled_stop} (来源 ${sdk_cb_log})"
+
+        # 步骤8：PUT 熔断规则 faultDetectConfig.enable=true，验证探测重新启动
+        log_step "用例 ${case_tag} [8] D段-toggle：重新开启探测（PUT faultDetectConfig.enable=true）"
+        update_circuitbreaker_rule "$cb_rule_id" "$cb_body"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [8] 等待 SDK 感知规则变更（探测应重新启动）"
+        local schedule_after_d
+        schedule_after_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
+        if [[ "$schedule_after_d" -gt "$schedule_before_d" ]]; then
+            d_resume_schedule="yes"
+        else
+            d_resume_schedule="no"
+        fi
+        log_info "用例 ${case_tag} [8] 探测恢复佐证：schedule task 行数 ${schedule_before_d}→${schedule_after_d} (${d_resume_schedule})"
+    fi
+
+    # D 段 - interval：规则参数热更新验证（修改探测间隔）
+    if [[ "$d_phase" == "interval" ]]; then
+        log_step "用例 ${case_tag} [7] D段-interval：修改探测间隔 interval=${FD_PROBE_INTERVAL}s→${FD_PROBE_INTERVAL_UPDATED}s"
+        local fd_body_updated
+        fd_body_updated=$(RULE_NAME="$fd_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
+            FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL_UPDATED" FD_PROBE_METHOD_VALUE="$probe_method_value" \
+            build_fault_detect_rule_body)
+        update_fault_detect_rule "$fd_rule_id" "$fd_body_updated"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [7] 等待 SDK 感知探测规则变更（应重建 checker）"
+        # 验证 SDK 日志中出现 interval=${FD_PROBE_INTERVAL_UPDATED}s 的 schedule task
+        if grep -qE "\[CircuitBreaker\] schedule task.*interval=${FD_PROBE_INTERVAL_UPDATED}s" "$sdk_cb_log" 2>/dev/null; then
+            d_new_interval="yes"
+        else
+            d_new_interval="no"
+        fi
+        log_info "用例 ${case_tag} [7] 探测间隔更新佐证：interval=${FD_PROBE_INTERVAL_UPDATED}s schedule task 出现=${d_new_interval} (来源 ${sdk_cb_log})"
+    fi
+
+    # 判定（含 D 段指标）
     print_block "用例 ${case_tag} 判定指标" \
         "触发 OPEN  : abort=${trigger_abort} (期望 >=1)" \
         "维持 OPEN  : abort=${keep_abort} (期望 >=1，探测失败不恢复)" \
         "探活 CLOSE : ok=${recover_ok}/${FD_VERIFY_COUNT} (期望 == ${FD_VERIFY_COUNT})" \
-        "日志佐证   : 探测调度=${has_schedule}, 状态切换=${has_statechg} (期望均为 yes)"
+        "日志佐证   : 探测调度=${has_schedule}, 状态切换=${has_statechg} (期望均为 yes)" \
+        "D段-关闭   : disabled_stop=${d_disabled_stop} (期望 yes，toggle 用例; 非 toggle 用例=- 忽略)" \
+        "D段-恢复   : resume_schedule=${d_resume_schedule} (期望 yes，toggle 用例; 非 toggle 用例=- 忽略)" \
+        "D段-间隔   : new_interval=${d_new_interval} (期望 yes，interval 用例; 非 interval 用例=- 忽略)"
 
+    local abc_pass="no"
     if [[ "$trigger_abort" -ge 1 ]] && [[ "$keep_abort" -ge 1 ]] \
         && [[ "$recover_ok" -eq "$FD_VERIFY_COUNT" ]] \
         && [[ "$has_schedule" == "yes" ]] && [[ "$has_statechg" == "yes" ]]; then
+        abc_pass="yes"
+    fi
+
+    local d_pass="yes"
+    if [[ "$d_phase" == "toggle" ]]; then
+        [[ "$d_disabled_stop" != "yes" ]] && d_pass="no"
+        [[ "$d_resume_schedule" != "yes" ]] && d_pass="no"
+    elif [[ "$d_phase" == "interval" ]]; then
+        [[ "$d_new_interval" != "yes" ]] && d_pass="no"
+    fi
+
+    if [[ "$abc_pass" == "yes" ]] && [[ "$d_pass" == "yes" ]]; then
         _CASE_RESULT="PASS"
     else
         _CASE_RESULT="FAIL"
@@ -909,17 +1037,19 @@ _run_probe_abort_case() {
 }
 
 # case_fault_detect 服务级（SERVICE）主动探测验证。被调服务用独立 FD_SVC_CALLEE。
+# D 段增加 enable toggle 验证：关闭探测(faultDetectConfig.enable=false)→验证停止→重新开启→验证恢复。
 case_fault_detect() {
     _run_probe_abort_case "服务级(SERVICE)" "服务级" "$FD_CALLER" \
-        "fault_detect_consumer" "$FD_CONSUMER_PORT" "SERVICE" "" "$FD_SVC_CALLEE"
+        "fault_detect_consumer" "$FD_CONSUMER_PORT" "SERVICE" "" "$FD_SVC_CALLEE" "toggle"
 }
 
 # case_fault_detect_method 接口级（METHOD）主动探测验证。被调服务用独立 FD_METHOD_CALLEE。
 # 与 SERVICE 级闭环一致（都经 AcquirePermission，OPEN 时 abort），区别仅在规则 level=METHOD、
 # destination.method 与 BlockConfig.api.path 限定 /echo、探测规则 targetService.method=/echo。
+# D 段增加规则参数热更新验证：修改探测间隔 interval 2s→5s→验证 schedule task 日志间隔变化。
 case_fault_detect_method() {
     _run_probe_abort_case "接口级(METHOD)" "接口级" "$FD_METHOD_CALLER" \
-        "fd_method_consumer" "$FD_METHOD_CONSUMER_PORT" "METHOD" "/echo" "$FD_METHOD_CALLEE"
+        "fd_method_consumer" "$FD_METHOD_CONSUMER_PORT" "METHOD" "/echo" "$FD_METHOD_CALLEE" "interval"
 }
 
 # _run_probe_tcpudp_case 验证 TCP / UDP 协议主动探测闭环（SERVICE 级，abort 型）。
