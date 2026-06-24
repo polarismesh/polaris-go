@@ -121,18 +121,12 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 		l.Debugf("[HealthCheck][udp] connect success, address=%s", address)
 	}
 	if rule == nil || rule.GetUdpConfig() == nil {
-		delete(g.lastErr, address+"|dial")
-		delete(g.lastErr, address+"|write")
-		delete(g.lastErr, address+"|deadline")
-		delete(g.lastErr, address+"|read")
+		g.clearErr(address)
 		return true
 	}
 	udpCfg := rule.GetUdpConfig()
 	if udpCfg.Send == "" {
-		delete(g.lastErr, address+"|dial")
-		delete(g.lastErr, address+"|write")
-		delete(g.lastErr, address+"|deadline")
-		delete(g.lastErr, address+"|read")
+		g.clearErr(address)
 		return true
 	}
 	if _, err = conn.Write([]byte(udpCfg.Send)); err != nil {
@@ -165,12 +159,25 @@ func (g *Detector) doUDPDetect(address string, rule *fault_tolerance.FaultDetect
 	}
 	if found {
 		// 探测完全成功，清除所有 err 记录，确保下次异常能重新打印。
-		delete(g.lastErr, address+"|dial")
-		delete(g.lastErr, address+"|write")
-		delete(g.lastErr, address+"|deadline")
-		delete(g.lastErr, address+"|read")
+		g.clearErr(address)
 	}
 	return found
+}
+
+// clearErr 清除指定 address 各阶段（dial/write/deadline/read）的 err 记录。
+// 必须持 lastErrMu：detector 是全局单例（healthCheckers[protocol] 每协议一个实例），
+// 被所有 ResourceHealthChecker 共享，TaskExecutor 多 worker 并发调度各资源探测任务，
+// 会并发调用 doUDPDetect / logConvergedErr 读写 lastErr；裸 delete 与 logConvergedErr
+// 的持锁写并发执行会触发 concurrent map writes，直接 crash 进程。
+func (g *Detector) clearErr(address string) {
+	g.lastErrMu.Lock()
+	defer g.lastErrMu.Unlock()
+	if g.lastErr == nil {
+		return
+	}
+	for _, stage := range []string{"dial", "write", "deadline", "read"} {
+		delete(g.lastErr, address+"|"+stage)
+	}
 }
 
 // logConvergedErr 探测异常收敛打印：首次出现或 err 内容变化时打印 Errorf，err 不变时静默。

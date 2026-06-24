@@ -64,6 +64,55 @@ func TestDetector_LastErrConcurrent(t *testing.T) {
 	t.Logf("concurrent lastErr test completed, goroutines=%d, iterations=%d", goroutines, iterations)
 }
 
+// TestDetector_ClearErrConcurrent 验证 clearErr 与 lastErr 的并发 upsert 交叉执行时
+// 持锁保护正确，不触发 concurrent map writes。
+//
+// 这是对历史 P1 缺陷的回归：doUDPDetect 早返回/成功分支曾直接裸 delete(g.lastErr,...)
+// 未持 lastErrMu，而 logConvergedErr 持锁写同一 map；detector 为全局单例被多 worker
+// 并发调度时构成数据竞争。必须以 go test -race 运行才能暴露。
+func TestDetector_ClearErrConcurrent(t *testing.T) {
+	detector := &Detector{
+		lastErr: make(map[string]string, 8),
+	}
+
+	// 模拟 logConvergedErr 的持锁写（不经过 logCtx，避免依赖全局 logger）
+	upsertErr := func(addr, stage, errMsg string) {
+		detector.lastErrMu.Lock()
+		defer detector.lastErrMu.Unlock()
+		if detector.lastErr == nil {
+			detector.lastErr = make(map[string]string, 8)
+		}
+		errKey := addr + "|" + stage
+		if lastErr, ok := detector.lastErr[errKey]; !ok || lastErr != errMsg {
+			detector.lastErr[errKey] = errMsg
+		}
+	}
+
+	var wg sync.WaitGroup
+	const goroutines = 10
+	const iterations = 100
+	addrs := []string{"127.0.0.1:1", "127.0.0.1:2", "127.0.0.1:3"}
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				addr := addrs[i%len(addrs)]
+				if i%2 == 0 {
+					// 写入 err 记录（模拟探测失败上报）
+					upsertErr(addr, "read", "i/o timeout")
+				} else {
+					// 清除 err 记录（模拟探测恢复/成功分支，走修复后的持锁 clearErr）
+					detector.clearErr(addr)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	t.Logf("concurrent clearErr test completed, goroutines=%d, iterations=%d", goroutines, iterations)
+}
+
 // TestDetector_LogConvergedErr 验证 lastErr map 在不同 stage 和 err 内容变化时的收敛行为。
 // 直接测试 map 操作逻辑，不经过 logConvergedErr（避免依赖 logCtx）。
 func TestDetector_LogConvergedErr(t *testing.T) {
