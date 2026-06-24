@@ -102,7 +102,7 @@ func (c *ErrRateCounter) Report(success bool) {
 		return 0
 	})
 	if !success && atomic.CompareAndSwapInt32(&c.scheduled, 0, 1) {
-		c.log.Infof("[CircuitBreaker][ErrRateCounter] scheduled error rate check, ruleName:%s, ruleID:%s, "+
+		c.log.Debugf("[CircuitBreaker][ErrRateCounter] scheduled error rate check, ruleName:%s, ruleID:%s, "+
 			"ruleRev:%s, metricWindow(%v), resource(%s)",
 			c.ruleName, c.ruleID, c.ruleRevision, c.metricWindow, c.res.String())
 		c.delayExecutor(c.metricWindow, func() {

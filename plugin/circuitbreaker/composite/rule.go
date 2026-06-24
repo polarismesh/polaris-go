@@ -75,6 +75,8 @@ func (c *RuleContainer) scheduleCircuitBreaker() {
 }
 
 func (c *RuleContainer) scheduleHealthCheck() {
+	// 调度刷新探测规则，由规则变更/事件驱动（非每请求），使用 Debug 级别记录触发来源。
+	c.log.Debugf("[FaultDetect] schedule health check refresh for resource=%s", c.res.String())
 	c.executor.AffinityExecute(c.res.String(), c.realRefreshHealthCheck)
 }
 
@@ -134,8 +136,11 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	if exist {
 		currentActiveRule = counters.CurrentActiveRule()
 	}
-	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFallbackConfig() != nil &&
-		currentActiveRule.GetFallbackConfig().Enable {
+	// 主动探测的启动门控：熔断规则启用 且 其 faultDetectConfig.enable=true。
+	// faultDetectConfig 是独立的主动探测开关，与 fallbackConfig（熔断后的降级响应）解耦；
+	// 仅配置降级而未开启探测时不应启动探测任务，反之亦然。
+	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFaultDetectConfig() != nil &&
+		currentActiveRule.GetFaultDetectConfig().GetEnable() {
 		engineFlow := c.engineFlow
 		resp, err := engineFlow.SyncGetServiceRule(model.EventFaultDetect, &model.GetServiceRuleRequest{
 			Namespace: c.res.GetService().Namespace,
@@ -146,14 +151,27 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 			c.executor.AffinityDelayExecute(c.res.String(), 5*time.Second, c.realRefreshHealthCheck)
 			return
 		}
-		if faultDetector := selectFaultDetector(c.res, resp, c.regexFunction); faultDetector != nil {
+		faultDetector := selectFaultDetector(c.res, resp, c.regexFunction)
+		if faultDetector == nil {
+			// 门控已开启但尚未匹配到 FaultDetectRule（常见于探测规则刚下发、SDK 还没拉取到），
+			// 周期级日志记录，便于排查"探测门控通过但 checker 未建立"。
+			c.log.Debugf("[FaultDetect] gate enabled but no matched fault detect rule yet for resource=%s",
+				c.res.String())
+		}
+		if faultDetector != nil {
 			if curChecker, ok := c.breaker.getResourceHealthChecker(c.res); ok {
 				curRule := curChecker.faultDetector
 				if curRule.Revision == faultDetector.Revision {
+					c.log.Debugf("[FaultDetect] health checker unchanged (revision=%s) for resource=%s, skip rebuild",
+						faultDetector.Revision, c.res.String())
 					return
 				}
+				c.log.Debugf("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
+					curRule.Revision, faultDetector.Revision, c.res.String())
 				curChecker.stop()
 			}
+			c.log.Debugf("[FaultDetect] build health checker for resource=%s, faultDetector revision=%s, rules=%d",
+				c.res.String(), faultDetector.Revision, len(faultDetector.GetRules()))
 			checker := NewResourceHealthChecker(c.res, faultDetector, c.breaker)
 			c.breaker.setResourceHealthChecker(c.res, checker)
 			if c.res.GetLevel() != fault_tolerance.Level_INSTANCE {
@@ -307,8 +325,10 @@ func selectFaultDetector(res model.Resource, object *model.ServiceRuleResponse, 
 }
 
 func sortFaultDetectRules(srcRules []*fault_tolerance.FaultDetectRule) []*fault_tolerance.FaultDetectRule {
-	rules := make([]*fault_tolerance.FaultDetectRule, 0, len(srcRules))
-	copy(rules, srcRules)
+	// 复制一份待排序切片，避免就地修改入参底层数组。
+	// 注意：必须用 append（或先 make 出等长 slice 再 copy），不能用 make(..., 0, len)+copy——
+	// copy 的拷贝条数受目标 slice 的 len 限制，len=0 时会把规则全部丢弃。
+	rules := append([]*fault_tolerance.FaultDetectRule(nil), srcRules...)
 	sort.Slice(rules, func(i, j int) bool {
 		rule1 := rules[i]
 		rule2 := rules[j]

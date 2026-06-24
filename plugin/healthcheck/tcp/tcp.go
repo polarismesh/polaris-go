@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
@@ -43,6 +44,10 @@ type Detector struct {
 	timeout             time.Duration
 	// 上下文日志
 	logCtx *log.ContextLogger
+	// lastDialErr 记录每个探测地址的上一次 TCP 连接错误信息，err 内容不变时静默不重复打印。
+	lastDialErr map[string]string
+	// lastDialErrMu 保护 lastDialErr 的并发访问。
+	lastDialErrMu sync.Mutex
 }
 
 // Destroy 销毁插件，可用于释放资源
@@ -69,6 +74,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 	}
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
 	g.logCtx = ctx.ValueCtx.GetContextLogger()
+	g.lastDialErr = make(map[string]string, 16)
 	return nil
 }
 
@@ -103,12 +109,36 @@ func (g *Detector) doTCPDetect(address string, rule *fault_tolerance.FaultDetect
 	// 建立连接
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+		errMsg := err.Error()
+		// 探测异常收敛：err 内容不变时仅首次打印，避免连接超时/拒绝等重复刷屏。
+		g.lastDialErrMu.Lock()
+		if g.lastDialErr == nil {
+			g.lastDialErr = make(map[string]string, 8)
+		}
+		if lastErr, ok := g.lastDialErr[address]; !ok || lastErr != errMsg {
+			g.lastDialErr[address] = errMsg
+			g.lastDialErrMu.Unlock()
+			if l := g.logCtx.GetDetectLogger(); l != nil {
+				l.Errorf("[HealthCheck][tcp] fail to check %s, err is %v", address, err)
+			}
+		} else {
+			g.lastDialErrMu.Unlock()
+		}
 		return false
 	}
+	// err 恢复后清除记录，确保下次异常能重新打印。
+	g.lastDialErrMu.Lock()
+	if g.lastDialErr != nil {
+		delete(g.lastDialErr, address)
+	}
+	g.lastDialErrMu.Unlock()
 	defer func() {
 		_ = conn.Close()
 	}()
+	// 探测连通成功，每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
+	if l := g.logCtx.GetDetectLogger(); l != nil {
+		l.Debugf("[HealthCheck][tcp] connect success, address=%s", address)
+	}
 	if rule == nil || rule.GetTcpConfig() == nil {
 		return true
 	}

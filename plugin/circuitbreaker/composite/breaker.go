@@ -200,6 +200,14 @@ func (c *CompositeCircuitBreaker) Report(stat *model.ResourceStat) error {
 	return c.doReport(stat, true)
 }
 
+// reportFaultDetectStat 上报主动探测结果。
+// 与业务请求上报（Report）的区别在于 record=false：探测结果只参与熔断状态机统计，
+// 不再触发 addInstanceForHealthCheck 把实例重新注册进探测集合，避免探测自身扩充探测目标的自循环。
+// stat 探测结果统计；返回 doReport 的处理结果（当前恒为 nil，错误仅记录日志）。
+func (c *CompositeCircuitBreaker) reportFaultDetectStat(stat *model.ResourceStat) error {
+	return c.doReport(stat, false)
+}
+
 func (c *CompositeCircuitBreaker) doReport(stat *model.ResourceStat, record bool) error {
 	// 第一层：检查 stat 是否为 nil
 	if stat == nil {
@@ -321,8 +329,14 @@ func (c *CompositeCircuitBreaker) addInstanceForHealthCheck(res model.Resource, 
 	}
 	checkers, exist := c.loadServiceHealthCheck(*insRes.GetService())
 	if !exist {
+		// 周期级/请求级日志：业务上报频繁触发，使用 Debug 级别。
+		// 服务无主动探测 checker 时直接返回，是 SERVICE/METHOD 级探测懒启动前的常态。
+		c.cbLog.Debugf("[FaultDetect] no health checker for service=%s, skip add instance node=%s",
+			insRes.GetService().String(), insRes.GetNode().String())
 		return
 	}
+	c.cbLog.Debugf("[FaultDetect] add instance for health check, service=%s, node=%s",
+		insRes.GetService().String(), insRes.GetNode().String())
 	checkers.foreach(func(rhc *ResourceHealthChecker) {
 		rhc.addInstance(insRes, true)
 	})

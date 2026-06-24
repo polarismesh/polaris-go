@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -168,4 +169,50 @@ func (m *MockHttpServer) testHandle(rsp http.ResponseWriter, req *http.Request) 
 	if m.callback != nil {
 		m.callback(rsp, req)
 	}
+}
+
+// TestDetector_LastDoErrConcurrent 验证多个 goroutine 并发操作 lastDoErr map 时
+// lastDoErrMu 能正确保护并发读写，不会触发 race condition。
+func TestDetector_LastDoErrConcurrent(t *testing.T) {
+	detector := &Detector{
+		lastDoErr: make(map[string]string, 8),
+	}
+
+	var wg sync.WaitGroup
+	const goroutines = 10
+	const iterations = 100
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				urlStr := "http://127.0.0.1:8080/echo"
+				if i%2 == 0 {
+					urlStr = "http://127.0.0.2:8080/echo"
+				}
+				// 模拟 doHttpDetect 中对 lastDoErr 的并发读写模式
+				detector.lastDoErrMu.Lock()
+				if detector.lastDoErr == nil {
+					detector.lastDoErr = make(map[string]string, 8)
+				}
+				errMsg := "connection refused"
+				if lastErr, ok := detector.lastDoErr[urlStr]; !ok || lastErr != errMsg {
+					detector.lastDoErr[urlStr] = errMsg
+				}
+				detector.lastDoErrMu.Unlock()
+
+				// 模拟 delete 路径
+				if i%3 == 0 {
+					detector.lastDoErrMu.Lock()
+					if detector.lastDoErr != nil {
+						delete(detector.lastDoErr, urlStr)
+					}
+					detector.lastDoErrMu.Unlock()
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	t.Logf("concurrent lastDoErr test completed, goroutines=%d, iterations=%d", goroutines, iterations)
 }

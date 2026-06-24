@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
@@ -48,6 +49,11 @@ type Detector struct {
 	client  HttpSender
 	// 上下文日志
 	logCtx *log.ContextLogger
+	// lastDoErr 记录每个探测地址的上一次 HTTP 请求错误信息，err 内容不变时静默不重复打印。
+	lastDoErr map[string]string
+	// lastDoErrMu 保护 lastDoErr 的并发访问：多个 ResourceHealthChecker 共享同一 detector 实例，
+	// 它们的 IntervalExecute 可能并发调用 doHttpDetect 读写该 map。
+	lastDoErrMu sync.Mutex
 }
 
 // Type 插件类型
@@ -68,6 +74,7 @@ func (g *Detector) Init(ctx *plugin.InitContext) (err error) {
 		g.cfg = cfgValue.(*Config)
 	}
 	g.client = &http.Client{}
+	g.lastDoErr = make(map[string]string, 16)
 	g.timeout = ctx.Config.GetConsumer().GetHealthCheck().GetTimeout()
 	g.logCtx = ctx.ValueCtx.GetContextLogger()
 	return nil
@@ -108,18 +115,59 @@ func (g *Detector) IsEnable(cfg config.Configuration) bool {
 	return cfg.GetGlobal().GetSystem().GetMode() != model.ModeWithAgent
 }
 
+// getDetectLog 获取探测日志记录器，若 logCtx 未初始化或全局 logger 未就绪则返回 nil。
+// 调用方需判空：nil 时直接跳过日志输出（仅发生在测试环境未初始化 logger 的场景）。
+func (g *Detector) getDetectLog() log.Logger {
+	if g.logCtx == nil {
+		return nil
+	}
+	return g.logCtx.GetDetectLogger()
+}
+
 // doHttpDetect 执行一次健康探测逻辑
 func (g *Detector) doHttpDetect(detReq *http.Request, rule *fault_tolerance.FaultDetectRule) (string, bool) {
 	resp, err := g.client.Do(detReq)
 	if err != nil {
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+		errMsg := err.Error()
+		urlStr := detReq.URL.String()
+		// 探测异常收敛：err 内容不变时仅首次打印，避免连接超时/拒绝等重复刷屏。
+		g.lastDoErrMu.Lock()
+		if g.lastDoErr == nil {
+			g.lastDoErr = make(map[string]string, 8)
+		}
+		if lastErr, ok := g.lastDoErr[urlStr]; !ok || lastErr != errMsg {
+			g.lastDoErr[urlStr] = errMsg
+			g.lastDoErrMu.Unlock()
+			if l := g.getDetectLog(); l != nil {
+				l.Errorf("[HealthCheck][http] fail to check %+v, err is %v", detReq.URL, err)
+			}
+		} else {
+			g.lastDoErrMu.Unlock()
+		}
 		return "", false
 	}
-	defer resp.Body.Close()
-	if code := resp.StatusCode; code >= 200 && code < 500 {
-		return strconv.Itoa(resp.StatusCode), true
+	// err 恢复后清除记录，确保下次异常能重新打印。
+	g.lastDoErrMu.Lock()
+	if g.lastDoErr != nil {
+		delete(g.lastDoErr, detReq.URL.String())
 	}
-	return strconv.Itoa(resp.StatusCode), false
+	g.lastDoErrMu.Unlock()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			if l := g.getDetectLog(); l != nil {
+				l.Errorf("[HealthCheck][http] close resp body err, url=%+v, err=%v",
+					detReq.URL, err)
+			}
+		}
+	}()
+	code := resp.StatusCode
+	success := code >= 200 && code < 500
+	// 探测成功不属于失败事件，但每个探测周期都会产生，使用 Debug 级别记录，便于确认探测真实发起。
+	if l := g.getDetectLog(); l != nil {
+		l.Debugf("[HealthCheck][http] detect done, url=%+v, code=%d, success=%t",
+			detReq.URL, code, success)
+	}
+	return strconv.Itoa(code), success
 }
 
 // Protocol .
@@ -159,7 +207,9 @@ func (g *Detector) generateHttpRequest(ctx context.Context, ins model.Instance, 
 
 	request, err := http.NewRequestWithContext(ctx, rule.GetHttpConfig().Method, address, bytes.NewBufferString(rule.HttpConfig.GetBody()))
 	if err != nil {
-		g.logCtx.GetDetectLogger().Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		if l := g.getDetectLog(); l != nil {
+			l.Errorf("[HealthCheck][http] fail to build request %+v, err is %v", address, err)
+		}
 		return nil, err
 	}
 
