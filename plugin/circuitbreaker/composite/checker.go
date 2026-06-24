@@ -147,7 +147,9 @@ func (c *ResourceHealthChecker) cleanInstances() {
 			lastReportMilli := v.getLastReportMilli()
 			if curTimeMill-lastReportMilli >= expireIntervalMill {
 				waitDel = append(waitDel, k)
-				// 清理过期实例：周期任务内部状态，使用 Debug 级别避免实例大规模过期时刷屏。
+				// 清理过期实例：周期任务的内部状态变更日志，使用 Debug 级别。
+				// 大规模实例过期（如容器批量重启）时可能产生大量输出，
+				// 生产环境通常无需关注此信息，故采用 Debug 级别按需开启。
 				c.log.Debugf("[CircuitBreaker] clean instance from health check tasks, resource=%s, expired node=%s, lastReportMilli=%d",
 					c.resource.String(), k, lastReportMilli)
 			}
