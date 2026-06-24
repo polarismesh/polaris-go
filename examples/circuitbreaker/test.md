@@ -209,6 +209,12 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - Decorator 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
 - InvokeHandler `trigger_fail >= 1`，`verify_ok == RECOVERY_REQUEST_COUNT`，`recover_ok == RECOVERY_REQUEST_COUNT`
 
+### 验证原理
+- **为什么实例级熔断"不 abort 而是流量转移"**：`commonCheck` 只对 `ServiceResource` / `MethodResource` 调 `Check`（`circuitbreaker_flow.go:244`），**INSTANCE 级资源不参与请求前检查**，因此实例 b 被熔断 OPEN 后请求并不会被拒绝（无 `call aborted`），而是由路由/负载均衡层把 b 从可选实例集中摘除，流量自然全部落到健康实例 a。这正是 1.5 期望 `verify_ok == RECOVERY_REQUEST_COUNT`（全 200）而非 abort 的根因。
+- **上报路径**：装饰器内 `SetInstance` 回填具体实例后，`commonReport` 追加一次 `InstanceResource` 上报（`circuitbreaker_flow.go:326`），由 b 的连续 5 次 5xx 推动该实例计数器 `close → open`。
+- **半开恢复**：`open` 后经 `sleepWindow`(6s) 延迟转 `half-open`（`counter.go:156`），`half-open` 态发放 `consecutiveSuccess=1` 个探测配额；b 翻回 200 后探测成功即 `half-open → close`（`counter.go:189`），b 重新进入可选实例集。
+- **4xx 不计入**：`error_conditions` 配 `RET_CODE RANGE 500~599`，`blockCounter.parseRetStatus`（`block_counter.go:106`）只把 5xx 判为 `RetFail`，4xx 透传为成功，故不会因客户端错误误触发熔断。
+
 ---
 
 ## 用例 2：服务级（SERVICE）熔断
@@ -257,6 +263,11 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - InvokeHandler `trigger_fail >= 1`，`verify_abort >= 1`，`recover_ok >= 1`
 - fallback 正向 `svc_fallback >= 1`（enable=true → HTTP 599）
 - fallback 反向 `svc_fb_off_abort >= 1`（enable=false → 503 兜底）
+
+### 验证原理
+- **为什么服务级熔断"会 abort"**：`commonCheck` 第一步就对 `ServiceResource` 调 `Check`（`circuitbreaker_flow.go:249`），服务级计数器 OPEN 后 `CheckResult.Pass=false`，请求在调用业务前即被拦截返回 `call aborted`。这与用例 1（实例级不进 `Check`）形成对照——所以 2.1 复位为 **a/b 都 500**（整服务不可用），让服务级错误率达阈值。
+- **半开放行业务请求探活**：服务级 `half-open` 态由 `AcquirePermission` 发放有限配额（`half_open_status.go`，CAS 原子计数确保并发不超额），获得配额的业务请求落到已翻回 200 的 provider 即上报成功，`Release` 归集判定连续成功达 `consecutiveSuccess=1` 触发 `half-open → close`（`counter.go:217` `handleHalfOpenReport`）。因此 2.6 恢复阶段必须 **a/b 同步翻回 200**，否则半开探测可能打到仍 500 的实例而回 OPEN。
+- **fallback 降级**：规则顶层 `fallbackConfig.enable=true` 时，`buildFallbackInfo` 把规则配置的 code/body/headers 封装进 `CallAborted`，demo 端 `HasFallback()` 为真则透传降级响应（599 + "degraded"）而非默认 503；`enable=false` 时 `GetEnable()` 短路，`CallAborted` 不带 fallback，demo 回默认 503 兜底。
 
 ---
 
@@ -324,6 +335,13 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - fallback 正向 `iface_fallback >= 1`（enable=true → HTTP 599）
 - fallback 反向 `iface_fb_off_abort >= 1`（enable=false → 503 兜底）
 
+### 验证原理
+- **多 BlockConfig 按 path 选中**：1 条 METHOD 级规则带 3 个 BlockConfig，请求进来时 `selectCircuitBreakerRule`（`rule.go:201`）先按 Level/source/destination 选中规则，再由 `matchRuleAPI`（`rule.go:268`）遍历 BlockConfig 用 `api.protocol/method/path` 匹配选中对应块；上报时 `dispatchToBlocks`（`counter.go:250`）只把统计派发给 `matchAPI` 命中的块。这保证 `/echo`、`/order`、`/slow` 三个接口的熔断计数器**彼此独立、互不串扰**——这就是"多接口隔离"的实现基础。
+- **未配置规则的接口不被熔断**：`/info` 没有对应 BlockConfig，且 consumer 侧 `defaultRuleEnable=false`，故即使 `/info` 恒 500 也不会触发任何计数器（3.11 期望 `abort == 0`）。
+- **阈值隔离**：`/order` 故意配 `CONSECUTIVE_ERROR=100 + minRequest=200`，普通 burst 量级永远达不到，验证"高阈值接口在同一规则下不会被低阈值接口的失败带崩"。
+- **DELAY 时延熔断**：`/slow` 块的 `error_conditions` 用 `INPUT_TYPE=DELAY, value=200`，`parseRetStatus`（`block_counter.go:128`）把 `stat.Delay.Milliseconds() > 200` 判为 `RetTimeout`（失败），因此 3.12 把延迟设 500ms 即可触发——验证"错误判定不止看返回码，还支持时延维度"。
+- **多 MatchString**：`/echo` 块同时挂 `RANGE/EXACT/REGEX/IN/NOT_IN` 5 种 RET_CODE 条件，验证 `match.MatchString` 5 种匹配语义在同一块内都能正确识别 5xx。
+
 ---
 
 ## 用例 4：存量散装写法（旧版 API）的实例级熔断
@@ -361,6 +379,10 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
 - 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
 
+### 验证原理
+- **散装写法等价于装饰器**：装饰器（用例 1）本质是把 `Check → 业务调用 → Report` 三步封装。旧版直接调 `CircuitBreakerAPI.Report(InstanceResource)` 上报熔断结果 + `ConsumerAPI.UpdateServiceCallResult` 上报指标，绕过装饰器但触达的是**同一套 `InstanceResource` 计数器**（`counter.go` 的 `Report`/`dispatchToBlocks`）。
+- **结果与用例 1 完全对齐**正说明：新版 SDK 重构装饰器/InvokeHandler 时没有破坏底层实例级熔断与半开恢复链路，存量客户零改造即可继续工作（向后兼容）。
+
 ---
 
 ## 用例 5：HTTP 状态码区分（4xx 不熔断 / 5xx 熔断 / 网络错熔断）
@@ -395,6 +417,12 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - B 段：`b_trigger_fail ≥ 3` 且 `b_verify_ok + b_verify_abort == RECOVERY_REQUEST_COUNT` 且 `b_recover_ok == RECOVERY_REQUEST_COUNT`
 - C 段：`c_fail ≥ 1` 且 `c_abort ≥ 1`（网络错触发熔断）
 
+### 验证原理
+- **retCode 双路径是关键**：熔断计数器看的是 `stat.RetCode`，而它由 demo 端按 HTTP 状态码分流决定——5xx 走 `OnError` 设 `retCode="-1"`（或 5xx 码），4xx 走 `OnSuccess` 透传真实码。`parseRetStatus`（`block_counter.go:106`）只对 `RET_CODE RANGE 500~599` 命中的码判 `RetFail`。
+  - **A 段（4xx 不熔断）**：403 走 OnSuccess、码=403 不在 500~599 区间 → 判成功 → 计数器永不 OPEN。验证"客户端错误不应触发服务端熔断"。
+  - **B 段（5xx 熔断）**：500 走 OnError → 累计 3 次连续失败触发 INSTANCE 级 OPEN。
+  - **C 段（网络错熔断）**：provider 关停后请求根本发不出去（连接失败），SDK 内部用 `retCode="-1"` 哨兵标记；`parseRetStatus`（`block_counter.go:124`）对 `"-1"` **直接判 `RetFail` 而不经 MatchString**，因此网络错也能触发熔断。C 段用 SERVICE 级规则是因为实例全死时 INSTANCE 级会因实例剔除而 `GetOneInstance` 直接失败、难以稳定复现熔断态。
+
 ---
 
 ## 用例 6：默认实例级熔断兜底（服务端无规则）
@@ -423,6 +451,11 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - `trigger_fail ≥ 3`
 - `verify_ok == RECOVERY_REQUEST_COUNT`
 - `recover_ok == RECOVERY_REQUEST_COUNT`
+
+### 验证原理
+- **默认规则注入时机**：当 `getCircuitBreakerRule`（`default.go:51`）先查服务端规则 miss、且 `defaultRuleEnable=true`、且当前是 INSTANCE 级时，SDK 本地构造 `default-polaris-instance-circuit-breaker` 规则兜底。
+- **`hasAnyEnabledRule` 拦截**（`default.go:139`）：注入前会全局检查——若该服务下存在任意 enabled 且匹配当前 caller 的服务端规则（SERVICE/METHOD/INSTANCE 任一级），则**不注入**默认规则（避免与服务端规则冲突）。本用例特意用独立 selfService（`CircuitBreakerDefaultRuleCaller`）就是为了不被其他用例的规则命中，确保走默认规则路径。
+- **行为与用例 1 一致**：默认规则同样是 INSTANCE 级（`error_conditions=RET_CODE 500~599`，trigger=ERROR_RATE+CONSECUTIVE_ERROR），故 b 被熔断后流量转移到 a（不 abort），半开恢复机制与用例 1 相同。
 
 ---
 
@@ -453,6 +486,11 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
 - 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
 
+### 验证原理
+- **规则热更新链路**：调 `update_circuitbreaker_rule` PUT 改 `CONSECUTIVE_ERROR` 后，服务端规则 `revision` 变更，SDK 通过规则变更事件感知并**重建对应资源计数器**（`counter.go`），新阈值立即生效，无需重启 consumer。
+- **第 2 轮 burst 须加大**：轮 1 阈值 3、轮 2 阈值 7，但 50/50 LB 下 b 不一定连续被选中 7 次，故轮 2 用 case-local `MODIFY_R2_TRIGGER_COUNT=30` 保证连续命中 b 达 7 次（否则 trigger 不足导致假性 FAIL）。
+- 验证目的：证明运行时通过控制台/OpenAPI 修改熔断阈值能动态生效，是熔断规则可运维性的核心能力。
+
 ---
 
 ## 用例 8：接口协议+HTTP方法维度合并（1 条规则 13 个 BlockConfig）
@@ -475,6 +513,10 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 通过条件（共 13 × 3 = 39 项指标）
 每个 BC：`trigger fail >= 1 || abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
+
+### 验证原理
+- **协议/方法维度独立匹配**：consumer 按请求路径段（如 `/api/protocol/grpc`、`/api/method/POST`）推断 `RequestContext.Protocol` / `HTTPMethod`，构造 `MethodResource` 时带上这两维。上报时 `matchAPI`（`block_counter.go:138`）按 `protocol/method/path` 组合匹配选中对应 BlockConfig，使 13 个维度（4 协议 + 9 HTTP 方法）的熔断计数器**彼此正交、互不干扰**。
+- **验证目的**：一条规则即可对不同协议、不同 HTTP 方法分别配置独立熔断策略（如 gRPC 与 HTTP 分开熔断、GET 与 POST 分开熔断），无需为每个维度建独立规则。
 
 ---
 
@@ -503,6 +545,10 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 为什么移除了反向验证？
 5 种 path-type 已合并到 1 条规则的 5 个 BlockConfig。`NOT_EQUALS` 和 `NOT_IN` 否定匹配 BC 会吃掉几乎所有 path，不存在"对全部 5 个 BC 都不匹配"的反向 path。正向 3 阶段已充分证明 5 种 MatchString 各自的匹配语义。
+
+### 验证原理
+- **MatchString 5 种语义**：`api.path` 的 `type` 字段决定路径匹配方式，由 `match.MatchString` 统一实现——`EXACT`（全等）、`REGEX`（正则）、`NOT_EQUALS`（不等）、`IN`（在逗号分隔集合内）、`NOT_IN`（不在集合内）。consumer 对每种 path-type 发送一条**应命中**的请求路径（见上表"消费者触发 path"列），验证 `matchRuleAPI`（`rule.go:268`）能据此选中对应 BlockConfig 并触发熔断。
+- 与用例 8 互补：用例 8 验证 protocol/method 维度匹配，用例 9 验证 path 这一维的 5 种字符串匹配算法都正确。
 
 ### 通过条件（共 5 × 3 = 15 项指标）
 每种 path type：`trigger fail >= 1 || abort >= 1`，`verify ok + abort == 3`，`recover ok == 3`
