@@ -602,6 +602,50 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ---
 
+## 用例 11：熔断可观测性验证（pull /metrics + mock pushgateway 事件双验证）
+
+### Caller 写法
+- 同 `newCircuitBreakerCaller/consumer`，selfService=`CircuitBreakerObservabilityCaller`
+- 三级各用独立 consumer 端口：SERVICE=18101，METHOD=18102，INSTANCE=18103
+- **每个 consumer 同时配两种可观测能力**：
+  - `statReporter.prometheus.type=pull` + `interval:5s`（SDK 启动独立 HTTP server 暴露 `/metrics` 端点，端口=业务端口+10000）
+  - `eventReporter.pushgateway.address=127.0.0.1:19091`（指向本地 `mock_event_server.py`）
+- 远程告知性子阶段额外 1 个 consumer（端口 18104，event_addr 为空走服务发现）
+
+### 规则
+- 三级各独立规则名：`cb-obs-service/method/instance-CircuitBreakerObservabilityCaller`
+- `CONSECUTIVE_ERROR=5`，`sleepWindow=6s`，`consecutiveSuccess=1`
+- `error_conditions`：`RET_CODE RANGE 500~599`
+
+### 验证步骤（三级各 1 个 consumer，一次 trigger 同时验 metrics + events）
+| 步骤 | 操作 | 判定 |
+|------|------|------|
+| 前置 | 启动 `mock_event_server.py`（监听 :19091），关闭残留 INSTANCE 规则 `cb-instance-CircuitBreakerHttpStatusCaller`（PUT enable=false） | mock server 就绪，残留规则 disabled |
+| .1 复位 provider | SERVICE/METHOD：a/b=500；INSTANCE：a=200,b=500 | - |
+| .2 启动 consumer | 编译 + 启动对应 level consumer，同时配 prometheus pull + pushgateway mock | consumer 就绪 |
+| .3 创建规则 | `create_circuitbreaker_rule` 创建对应规则，等 `WAIT_RULE_READY_SECONDS` | 规则生效 |
+| .4 trigger OPEN | burst 触发熔断 OPEN | `abort≥1` 或 `fail≥1` |
+| .5 验证 metrics | curl `/metrics` 轮询 `circuitbreaker_open`（6轮×5s），命中 value>0 + rule_name 匹配 → OK | `circuitbreaker_open` 命中 |
+| .6 recover | provider 翻回 200，等半开恢复 → CLOSE，等 4s 事件 flush | 全 200 |
+| .7 验证 events | 解析 `captured_events.json`，匹配 `CircuitBreakerOpen` + `rule_name`/`namespace`/`service`/`resource_type` | 全部匹配 |
+| .8 告知性 | `circuitbreaker_halfopen` gauge + `CircuitBreakerHalfOpen`/`Close` 事件 | 告知性 |
+
+### 远程告知性子阶段
+额外启动 1 个 consumer（event_addr 为空 → 走服务发现），复用 SERVICE 规则 → trigger → grep SDK 日志 `ReportEvent(CircuitBreakerOpen)` + `Flush 成功` 次数。
+
+### 通过条件
+- 三级 `circuitbreaker_open` 指标**全部**命中（值>0 + rule_name 匹配）
+- 三级 `CircuitBreakerOpen` 事件**全部**捕获（rule_name/ns/service/resource_type 匹配）
+- 远程告知性子阶段 `ReportEvent` 调用次数 ≥ 1
+
+### 验证原理
+- **一次 trigger 同时产出 gauge + event**：`counter.go:174` `reportCircuitBreakMetric` → `SyncReportStat` 写入 `circuitBreakerCollector` → `doAggregation`（`interval:5s`）写入 GaugeVec；`counter.go:175` `reportCircuitBreakerEvent` → `sendEvent` 投递 EventReporter 链 → `PushgatewayReporter` batch flush POST `/polaris/client/events`。
+- **聚合间隔 5s**（`interval:5s` 替代默认 15s）保证首次聚合在 OPEN 窗口内触发，避免被后续状态覆盖。
+- **revision 永不过期**（`collector.go:189/196` `currentRevision>0` 守卫）：`circuitBreakerCollector` 传 `0` 跳过 revision 过期清零，对齐 polaris-java。
+- **残留规则关闭**：`disable_circuitbreaker_rule` PUT enable=false 在 consumer 启动前关闭残留规则，SDK 不为其创建 counters → 不抢占触发。
+
+---
+
 ## 主动探测用例（独立脚本 `verify_faultdetect.sh`）
 
 > 本组用例不在 `verify_circuitbreaker.sh` 中，由独立脚本 `verify_faultdetect.sh` 执行，
@@ -737,3 +781,12 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 | `buildFallbackInfo` 的 `GetEnable()` 短路（enable=false 回 503） | 用例 2/3 fallback 反向子阶段 |
 | `CallAborted` 携带 fallback + demo `HasFallback()` 透传/回退 | 用例 2/3 fallback 子阶段 |
 | PUT 更新熔断规则 fallbackConfig.enable 触发 SDK counter 重建 | 用例 2/3 fallback 子阶段 |
+| `reportCircuitBreakMetric` + `buildCircuitBreakGauge` 构造熔断 gauge 并通过 `SyncReportStat` 上报 | 用例 11 |
+| `PrometheusReporter.ReportStat` → `circuitBreakerCollector.CollectStatInfo` → `doAggregation` 聚合到 GaugeVec | 用例 11 |
+| `PullAction.doAggregation` 读 `cfg.Interval`（默认 15s）替代硬编码 30s | 用例 11 |
+| `PutDataFromContainerInOrder` `currentRevision>0` 守卫（熔断 gauge 永不过期，对齐 polaris-java） | 用例 11 |
+| `reportCircuitBreakerEvent` → `BuildCircuitBreakerEvent` → `sendEvent` 投递事件链 | 用例 11 |
+| `PushgatewayReporter.ReportEvent` 入队 + batch flush POST `/polaris/client/events` | 用例 11 |
+| `toOpen` reason 形参透传（trigger 层 `CloseToOpen` 传入 CONSECUTIVE_ERROR/ERROR_RATE 描述） | 用例 11 |
+| `disable_circuitbreaker_rule` PUT enable=false 关闭残留规则（避免抢占触发） | 用例 11 |
+| 一次 trigger 同时产出 gauge + event（metrics + events 复用同一个 consumer） | 用例 11 |

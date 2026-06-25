@@ -22,7 +22,7 @@ examples/circuitbreaker/
 ├── oldInstanceCircuitBreakerCaller/     # 旧版散装写法（保留兼容）
 │   └── consumer/                        #   CircuitBreakerAPI.Report + ConsumerAPI.UpdateServiceCallResult
 │                                        #   仅覆盖实例级熔断
-├── verify_circuitbreaker.sh             # 【主入口】被动熔断一键 E2E 测试脚本（10 个用例）
+├── verify_circuitbreaker.sh             # 【主入口】被动熔断一键 E2E 测试脚本（11 个用例）
 ├── verify_faultdetect.sh                # 主动探测（fault detect）端到端验证脚本（6 个用例）
 ├── cleanup.sh                           # 进程与目录清理脚本
 ├── test.md                              # 被动熔断用例清单与验证原理（详细）
@@ -33,7 +33,7 @@ examples/circuitbreaker/
 ## 文档导航
 
 - **本文（README.md）**：目录架构、demo 编写规范、验证脚本入口说明
-- **[test.md](test.md)**：`verify_circuitbreaker.sh` 的全部 10 个熔断用例（Caller 写法 / 规则 / 验证步骤 / 通过条件 / 验证原理）
+- **[test.md](test.md)**：`verify_circuitbreaker.sh` 的全部 11 个熔断用例（Caller 写法 / 规则 / 验证步骤 / 通过条件 / 验证原理）
 - **[fault-detect.md](fault-detect.md)**：`verify_faultdetect.sh` 的全部 6 个主动探测用例（同上结构）
 
 ## 前置条件
@@ -185,13 +185,13 @@ customer func 返回 (result, err)
 
 一键 E2E 测试脚本，覆盖**被动熔断**的完整链路（业务请求触发 OPEN → 半开 → 恢复）。
 
-**共 10 个用例**：`instance` / `service` / `interface` / `old_instance` /
+**共 11 个用例**：`instance` / `service` / `interface` / `old_instance` /
 `http_status` / `default_rule` / `modify_rule` / `protocol_method` / `pathtype` /
-`all_dead_fallback`。
+`all_dead_fallback` / `cb_observability`。
 
 覆盖三级熔断（INSTANCE/SERVICE/METHOD）、三种编程模型（Decorator/InvokeHandler/Bare Report）、
 HTTP 状态码区分、默认规则兜底、规则热更新、协议/方法/路径多维度匹配、全死全活兜底策略、
-自定义降级响应（fallback）等核心能力。
+自定义降级响应（fallback）、熔断可观测性（prometheus pull gauge + pushgateway 事件，一次 trigger 双验证）等核心能力。
 
 > 用例详细说明见 **[test.md](test.md)**，含每个用例的 Caller 写法、规则配置、验证步骤、
 > 通过条件、验证原理（带源码行号引用）和失败诊断。

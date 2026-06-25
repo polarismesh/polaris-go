@@ -144,10 +144,12 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
 		if s.cfg.port == adminPort {
 			log.GetBaseLogger().Infof("[metrics]init action, pull port is same as admin port, register metrics path")
-			handler := promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})
+		mh := &metricsHttpHandler{
+			handler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
+		}
 			s.initCtx.Config.GetGlobal().GetAdmin().RegisterPath(model.AdminHandler{
 				Path:        "/metrics",
-				HandlerFunc: handler.ServeHTTP,
+				HandlerFunc: mh.ServeHTTP,
 			})
 		}
 	}
@@ -188,9 +190,9 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 			if s.circuitBreakerCollector == nil || val == nil {
 				return nil
 			}
-			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val)
-			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] CircuitBreakStat received: method=%s cbStatus=%v labels=%v",
-				val.Method, val.CBStatus, labels)
+			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val, s.bindIP)
+			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] CircuitBreakStat received: method=%s status=%s labels=%v",
+				val.Method, val.CBStatus.GetStatus(), labels)
 			s.circuitBreakerCollector.CollectStatInfo(val, labels, statcommon.CircuitBreakerStrategy,
 				statcommon.CircuitBreakerLabelOrder)
 		}
@@ -316,7 +318,7 @@ func (pa *PullAction) Close() {
 }
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pa.cfg.Interval)
 	lastRevisionLogTime := time.Time{}
 
 	action := func() {

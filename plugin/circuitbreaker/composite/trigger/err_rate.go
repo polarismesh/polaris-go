@@ -18,6 +18,7 @@
 package trigger
 
 import (
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -128,7 +129,9 @@ func (c *ErrRateCounter) Report(success bool) {
 				"errorPercent(%d%%), resource(%s)",
 				c.ruleName, c.ruleID, c.ruleRevision, reqCount, reqFailCount, failRatio,
 				c.minimumRequest, c.errorPercent, c.res.String())
-			c.handler.CloseToOpen(c.ruleName)
+			reason := fmt.Sprintf("ERROR_RATE:%.0f%% (threshold:%d%%, window:%ds, reqCount:%d)",
+				failRatio, c.errorPercent, int(c.metricWindow/time.Second), reqCount)
+			c.handler.CloseToOpen(c.ruleName, reason)
 			atomic.StoreInt32(&c.scheduled, 0)
 		})
 	}

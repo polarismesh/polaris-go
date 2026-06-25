@@ -24,9 +24,14 @@ import (
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/model/event"
+	"github.com/polarismesh/polaris-go/pkg/model/pb"
+	"github.com/polarismesh/polaris-go/pkg/plugin/events"
 	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
@@ -143,17 +148,19 @@ func (rc *ResourceCounters) CurrentCircuitBreakerStatus() model.CircuitBreakerSt
 	return nil
 }
 
-func (rc *ResourceCounters) CloseToOpen(breaker string) {
+func (rc *ResourceCounters) CloseToOpen(breaker string, reason string) {
 	rc.lock.Lock()
 	defer rc.lock.Unlock()
 
 	status := rc.CurrentCircuitBreakerStatus()
 	if status.GetStatus() == model.Close {
-		rc.toOpen(status, breaker)
+		rc.toOpen(status, breaker, reason)
 	}
 }
 
-func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name string) {
+// toOpen 切换到 Open 态。reason 为触发原因描述（由 trigger 层构造），用于熔断事件上报；
+// 半开重新打开（HalfOpenToOpen）等无 trigger 原因场景传空串。
+func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name string, reason string) {
 	newStatus := model.NewCircuitBreakerStatus(name, model.Open, time.Now(),
 		func(cbs model.CircuitBreakerStatus) {
 			cbs.SetFallbackInfo(rc.fallbackInfo)
@@ -163,6 +170,10 @@ func (rc *ResourceCounters) toOpen(before model.CircuitBreakerStatus, name strin
 	rc.logStat.Infof("[CircuitBreaker] status change: %s -> %s, resource(%s), rule(%s, id=%s, rev=%s)",
 		before.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
 		before.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
+
+	rc.reportCircuitBreakMetric(newStatus)
+	rc.reportCircuitBreakerEvent(before.GetStatus(), model.Open, reason)
+
 	sleepWindow := rc.activeRule.GetRecoverCondition().GetSleepWindow()
 	delay := time.Duration(sleepWindow) * time.Second
 
@@ -184,6 +195,9 @@ func (rc *ResourceCounters) OpenToHalfOpen() {
 		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 	rc.updateCircuitBreakerStatus(halfOpenStatus)
 	rc.reportCircuitStatus(halfOpenStatus)
+
+	rc.reportCircuitBreakMetric(halfOpenStatus)
+	rc.reportCircuitBreakerEvent(model.Open, model.HalfOpen, "")
 }
 
 func (rc *ResourceCounters) HalfOpenToClose() {
@@ -201,6 +215,9 @@ func (rc *ResourceCounters) HalfOpenToClose() {
 		status.GetStatus(), newStatus.GetStatus(), rc.resource.String(),
 		status.GetCircuitBreaker(), rc.activeRule.Id, rc.activeRule.Revision)
 
+	rc.reportCircuitBreakMetric(newStatus)
+	rc.reportCircuitBreakerEvent(model.HalfOpen, model.Close, "")
+
 	rc.resumeAllBlocks()
 }
 
@@ -210,7 +227,7 @@ func (rc *ResourceCounters) HalfOpenToOpen() {
 
 	status := rc.CurrentCircuitBreakerStatus()
 	if status.GetStatus() == model.HalfOpen {
-		rc.toOpen(status, status.GetCircuitBreaker())
+		rc.toOpen(status, status.GetCircuitBreaker(), "")
 	}
 }
 
@@ -318,6 +335,106 @@ func (rc *ResourceCounters) reportCircuitStatus(newStatus model.CircuitBreakerSt
 	if err := rc.circuitBreaker.localCache.UpdateInstances(updateRequest); err != nil {
 		rc.circuitBreaker.logCtx.GetCircuitBreakerLogger().Errorf("update instance circuitbreaker status fail, resource %s, "+
 			"rule %s, err %s", insRes.String(), rc.activeRule.Id, err.Error())
+	}
+}
+
+// reportCircuitBreakMetric 上报熔断状态指标到 StatReporter 链（Prometheus 等）。
+// cbStatus 为切换后的目标状态；出错只记日志，不阻断状态机。
+func (rc *ResourceCounters) reportCircuitBreakMetric(cbStatus model.CircuitBreakerStatus) {
+	if rc.engineFlow == nil {
+		return
+	}
+	gauge := rc.buildCircuitBreakGauge(cbStatus)
+	if err := rc.engineFlow.SyncReportStat(model.CircuitBreakStat, gauge); err != nil {
+		rc.logStat.Errorf("[CircuitBreaker] report metric failed, resource=%s, err=%v",
+			rc.resource.String(), err)
+	}
+}
+
+// buildCircuitBreakGauge 从资源与当前状态构造熔断监控指标数据源。
+// 按资源级别填充被调服务、主调服务、方法、被熔断实例等维度。
+func (rc *ResourceCounters) buildCircuitBreakGauge(
+	cbStatus model.CircuitBreakerStatus) *model.CircuitBreakGauge {
+	gauge := &model.CircuitBreakGauge{
+		CBStatus:      cbStatus,
+		Level:         levelToString(rc.resource.GetLevel()),
+		RuleName:      rc.activeRule.GetName(),
+		CalleeService: rc.resource.GetService(),
+		CallerService: rc.resource.GetCallerService(),
+	}
+	switch rc.resource.GetLevel() {
+	case fault_tolerance.Level_METHOD:
+		if mr, ok := rc.resource.(*model.MethodResource); ok {
+			gauge.Method = mr.Path
+		}
+	case fault_tolerance.Level_INSTANCE:
+		if ir, ok := rc.resource.(*model.InstanceResource); ok {
+			node := ir.GetNode()
+			ins := pb.NewInstanceInProto(&service_manage.Instance{
+				Host: wrapperspb.String(node.Host),
+				Port: wrapperspb.UInt32(node.Port),
+			}, defaultServiceKey(ir.GetService()), nil)
+			gauge.ChangeInstance = ins
+			gauge.Subset = ins.GetLogicSet()
+		}
+	}
+	return gauge
+}
+
+// levelToString 把熔断资源级别枚举映射为监控/事件中的字符串表示。
+func levelToString(l fault_tolerance.Level) string {
+	switch l {
+	case fault_tolerance.Level_SERVICE:
+		return "SERVICE"
+	case fault_tolerance.Level_METHOD:
+		return "METHOD"
+	case fault_tolerance.Level_INSTANCE:
+		return "INSTANCE"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// reportCircuitBreakerEvent 构造熔断事件并投递到 EventReporter 链。
+// from/to 为状态转换前后状态；reason 无则传空串。出错只记日志，不阻断状态机。
+func (rc *ResourceCounters) reportCircuitBreakerEvent(from, to model.Status, reason string) {
+	eventInfo := event.BuildCircuitBreakerEvent(rc.resource, rc.activeRule, from, to, reason)
+	rc.sendEvent(eventInfo)
+}
+
+// reportDestroyEvent 在规则被删除或替换、counters 被丢弃时上报销毁事件。
+// model.Status 无 Destroy 枚举，故构造 to=Close 的事件后覆写 EventName 为 CircuitBreakerDestroy。
+func (rc *ResourceCounters) reportDestroyEvent() {
+	cur := rc.CurrentCircuitBreakerStatus()
+	if cur == nil {
+		return
+	}
+	eventInfo := event.BuildCircuitBreakerEvent(rc.resource, rc.activeRule, cur.GetStatus(), model.Close, "")
+	if eventInfo == nil {
+		return
+	}
+	eventInfo.EventName = event.CircuitBreakerDestroy
+	rc.sendEvent(eventInfo)
+}
+
+// sendEvent 把事件逐个投递到 EventReporter 链。chain 为空或获取失败时静默返回。
+func (rc *ResourceCounters) sendEvent(eventInfo *event.BaseEventImpl) {
+	if rc.engineFlow == nil || eventInfo == nil {
+		return
+	}
+	chainValue := rc.engineFlow.GetEventReportChain()
+	if chainValue == nil {
+		return
+	}
+	chain, ok := chainValue.([]events.EventReporter)
+	if !ok || len(chain) == 0 {
+		return
+	}
+	for _, reporter := range chain {
+		if err := reporter.ReportEvent(eventInfo); err != nil {
+			rc.logStat.Errorf("[CircuitBreaker] report event failed, resource=%s, eventName=%s, err=%v",
+				rc.resource.String(), eventInfo.GetEventName(), err)
+		}
 	}
 }
 

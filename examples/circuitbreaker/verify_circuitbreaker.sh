@@ -54,6 +54,15 @@
 #   4. 启动 Consumer 并发请求 → 累计失败 → 验证熔断生效
 #   5. 通过 /switch 接口翻转 provider 状态 → 验证恢复链路
 #   6. 清理规则与进程
+#
+# 可观测性验证（监控指标 + 事件上报，告知性子步骤，参考 verify_ratelimit.sh 8.x/9.x）:
+#   - 用例 1/2/3/4 复用各自原有的 consumer 与熔断规则，不新增业务进程；
+#     全局仅额外启动 1 个 mock pushgateway（Python）捕获熔断状态切换事件。
+#   - consumer yaml 在 global 段追加 statReporter(prometheus pull) + eventReporter(pushgateway)：
+#       * 监控指标：curl consumer 自身 /metrics(业务端口+10000) → circuitbreaker_open{callee_service,rule_name,...}
+#       * 事件上报：mock pushgateway 捕获 event_name=CircuitBreakerOpen/Close 且 rule_name 匹配
+#   - 该子步骤为告知性输出，不改变熔断用例本身的 PASS/FAIL；
+#     可用环境变量 OBSERV_ENABLE=false 整体关闭。
 # =============================================================================
 
 set -euo pipefail
@@ -148,6 +157,21 @@ WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-8}"
 RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
+# ===== 可观测性验证（监控指标 + 事件上报）配置 =====
+# 设计：复用用例 1/2/3/4 原有的 consumer 与熔断规则，不新增业务进程；
+#       全局仅额外启动 1 个 mock pushgateway（Python）捕获熔断事件。
+#   - consumer yaml 在 global 段追加 statReporter(prometheus pull) + eventReporter(pushgateway)
+#   - 每个 consumer 的 /metrics 端口 = 业务端口 + 10000（避免多实例端口冲突）
+#   - 所有 consumer 的事件都 POST 到同一个 mock server（${MOCK_CB_EVENT_PORT}）
+# OBSERV_ENABLE=false 时整体跳过可观测性子步骤（默认开启）
+OBSERV_ENABLE="${OBSERV_ENABLE:-true}"
+# mock pushgateway 监听端口（与 ratelimit 的 19090 错开，避免并行跑时冲突）
+MOCK_CB_EVENT_PORT="${MOCK_CB_EVENT_PORT:-19091}"
+# consumer prometheus /metrics 端口偏移：业务端口 + 该偏移。
+# 用 20000 而非 10000，避免与 provider-a/b（28081/28082）等端口冲突
+# （18081+10000=28081 会撞 provider-a，故必须用更大偏移）。
+METRICS_PORT_OFFSET="${METRICS_PORT_OFFSET:-20000}"
+
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -221,6 +245,13 @@ CONSUMER_PIDS=()
 
 # 创建过的熔断规则 ID 列表（脚本退出前会逐个删除）
 CREATED_RULE_IDS=()
+
+# 可观测性：mock pushgateway PID + 捕获事件文件（JSON-lines）。
+# 全局共享：所有用例的熔断事件都写入同一个文件，按 rule_name / service 区分。
+MOCK_CB_EVENT_PID=""
+CB_EVENTS_FILE="${LOG_DIR}/captured_cb_events.json"
+# 可观测性运行期状态：mock server 是否真正起来（起不来则降级为"仅探测指标"）
+OBSERV_EVENT_READY="false"
 
 # ======================== 工具函数 ========================
 # 注意：日志统一写到 stderr，避免在 `result=$(some_func)` 这类命令替换里被一起捕获，
@@ -321,6 +352,12 @@ cleanup() {
             log_info "已停止 ${pid_var} (PID: $pid)"
         fi
     done
+    # mock pushgateway（可观测性事件捕获）
+    if [[ -n "$MOCK_CB_EVENT_PID" ]] && kill -0 "$MOCK_CB_EVENT_PID" 2>/dev/null; then
+        kill "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+        wait "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+        log_info "已停止 mock pushgateway (PID: $MOCK_CB_EVENT_PID)"
+    fi
 }
 
 trap cleanup EXIT
@@ -1580,6 +1617,42 @@ generate_consumer_polaris_yaml() {
     # 第三参数控制是否启用全死全活；默认 true
     # 用例 10（all_dead_fallback）阶段 B 会传 "false"，验证全死全活关闭时 GetOneInstance 失败
     local enable_recover_all="${3:-true}"
+    # 第四参数控制是否启用可观测性（监控指标 + 事件上报）；默认 false
+    # 用例 1/2/3/4 会传 "true"，在 global 段追加 statReporter / eventReporter，
+    # 让 consumer 进程自身按 pull 模式暴露 /metrics 端口，并把熔断状态切换事件 POST 到
+    # 本地 mock pushgateway，从而在不新增业务进程、复用原有熔断规则的前提下验证可观测性。
+    local enable_observ="${4:-false}"
+
+    # 可观测性 global 段：
+    #   statReporter   —— prometheus pull 模式暴露 /metrics（端口取 ${POLARIS_METRICS_PORT}）
+    #                     熔断状态切换时 SDK 上报 circuitbreaker_open / circuitbreaker_halfopen 指标
+    #   eventReporter  —— pushgateway 把 CircuitBreakerOpen / CircuitBreakerClose 事件
+    #                     POST 到 ${POLARIS_EVENT_ADDR}（本地 mock server）
+    # 注意：metricPort / address 用单引号字面量写 ${...}，由 SDK 的 os.ExpandEnv 在读取
+    #       yaml 时展开（参见 pkg/config/impl.go），脚本启动 consumer 前 export 这两个环境变量；
+    #       此处必须用单引号 heredoc，避免 bash 在生成 yaml 时就把 ${...} 提前展开成空串。
+    local observ_block=""
+    if [[ "$enable_observ" == "true" ]]; then
+        observ_block=$(cat <<'YAML'
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricHost: 127.0.0.1
+        metricPort: '${POLARIS_METRICS_PORT}'
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+    plugin:
+      pushgateway:
+        address: '${POLARIS_EVENT_ADDR}'
+YAML
+)
+    fi
 
     local default_block=""
     if [[ "$enable_default" == "true" ]]; then
@@ -1613,6 +1686,7 @@ global:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
     connectTimeout: 3s
+${observ_block}
 consumer:
   circuitBreaker:
     enable: true
@@ -1718,11 +1792,17 @@ start_consumer() {
     local enable_default_rule="${6:-false}"
     # 第七参数（可选）：是否启用全死全活；默认 true
     local enable_recover_all="${7:-true}"
+    # 第八参数（可选）：是否启用可观测性（监控指标 + 事件上报）；默认 false
+    local enable_observ="${8:-false}"
+    # 第九参数（可选）：prometheus pull /metrics 端口；默认 业务端口 + METRICS_PORT_OFFSET
+    local metrics_port="${9:-$((port + METRICS_PORT_OFFSET))}"
+    # 第十参数（可选）：mock pushgateway 地址；默认空（不上报远端）
+    local event_addr="${10:-}"
 
     # 注意：workdir 不能与二进制输出路径同名，理由同 start_provider。
     local workdir="${BUILD_DIR}/${name}_run"
     mkdir -p "$workdir"
-    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule" "$enable_recover_all"
+    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule" "$enable_recover_all" "$enable_observ"
 
     if lsof -ti :"${port}" > /dev/null 2>&1; then
         log_warn "端口 ${port} 已被占用，尝试终止已有进程..."
@@ -1739,7 +1819,12 @@ start_consumer() {
 
     # 同 start_provider：子进程必须 detach 标准 fd，避免被 r=$(case_xxx) 命令替换的
     # 子 shell 持有捕获管道导致主 shell 卡死。
-    (cd "$workdir" && exec "${BUILD_DIR}/${name}" \
+    # POLARIS_METRICS_PORT / POLARIS_EVENT_ADDR 仅在该子 shell 内 export，
+    # 供 yaml 中 ${...} 占位符经 SDK os.ExpandEnv 展开；不污染主 shell 环境。
+    (cd "$workdir" \
+        && export POLARIS_METRICS_PORT="$metrics_port" \
+        && export POLARIS_EVENT_ADDR="$event_addr" \
+        && exec "${BUILD_DIR}/${name}" \
         --selfNamespace "$NAMESPACE" \
         --selfService "$self_service" \
         --selfRegister=false \
@@ -1868,6 +1953,183 @@ run_burst() {
     log_info "[${label}] total=${CASE_TOTAL}, ok=${CASE_OK}, fail=${CASE_FAIL}, abort=${CASE_ABORT}, fallback=${CASE_FALLBACK}"
 }
 
+# ======================== 可观测性验证（监控指标 + 事件上报） ========================
+# 启动全局唯一的 mock pushgateway，捕获所有用例的熔断事件到 JSON-lines 文件。
+# 在 main() 步骤 B（provider 集群就绪）之后调用一次；cleanup 时停止。
+# 失败（python3 缺失 / 端口占用）时降级：OBSERV_EVENT_READY=false，事件子步骤跳过、指标仍探测。
+start_mock_cb_event_server() {
+    if [[ "$OBSERV_ENABLE" != "true" ]]; then
+        log_info "[可观测性] OBSERV_ENABLE=false，跳过监控+事件验证"
+        return 0
+    fi
+    if [[ ! -f "${SCRIPT_DIR}/mock_event_server.py" ]]; then
+        log_warn "[可观测性] 未找到 mock_event_server.py，事件验证降级为跳过（指标验证仍执行）"
+        return 0
+    fi
+    rm -f "$CB_EVENTS_FILE"
+    # mock server 必须 detach 标准 fd，避免被后续 r=$(case_xxx) 命令替换的子 shell
+    # 继承捕获管道导致主 shell 卡死（与 start_consumer 同理）。
+    (exec python3 "${SCRIPT_DIR}/mock_event_server.py" "$CB_EVENTS_FILE" "$MOCK_CB_EVENT_PORT" \
+        < /dev/null > "${LOG_DIR}/mock_cb_event_server.log" 2>&1) &
+    MOCK_CB_EVENT_PID=$!
+    disown "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+    sleep 1
+    if ! kill -0 "$MOCK_CB_EVENT_PID" 2>/dev/null; then
+        log_warn "[可观测性] mock_event_server 启动失败，事件验证降级为跳过（指标验证仍执行）"
+        MOCK_CB_EVENT_PID=""
+        return 0
+    fi
+    OBSERV_EVENT_READY="true"
+    log_info "[可观测性] mock pushgateway (PID=${MOCK_CB_EVENT_PID}) 监听 :${MOCK_CB_EVENT_PORT}，事件写入 ${CB_EVENTS_FILE}"
+    return 0
+}
+
+# _probe_cb_metric <metrics_port> <callee_service> <rule_name>
+# 探测 consumer 自身暴露的 prometheus /metrics，确认熔断指标已上报。
+# 断言：存在 circuitbreaker_open 指标行，且该行 label 命中 callee_service / rule_name。
+# 说明：circuitbreaker_open 是 gauge（Open 时 +1、HalfOpen 时 -1），探测发生在 recover 之后，
+#       数值可能已回落到 0，因此判定"指标行存在"即证明上报链路打通，不强求 value>0。
+# 返回：命中打印 "OK <匹配行数>"；未命中打印 "MISS <原因>"。输出到 stdout 供调用方捕获。
+_probe_cb_metric() {
+    local metrics_port="$1"
+    local callee_service="$2"
+    local rule_name="$3"
+
+    local body code attempt
+    for attempt in 1 2 3 4 5; do
+        body=$(curl -s --connect-timeout 3 --max-time 5 \
+            -w '\n%{http_code}' "http://127.0.0.1:${metrics_port}/metrics" 2>/dev/null || echo "")
+        code=$(echo "$body" | tail -1)
+        body=$(echo "$body" | sed '$d')
+        if echo "$body" | grep -q "circuitbreaker_open"; then
+            break
+        fi
+        log_info "[可观测性][指标] 第 ${attempt}/5 次轮询未见 circuitbreaker_open（HTTP=${code}, body_len=${#body}），等 6s..." >&2
+        [[ $attempt -lt 5 ]] && sleep 6
+    done
+
+    if [[ -z "$body" ]]; then
+        echo "MISS /metrics(${metrics_port})返回空"
+        return 0
+    fi
+    if ! echo "$body" | grep -q "circuitbreaker_open"; then
+        echo "MISS 未找到circuitbreaker_open指标"
+        return 0
+    fi
+
+    # 打印所有 circuitbreaker_* 指标行供审计
+    log_info "[可观测性][指标] --- circuitbreaker_* 指标行 ---" >&2
+    echo "$body" | grep "^circuitbreaker_" | while IFS= read -r line; do
+        log_info "[可观测性][指标]   ${line}" >&2
+    done
+    log_info "[可观测性][指标] --- end ---" >&2
+
+    # 校验 label：callee_service 与 rule_name 至少各命中一行
+    local hit_svc hit_rule
+    hit_svc=$(echo "$body" | grep "circuitbreaker_open" | grep -c "callee_service=\"${callee_service}\"" || echo 0)
+    hit_rule=$(echo "$body" | grep "circuitbreaker_open" | grep -c "rule_name=\"${rule_name}\"" || echo 0)
+    if [[ "$hit_svc" -ge 1 ]] && [[ "$hit_rule" -ge 1 ]]; then
+        echo "OK svc命中${hit_svc}行/rule命中${hit_rule}行"
+        return 0
+    fi
+    echo "MISS label不匹配(svc=${callee_service}命中${hit_svc}/rule=${rule_name}命中${hit_rule})"
+    return 0
+}
+
+# _verify_cb_event <rule_name> <callee_service>
+# 解析全局 captured_cb_events.json，校验本用例的熔断事件已上报。
+# 断言：存在 event_name=CircuitBreakerOpen 且 rule_name / service 与本用例匹配。
+# 返回：命中打印 "OK <Open次数>/<Close次数>"；未命中打印 "MISS <原因>"。
+_verify_cb_event() {
+    local rule_name="$1"
+    local callee_service="$2"
+
+    if [[ "$OBSERV_EVENT_READY" != "true" ]]; then
+        echo "SKIP mock server未就绪"
+        return 0
+    fi
+    if [[ ! -f "$CB_EVENTS_FILE" ]]; then
+        echo "MISS 事件文件不存在"
+        return 0
+    fi
+
+    # python3 解析 JSON-lines，统计本用例的 Open / Close 事件数并校验字段
+    local result
+    result=$(RULE_NAME="$rule_name" CALLEE_SVC="$callee_service" NS="$NAMESPACE" \
+        python3 -c "
+import json, os, sys
+rule = os.environ['RULE_NAME']
+svc  = os.environ['CALLEE_SVC']
+ns   = os.environ['NS']
+open_cnt = close_cnt = 0
+for line in open('${CB_EVENTS_FILE}', encoding='utf-8'):
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        e = json.loads(line)
+    except Exception:
+        continue
+    # 事件按 rule_name + service 归属到本用例；service 为被调服务名
+    if e.get('rule_name') != rule or e.get('service') != svc or e.get('namespace') != ns:
+        continue
+    name = e.get('event_name')
+    if name == 'CircuitBreakerOpen':
+        open_cnt += 1
+    elif name == 'CircuitBreakerClose':
+        close_cnt += 1
+if open_cnt >= 1:
+    print('OK %d %d' % (open_cnt, close_cnt))
+else:
+    print('MISS 未找到匹配的CircuitBreakerOpen事件(rule=%s svc=%s)' % (rule, svc))
+" 2>/dev/null || echo "MISS python3解析异常")
+    echo "$result"
+    return 0
+}
+
+# _verify_observability <用例名> <metrics_port> <callee_service> <rule_name>
+# 可观测性子步骤总入口（告知性，不影响熔断核心用例的 PASS/FAIL）：
+#   1) 探测 /metrics 的 circuitbreaker_open 指标
+#   2) 校验 mock pushgateway 捕获的 CircuitBreakerOpen/Close 事件
+# 仅打印结果到日志，便于人工对账；调用方在 stop_consumer 之前调用（此时 consumer 仍存活，
+# /metrics 端口可达）。
+_verify_observability() {
+    local case_label="$1"
+    local metrics_port="$2"
+    local callee_service="$3"
+    local rule_name="$4"
+
+    if [[ "$OBSERV_ENABLE" != "true" ]]; then
+        return 0
+    fi
+
+    log_step "${case_label} [可观测性] 监控指标 + 事件上报验证（复用本用例 consumer/规则，告知性）"
+    print_block "${case_label} 可观测性验证（不影响核心判定）" \
+        "目标:   验证熔断状态切换触发了 SDK 监控指标 + 事件上报两条链路" \
+        "指标:   curl consumer 自身 /metrics(${metrics_port}) → 找 circuitbreaker_open{callee_service=${callee_service},rule_name=${rule_name}}" \
+        "事件:   mock pushgateway 捕获 event_name=CircuitBreakerOpen 且 rule_name=${rule_name}、service=${callee_service}" \
+        "说明:   circuitbreaker_open 为 gauge，探测在 recover 后数值可能回落到 0，故只断言指标行存在" \
+        "判定:   告知性输出，不改变熔断用例本身的 PASS/FAIL"
+
+    local metric_ret event_ret
+    metric_ret=$(_probe_cb_metric "$metrics_port" "$callee_service" "$rule_name")
+    event_ret=$(_verify_cb_event "$rule_name" "$callee_service")
+
+    if [[ "$metric_ret" == OK* ]]; then
+        log_info "${case_label} [可观测性][指标] ✅ ${metric_ret}"
+    else
+        log_warn "${case_label} [可观测性][指标] ⚠️ ${metric_ret}（不影响核心判定）"
+    fi
+    if [[ "$event_ret" == OK* ]]; then
+        log_info "${case_label} [可观测性][事件] ✅ ${event_ret}（Open/Close 次数）"
+    elif [[ "$event_ret" == SKIP* ]]; then
+        log_info "${case_label} [可观测性][事件] ⏭ ${event_ret}"
+    else
+        log_warn "${case_label} [可观测性][事件] ⚠️ ${event_ret}（不影响核心判定）"
+    fi
+    return 0
+}
+
 # ======================== 三个子用例 ========================
 # 每个子用例返回 0=PASS / 非0=FAIL，并把结论 echo 到 stdout
 # 用例编号严格顺序递增（参考 examples/route 规约）
@@ -1925,9 +2187,13 @@ case_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例1.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例1.2 启动 instance consumer"
+    log_step "用例1.2 启动 instance consumer（开启可观测性：监控指标 + 事件上报）"
+    # 开启可观测性：enable_default_rule=false, enable_recover_all=true, enable_observ=true,
+    # metrics_port=业务端口+10000, event_addr 指向全局 mock pushgateway。
+    local instance_metrics_port=$((INSTANCE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "instance_consumer" "$INSTANCE_CONSUMER_DIR" \
-        "$INSTANCE_CALLER" "$INSTANCE_CONSUMER_PORT" "${LOG_DIR}/instance_consumer.log"; then
+        "$INSTANCE_CALLER" "$INSTANCE_CONSUMER_PORT" "${LOG_DIR}/instance_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$instance_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
@@ -1998,6 +2264,9 @@ case_instance() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（INSTANCE 级规则名 cb-instance-<caller>）
+    _verify_observability "用例1" "$instance_metrics_port" "$SERVICE_NAME" "cb-instance-${INSTANCE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -2107,9 +2376,11 @@ case_service() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例2.1] provider-a → 500 / provider-b → 500（模拟整服务不可用）"
 
-    log_step "用例2.2 启动 service consumer"
+    log_step "用例2.2 启动 service consumer（开启可观测性：监控指标 + 事件上报）"
+    local service_metrics_port=$((SERVICE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "service_consumer" "$SERVICE_CONSUMER_DIR" \
-        "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" "${LOG_DIR}/service_consumer.log"; then
+        "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" "${LOG_DIR}/service_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$service_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
@@ -2181,6 +2452,9 @@ case_service() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（SERVICE 级规则名 cb-service-<caller>）
+    _verify_observability "用例2" "$service_metrics_port" "$SERVICE_NAME" "cb-service-${SERVICE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -2389,9 +2663,11 @@ case_interface() {
     provider_set_error "$PROVIDER_B_PORT" "true" "true"
     log_info "[用例3.1] provider-a/b 的 /echo 与 /order 均返回 500，/info 恒为 500"
 
-    log_step "用例3.2 启动 interface consumer"
+    log_step "用例3.2 启动 interface consumer（开启可观测性：监控指标 + 事件上报）"
+    local interface_metrics_port=$((INTERFACE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "interface_consumer" "$INTERFACE_CONSUMER_DIR" \
-        "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" "${LOG_DIR}/interface_consumer.log"; then
+        "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" "${LOG_DIR}/interface_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$interface_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
@@ -2504,6 +2780,10 @@ case_interface() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "/slow 恢复" "/slow"
     local slow_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件
+    # METHOD 级 /echo 块对应规则名 cb-interface-<caller>（/order、/slow 为独立子规则）
+    _verify_observability "用例3" "$interface_metrics_port" "$SERVICE_NAME" "cb-interface-${INTERFACE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -2716,9 +2996,11 @@ case_old_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例4.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例4.2 启动 old-instance consumer（旧版散装写法）"
+    log_step "用例4.2 启动 old-instance consumer（旧版散装写法，开启可观测性：监控指标 + 事件上报）"
+    local old_instance_metrics_port=$((OLD_INSTANCE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "old_instance_consumer" "$OLD_INSTANCE_CONSUMER_DIR" \
-        "$OLD_INSTANCE_CALLER" "$OLD_INSTANCE_CONSUMER_PORT" "${LOG_DIR}/old_instance_consumer.log"; then
+        "$OLD_INSTANCE_CALLER" "$OLD_INSTANCE_CONSUMER_PORT" "${LOG_DIR}/old_instance_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$old_instance_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
@@ -2788,6 +3070,9 @@ case_old_instance() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "旧版实例级恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（INSTANCE 级规则名 cb-instance-<old_caller>）
+    _verify_observability "用例4" "$old_instance_metrics_port" "$SERVICE_NAME" "cb-instance-${OLD_INSTANCE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -3852,6 +4137,10 @@ main() {
 
     log_info "等待 5s 让服务发现缓存就绪..."
     sleep 5
+
+    # === 步骤B2：启动全局 mock pushgateway（可观测性事件捕获，唯一额外进程） ===
+    log_step "步骤B2 启动 mock pushgateway（监控+事件验证用，全局共享）"
+    start_mock_cb_event_server
 
     # === 步骤C：执行子用例 ===
     local results=()

@@ -98,7 +98,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 	resourceCounters := c.breaker.getLevelResourceCounters(c.res.GetLevel())
 	cbRule := c.getCircuitBreakerRule(resp)
 	if cbRule == nil {
-		if _, exist := resourceCounters.remove(c.res); exist {
+		if old, exist := resourceCounters.remove(c.res); exist {
+			// 规则被删除，旧 counters 即将被丢弃，上报熔断销毁事件
+			old.reportDestroyEvent()
 			c.log.Infof("[CircuitBreaker] removed counters for resource: %s, scheduling health check", c.res.String())
 			c.scheduleHealthCheck()
 		}
@@ -106,9 +108,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 	}
 	c.log.Debugf("[CircuitBreaker] matched rule: %s (id: %s, revision: %s) for resource: %s",
 		cbRule.Name, cbRule.Id, cbRule.Revision, c.res.String())
-	counters, exist := resourceCounters.get(c.res)
+	oldCounters, exist := resourceCounters.get(c.res)
 	if exist {
-		activeRule := counters.CurrentActiveRule()
+		activeRule := oldCounters.CurrentActiveRule()
 		if activeRule.Id == cbRule.Id && activeRule.Revision == cbRule.Revision {
 			c.log.Debugf("[CircuitBreaker] rule unchanged for resource: %s, skipping update", c.res.String())
 			return
@@ -117,10 +119,14 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 			"new rule: %s (id: %s, revision: %s)", c.res.String(), activeRule.Name, activeRule.Id,
 			activeRule.Revision, cbRule.Name, cbRule.Id, cbRule.Revision)
 	}
-	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
+	counters, err := newResourceCounters(c.res, cbRule, c.breaker)
 	if err != nil {
 		c.log.Errorf("[CircuitBreaker] new resource counters fail: %+v", err)
 		return
+	}
+	// 规则发生变更，旧 counters 即将被新 counters 覆盖，上报熔断销毁事件
+	if exist {
+		oldCounters.reportDestroyEvent()
 	}
 	resourceCounters.put(c.res, counters)
 	c.log.Infof("[CircuitBreaker] created new counters, applied rule: %s (id: %s, revision: %s) for resource: %s",
