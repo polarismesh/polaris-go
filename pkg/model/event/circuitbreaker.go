@@ -20,6 +20,7 @@ package event
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/polarismesh/specification/source/go/api/v1/fault_tolerance"
@@ -54,6 +55,10 @@ const (
 //
 // 返回：
 //   - 填充完整字段的 *BaseEventImpl，clientID/clientIP 由 EventReporter 在投递时注入，此处不填。
+//   - event_type 使用 "CircuitBreaker"+EventName 格式（如 "CircuitBreakerOpen"），
+//     因为服务端 pushgateway 只接受 event_type 字段，不保留 event_name。
+//   - rule_name / resource_type / current_status / previous_status / additional_params
+//     等被服务端丢弃的字段统一打包到 labels 中。
 func BuildCircuitBreakerEvent(
 	resource model.Resource,
 	rule *fault_tolerance.CircuitBreakerRule,
@@ -61,14 +66,18 @@ func BuildCircuitBreakerEvent(
 	reason string,
 ) *BaseEventImpl {
 	toStr := parseCircuitBreakerStatus(to)
+	fromStr := parseCircuitBreakerStatus(from)
+	eventName := parseFlowEventName(toStr)
 	e := &BaseEventImpl{
-		EventType:        CircuitBreakerEventType.EventTypeString(),
-		EventName:        parseFlowEventName(toStr),
+		// event_type 使用组合格式 "CircuitBreaker" + EventName，
+		// 对齐服务端 pushgateway 的接受字段（仅 event_type 保留，event_name 会被丢弃）
+		EventType:        "CircuitBreaker" + string(eventName),
+		EventName:        eventName,
 		EventTime:        time.Now().Format("2006-01-02 15:04:05"),
 		Namespace:        resource.GetService().Namespace,
 		Service:          resource.GetService().Service,
 		CurrentStatus:    toStr,
-		PreviousStatus:   parseCircuitBreakerStatus(from),
+		PreviousStatus:   fromStr,
 		RuleName:         circuitBreakerRuleName(rule),
 		Reason:           reason,
 		AdditionalParams: make(map[string]string),
@@ -81,7 +90,8 @@ func BuildCircuitBreakerEvent(
 
 	ns := resource.GetService().Namespace
 	svc := resource.GetService().Service
-	switch resource.GetLevel() {
+	rLevel := resource.GetLevel()
+	switch rLevel {
 	case fault_tolerance.Level_SERVICE:
 		e.ResourceType = "SERVICE"
 		e.AdditionalParams[IsolationObjectKey] = fmt.Sprintf("%s#%s", ns, svc)
@@ -105,6 +115,8 @@ func BuildCircuitBreakerEvent(
 	}
 
 	fillRateParams(e, rule)
+	// 将被服务端丢弃的关键字段打包到 labels 中
+	e.Labels = buildLabels(e, rLevel, toStr, fromStr)
 	return e
 }
 
@@ -168,4 +180,41 @@ func parseFlowEventName(toStatus string) EventName {
 	default:
 		return CircuitBreakerDestroy
 	}
+}
+
+// buildLabels 将被服务端 pushgateway 丢弃的关键字段打包到 labels 字符串中。
+// 服务端只接受 event_type / namespace / service / host / port / api_* /
+// source_* / labels / reason / client_id / client_ip / event_time / instance_id / log_time，
+// event_name / rule_name / resource_type / current_status / previous_status /
+// additional_params 等字段均被丢弃，因此把它们编码为 labels 中的 key=value 对。
+func buildLabels(
+	e *BaseEventImpl,
+	level fault_tolerance.Level,
+	toStatus, fromStatus string,
+) string {
+	fragments := make([]string, 0, 8)
+
+	add := func(key, value string) {
+		if value != "" {
+			fragments = append(fragments, key+"="+value)
+		}
+	}
+
+	add("rule_name", e.RuleName)
+	add("resource_type", e.ResourceType)
+	add("current_status", toStatus)
+	add("previous_status", fromStatus)
+	if level == fault_tolerance.Level_INSTANCE {
+		add("isolation_object", e.Host+":"+e.Port)
+	} else if iso, ok := e.AdditionalParams[IsolationObjectKey]; ok {
+		add("isolation_object", iso)
+	}
+	if fr, ok := e.AdditionalParams[FailureRateKey]; ok && fr != "" {
+		add("failure_rate", fr)
+	}
+	if scd, ok := e.AdditionalParams[SlowCallDurationKey]; ok && scd != "" {
+		add("slow_call_duration", scd)
+	}
+
+	return strings.Join(fragments, " ")
 }

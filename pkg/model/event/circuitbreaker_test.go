@@ -54,7 +54,8 @@ func TestBuildCircuitBreakerEvent_ServiceLevel(t *testing.T) {
 	got := BuildCircuitBreakerEvent(res, rule, model.Close, model.Open, "ERROR_RATE:80% (threshold:50%)")
 
 	assert.NotNil(t, got)
-	assert.Equal(t, CircuitBreakerEventType.EventTypeString(), got.EventType)
+	// event_type 改为组合格式 "CircuitBreaker" + EventName（对齐服务端 pushgateway 只接受 event_type）
+	assert.Equal(t, "CircuitBreakerCircuitBreakerOpen", got.EventType)
 	assert.Equal(t, CircuitBreakerOpen, got.EventName)
 	assert.Equal(t, "ns", got.Namespace)
 	assert.Equal(t, "svc", got.Service)
@@ -69,6 +70,14 @@ func TestBuildCircuitBreakerEvent_ServiceLevel(t *testing.T) {
 	assert.Equal(t, "50", got.AdditionalParams[FailureRateKey])
 	assert.Equal(t, "30", got.AdditionalParams[SlowCallDurationKey])
 	assert.NotEmpty(t, got.EventTime)
+	// labels 内打包了被服务端丢弃的字段
+	assert.Contains(t, got.Labels, "rule_name=demo-cb-rule")
+	assert.Contains(t, got.Labels, "resource_type=SERVICE")
+	assert.Contains(t, got.Labels, "current_status=OPEN")
+	assert.Contains(t, got.Labels, "previous_status=CLOSE")
+	assert.Contains(t, got.Labels, "isolation_object=ns#svc")
+	assert.Contains(t, got.Labels, "failure_rate=50")
+	assert.Contains(t, got.Labels, "slow_call_duration=30")
 }
 
 // TestBuildCircuitBreakerEvent_MethodLevel 验证 METHOD 级熔断事件的 API 字段与隔离对象。
@@ -105,6 +114,9 @@ func TestBuildCircuitBreakerEvent_InstanceLevel(t *testing.T) {
 	assert.Equal(t, "1.2.3.4", got.Host)
 	assert.Equal(t, "8080", got.Port)
 	assert.Equal(t, "1.2.3.4:8080", got.AdditionalParams[IsolationObjectKey])
+	// labels 中 INSTANCE 级的 isolation_object 直接从 host:port 拼接
+	assert.Contains(t, got.Labels, "isolation_object=1.2.3.4:8080")
+	assert.Contains(t, got.Labels, "resource_type=INSTANCE")
 	// caller 为 nil 时来源字段保持空
 	assert.Empty(t, got.SourceNamespace)
 	assert.Empty(t, got.SourceService)

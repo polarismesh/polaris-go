@@ -90,12 +90,8 @@
 | 1 | InvokeHandler | `instance_invoke_consumer_run/` | 与 Decorator 共用 selfService + 规则 |
 | 2 | Decorator | `service_consumer_run/` | SERVICE 级熔断，装饰器模式 |
 | 2 | InvokeHandler | `service_invoke_consumer_run/` | 与 Decorator 共用 selfService + 规则 |
-| 2 | fallback 正向 | `service_fallback_consumer_run/` | fallbackConfig.enable=true → HTTP 599 |
-| 2 | fallback 反向 | `service_fallback_off_consumer_run/` | fallbackConfig.enable=false → 503 兜底 |
 | 3 | Decorator | `interface_consumer_run/` | METHOD 级熔断 + /echo /order /info /slow |
 | 3 | InvokeHandler | `interface_invoke_consumer_run/` | 只验证 /echo 路径 |
-| 3 | fallback 正向 | `interface_fallback_consumer_run/` | fallbackConfig.enable=true → HTTP 599 |
-| 3 | fallback 反向 | `interface_fallback_off_consumer_run/` | fallbackConfig.enable=false → 503 兜底 |
 | 4 | - | `old_instance_consumer_run/` | 旧版散装 API（向后兼容验证） |
 | 5 | A/B/C 段 | `http_status_consumer_run/` | 三个子阶段共用同一 consumer |
 | 6 | - | `default_rule_consumer_run/` | 服务端无规则，依赖 SDK 本地默认规则 |
@@ -260,19 +256,17 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 2.8 再次出现 abort
 - 2.9 再次翻 200 → 再次恢复
 - ── InvokeHandler 子阶段（复用 Decorator 的规则）──
-- 2.10 启动 invokeHandler consumer
-- 2.11 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
-- 2.12 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 2.13 恢复：a/b 翻回 200，等 8s
-- ── fallback 子阶段（复用 Decorator 的规则 cb-service-CircuitBreakerServiceCaller，PUT 更新规则切换 fallbackConfig.enable）──
-- 2.14 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker" / header X-Fallback=true）
-- 2.15 重启 consumer（规则 revision 变更触发 SDK counter 重建，需重新加载）
-- 2.16 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次 `/echo`
-- 2.17 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"）
-- 2.18 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
-- 2.19 重启 consumer
-- 2.20 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
-- 2.21 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
+- 2.16 启动 invokeHandler consumer
+- 2.17 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
+- 2.18 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 2.19 恢复：a/b 翻回 200，等 8s
+- ── fallback 子阶段（复用 Decorator 的规则 cb-service-CircuitBreakerServiceCaller + **不重启 consumer**，直接 PUT 切换 fallbackConfig.enable）──
+- 2.10 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker" / header X-Fallback=true）
+- 2.11 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次 `/echo`（复用运行中 consumer）
+- 2.12 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"）
+- 2.13 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
+- 2.14 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次（服用运行中 consumer）
+- 2.15 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
 
 ### 通过条件（共 11 项指标）
 - Decorator 两轮 `trigger_fail >= 1`
@@ -285,7 +279,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 ### 验证原理
 - **为什么服务级熔断"会 abort"**：`commonCheck` 第一步就对 `ServiceResource` 调 `Check`（`circuitbreaker_flow.go:249`），服务级计数器 OPEN 后 `CheckResult.Pass=false`，请求在调用业务前即被拦截返回 `call aborted`。这与用例 1（实例级不进 `Check`）形成对照——所以 2.1 复位为 **a/b 都 500**（整服务不可用），让服务级错误率达阈值。
 - **半开放行业务请求探活**：服务级 `half-open` 态由 `AcquirePermission` 发放有限配额（`half_open_status.go`，CAS 原子计数确保并发不超额），获得配额的业务请求落到已翻回 200 的 provider 即上报成功，`Release` 归集判定连续成功达 `consecutiveSuccess=1` 触发 `half-open → close`（`counter.go:217` `handleHalfOpenReport`）。因此 2.6 恢复阶段必须 **a/b 同步翻回 200**，否则半开探测可能打到仍 500 的实例而回 OPEN。
-- **fallback 降级**：规则顶层 `fallbackConfig.enable=true` 时，`buildFallbackInfo` 把规则配置的 code/body/headers 封装进 `CallAborted`，demo 端 `HasFallback()` 为真则透传降级响应（599 + "degraded"）而非默认 503；`enable=false` 时 `GetEnable()` 短路，`CallAborted` 不带 fallback，demo 回默认 503 兜底。
+- **fallback 降级**：规则顶层 `fallbackConfig.enable=true` 时，`buildFallbackInfo` 把规则配置的 code/body/headers 封装进 `CallAborted`，demo 端 `HasFallback()` 为真则透传降级响应（599 + "degraded"）而非默认 503；`enable=false` 时 `GetEnable()` 短路，`CallAborted` 不带 fallback，demo 回默认 503 兜底。PUT 更新规则 revision 变更触发 SDK counter 重建（`rule.go:101`），**无需重启 consumer**——fallback 子阶段复用 Decorator 运行中 consumer，在 consumer 存活期内通过 PUT 切换 enable toggle 完成正向/反向验证。
 
 ---
 
@@ -330,19 +324,18 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 3.13 验证：再发 `RECOVERY_REQUEST_COUNT` 次，应出现 abort
 - 3.14 恢复：延迟清零，等 `WAIT_HALF_OPEN_SECONDS` → 全部 200
 - ── InvokeHandler 子阶段（复用 Decorator 的规则，只验证 /echo）──
-- 3.15 启动 invokeHandler consumer
-- 3.16 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
-- 3.17 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 3.18 恢复：a/b 翻回 200，等 8s
-- ── fallback 子阶段（复用 Decorator 的 merged 规则 cb-interface-CircuitBreakerInterfaceCaller，PUT 更新规则切换 fallbackConfig.enable）──
-- 3.19 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker"）
-- 3.20 重启 consumer（规则 revision 变更触发 SDK counter 重建，需重新加载）
-- 3.21 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
-- 3.22 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"，fallbackConfig 为 Rule 级字段，三个 block 共享）
-- 3.23 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
-- 3.24 重启 consumer
-- 3.25 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
-- 3.26 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
+- 3.21 启动 invokeHandler consumer
+- 3.21 启动 invokeHandler consumer
+- 3.22 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
+- 3.23 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 3.24 恢复：a/b 翻回 200，等 8s
+- ── fallback 子阶段（复用 Decorator 的 merged 规则 cb-interface-CircuitBreakerInterfaceCaller + **不重启 consumer**，直接 PUT 切换 fallbackConfig.enable）──
+- 3.15 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker"）
+- 3.16 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`（复用运行中 consumer）
+- 3.17 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `iface_fallback >= 1`（HTTP 599 + body "degraded"，fallbackConfig 为 Rule 级字段，三个 block 共享）
+- 3.18 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
+- 3.19 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`（复用运行中 consumer）
+- 3.20 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `iface_fb_off_abort >= 1`（503，enable=false 不下发 599）
 
 ### 通过条件（共 16 项指标）
 - `/echo` Decorator 两轮 trigger ≥1 fail / verify ≥1 abort / recover 全 200
@@ -488,7 +481,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 7.1 复位 provider：a=200 / b=500
-- 7.2 启动 modify_rule consumer（**同时配 pushgateway + prometheus pull**，开启可观测性）
+- 7.2 启动 modify_rule consumer（**同时配 prometheus pull + pushgateway**，`event_addr` 为空→走 Polaris 服务发现上报到服务端 pushgateway）
 - 7.3 创建规则（`CONSECUTIVE_ERROR=3`）
 - ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
 - 7.4-7.6 trigger → verify → recover
@@ -499,18 +492,18 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 7.9 触发：发 `MODIFY_R2_TRIGGER_COUNT=30` 次
 - 7.10-7.11 verify → recover
 - ── 可观测性验证 ──
-- 7.12 验证事件上报：curl `/metrics` 查 `circuitbreaker_open` gauge + 解析 `captured_cb_events.json` 验证 `CircuitBreakerOpen` 事件（告知性，不影响核心 PASS/FAIL）
+- 7.12 验证事件上报：curl `/metrics` 查 `circuitbreaker_open` gauge + events 上报到服务端 pushgateway（event_addr 为空走 Polaris 服务发现，告知性，不影响核心 PASS/FAIL）
 
 ### 通过条件（共 6 项核心指标 + 告知性可观测性指标）
 - 两轮 `trigger_fail >= 1`
 - 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
 - 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
-- **告知性**：`circuitbreaker_open` gauge 命中 + `CircuitBreakerOpen` 事件捕获
+- **可观测性**：`circuitbreaker_open` gauge 命中 + `CircuitBreakerOpen` 事件上报（**告知性**）
 
 ### 验证原理
 - **规则热更新链路**：调 `update_circuitbreaker_rule` PUT 改 `CONSECUTIVE_ERROR` 后，服务端规则 `revision` 变更，SDK 通过规则变更事件感知并**重建对应资源计数器**（`counter.go`），新阈值立即生效，无需重启 consumer。
 - **第 2 轮 burst 须加大**：轮 1 阈值 3、轮 2 阈值 7，但 50/50 LB 下 b 不一定连续被选中 7 次，故轮 2 用 case-local `MODIFY_R2_TRIGGER_COUNT=30` 保证连续命中 b 达 7 次（否则 trigger 不足导致假性 FAIL）。
-- **事件上报与规则热更新联动**：规则 `revision` 变更触发 `counter.go` 的 `ruleUpdated → destroyCounters → newCounters` 重建链路（`rule.go:101-125`），新 counters 与旧 counters 通过 `Destroy` 事件（`event_name=CircuitBreakerDestroy`）桥接；重建后新状态切换的 `Open`/`Close` 事件仍然正常投递到 pushgateway。用例 7 让 consumer 同时配 pushgateway，在规则热更新前后各完成一次完整熔断闭环，验证事件链路不在 counter 重建后断裂。
+- **事件上报与规则热更新联动**：规则 `revision` 变更触发 `counter.go` 的 `ruleUpdated → destroyCounters → newCounters` 重建链路（`rule.go:101-125`），新 counters 与旧 counters 通过 `Destroy` 事件（`event_name=CircuitBreakerDestroy`）桥接；重建后新状态切换的 `Open`/`Close` 事件仍然正常投递。用例 7 的 `event_addr` 为空，SDK 通过 **Polaris 服务发现**将事件上报到服务端 pushgateway（非本地 mock），验证事件链路的远程投递能力。
 - 验证目的：证明运行时通过控制台/OpenAPI 修改熔断阈值能动态生效，是熔断规则可运维性的核心能力。
 
 ---
@@ -643,7 +636,12 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 | 用例 2 | SERVICE | service_consumer | 18082 | 38082 | `cb-service-${SERVICE_CALLER}` |
 | 用例 3 | METHOD | interface_consumer | 18083 | 38083 | `cb-interface-${INTERFACE_CALLER}` |
 | 用例 4 | INSTANCE | old_instance_consumer | 18084 | 38084 | `cb-instance-${OLD_INSTANCE_CALLER}` |
-| 用例 7 | INSTANCE | modify_rule_consumer | 18087 | 38087 | `cb-instance-${MODIFY_RULE_CALLER}` |
+| 用例 7 | INSTANCE | modify_rule_consumer | 18087 | 38087 | `cb-instance-${MODIFY_RULE_CALLER}`（event_addr 为空，上报到服务端 pushgateway） |
+
+> **用例 1/2/3/4** 的 event_addr 指向本地 `mock_event_server.py`（127.0.0.1:19091），用于脚本内验证事件内容；
+> **用例 7** 的 event_addr 为空，SDK 通过 **Polaris 服务发现**直连服务端 pushgateway，
+> 验证事件链路的远程投递能力。由于事件不走 mock，`_verify_cb_event` 对用例 7 预期返回 `SKIP`（mock 文件中无匹配），
+> `_verify_observability` 会输出 `log_info` 而非 `log_warn`。
 
 ### 全局基础设施
 - 步骤 B 后启动 **1 个** `mock_event_server.py`（监听 `MOCK_CB_EVENT_PORT=19091`），按 `captured_cb_events.json` JSONL 捕获 pushgateway POST；cleanup 时停止。
@@ -800,7 +798,7 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 | `buildFallbackInfo` 解析规则降级响应（SERVICE/METHOD） | 用例 2/3 fallback 正向子阶段 |
 | `buildFallbackInfo` 的 `GetEnable()` 短路（enable=false 回 503） | 用例 2/3 fallback 反向子阶段 |
 | `CallAborted` 携带 fallback + demo `HasFallback()` 透传/回退 | 用例 2/3 fallback 子阶段 |
-| PUT 更新熔断规则 fallbackConfig.enable 触发 SDK counter 重建 | 用例 2/3 fallback 子阶段 |
+| PUT 更新 fallbackConfig.enable 触发 SDK counter 重建（**无需重启 consumer**） | 用例 2/3 fallback 子阶段 |
 | `reportCircuitBreakMetric` + `buildCircuitBreakGauge` 构造熔断 gauge 并通过 `SyncReportStat` 上报 | 用例 1/2/3/4（嵌入可观测性子步骤） |
 | `PrometheusReporter.ReportStat` → `circuitBreakerCollector.CollectStatInfo` → `doAggregation` 聚合到 GaugeVec | 用例 1/2/3/4（嵌入可观测性子步骤） |
 | `PullAction.doAggregation` 读 `cfg.Interval`（默认 15s）替代硬编码 30s | 用例 1/2/3/4（嵌入可观测性子步骤） |
