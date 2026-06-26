@@ -3483,9 +3483,11 @@ case_modify_rule() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例7.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例7.2 启动 modify_rule consumer"
+    log_step "用例7.2 启动 modify_rule consumer（开启可观测性：事件上报验证）"
+    local modify_rule_metrics_port=$((MODIFY_RULE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "modify_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
-        "$MODIFY_RULE_CALLER" "$MODIFY_RULE_CONSUMER_PORT" "${LOG_DIR}/modify_rule_consumer.log"; then
+        "$MODIFY_RULE_CALLER" "$MODIFY_RULE_CONSUMER_PORT" "${LOG_DIR}/modify_rule_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$modify_rule_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
@@ -3568,6 +3570,9 @@ case_modify_rule() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$MODIFY_RULE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "修改规则恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时验证事件上报（INSTANCE 级规则名 cb-instance-<caller>）
+    _verify_observability "用例7" "$modify_rule_metrics_port" "$SERVICE_NAME" "cb-instance-${MODIFY_RULE_CALLER}"
 
     stop_consumer "$consumer_pid"
 

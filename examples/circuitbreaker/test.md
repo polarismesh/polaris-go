@@ -99,7 +99,7 @@
 | 4 | - | `old_instance_consumer_run/` | 旧版散装 API（向后兼容验证） |
 | 5 | A/B/C 段 | `http_status_consumer_run/` | 三个子阶段共用同一 consumer |
 | 6 | - | `default_rule_consumer_run/` | 服务端无规则，依赖 SDK 本地默认规则 |
-| 7 | - | `modify_rule_consumer_run/` | 规则参数热修改验证（阈值 3→7） |
+| 7 | - | `modify_rule_consumer_run/` | 规则参数热修改验证（阈值 3→7）+ 事件上报验证 |
 | 8 | - | `pm_consumer_run/` | 协议/HTTP 方法维度合并（13 BlockConfig） |
 | 9 | - | `pathtype_consumer_run/` | 5 种 MatchString 路径匹配方式 |
 | 10 | A Decorator | `decorator_consumer_run/` | 第 1 次启动：enableRecoverAll=true |
@@ -116,9 +116,11 @@
 > `_run` 为第一次启动（全死全活开启），`_b_run` 为第二次启动（全死全活关闭），
 > `_c_run` 为第三次启动（恢复全死全活开启）。
 >
-> **用例 1/2/3/4** 的可观测性验证（metrics curl + events 解析）内嵌在各用例的
+> **用例 1/2/3/4/7** 的可观测性验证（metrics curl + events 解析）内嵌在各用例的
 > `stop_consumer` 之前，**不产生新的 `_run` 目录**——consumer 启动时通过 yaml
 > 同时配 prometheus pull + pushgateway mock，一次熔断 trigger 同时产出 gauge + event。
+> 用例 7 额外验证**规则热更新后事件链路不断裂**（counter 重建后 event_name=CircuitBreakerDestroy
+> 桥接 + 新状态切换的 Open 事件仍正常投递）。
 
 ### 排查示例
 
@@ -486,7 +488,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 7.1 复位 provider：a=200 / b=500
-- 7.2 启动 modify_rule consumer
+- 7.2 启动 modify_rule consumer（**同时配 pushgateway + prometheus pull**，开启可观测性）
 - 7.3 创建规则（`CONSECUTIVE_ERROR=3`）
 - ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
 - 7.4-7.6 trigger → verify → recover
@@ -496,15 +498,19 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - ── 第 2 轮（CONSECUTIVE_ERROR=7） ──
 - 7.9 触发：发 `MODIFY_R2_TRIGGER_COUNT=30` 次
 - 7.10-7.11 verify → recover
+- ── 可观测性验证 ──
+- 7.12 验证事件上报：curl `/metrics` 查 `circuitbreaker_open` gauge + 解析 `captured_cb_events.json` 验证 `CircuitBreakerOpen` 事件（告知性，不影响核心 PASS/FAIL）
 
-### 通过条件（共 6 项指标）
+### 通过条件（共 6 项核心指标 + 告知性可观测性指标）
 - 两轮 `trigger_fail >= 1`
 - 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
 - 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
+- **告知性**：`circuitbreaker_open` gauge 命中 + `CircuitBreakerOpen` 事件捕获
 
 ### 验证原理
 - **规则热更新链路**：调 `update_circuitbreaker_rule` PUT 改 `CONSECUTIVE_ERROR` 后，服务端规则 `revision` 变更，SDK 通过规则变更事件感知并**重建对应资源计数器**（`counter.go`），新阈值立即生效，无需重启 consumer。
 - **第 2 轮 burst 须加大**：轮 1 阈值 3、轮 2 阈值 7，但 50/50 LB 下 b 不一定连续被选中 7 次，故轮 2 用 case-local `MODIFY_R2_TRIGGER_COUNT=30` 保证连续命中 b 达 7 次（否则 trigger 不足导致假性 FAIL）。
+- **事件上报与规则热更新联动**：规则 `revision` 变更触发 `counter.go` 的 `ruleUpdated → destroyCounters → newCounters` 重建链路（`rule.go:101-125`），新 counters 与旧 counters 通过 `Destroy` 事件（`event_name=CircuitBreakerDestroy`）桥接；重建后新状态切换的 `Open`/`Close` 事件仍然正常投递到 pushgateway。用例 7 让 consumer 同时配 pushgateway，在规则热更新前后各完成一次完整熔断闭环，验证事件链路不在 counter 重建后断裂。
 - 验证目的：证明运行时通过控制台/OpenAPI 修改熔断阈值能动态生效，是熔断规则可运维性的核心能力。
 
 ---
@@ -637,6 +643,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 | 用例 2 | SERVICE | service_consumer | 18082 | 38082 | `cb-service-${SERVICE_CALLER}` |
 | 用例 3 | METHOD | interface_consumer | 18083 | 38083 | `cb-interface-${INTERFACE_CALLER}` |
 | 用例 4 | INSTANCE | old_instance_consumer | 18084 | 38084 | `cb-instance-${OLD_INSTANCE_CALLER}` |
+| 用例 7 | INSTANCE | modify_rule_consumer | 18087 | 38087 | `cb-instance-${MODIFY_RULE_CALLER}` |
 
 ### 全局基础设施
 - 步骤 B 后启动 **1 个** `mock_event_server.py`（监听 `MOCK_CB_EVENT_PORT=19091`），按 `captured_cb_events.json` JSONL 捕获 pushgateway POST；cleanup 时停止。
@@ -798,8 +805,9 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 | `PrometheusReporter.ReportStat` → `circuitBreakerCollector.CollectStatInfo` → `doAggregation` 聚合到 GaugeVec | 用例 1/2/3/4（嵌入可观测性子步骤） |
 | `PullAction.doAggregation` 读 `cfg.Interval`（默认 15s）替代硬编码 30s | 用例 1/2/3/4（嵌入可观测性子步骤） |
 | `PutDataFromContainerInOrder` `currentRevision>0` 守卫（熔断 gauge 永不过期，对齐 polaris-java） | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `reportCircuitBreakerEvent` → `BuildCircuitBreakerEvent` → `sendEvent` 投递事件链 | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `PushgatewayReporter.ReportEvent` 入队 + batch flush POST `/polaris/client/events` | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `toOpen` reason 形参透传（trigger 层 `CloseToOpen` 传入 CONSECUTIVE_ERROR/ERROR_RATE 描述） | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `mock_event_server.py` 全局启动 1 个捕获 pushgateway POST + cleanup 停止 | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| 一次 trigger 同时产出 gauge + event（prometheus + pushgateway 同配同 consumer） | 用例 1/2/3/4（嵌入可观测性子步骤） |
+| `reportCircuitBreakerEvent` → `BuildCircuitBreakerEvent` → `sendEvent` 投递事件链 | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
+| `PushgatewayReporter.ReportEvent` 入队 + batch flush POST `/polaris/client/events` | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
+| `toOpen` reason 形参透传（trigger 层 `CloseToOpen` 传入 CONSECUTIVE_ERROR/ERROR_RATE 描述） | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
+| `mock_event_server.py` 全局启动 1 个捕获 pushgateway POST + cleanup 停止 | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
+| 一次 trigger 同时产出 gauge + event（prometheus + pushgateway 同配同 consumer） | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
+| 规则热更新（update_circuitbreaker_rule）后熔断事件仍正常上报 | 用例 7（嵌入可观测性子步骤） |
