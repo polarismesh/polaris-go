@@ -410,9 +410,6 @@ func (rc *ResourceCounters) reportDestroyEvent() {
 		return
 	}
 	eventInfo := event.BuildCircuitBreakerEvent(rc.resource, rc.activeRule, cur.GetStatus(), model.Close, "")
-	if eventInfo == nil {
-		return
-	}
 	eventInfo.EventName = event.CircuitBreakerDestroy
 	rc.sendEvent(eventInfo)
 }

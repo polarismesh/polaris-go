@@ -186,7 +186,7 @@ func PutDataFromContainerInOrder(metricVecCaches map[string]*prometheus.GaugeVec
 		canReport := true
 		switch rs := metricValue.(type) {
 		case *StatRevisionMetric:
-			// currentRevision==0 表示永不过期（熔断 gauge 等状态指标），对齐 polaris-java 语义
+			// currentRevision==0 表示永不过期（熔断 gauge 等状态指标），跳过版本过期清零逻辑
 			if currentRevision > 0 && rs.GetRevision() < currentRevision-RevisionMaxScope {
 				// 如果连续两个版本还没有数据，就清除该数据
 				gauge.Delete(rs.GetLabels())
@@ -194,7 +194,7 @@ func PutDataFromContainerInOrder(metricVecCaches map[string]*prometheus.GaugeVec
 				canReport = false
 				continue
 			}
-			// currentRevision==0 表示永不过期（熔断 gauge 等状态指标），对齐 polaris-java 语义
+			// currentRevision==0 表示永不过期（熔断 gauge 等状态指标），跳过版本过期清零逻辑
 			if currentRevision > 0 && rs.GetRevision() < currentRevision {
 				// 如果版本为老版本，则清零数据
 				gauge.Delete(rs.GetLabels())

@@ -44,8 +44,8 @@ type Config struct {
 	port     int           `yaml:"-"`
 	Interval time.Duration `yaml:"interval"`
 	Address  string        `yaml:"address"`
-	// pushgateway 服务发现配置：仅 push 模式 + address 为空时生效。
-	// 参照 polaris-java ServiceAddressRepository 的两级回退模式。
+	// pushgateway 服务发现配置：仅 push 模式 + address 为空时生效，
+	// 通过 Polaris 服务发现懒解析地址。
 	PushGatewayNamespace string `yaml:"pushGatewayNamespace"`
 	PushGatewayService   string `yaml:"pushGatewayService"`
 }

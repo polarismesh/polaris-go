@@ -427,7 +427,7 @@ type PushAction struct {
 	cfg      *Config
 	pusher   *push.Pusher
 	// resolvedAddress 解析后的 pushgateway 地址：优先使用 cfg.Address，
-	// 为空时通过 Polaris 服务发现获取，对齐 polaris-java ServiceAddressRepository
+	// 为空时通过 Polaris 服务发现获取，避免 Init 时机过早导致的超时
 	resolvedAddress string
 	// push 失败日志收敛字段：首次 ERROR，后续同一错误每 30s 一次 WARN
 	lastPushErr    string
@@ -570,6 +570,9 @@ func (pa *PushAction) logPushError(err error) {
 // 优先使用 cfg.Address，为空时通过 Polaris 服务发现查 pushgateway 实例。
 // 设置 5s 超时 + 1 次重试，避免 cold start 时的默认 1s 超时过早失败。
 func resolvePushAddress(initCtx *plugin.InitContext, cfg *Config) (string, error) {
+	if initCtx == nil || initCtx.ValueCtx == nil || initCtx.ValueCtx.GetEngine() == nil {
+		return "", fmt.Errorf("pushgateway service discovery unavailable: engine not ready")
+	}
 	svc := cfg.PushGatewayService
 	ns := cfg.PushGatewayNamespace
 	req := &model.GetOneInstanceRequest{
