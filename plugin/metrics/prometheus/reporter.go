@@ -144,9 +144,9 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
 		if s.cfg.port == adminPort {
 			log.GetBaseLogger().Infof("[metrics]init action, pull port is same as admin port, register metrics path")
-		mh := &metricsHttpHandler{
-			handler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
-		}
+			mh := &metricsHttpHandler{
+				handler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
+			}
 			s.initCtx.Config.GetGlobal().GetAdmin().RegisterPath(model.AdminHandler{
 				Path:        "/metrics",
 				HandlerFunc: mh.ServeHTTP,

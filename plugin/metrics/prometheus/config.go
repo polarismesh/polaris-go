@@ -28,8 +28,8 @@ func init() {
 }
 
 const (
-	defaultReportInterval      = 1 * time.Minute
-	defaultMetricPort          = 28080
+	defaultReportInterval       = 1 * time.Minute
+	defaultMetricPort           = 28080
 	defaultPushGatewayNamespace = "Polaris"
 	defaultPushGatewayService   = "polaris.pushgateway"
 	// pushErrLogInterval push 失败日志收敛间隔：首次 ERROR，后续同一错误每 30s 一次 WARN
