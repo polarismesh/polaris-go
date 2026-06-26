@@ -95,7 +95,7 @@
 | 4 | - | `old_instance_consumer_run/` | 旧版散装 API（向后兼容验证） |
 | 5 | A/B/C 段 | `http_status_consumer_run/` | 三个子阶段共用同一 consumer |
 | 6 | - | `default_rule_consumer_run/` | 服务端无规则，依赖 SDK 本地默认规则 |
-| 7 | - | `modify_rule_consumer_run/` | 规则参数热修改验证（阈值 3→7）+ 事件上报验证 |
+| 7 | - | `modify_rule_consumer_run/` | 规则参数热修改验证（阈值 3→7）+ push 模式远程可观测性 |
 | 8 | - | `pm_consumer_run/` | 协议/HTTP 方法维度合并（13 BlockConfig） |
 | 9 | - | `pathtype_consumer_run/` | 5 种 MatchString 路径匹配方式 |
 | 10 | A Decorator | `decorator_consumer_run/` | 第 1 次启动：enableRecoverAll=true |
@@ -112,11 +112,11 @@
 > `_run` 为第一次启动（全死全活开启），`_b_run` 为第二次启动（全死全活关闭），
 > `_c_run` 为第三次启动（恢复全死全活开启）。
 >
-> **用例 1/2/3/4/7** 的可观测性验证（metrics curl + events 解析）内嵌在各用例的
+> **用例 1/2/3/4** 的可观测性验证（pull 模式：metrics curl + events 解析）内嵌在各用例的
 > `stop_consumer` 之前，**不产生新的 `_run` 目录**——consumer 启动时通过 yaml
 > 同时配 prometheus pull + pushgateway mock，一次熔断 trigger 同时产出 gauge + event。
-> 用例 7 额外验证**规则热更新后事件链路不断裂**（counter 重建后 event_name=CircuitBreakerDestroy
-> 桥接 + 新状态切换的 Open 事件仍正常投递）。
+> **用例 7** 使用 push 模式（`METRICS_TYPE=push`），metrics 和事件均上报到远程 pushgateway，
+> 无本地 /metrics 端点，不执行 `_verify_observability`。
 
 ### 排查示例
 
@@ -216,6 +216,11 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 1.11 触发：b=500，发 `INSTANCE_R1_TRIGGER_COUNT=30` 次
 - 1.12 验证：再发 10 次，流量全部走 a
 - 1.13 恢复：b 翻回 200，等 8s
+- ── 可观测性子步骤（告知性，在 stop_consumer 前执行）──
+- 1.14 `_verify_observability`：
+  - curl consumer 的 /metrics 端口（38081），轮询 5 次查找 `circuitbreaker_open{callee_service="CircuitBreakerCallee",rule_name="cb-instance-CircuitBreakerInstanceCaller"}`
+  - 解析 `captured_cb_events.json` 中该 rule_name 的事件（Open/Close 统计）
+  - 失败只 log_warn，不影响核心 PASS/FAIL
 
 ### 通过条件（共 9 项指标）
 - Decorator 两轮 `trigger_fail >= 1`
@@ -255,18 +260,24 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 2.7 再置 a/b=500 → 再次熔断
 - 2.8 再次出现 abort
 - 2.9 再次翻 200 → 再次恢复
-- ── InvokeHandler 子阶段（复用 Decorator 的规则）──
-- 2.16 启动 invokeHandler consumer
-- 2.17 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
-- 2.18 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 2.19 恢复：a/b 翻回 200，等 8s
 - ── fallback 子阶段（复用 Decorator 的规则 cb-service-CircuitBreakerServiceCaller + **不重启 consumer**，直接 PUT 切换 fallbackConfig.enable）──
 - 2.10 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker" / header X-Fallback=true）
 - 2.11 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次 `/echo`（复用运行中 consumer）
 - 2.12 正向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_FALLBACK >= 1`（HTTP 599 + body "degraded"）
 - 2.13 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
-- 2.14 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次（服用运行中 consumer）
+- 2.14 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次（复用运行中 consumer）
 - 2.15 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `CASE_ABORT >= 1`（503，enable=false 不下发 599）
+- ── 可观测性子步骤（告知性，在 stop_consumer 前执行）──
+- 2.15a `_verify_observability`：
+  - curl consumer 的 /metrics 端口（38082），轮询 5 次查找 `circuitbreaker_open{callee_service="CircuitBreakerCallee",rule_name="cb-service-CircuitBreakerServiceCaller"}`
+  - 解析 `captured_cb_events.json` 中该 rule_name 的事件
+  - 注意：fallback 子阶段在可观测性验证之前执行，事件文件中可能包含 fallback 阶段的 Open/Close 事件
+  - 失败只 log_warn，不影响核心 PASS/FAIL
+- ── InvokeHandler 子阶段（复用 Decorator 的规则）──
+- 2.16 启动 invokeHandler consumer
+- 2.17 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次
+- 2.18 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 2.19 恢复：a/b 翻回 200，等 8s
 
 ### 通过条件（共 11 项指标）
 - Decorator 两轮 `trigger_fail >= 1`
@@ -280,6 +291,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - **为什么服务级熔断"会 abort"**：`commonCheck` 第一步就对 `ServiceResource` 调 `Check`（`circuitbreaker_flow.go:249`），服务级计数器 OPEN 后 `CheckResult.Pass=false`，请求在调用业务前即被拦截返回 `call aborted`。这与用例 1（实例级不进 `Check`）形成对照——所以 2.1 复位为 **a/b 都 500**（整服务不可用），让服务级错误率达阈值。
 - **半开放行业务请求探活**：服务级 `half-open` 态由 `AcquirePermission` 发放有限配额（`half_open_status.go`，CAS 原子计数确保并发不超额），获得配额的业务请求落到已翻回 200 的 provider 即上报成功，`Release` 归集判定连续成功达 `consecutiveSuccess=1` 触发 `half-open → close`（`counter.go:217` `handleHalfOpenReport`）。因此 2.6 恢复阶段必须 **a/b 同步翻回 200**，否则半开探测可能打到仍 500 的实例而回 OPEN。
 - **fallback 降级**：规则顶层 `fallbackConfig.enable=true` 时，`buildFallbackInfo` 把规则配置的 code/body/headers 封装进 `CallAborted`，demo 端 `HasFallback()` 为真则透传降级响应（599 + "degraded"）而非默认 503；`enable=false` 时 `GetEnable()` 短路，`CallAborted` 不带 fallback，demo 回默认 503 兜底。PUT 更新规则 revision 变更触发 SDK counter 重建（`rule.go:101`），**无需重启 consumer**——fallback 子阶段复用 Decorator 运行中 consumer，在 consumer 存活期内通过 PUT 切换 enable toggle 完成正向/反向验证。
+- **可观测性子步骤的执行时机**：`_verify_observability` 在 fallback 子阶段完成之后、`stop_consumer` 之前执行。此时 consumer 仍存活，/metrics 端点可达。因为 fallback 子阶段通过 PUT 切换 enable 不重启 consumer，所有阶段的熔断事件（Decorator 两轮 + fallback 正向/反向）都已写入 `captured_cb_events.json`，可观测性验证能检查到完整的事件链。metrics gauge 只反映当前状态（可能已恢复为 CLOSE），故判定标准为"指标行存在"而非"value>0"。
 
 ---
 
@@ -323,12 +335,6 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 3.12 触发：`/slow` 延迟设 500ms，发 `TRIGGER_REQUEST_COUNT` 次
 - 3.13 验证：再发 `RECOVERY_REQUEST_COUNT` 次，应出现 abort
 - 3.14 恢复：延迟清零，等 `WAIT_HALF_OPEN_SECONDS` → 全部 200
-- ── InvokeHandler 子阶段（复用 Decorator 的规则，只验证 /echo）──
-- 3.21 启动 invokeHandler consumer
-- 3.21 启动 invokeHandler consumer
-- 3.22 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
-- 3.23 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
-- 3.24 恢复：a/b 翻回 200，等 8s
 - ── fallback 子阶段（复用 Decorator 的 merged 规则 cb-interface-CircuitBreakerInterfaceCaller + **不重启 consumer**，直接 PUT 切换 fallbackConfig.enable）──
 - 3.15 PUT 更新规则打开 `fallbackConfig.enable=true`（code=599 / body="degraded by circuitbreaker"）
 - 3.16 正向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`（复用运行中 consumer）
@@ -336,6 +342,16 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 3.18 PUT 更新规则关闭 `fallbackConfig.enable=false`（验证 enable 短路）
 - 3.19 反向触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`（复用运行中 consumer）
 - 3.20 反向验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望 `iface_fb_off_abort >= 1`（503，enable=false 不下发 599）
+- ── 可观测性子步骤（告知性，在 stop_consumer 前执行）──
+- 3.20a `_verify_observability`：
+  - curl consumer 的 /metrics 端口（38083），轮询 5 次查找 `circuitbreaker_open{callee_service="CircuitBreakerCallee",rule_name="cb-interface-CircuitBreakerInterfaceCaller"}`
+  - 解析 `captured_cb_events.json` 中该 rule_name 的事件
+  - 失败只 log_warn，不影响核心 PASS/FAIL
+- ── InvokeHandler 子阶段（复用 Decorator 的规则，只验证 /echo）──
+- 3.21 启动 invokeHandler consumer
+- 3.22 触发：a/b=500，发 `TRIGGER_REQUEST_COUNT` 次到 `/echo`
+- 3.23 验证：再发 `RECOVERY_REQUEST_COUNT` 次，期望出现 abort
+- 3.24 恢复：a/b 翻回 200，等 8s
 
 ### 通过条件（共 16 项指标）
 - `/echo` Decorator 两轮 trigger ≥1 fail / verify ≥1 abort / recover 全 200
@@ -352,6 +368,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - **阈值隔离**：`/order` 故意配 `CONSECUTIVE_ERROR=100 + minRequest=200`，普通 burst 量级永远达不到，验证"高阈值接口在同一规则下不会被低阈值接口的失败带崩"。
 - **DELAY 时延熔断**：`/slow` 块的 `error_conditions` 用 `INPUT_TYPE=DELAY, value=200`，`parseRetStatus`（`block_counter.go:128`）把 `stat.Delay.Milliseconds() > 200` 判为 `RetTimeout`（失败），因此 3.12 把延迟设 500ms 即可触发——验证"错误判定不止看返回码，还支持时延维度"。
 - **多 MatchString**：`/echo` 块同时挂 `RANGE/EXACT/REGEX/IN/NOT_IN` 5 种 RET_CODE 条件，验证 `match.MatchString` 5 种匹配语义在同一块内都能正确识别 5xx。
+- **可观测性子步骤的执行时机**：`_verify_observability` 在 fallback 子阶段完成之后、`stop_consumer` 之前执行。此时 consumer 仍存活，/metrics 端点可达。因为 fallback 子阶段通过 PUT 切换 enable 不重启 consumer，所有阶段的熔断事件（Decorator 两轮 + 多接口隔离 + /slow DELAY + fallback 正向/反向）都已写入 `captured_cb_events.json`，可观测性验证能检查到完整的事件链。metrics gauge 只反映当前状态（可能已恢复为 CLOSE），故判定标准为"指标行存在"而非"value>0"。
 
 ---
 
@@ -384,6 +401,11 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 4.7 再次触发：b 重新置 500，发 `OLD_INSTANCE_R2_TRIGGER_COUNT=30` 次
 - 4.8 再次验证：流量再次全部走 a
 - 4.9 再次恢复：b 翻回 200
+- ── 可观测性子步骤（告知性，在 stop_consumer 前执行）──
+- 4.10 `_verify_observability`：
+  - curl consumer 的 /metrics 端口（38084），轮询 5 次查找 `circuitbreaker_open{callee_service="CircuitBreakerCallee",rule_name="cb-instance-CircuitBreakerOldInstanceCaller"}`
+  - 解析 `captured_cb_events.json` 中该 rule_name 的事件
+  - 失败只 log_warn，不影响核心 PASS/FAIL
 
 ### 通过条件（共 6 项指标，与用例 1 对齐）
 - 两轮 `trigger_fail >= 1`
@@ -481,7 +503,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 7.1 复位 provider：a=200 / b=500
-- 7.2 启动 modify_rule consumer（**同时配 prometheus pull + pushgateway**，`event_addr` 为空→走 Polaris 服务发现上报到服务端 pushgateway）
+- 7.2 启动 modify_rule consumer（**METRICS_TYPE=push**：监控指标 push 到远程 pushgateway，`event_addr` 为空 → 事件走 Polaris 服务发现上报到服务端 pushgateway；无本地 /metrics 端点）
 - 7.3 创建规则（`CONSECUTIVE_ERROR=3`）
 - ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
 - 7.4-7.6 trigger → verify → recover
@@ -492,19 +514,18 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 7.9 触发：发 `MODIFY_R2_TRIGGER_COUNT=30` 次
 - 7.10-7.11 verify → recover
 - ── 可观测性验证 ──
-- 7.12 验证事件上报：curl `/metrics` 查 `circuitbreaker_open` gauge + events 上报到服务端 pushgateway（event_addr 为空走 Polaris 服务发现，告知性，不影响核心 PASS/FAIL）
+- 7.12 远程可观测性验证（**告知性，无脚本内验证**）：监控指标 push 到 `${POLARIS_METRICS_PUSH_ADDR}` 远端、事件经 Polaris 服务发现上报服务端 pushgateway。脚本不进行本地 curl 或事件文件解析——用户需自行到服务端 Grafana/事件平台查看数据到达情况。
 
-### 通过条件（共 6 项核心指标 + 告知性可观测性指标）
+### 通过条件（共 6 项核心指标）
 - 两轮 `trigger_fail >= 1`
 - 两轮 `verify_ok == RECOVERY_REQUEST_COUNT`
 - 两轮 `recover_ok == RECOVERY_REQUEST_COUNT`
-- **可观测性**：`circuitbreaker_open` gauge 命中 + `CircuitBreakerOpen` 事件上报（**告知性**）
 
 ### 验证原理
 - **规则热更新链路**：调 `update_circuitbreaker_rule` PUT 改 `CONSECUTIVE_ERROR` 后，服务端规则 `revision` 变更，SDK 通过规则变更事件感知并**重建对应资源计数器**（`counter.go`），新阈值立即生效，无需重启 consumer。
 - **第 2 轮 burst 须加大**：轮 1 阈值 3、轮 2 阈值 7，但 50/50 LB 下 b 不一定连续被选中 7 次，故轮 2 用 case-local `MODIFY_R2_TRIGGER_COUNT=30` 保证连续命中 b 达 7 次（否则 trigger 不足导致假性 FAIL）。
-- **事件上报与规则热更新联动**：规则 `revision` 变更触发 `counter.go` 的 `ruleUpdated → destroyCounters → newCounters` 重建链路（`rule.go:101-125`），新 counters 与旧 counters 通过 `Destroy` 事件（`event_name=CircuitBreakerDestroy`）桥接；重建后新状态切换的 `Open`/`Close` 事件仍然正常投递。用例 7 的 `event_addr` 为空，SDK 通过 **Polaris 服务发现**将事件上报到服务端 pushgateway（非本地 mock），验证事件链路的远程投递能力。
-- 验证目的：证明运行时通过控制台/OpenAPI 修改熔断阈值能动态生效，是熔断规则可运维性的核心能力。
+- **push 模式远程投递**：用例 7 是唯一使用 `METRICS_TYPE=push` 的用例。监控指标经 prometheus remote write 推送到远程 pushgateway（`address=${POLARIS_METRICS_PUSH_ADDR}`，默认空→走 Polaris 服务发现解析 `polaris.pushgateway`）。事件上报通过 `event_addr` 为空走 Polaris 服务发现自动解析 `polaris.pushgateway` 实例并投递。push 模式下无本地 /metrics 端点，脚本不执行 `_verify_observability`——用户需到服务端 Grafana/事件平台确认数据到达。
+- 验证目的：证明运行时通过控制台/OpenAPI 修改熔断阈值能动态生效，是熔断规则可运维性的核心能力。同时验证 push 模式下指标和事件的远程投递全链路能力。
 
 ---
 
@@ -619,35 +640,43 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ## 熔断可观测性验证（嵌入用例 1/2/3/4，告知性）
 
-可观测性验证**不是独立用例**，而是嵌入在用例 1/2/3/4 末尾的**告知性子步骤**（`stop_consumer` 前由 `_verify_observability` 触发）。不额外启动 consumer、不增规则、不影响核心熔断 PASS/FAIL。
+可观测性验证**不是独立用例**，而是嵌入在用例 1/2/3/4 末尾的**告知性子步骤**（`stop_consumer` 前由 `_verify_observability` 触发）。不额外启动 consumer、不增规则、不影响核心熔断 PASS/FAIL。**用例 7 使用 push 模式，无本地可观测性验证。**
 
 ### 设计思路
-每个 consumer 启动时通过 yaml 同时配两种可观测能力：
-- `statReporter.prometheus.type=pull` + `interval:5s`（SDK 启动独立 HTTP server 暴露 `/metrics`，端口=业务端口+`METRICS_PORT_OFFSET`=20000）
-- `eventReporter.pushgateway.address=127.0.0.1:19091`（指向全局 1 个 `mock_event_server.py`）
 
-一次熔断 trigger 同时产出 gauge + event，脚本在 `stop_consumer` 前 curl `/metrics` + 解析 `captured_cb_events.json` 完成验证。
+可观测性验证支持两种模式：
+
+**pull 模式（用例 1/2/3/4）**：
+- `statReporter.prometheus.type=pull`（SDK 启动独立 HTTP server 暴露 `/metrics`，端口=业务端口+`METRICS_PORT_OFFSET`=20000）
+- `eventReporter.pushgateway.address=127.0.0.1:19091`（指向全局 1 个 `mock_event_server.py`）
+- 一次熔断 trigger 同时产出 gauge + event，脚本在 `stop_consumer` 前 curl `/metrics` + 解析 `captured_cb_events.json` 完成验证
+
+**push 模式（用例 7）**：
+- `statReporter.prometheus.type=push`（监控指标推送到远程 pushgateway `address=${POLARIS_METRICS_PUSH_ADDR}`）
+- `eventReporter.pushgateway.address=""`（空 → 事件走 Polaris 服务发现上报服务端 pushgateway）
+- **无本地 /metrics 端点，脚本不执行 `_verify_observability`**，用户需到服务端确认数据到达
 
 ### 嵌入点与对应关系
 
-| 嵌入用例 | Level | consumer 名 | 业务端口 | metrics 端口 | rule_name |
-|---------|-------|-------------|---------|------------|-----------|
-| 用例 1 | INSTANCE | instance_consumer | 18081 | 38081 | `cb-instance-${INSTANCE_CALLER}` |
-| 用例 2 | SERVICE | service_consumer | 18082 | 38082 | `cb-service-${SERVICE_CALLER}` |
-| 用例 3 | METHOD | interface_consumer | 18083 | 38083 | `cb-interface-${INTERFACE_CALLER}` |
-| 用例 4 | INSTANCE | old_instance_consumer | 18084 | 38084 | `cb-instance-${OLD_INSTANCE_CALLER}` |
-| 用例 7 | INSTANCE | modify_rule_consumer | 18087 | 38087 | `cb-instance-${MODIFY_RULE_CALLER}`（event_addr 为空，上报到服务端 pushgateway） |
+| 嵌入用例 | Level | consumer 名 | 业务端口 | metrics 端口 | rule_name | 可观测性模式 |
+|---------|-------|-------------|---------|------------|-----------|------------|
+| 用例 1 | INSTANCE | instance_consumer | 18081 | 38081 | `cb-instance-${INSTANCE_CALLER}` | pull + mock 事件 |
+| 用例 2 | SERVICE | service_consumer | 18082 | 38082 | `cb-service-${SERVICE_CALLER}` | pull + mock 事件 |
+| 用例 3 | METHOD | interface_consumer | 18083 | 38083 | `cb-interface-${INTERFACE_CALLER}` | pull + mock 事件 |
+| 用例 4 | INSTANCE | old_instance_consumer | 18084 | 38084 | `cb-instance-${OLD_INSTANCE_CALLER}` | pull + mock 事件 |
+| 用例 7 | INSTANCE | modify_rule_consumer | 18087 | **无** | `cb-instance-${MODIFY_RULE_CALLER}` | **push 模式，无本地验证** |
 
-> **用例 1/2/3/4** 的 event_addr 指向本地 `mock_event_server.py`（127.0.0.1:19091），用于脚本内验证事件内容；
-> **用例 7** 的 event_addr 为空，SDK 通过 **Polaris 服务发现**直连服务端 pushgateway，
-> 验证事件链路的远程投递能力。由于事件不走 mock，`_verify_cb_event` 对用例 7 预期返回 `SKIP`（mock 文件中无匹配），
-> `_verify_observability` 会输出 `log_info` 而非 `log_warn`。
+> **用例 1/2/3/4** 使用 pull 模式：event_addr 指向本地 `mock_event_server.py`（127.0.0.1:19091），脚本在 `stop_consumer` 前通过 curl `/metrics` + 解析 `captured_cb_events.json` 完成本地验证。
+> **用例 7** 使用 push 模式：`METRICS_TYPE=push`，metrics_port 和 event_addr 均为空，监控指标 push 到远程 pushgateway、事件经 Polaris 服务发现上报服务端。脚本不执行任何 `_verify_observability`，无本地 curl 或事件文件解析——用户需到服务端 Grafana/事件平台查看。
 
 ### 全局基础设施
 - 步骤 B 后启动 **1 个** `mock_event_server.py`（监听 `MOCK_CB_EVENT_PORT=19091`），按 `captured_cb_events.json` JSONL 捕获 pushgateway POST；cleanup 时停止。
 - `OBSERV_ENABLE=true`（默认）控制开关，设为 false 时跳过全部可观测性子步骤。
 
 ### 验证步骤（每次嵌入执行相同流程，由 `_verify_observability` 统一驱动）
+
+> 以下步骤仅适用于 **pull 模式**（用例 1/2/3/4）。用例 7 使用 push 模式，不执行本地可观测性验证。
+
 | 顺序 | 操作 | 函数 | 判定 |
 |------|------|------|------|
 | 1 | 确保 consumer 存活且 /metrics 可达（在 stop_consumer 前执行） | 调用方控制 | - |
