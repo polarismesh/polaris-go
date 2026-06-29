@@ -176,7 +176,8 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 3. 步骤 C：依次执行用例 1-10
    - 默认 `RUN_CASES=instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback`，可通过 `--only` 缩小范围
    - 每个用例开始时打印结构化 `print_block` 概览（Caller 写法 / 规则配置 / 验证步骤 / 预期结果 / 判定标准）
-   - 创建规则前会通过 `inspect_caller_rules` + `inspect_callee_rules` 巡检主调与被调维度的现有熔断规则
+   - **启动前规则巡检**（每个用例在 `start_consumer` 之前）：通过 `precheck_and_disable_stranger_rules` 巡检主调与被调维度，自动关闭 `source=*/*` 的通配干扰规则（`PUT enable=false`），等待 `WAIT_RULE_READY_SECONDS` 让服务端同步
+   - **启动后复核**：consumer 启动后再次 `inspect_caller_rules` + `inspect_callee_rules`，确认只有预期的规则命中
      - 默认仅 WARN，列出陌生规则
      - `STRICT_RULE_CHECK=true` 时遇到陌生规则直接 FAIL（避免规则污染）
 4. 步骤 D：结果汇总，trap EXIT 时自动删除创建的熔断规则并停止进程
@@ -201,6 +202,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 1.1 复位 provider：a=200，b=500
+- 1.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则（如用例10残留的 `cb-instance-CircuitBreakerHttpStatusCaller`），避免 INSTANCE 级同时存在两条规则计数
 - 1.2 启动 instance consumer
 - 1.3 创建/更新规则
 - ── Decorator 第 1 轮 ──
@@ -250,6 +252,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 2.1 复位 provider：a=500，b=500（模拟整服务不可用）
+- 2.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
 - 2.2 启动 service consumer
 - 2.3 创建/更新规则
 - ── Decorator 第 1 轮 ──
@@ -318,6 +321,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 3.1 复位 provider：a/b 的 `/echo /order` 都 500；`/info` 恒 500；`/slow` 默认 0ms
+- 3.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
 - 3.2 启动 interface consumer
 - 3.3 创建规则
 - ── /echo Decorator 第 1 轮 ──
@@ -391,6 +395,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 4.1 复位 provider：a=200，b=500
+- 4.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
 - 4.2 启动 old-instance consumer
 - 4.3 创建/更新规则
 - ── 第 1 轮 ──
@@ -430,6 +435,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 5.1 复位 provider：a=200 / b=200
+- 5.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
 - 5.2 启动 http_status consumer
 - 5.3 创建 INSTANCE 级规则
 - ── A 段：4xx 不熔断 ──
@@ -474,6 +480,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 6.1 复位 provider：a=200 / b=500
+- 6.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则（残留通配规则会覆盖默认规则，导致本用例失去验证意义）
 - 6.2 启动 default-rule consumer
 - 6.3 跳过规则创建
 - 6.4 触发：连发 `DEFAULT_RULE_TRIGGER_COUNT=30` 次 → b 累计 3 次 5xx 触发熔断
@@ -503,6 +510,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤
 - 7.1 复位 provider：a=200 / b=500
+- 7.1a [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则（残留同名规则会与即将创建的规则冲突）
 - 7.2 启动 modify_rule consumer（**METRICS_TYPE=push**：监控指标 push 到远程 pushgateway，`event_addr` 为空 → 事件走 Polaris 服务发现上报到服务端 pushgateway；无本地 /metrics 端点）
 - 7.3 创建规则（`CONSECUTIVE_ERROR=3`）
 - ── 第 1 轮（CONSECUTIVE_ERROR=3） ──
@@ -542,6 +550,8 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 - 每条 BC 共用 `CONSECUTIVE_ERROR=3`
 
 ### 验证步骤
+- 8.0 [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
+- 8.1 启动 PM consumer（端口 `PM_CONSUMER_PORT=18088`）
 对 13 个 BlockConfig 各跑 3 阶段：
 - `trigger`：发 `PM_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
 - `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
@@ -574,6 +584,8 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 每条 BC 共用 `CONSECUTIVE_ERROR=3`。
 
 ### 验证步骤
+- 9.0 [规则巡检] 启动前检查并关闭残留的 `source=*/*` 通配干扰规则
+- 9.1 启动 pathtype consumer（端口 `PATHTYPE_CONSUMER_PORT=18089`）
 对 5 种 MatchString 各跑正向 3 阶段：
 - `trigger`：发 `PATHTYPE_TRIGGER_COUNT=30` 次 → 触发对应 BC 熔断
 - `verify`：再发 3 次 → 期望 abort 或 ok，总计 = 3
@@ -616,6 +628,7 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证步骤（每个子阶段执行相同流程）
 - ── 全死全活开启 ──
+- .0 [规则巡检] 启动前检查并关闭残留的同名规则（`cb-instance-CircuitBreakerHttpStatusCaller`），避免 create 失败或产生重复规则
 - .1 启动 consumer（`enableRecoverAll=true`）
 - .2 创建规则
 - .3 trigger：provider-a=500 / provider-b=500，发 60 次让两个实例都被熔断 OPEN
@@ -791,9 +804,10 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 |------|---------|------|
 | `trigger_fail=0` | provider-b/`/switch` 未生效；或 5 次 `CONSECUTIVE_ERROR` 之间穿插了来自 provider-a 的 200 | 查 `provider_b.log`；增大 `--trigger-count` |
 | `verify_abort=0`（仅服务级 / 接口级） | SDK 未应用 BlockConfig；或规则未启用；或被陌生规则干扰 | 查 consumer 日志；看"规则巡检"输出；增大 `WAIT_RULE_READY_SECONDS` |
-| `verify_ok < RECOVERY_REQUEST_COUNT`（仅实例级） | 流量未完全转移；或 GetOneInstance 把 cb=Open 实例仍然返回 | 查 `instance_consumer.log` 中 `printAllInstances` 输出 |
+| `verify_ok < RECOVERY_REQUEST_COUNT`（仅实例级） | 流量未完全转移；或 GetOneInstance 把 cb=Open 实例仍然返回；或残留通配规则干扰（实例级同时命中两条规则） | 查 `instance_consumer.log` 中 `printAllInstances` 输出；确认启动前巡检日志中干扰规则已被关闭 |
 | `recover_ok=0`（服务级/接口级/实例级） | sleepWindow 不够；或半开探测打到仍 500 的实例 | 增大 `--wait-half-open`；服务级用例必须把所有实例同步翻回 200 |
-| `inspect_caller_rules` 警告"陌生规则" | 上一次脚本运行未清理干净 | 登录控制台清理；或设 `STRICT_RULE_CHECK=true` |
+| `inspect_caller_rules` 警告"陌生规则" | 上一次脚本运行未清理干净 | 脚本已自动通过 `disable_circuitbreaker_rule`（`PUT enable=false`）关闭干扰规则；若仍警告，登录控制台确认规则状态 |
+| `precheck_and_disable_stranger_rules` 关闭规则失败 | HTTP 403（测试环境 DELETE 同理）或网络不通 | 检查 `POLARIS_TOKEN` 与 `POLARIS_HTTP_ADDR`；确认 `/naming/v1/circuitbreaker/rules/enable` 接口可达 |
 | 用例 6/7 verify 阶段全 EOF | case 5 C 段关 provider 后未正确重启 | 确认脚本已用主 shell `start_provider` 接管 |
 | 用例 7 轮 2 verify=9 (期望 10) | CONSECUTIVE_ERROR=7 阈值下 burst=15 不够 | 确认轮 2 用了 case-local `MODIFY_R2_TRIGGER_COUNT=30` |
 | 用例 8/10 trigger 阶段未命中 | `RequestContext.Protocol/HTTPMethod` 未正确推断 | 查 `pm_consumer.log` / `pathtype_consumer.log` |
@@ -838,3 +852,6 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 | `mock_event_server.py` 全局启动 1 个捕获 pushgateway POST + cleanup 停止 | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
 | 一次 trigger 同时产出 gauge + event（prometheus + pushgateway 同配同 consumer） | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
 | 规则热更新（update_circuitbreaker_rule）后熔断事件仍正常上报 | 用例 7（嵌入可观测性子步骤） |
+| `precheck_and_disable_stranger_rules` 启动前巡检 + 自动关闭 `source=*/*` 通配干扰规则（`PUT enable=false`） | 全部用例 |
+| `disable_circuitbreaker_rule` 通过 PUT `/naming/v1/circuitbreaker/rules/enable` 传入 `enable=false` 关闭规则 | 全部用例 |
+| `_inspect_rules` 输出 `STRANGER_IDS`（陌生规则 id 列表）供调用方做 disable 操作 | 全部用例 |

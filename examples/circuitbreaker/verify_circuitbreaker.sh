@@ -748,6 +748,7 @@ def could_affect_caller(item):
 
 filtered = [it for it in items if match_role(it)]
 strangers = []
+stranger_ids = []
 lines = []
 for it in filtered:
     name = it.get('name', '')
@@ -775,14 +776,16 @@ for it in filtered:
     lines.append(f'{en}  {level:<8} {name}  {src_str} → {dst_str}{path_str}  (id={rid}){affects_mark}')
     if expected and name not in expected and affects:
         strangers.append(name)
+        stranger_ids.append(rid)
 if not lines:
     print('TABLE')
 else:
     print('TABLE\t' + '\n'.join(lines))
 print('STRANGER\t' + ','.join(strangers))
+print('STRANGER_IDS\t' + ','.join(stranger_ids))
 " <<< "$resp" 2>/dev/null || true)
 
-    local table_part stranger_part
+    local table_part stranger_part stranger_ids_part
     # table_part 必须捕获所有命中行：Python 把规则用 \n 嵌在 TABLE 那一行后，
     # awk 按 \n 切 record 后会得到 "TABLE\ton1" / "on2" / "on3" 等多条 record。
     # 用状态机在 TABLE 行打印 tab 后内容、in_t 段打印其余行、STRANGER 行退出，
@@ -798,7 +801,9 @@ print('STRANGER\t' + ','.join(strangers))
         in_t { print }
     ')
     # STRANGER 行只有一行规则名（逗号分隔），单行提取无影响
-    stranger_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER/{print substr($0, index($0, "\t")+1); exit}')
+    stranger_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER\t/{print substr($0, index($0, "\t")+1); exit}')
+    # STRANGER_IDS 行是逗号分隔的规则 id 列表
+    stranger_ids_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER_IDS\t/{print substr($0, index($0, "\t")+1); exit}')
 
     if [[ -z "$table_part" ]]; then
         log_info "[规则巡检] ${role} ${ns}/${service} 当前无任何熔断规则"
@@ -813,12 +818,65 @@ print('STRANGER\t' + ','.join(strangers))
     if [[ -n "$stranger_part" ]]; then
         log_warn "[规则巡检] ${role}维度检测到本用例预期之外的规则: ${stranger_part}"
         log_warn "[规则巡检] 这些规则可能干扰本用例的统计（错误条件/阈值/触发率），建议先到控制台清理"
+        # 将陌生规则 id 列表输出到全局变量，供调用方做 disable 操作
+        _INSPECT_STRANGER_IDS="$stranger_ids_part"
         if [[ "${STRICT_RULE_CHECK:-false}" == "true" ]]; then
             log_error "[规则巡检] STRICT_RULE_CHECK=true，因存在陌生规则提前终止用例"
             return 1
         fi
     elif [[ -n "$table_part" ]]; then
         log_info "[规则巡检] ${role}维度仅本用例预期内的规则，无干扰风险"
+        _INSPECT_STRANGER_IDS=""
+    else
+        _INSPECT_STRANGER_IDS=""
+    fi
+    return 0
+}
+
+# precheck_and_disable_stranger_rules <caller> <caller_ns> <callee> <callee_ns> [expected ...]
+# 在启动 consumer 之前巡检主调和被调维度的规则，自动关闭 source=*/* 的通配干扰规则。
+# 返回 0 表示通过（干扰规则已关闭或无干扰规则），返回 1 表示 STRICT_RULE_CHECK 失败。
+precheck_and_disable_stranger_rules() {
+    local caller="$1"
+    local caller_ns="${2:-$NAMESPACE}"
+    local callee="$3"
+    local callee_ns="${4:-$NAMESPACE}"
+    shift 4 || true
+
+    log_step "[规则巡检] 启动前检查并关闭残留的 source=*/* 通配干扰规则"
+    local has_stranger=false
+
+    # 主调维度
+    if inspect_caller_rules "$caller" "$caller_ns" "$@"; then
+        if [[ -n "${_INSPECT_STRANGER_IDS:-}" ]]; then
+            has_stranger=true
+            IFS=',' read -ra stranger_id_arr <<< "$_INSPECT_STRANGER_IDS"
+            for sid in "${stranger_id_arr[@]}"; do
+                [[ -z "$sid" ]] && continue
+                disable_circuitbreaker_rule "$sid"
+            done
+        fi
+    else
+        return 1
+    fi
+
+    # 被调维度
+    if inspect_callee_rules "$callee" "$callee_ns" "$caller" "$@"; then
+        if [[ -n "${_INSPECT_STRANGER_IDS:-}" ]]; then
+            has_stranger=true
+            IFS=',' read -ra stranger_id_arr <<< "$_INSPECT_STRANGER_IDS"
+            for sid in "${stranger_id_arr[@]}"; do
+                [[ -z "$sid" ]] && continue
+                disable_circuitbreaker_rule "$sid"
+            done
+        fi
+    else
+        return 1
+    fi
+
+    if [[ "$has_stranger" == "true" ]]; then
+        log_info "[规则巡检] 干扰规则已关闭，等待 ${WAIT_RULE_READY_SECONDS}s 让服务端同步..."
+        sleep "$WAIT_RULE_READY_SECONDS"
     fi
     return 0
 }
@@ -889,6 +947,27 @@ enable_circuitbreaker_rule() {
         --header "X-Polaris-Token:${POLARIS_TOKEN}" \
         --header 'Content-Type: application/json' \
         --data-raw "${body}" > /dev/null 2>&1 || true
+}
+
+# disable_circuitbreaker_rule <id>
+# 通过 PUT /naming/v1/circuitbreaker/rules/enable 传入 enable=false 关闭规则。
+# 与 enable_circuitbreaker_rule 对称，用于在用例启动前关闭残留的通配（source=*/*）规则。
+disable_circuitbreaker_rule() {
+    local rule_id="$1"
+    local body
+    body=$(python3 -c "import json; print(json.dumps([{'id': '${rule_id}', 'enable': False}]))")
+    local http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request PUT "${POLARIS_HTTP_ADDR}/naming/v1/circuitbreaker/rules/enable" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" \
+        --header 'Content-Type: application/json' \
+        --data-raw "${body}" 2>/dev/null || echo "000")
+    if [[ "$http_code" == "200" ]]; then
+        log_info "[规则巡检] 已关闭无关规则 (id=${rule_id})"
+    else
+        log_warn "[规则巡检] 关闭无关规则失败 (id=${rule_id}, HTTP=${http_code})，请手动关闭"
+    fi
 }
 
 # ======================== 规则 body 生成（python3 + 环境变量传参） ========================
@@ -2218,6 +2297,16 @@ case_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例1.1] provider-a → 200 / provider-b → 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则（source=*/* 的通配规则）──
+    # 残留的通配规则（如用例10创建的 cb-instance-CircuitBreakerHttpStatusCaller）
+    # 会在 consumer 启动后立即被命中，导致 INSTANCE 级同时存在两条规则计数，
+    # 干扰本用例的触发/验证/恢复判定。
+    if ! precheck_and_disable_stranger_rules "$INSTANCE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${INSTANCE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例1.2 启动 instance consumer（开启可观测性：监控指标 + 事件上报）"
     # 开启可观测性：enable_default_rule=false, enable_recover_all=true, enable_observ=true,
     # metrics_port=业务端口+10000, event_addr 指向全局 mock pushgateway。
@@ -2230,7 +2319,7 @@ case_instance() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
+    # 启动后再次巡检：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$INSTANCE_CALLER" "$NAMESPACE" \
         "cb-instance-${INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -2238,7 +2327,7 @@ case_instance() {
         return 1
     fi
 
-    # 巡检被调维度的熔断规则
+    # 被调维度复核：确认无残留通配规则
     if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INSTANCE_CALLER" \
         "cb-instance-${INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -2407,6 +2496,13 @@ case_service() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例2.1] provider-a → 500 / provider-b → 500（模拟整服务不可用）"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$SERVICE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-service-${SERVICE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例2.2 启动 service consumer（开启可观测性：监控指标 + 事件上报）"
     local service_metrics_port=$((SERVICE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "service_consumer" "$SERVICE_CONSUMER_DIR" \
@@ -2417,7 +2513,7 @@ case_service() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$SERVICE_CALLER" "$NAMESPACE" \
         "cb-service-${SERVICE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -2667,6 +2763,13 @@ case_interface() {
     provider_set_error "$PROVIDER_B_PORT" "true" "true"
     log_info "[用例3.1] provider-a/b 的 /echo 与 /order 均返回 500，/info 恒为 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$INTERFACE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-interface-${INTERFACE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例3.2 启动 interface consumer（开启可观测性：监控指标 + 事件上报）"
     local interface_metrics_port=$((INTERFACE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "interface_consumer" "$INTERFACE_CONSUMER_DIR" \
@@ -2677,6 +2780,7 @@ case_interface() {
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定。
     # 接口级用例合并为 1 条规则，预期只有 cb-interface-merged。
     if ! inspect_caller_rules "$INTERFACE_CALLER" "$NAMESPACE" "cb-interface-${INTERFACE_CALLER}"; then
@@ -2974,6 +3078,13 @@ case_old_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例4.1] provider-a → 200 / provider-b → 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${OLD_INSTANCE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例4.2 启动 old-instance consumer（旧版散装写法，开启可观测性：监控指标 + 事件上报）"
     local old_instance_metrics_port=$((OLD_INSTANCE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "old_instance_consumer" "$OLD_INSTANCE_CONSUMER_DIR" \
@@ -2984,8 +3095,7 @@ case_old_instance() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
-    # 用例4 与用例1 共用 cb-instance-v5（source=*/*）
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" "cb-instance-${OLD_INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3131,6 +3241,13 @@ case_http_status() {
     provider_set_error "$PROVIDER_B_PORT" "false"
     log_info "[用例5.1] 复位 provider-a → 200 / provider-b → 200"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例5.2 启动 http_status consumer（统一装饰器写法）"
     if ! start_consumer "http_status_consumer" "$INSTANCE_CONSUMER_DIR" \
         "$HTTP_STATUS_CALLER" "$HTTP_STATUS_CONSUMER_PORT" "${LOG_DIR}/http_status_consumer.log"; then
@@ -3139,6 +3256,7 @@ case_http_status() {
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3357,6 +3475,16 @@ case_default_rule() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例6.1] provider-a → 200 / provider-b → 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    # 用例6 验证默认规则兜底，要求无任何同名规则；若残留 source=*/* 的通配规则
+    # 会覆盖默认规则（dictionary.Lookup 命中服务端规则 > 默认规则），
+    # 导致本用例失去验证意义。
+    if ! precheck_and_disable_stranger_rules "$DEFAULT_RULE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-no-rule-${DEFAULT_RULE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例6.2 启动 default-rule consumer（defaultRuleEnable=true）"
     if ! start_consumer "default_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
         "$DEFAULT_RULE_CALLER" "$DEFAULT_RULE_CONSUMER_PORT" \
@@ -3366,8 +3494,7 @@ case_default_rule() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调与被调维度的现有规则——本用例预期没有任何同名/同 source 的规则；
-    # 若存在陌生规则会导致默认规则被覆盖，使本用例失去验证意义。
+    # 启动后复核：确认无任何规则命中（默认规则生效的前提）
     if ! inspect_caller_rules "$DEFAULT_RULE_CALLER" "$NAMESPACE" \
         "cb-no-rule-${DEFAULT_RULE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -3461,6 +3588,15 @@ case_modify_rule() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例7.1] provider-a → 200 / provider-b → 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    # 用例7 创建 cb-instance-CircuitBreakerHttpStatusCaller (source=*/MODIFY_RULE_CALLER)，
+    # 但残留的 source=*/* 同名规则会与即将创建的规则冲突。
+    if ! precheck_and_disable_stranger_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例7.2 启动 modify_rule consumer（事件+监控数据 push 到服务端 pushgateway）"
     export METRICS_TYPE=push
     if ! start_consumer "modify_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
@@ -3473,6 +3609,7 @@ case_modify_rule() {
     unset METRICS_TYPE
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3600,6 +3737,14 @@ case_protocol_method() {
 
     log_step "用例8.1 启动 PM consumer"
     # 复用 newCircuitBreakerCaller 二进制 + inferProtocolMethod 自动推断 Protocol/Method
+
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$PM_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-proto-meth-${PM_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     if ! start_consumer "pm_consumer" "$CALLER_CONSUMER_DIR" \
         "$PM_CALLER" "$PM_CONSUMER_PORT" "${LOG_DIR}/pm_consumer.log"; then
         echo "FAIL"
@@ -3607,7 +3752,7 @@ case_protocol_method() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检 1 条规则（含 13 BC），caller 维度只有 1 条
+    # 启动后复核：确认 consumer 只拉到了预期的规则
     if ! inspect_caller_rules "$PM_CALLER" "$NAMESPACE" \
         "cb-proto-meth-${PM_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -3770,6 +3915,17 @@ case_pathtype() {
         "      不存在对全部 BC 都不匹配的'反向 path',故反向验证不适用于合并规则结构。"
 
     log_step "用例9.1 启动 pathtype consumer"
+
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    local expected_rules=(
+        "cb-pathtype-${PATHTYPE_CALLER}"
+    )
+    if ! precheck_and_disable_stranger_rules "$PATHTYPE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "${expected_rules[@]}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     if ! start_consumer "pathtype_consumer" "$CALLER_CONSUMER_DIR" \
         "$PATHTYPE_CALLER" "$PATHTYPE_CONSUMER_PORT" "${LOG_DIR}/pathtype_consumer.log"; then
         echo "FAIL"
@@ -3777,9 +3933,7 @@ case_pathtype() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    local expected_rules=(
-        "cb-pathtype-${PATHTYPE_CALLER}"
-    )
+    # 启动后复核：确认 consumer 只拉到了预期的规则
     if ! inspect_caller_rules "$PATHTYPE_CALLER" "$NAMESPACE" "${expected_rules[@]}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3904,12 +4058,22 @@ _run_all_dead_phase() {
 
     # ── 全死全活开启 ──
     log_step "用例10 [${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
+
+    # ── 规则巡检：在启动 consumer 之前关闭残留的同名规则 ──
+    # 用例10 子阶段共享同名规则 cb-instance-${HTTP_STATUS_CALLER}，
+    # 若上一轮运行残留了同名规则，create 会失败或产生重复规则。
+    if ! precheck_and_disable_stranger_rules "$caller" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        return 1
+    fi
+
     if ! start_consumer "${phase_label}_consumer" "$consumer_dir" \
         "$caller" "$port" "$log_file" "false" "true"; then
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$caller" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         return 1

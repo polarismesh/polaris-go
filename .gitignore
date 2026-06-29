@@ -33,6 +33,7 @@ specs/
 /examples/**/cache/
 /examples/**/.build/
 /examples/**/.logs/
+/examples/**/__pycache__/
 
 # polaris-go example 编译产物：各 lane/route/... 子目录下 go build . 会产生与
 # 目录同名的可执行二进制（如 polaris-go-route-lane-gateway），这些都不应入库。
