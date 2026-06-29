@@ -189,9 +189,15 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 		}
 	}
 	if !faultDetectEnabled {
-		c.log.Infof("[FaultDetect] health check for resource=%s is disabled, now stop the previous checker", c.res.String())
+		// 仅在真的停掉了一个已存在的 checker（探测从开启变为关闭，属状态变化事件）时打 INFO；
+		// 否则（该资源本就没配探测，仅刷新时例行判定门控不通过）降级 DEBUG，避免每次规则
+		// 复检/push 事件对未配探测的 METHOD/INSTANCE 资源重复刷屏淹没真正的状态切换事件。
 		if checker, ok := c.breaker.delResourceHealthChecker(c.res); ok {
+			c.log.Infof("[FaultDetect] health check for resource=%s is disabled, now stop the previous checker",
+				c.res.String())
 			checker.stop()
+		} else {
+			c.log.Debugf("[FaultDetect] health check for resource=%s is disabled (no active checker)", c.res.String())
 		}
 		if c.res.GetLevel() != fault_tolerance.Level_INSTANCE {
 			svcKey := c.res.GetService()

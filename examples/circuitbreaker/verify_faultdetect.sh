@@ -32,6 +32,12 @@
 #   - 熔断规则 faultDetectConfig.enable=true 作为探测启动门控
 #   - ResourceHealthChecker 周期调度（TaskExecutor 注入）
 #   - 探测结果走 record=false 上报，参与 HALF_OPEN 恢复判定
+#
+# 熔断事件上报（2026-06-29）:
+#   所有 consumer 启动时均配置 eventReporter.pushgateway（参考 verify_circuitbreaker.sh 用例7）。
+#   默认 POLARIS_EVENT_ADDR 为空，SDK 通过 Polaris 服务发现自动解析远端 pushgateway。
+#   事件日志落盘到 .build/<name>_run/polaris/log/event/polaris-event.log，
+#   可通过 grep "new event:" 查看推送的熔断事件 JSON。
 # =============================================================================
 
 set -euo pipefail
@@ -42,6 +48,10 @@ POLARIS_HTTP_PORT="${POLARIS_HTTP_PORT:-8090}"
 POLARIS_TOKEN="${POLARIS_TOKEN:-}"
 NAMESPACE="${NAMESPACE:-default}"
 SERVICE_NAME="${SERVICE_NAME:-CircuitBreakerCallee}"
+# 熔断事件上报地址（pushgateway）。默认为空，SDK PushgatewayReporter 在 address 为空时
+# 通过 Polaris 服务发现（polaris.pushgateway）自动解析远端 pushgateway 地址。
+# 如需指定地址（如本地 mock），通过环境变量设置：POLARIS_EVENT_ADDR=127.0.0.1:19091
+POLARIS_EVENT_ADDR="${POLARIS_EVENT_ADDR:-}"
 # 三级用例各用独立被调服务，避免共用 CircuitBreakerCallee 时被其它脚本（verify_circuitbreaker.sh
 # 用例10 的 source=*/* catch-all 规则）残留的同 destination 规则按 id 字典序抢占，导致探测门控
 # 误判 disabled、主动探测无法启动。provider 进程不变，同时注册到这三个服务（见 start_provider）。
@@ -658,6 +668,13 @@ global:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
     connectTimeout: 3s
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+    plugin:
+      pushgateway:
+        address: '\${POLARIS_EVENT_ADDR}'
 consumer:
   circuitBreaker:
     enable: true
@@ -745,7 +762,11 @@ start_consumer() {
     (cd "$CONSUMER_DIR" && go build -o "${BUILD_DIR}/${name}" .)
     command -v xattr &> /dev/null && xattr -c "${BUILD_DIR}/${name}" 2>/dev/null || true
 
-    (cd "$workdir" && exec "${BUILD_DIR}/${name}" \
+    # POLARIS_EVENT_ADDR 在子 shell 内 export，供 yaml 中 ${POLARIS_EVENT_ADDR} 占位符经 SDK os.ExpandEnv 展开。
+    # 默认为空字符串，SDK PushgatewayReporter 在 address 为空时通过 Polaris 服务发现自动解析远端 pushgateway。
+    (cd "$workdir" \
+        && export POLARIS_EVENT_ADDR="${POLARIS_EVENT_ADDR:-}" \
+        && exec "${BUILD_DIR}/${name}" \
         --selfNamespace "$NAMESPACE" \
         --selfService "$self_service" \
         --selfRegister=false \
@@ -879,6 +900,10 @@ _run_probe_abort_case() {
     local callee_service="${8:-$SERVICE_NAME}"
     # $9 D 段类型（可选）：toggle=enable toggle 验证, interval=规则参数热更新验证, 空=不增加 D 段
     local d_phase="${9:-}"
+    # ${10} 用例编号前缀（如 "1"/"2"），用于日志中标识所属用例
+    local case_num="${10:-}"
+    local step_prefix=""
+    [[ -n "$case_num" ]] && step_prefix="用例${case_num} "
     _CASE_RESULT="FAIL"
     local consumer_log="${LOG_DIR}/${consumer_name}.log"
 
@@ -898,12 +923,12 @@ _run_probe_abort_case() {
         "预期闭环 : 业务触发 OPEN -> provider 仍故障探测失败维持 OPEN -> 恢复 provider 探活成功 -> CLOSE"
 
     # 步骤1：环境复位（provider 全部正常）
-    log_step "用例 ${case_tag} [1] 环境复位：provider-a/b 均返回 200"
+    log_step "${step_prefix}${case_tag} [1] 环境复位：provider-a/b 均返回 200"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
 
     # 步骤2：启动 consumer + 下发熔断规则 + 探测规则
-    log_step "用例 ${case_tag} [2] 启动 consumer 并下发规则"
+    log_step "${step_prefix}${case_tag} [2] 启动 consumer 并下发规则"
     start_consumer "$consumer_name" "$caller" "$consumer_port" "$consumer_log" "$callee_service" || {
         _CASE_RESULT="FAIL"; return
     }
@@ -922,36 +947,37 @@ _run_probe_abort_case() {
         FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="$probe_method_value" \
         build_fault_detect_rule_body)
     fd_rule_id=$(create_fault_detect_rule "$fd_body" 2>/dev/null) || { _CASE_RESULT="FAIL"; return; }
+    log_info "${step_prefix}${case_tag} 预期生效的主动探测规则: ${fd_rule_name}（protocol=HTTP, method=${probe_method_value}, interval=${FD_PROBE_INTERVAL}s, port=0）"
 
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
+    wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
 
     # 步骤3：触发熔断 OPEN（a/b 全 500）
-    log_step "用例 ${case_tag} [3] 触发熔断：provider 全部置 500，burst ${FD_TRIGGER_COUNT} 次"
+    log_step "${step_prefix}${case_tag} [3] 触发熔断：provider 全部置 500，burst ${FD_TRIGGER_COUNT} 次"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "用例 ${case_tag} 触发-OPEN"
+    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "${step_prefix}${case_tag} 触发-OPEN"
     local trigger_abort="$CASE_ABORT"
 
     # 步骤4：维持 OPEN —— provider 仍故障，探测打 /echo 也失败，半开探测失败立即回 OPEN，不应恢复
-    log_step "用例 ${case_tag} [4] 维持 OPEN：provider 保持 500，等待 > sleepWindow 后验证仍熔断"
-    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "用例 ${case_tag} [4] 等待（探测持续失败，应维持 OPEN）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 维持-OPEN"
+    log_step "${step_prefix}${case_tag} [4] 维持 OPEN：provider 保持 500，等待 > sleepWindow 后验证仍熔断"
+    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "${step_prefix}${case_tag} [4] 等待（探测持续失败，应维持 OPEN）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 维持-OPEN"
     local keep_abort="$CASE_ABORT"
 
     # 步骤5：恢复 provider，纯靠主动探测探活推动 HALF_OPEN -> CLOSE
-    log_step "用例 ${case_tag} [5] 探活恢复：provider 全部置 200，仅等待主动探测推动恢复（不发业务请求）"
+    log_step "${step_prefix}${case_tag} [5] 探活恢复：provider 全部置 200，仅等待主动探测推动恢复（不发业务请求）"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
-    wait_seconds "$WAIT_RECOVER_SECONDS" "用例 ${case_tag} [5] 等待主动探测探活并推动 CLOSE（sleepWindow + 多个探测周期）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 恢复-CLOSE"
+    wait_seconds "$WAIT_RECOVER_SECONDS" "${step_prefix}${case_tag} [5] 等待主动探测探活并推动 CLOSE（sleepWindow + 多个探测周期）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 恢复-CLOSE"
     local recover_ok="$CASE_OK"
 
     # 步骤6：日志佐证探测真实运行
-    log_step "用例 ${case_tag} [6] 校验 SDK 熔断日志中的探测调度与状态切换"
+    log_step "${step_prefix}${case_tag} [6] 校验 SDK 熔断日志中的探测调度与状态切换"
     local sdk_cb_log="${BUILD_DIR}/${consumer_name}_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
     local has_schedule has_statechg
     _probe_log_evidence "$sdk_cb_log" has_schedule has_statechg
-    log_info "用例 ${case_tag} [6] 日志佐证：探测调度=${has_schedule}, 状态切换=${has_statechg} (来源 ${sdk_cb_log})"
+    log_info "${step_prefix}${case_tag} [6] 日志佐证：探测调度=${has_schedule}, 状态切换=${has_statechg} (来源 ${sdk_cb_log})"
 
     # ── D 段：规则动态启停 / 热更新验证 ──
     local d_disabled_stop="-" d_resume_schedule="-" d_new_interval="-"
@@ -963,7 +989,7 @@ _run_probe_abort_case() {
         schedule_before_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
 
         # 步骤7：PUT 熔断规则 faultDetectConfig.enable=false，验证探测停止
-        log_step "用例 ${case_tag} [7] D段-toggle：关闭探测（PUT faultDetectConfig.enable=false）"
+        log_step "${step_prefix}${case_tag} [7] D段-toggle：关闭探测（PUT faultDetectConfig.enable=false）"
         local cb_body_disabled
         cb_body_disabled=$(RULE_NAME="$cb_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
             SOURCE_NAMESPACE="$NAMESPACE" SOURCE_SERVICE="$caller" \
@@ -971,18 +997,18 @@ _run_probe_abort_case() {
             FD_RULE_LEVEL="$rule_level" FD_RULE_METHOD_VALUE="$rule_method_value" FD_BC_API_PATH="$bc_api_path" \
             build_circuitbreaker_rule_body_disable)
         update_circuitbreaker_rule "$cb_rule_id" "$cb_body_disabled"
-        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [7] 等待 SDK 感知规则变更（探测应被停止）"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [7] 等待 SDK 感知规则变更（探测应被停止）"
         if grep -qE "\[FaultDetect\] health check for resource=.*is disabled, now stop" "$sdk_cb_log" 2>/dev/null; then
             d_disabled_stop="yes"
         else
             d_disabled_stop="no"
         fi
-        log_info "用例 ${case_tag} [7] 探测停止佐证：${d_disabled_stop} (来源 ${sdk_cb_log})"
+        log_info "${step_prefix}${case_tag} [7] 探测停止佐证：${d_disabled_stop} (来源 ${sdk_cb_log})"
 
         # 步骤8：PUT 熔断规则 faultDetectConfig.enable=true，验证探测重新启动
-        log_step "用例 ${case_tag} [8] D段-toggle：重新开启探测（PUT faultDetectConfig.enable=true）"
+        log_step "${step_prefix}${case_tag} [8] D段-toggle：重新开启探测（PUT faultDetectConfig.enable=true）"
         update_circuitbreaker_rule "$cb_rule_id" "$cb_body"
-        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [8] 等待 SDK 感知规则变更（探测应重新启动）"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [8] 等待 SDK 感知规则变更（探测应重新启动）"
         local schedule_after_d
         schedule_after_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
         if [[ "$schedule_after_d" -gt "$schedule_before_d" ]]; then
@@ -990,29 +1016,29 @@ _run_probe_abort_case() {
         else
             d_resume_schedule="no"
         fi
-        log_info "用例 ${case_tag} [8] 探测恢复佐证：schedule task 行数 ${schedule_before_d}→${schedule_after_d} (${d_resume_schedule})"
+        log_info "${step_prefix}${case_tag} [8] 探测恢复佐证：schedule task 行数 ${schedule_before_d}→${schedule_after_d} (${d_resume_schedule})"
     fi
 
     # D 段 - interval：规则参数热更新验证（修改探测间隔）
     if [[ "$d_phase" == "interval" ]]; then
-        log_step "用例 ${case_tag} [7] D段-interval：修改探测间隔 interval=${FD_PROBE_INTERVAL}s→${FD_PROBE_INTERVAL_UPDATED}s"
+        log_step "${step_prefix}${case_tag} [7] D段-interval：修改探测间隔 interval=${FD_PROBE_INTERVAL}s→${FD_PROBE_INTERVAL_UPDATED}s"
         local fd_body_updated
         fd_body_updated=$(RULE_NAME="$fd_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$callee_service" \
             FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL_UPDATED" FD_PROBE_METHOD_VALUE="$probe_method_value" \
             build_fault_detect_rule_body)
         update_fault_detect_rule "$fd_rule_id" "$fd_body_updated"
-        wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [7] 等待 SDK 感知探测规则变更（应重建 checker）"
+        wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [7] 等待 SDK 感知探测规则变更（应重建 checker）"
         # 验证 SDK 日志中出现 interval=${FD_PROBE_INTERVAL_UPDATED}s 的 schedule task
         if grep -qE "\[CircuitBreaker\] schedule task.*interval=${FD_PROBE_INTERVAL_UPDATED}s" "$sdk_cb_log" 2>/dev/null; then
             d_new_interval="yes"
         else
             d_new_interval="no"
         fi
-        log_info "用例 ${case_tag} [7] 探测间隔更新佐证：interval=${FD_PROBE_INTERVAL_UPDATED}s schedule task 出现=${d_new_interval} (来源 ${sdk_cb_log})"
+        log_info "${step_prefix}${case_tag} [7] 探测间隔更新佐证：interval=${FD_PROBE_INTERVAL_UPDATED}s schedule task 出现=${d_new_interval} (来源 ${sdk_cb_log})"
     fi
 
     # 判定（含 D 段指标）
-    print_block "用例 ${case_tag} 判定指标" \
+    print_block "${step_prefix}${case_tag} 判定指标" \
         "触发 OPEN  : abort=${trigger_abort} (期望 >=1)" \
         "维持 OPEN  : abort=${keep_abort} (期望 >=1，探测失败不恢复)" \
         "探活 CLOSE : ok=${recover_ok}/${FD_VERIFY_COUNT} (期望 == ${FD_VERIFY_COUNT})" \
@@ -1047,7 +1073,7 @@ _run_probe_abort_case() {
 # D 段增加 enable toggle 验证：关闭探测(faultDetectConfig.enable=false)→验证停止→重新开启→验证恢复。
 case_fault_detect() {
     _run_probe_abort_case "服务级(SERVICE)" "服务级" "$FD_CALLER" \
-        "fault_detect_consumer" "$FD_CONSUMER_PORT" "SERVICE" "" "$FD_SVC_CALLEE" "toggle"
+        "fault_detect_consumer" "$FD_CONSUMER_PORT" "SERVICE" "" "$FD_SVC_CALLEE" "toggle" "1"
 }
 
 # case_fault_detect_method 接口级（METHOD）主动探测验证。被调服务用独立 FD_METHOD_CALLEE。
@@ -1056,7 +1082,7 @@ case_fault_detect() {
 # D 段增加规则参数热更新验证：修改探测间隔 interval 2s→5s→验证 schedule task 日志间隔变化。
 case_fault_detect_method() {
     _run_probe_abort_case "接口级(METHOD)" "接口级" "$FD_METHOD_CALLER" \
-        "fd_method_consumer" "$FD_METHOD_CONSUMER_PORT" "METHOD" "/echo" "$FD_METHOD_CALLEE" "interval"
+        "fd_method_consumer" "$FD_METHOD_CONSUMER_PORT" "METHOD" "/echo" "$FD_METHOD_CALLEE" "interval" "2"
 }
 
 # _run_probe_tcpudp_case 验证 TCP / UDP 协议主动探测闭环（SERVICE 级，abort 型）。
@@ -1068,10 +1094,14 @@ case_fault_detect_method() {
 #   - TCP/UDP 探测端口只在 provider-a 启动，故探测只探 a（SERVICE 级闭环不依赖多实例）。
 # 参数：$1 级别标签 $2 case 标签 $3 caller $4 consumer 名 $5 consumer 端口 $6 被调服务
 #       $7 探测协议(2/3) $8 探测端口 $9 send ${10} receive ${11} 探测故障开关参数名(openTcpError/openUdpError)
+#       ${12} 用例编号前缀（如 "4"/"5"）
 _run_probe_tcpudp_case() {
     local level_label="$1" case_tag="$2" caller="$3" consumer_name="$4" consumer_port="$5"
     local callee_service="$6" probe_protocol="$7" probe_port="$8" probe_send="$9" probe_receive="${10}"
     local probe_err_switch="${11}"
+    local case_num="${12:-}"
+    local step_prefix=""
+    [[ -n "$case_num" ]] && step_prefix="用例${case_num} "
     _CASE_RESULT="FAIL"
     local consumer_log="${LOG_DIR}/${consumer_name}.log"
 
@@ -1083,13 +1113,13 @@ _run_probe_tcpudp_case() {
         "预期闭环 : 业务(/echo)触发 OPEN -> ${probe_err_switch} 置故障探测失败维持 OPEN -> 恢复探测探活 -> CLOSE"
 
     # 步骤1：环境复位（业务 /echo 与探测端口均正常）
-    log_step "用例 ${case_tag} [1] 环境复位：provider 业务/探测端口均正常"
+    log_step "${step_prefix}${case_tag} [1] 环境复位：provider 业务/探测端口均正常"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     provider_set_switch "$PROVIDER_A_PORT" "$probe_err_switch" "false"
 
     # 步骤2：启动 consumer + 下发 SERVICE 级熔断规则 + TCP/UDP 探测规则
-    log_step "用例 ${case_tag} [2] 启动 consumer 并下发规则"
+    log_step "${step_prefix}${case_tag} [2] 启动 consumer 并下发规则"
     start_consumer "$consumer_name" "$caller" "$consumer_port" "$consumer_log" "$callee_service" || {
         _CASE_RESULT="FAIL"; return
     }
@@ -1108,44 +1138,45 @@ _run_probe_tcpudp_case() {
         FD_PROBE_SEND="$probe_send" FD_PROBE_RECEIVE="$probe_receive" \
         build_fault_detect_rule_body)
     create_fault_detect_rule "$fd_body" > /dev/null || { _CASE_RESULT="FAIL"; return; }
+    log_info "${step_prefix}${case_tag} 预期生效的主动探测规则: fd-fd-${probe_protocol}-${caller}（protocol=${probe_protocol}, port=${probe_port}, send=${probe_send}, receive=${probe_receive}, interval=${FD_PROBE_INTERVAL}s）"
 
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
+    wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
 
     # 步骤3：触发 SERVICE 级熔断 OPEN（业务 /echo 全 500）
-    log_step "用例 ${case_tag} [3] 触发熔断：provider /echo 置 500，burst ${FD_TRIGGER_COUNT} 次"
+    log_step "${step_prefix}${case_tag} [3] 触发熔断：provider /echo 置 500，burst ${FD_TRIGGER_COUNT} 次"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "用例 ${case_tag} 触发-OPEN"
+    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "${step_prefix}${case_tag} 触发-OPEN"
     local trigger_abort="$CASE_ABORT"
 
     # 步骤4：维持 OPEN —— 业务 /echo 保持 500（持续触发）+ 探测端口置故障（探测失败）。
     # 注意：不能在此恢复业务 /echo 为 200——SERVICE 级熔断进 half-open 态会放行业务请求探活，
     # 业务请求成功会抢先把熔断 close 掉，导致探测维持 OPEN 验证失效（实测 abort=0）。
     # 与 HTTP 用例一致：维持阶段业务保持 500，探测也故障，OPEN 才稳定。
-    log_step "用例 ${case_tag} [4] 维持 OPEN：业务 /echo 保持 500 + 探测端口故障，等待 > sleepWindow 验证仍熔断"
+    log_step "${step_prefix}${case_tag} [4] 维持 OPEN：业务 /echo 保持 500 + 探测端口故障，等待 > sleepWindow 验证仍熔断"
     provider_set_switch "$PROVIDER_A_PORT" "$probe_err_switch" "true"
-    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "用例 ${case_tag} [4] 等待（${probe_err_switch} 探测持续失败，应维持 OPEN）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 维持-OPEN"
+    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "${step_prefix}${case_tag} [4] 等待（${probe_err_switch} 探测持续失败，应维持 OPEN）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 维持-OPEN"
     local keep_abort="$CASE_ABORT"
 
     # 步骤5：探活恢复 —— 业务 /echo 与探测端口都恢复正常，主动探测探活推动 CLOSE
-    log_step "用例 ${case_tag} [5] 探活恢复：业务 /echo 与 ${probe_err_switch} 均置正常，等待主动探测推动 CLOSE"
+    log_step "${step_prefix}${case_tag} [5] 探活恢复：业务 /echo 与 ${probe_err_switch} 均置正常，等待主动探测推动 CLOSE"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     provider_set_switch "$PROVIDER_A_PORT" "$probe_err_switch" "false"
-    wait_seconds "$WAIT_RECOVER_SECONDS" "用例 ${case_tag} [5] 等待主动探测探活并推动 CLOSE（sleepWindow + 多个探测周期）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 恢复-CLOSE"
+    wait_seconds "$WAIT_RECOVER_SECONDS" "${step_prefix}${case_tag} [5] 等待主动探测探活并推动 CLOSE（sleepWindow + 多个探测周期）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 恢复-CLOSE"
     local recover_ok="$CASE_OK"
 
     # 步骤6：日志佐证探测真实运行
-    log_step "用例 ${case_tag} [6] 校验 SDK 熔断日志中的探测调度与状态切换"
+    log_step "${step_prefix}${case_tag} [6] 校验 SDK 熔断日志中的探测调度与状态切换"
     local sdk_cb_log="${BUILD_DIR}/${consumer_name}_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
     local has_schedule has_statechg
     _probe_log_evidence "$sdk_cb_log" has_schedule has_statechg
-    log_info "用例 ${case_tag} [6] 日志佐证：探测调度=${has_schedule}, 状态切换=${has_statechg} (来源 ${sdk_cb_log})"
+    log_info "${step_prefix}${case_tag} [6] 日志佐证：探测调度=${has_schedule}, 状态切换=${has_statechg} (来源 ${sdk_cb_log})"
 
     # 判定
-    print_block "用例 ${case_tag} 判定指标" \
+    print_block "${step_prefix}${case_tag} 判定指标" \
         "触发 OPEN  : abort=${trigger_abort} (期望 >=1)" \
         "维持 OPEN  : abort=${keep_abort} (期望 >=1，探测失败不恢复)" \
         "探活 CLOSE : ok=${recover_ok}/${FD_VERIFY_COUNT} (期望 == ${FD_VERIFY_COUNT})" \
@@ -1164,132 +1195,115 @@ _run_probe_tcpudp_case() {
 case_fault_detect_tcp() {
     _run_probe_tcpudp_case "TCP 探测" "TCP" "$FD_TCP_CALLER" \
         "fd_tcp_consumer" "$FD_TCP_CONSUMER_PORT" "$FD_TCP_CALLEE" \
-        "2" "$FD_TCP_PROBE_PORT" "ping" "tcp-ok" "openTcpError"
+        "2" "$FD_TCP_PROBE_PORT" "ping" "tcp-ok" "openTcpError" "4"
 }
 
 # case_fault_detect_udp UDP 协议主动探测验证（探 provider-a 的 28101 端口，send=ping/receive=udp-ok）
 case_fault_detect_udp() {
     _run_probe_tcpudp_case "UDP 探测" "UDP" "$FD_UDP_CALLER" \
         "fd_udp_consumer" "$FD_UDP_CONSUMER_PORT" "$FD_UDP_CALLEE" \
-        "3" "$FD_UDP_PROBE_PORT" "ping" "udp-ok" "openUdpError"
+        "3" "$FD_UDP_PROBE_PORT" "ping" "udp-ok" "openUdpError" "5"
 }
 
 # case_fault_detect_proto_method 验证探测规则 target_service.method 和 http_config.headers 维度。
 # 分三段：
-#   A) SERVICE 级 method 过滤：验证 selectFaultDetectRules 对非通配 method 的拒绝和通配的接受。
+#   A) SERVICE 级 method 过滤：验证已有 SERVICE 探测规则（method=* 通配）被 selectFaultDetectRules 接受；
+#      非通配拒绝的结论由段 B.2（METHOD 级 nonmatch 被拒绝）覆盖——两者共享 matchMethodWithAPI 路径。
 #   B) METHOD 级 method 过滤 + 完整闭环：验证精确匹配 method.value 的规则被选中并走完熔断闭环。
 #   C) HTTP headers：验证 http_config.headers 被正确设置到探测请求头。
 # 复用已有 SERVICE consumer（18095）和 METHOD consumer（18096），不新增进程。
+# ⚠️ A 段不创建新规则：SDK 的 selectFaultDetectRules 对同 protocol 只取第一条匹配规则，
+#   SERVICE 用例的 fd-fd-SERVICE-*（method=*）已占用 HTTP 协议 slot，新规则不会被选中。
 case_fault_detect_proto_method() {
     _CASE_RESULT="FAIL"
     local case_tag="协议方法"
+    local case_num="6"
+    local step_prefix="用例${case_num} "
     local a_pass="no" b_pass="no" c_pass="no"
 
     # ── 段 A：SERVICE 级 method 过滤 ──
-    log_step "用例 ${case_tag} [A.1] 段A-非通配：创建 method.value=/api/protocol/http 探测规则（SERVICE 级应拒绝）"
-    # 复用 SERVICE consumer（18095）和 FD_SVC_CALLEE
+    # 复用 SERVICE consumer（18095）和 FD_SVC_CALLEE。
+    # SERVICE 用例已创建探测规则 fd-fd-SERVICE-CircuitBreakerFaultDetectCaller（method=* 通配），
+    # 若该规则被 schedule task 选中，即验证了"SERVICE 级接受通配 method"。
+    # 非通配拒绝验证由段 B.2（METHOD 级 nonmatch 被拒绝）等价覆盖：
+    #   selectFaultDetectRules → matchMethodWithAPI → IsMatchAll 对非通配返回 false，
+    #   SERVICE 级与 METHOD 级共享同一代码路径，METHOD 级拒绝 → SERVICE 级同理。
     local svc_sdk_cb_log="${BUILD_DIR}/fault_detect_consumer_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
-
-    local fd_body_a1
-    fd_body_a1=$(RULE_NAME="fd-fd-SERVICE-${FD_CALLER}-nonwildcard" NAMESPACE="$NAMESPACE" SERVICE_NAME="$FD_SVC_CALLEE" \
-        FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="/api/protocol/http" \
-        build_fault_detect_rule_body)
-    local fd_id_a1
-    fd_id_a1=$(create_fault_detect_rule "$fd_body_a1" 2>/dev/null) || true
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [A.1] 等待 SDK 拉取探测规则"
-
-    # 验证：非通配 method 的探测规则不应被 SERVICE 级选中。
-    # selectFaultDetectRules 对 SERVICE 级用 IsMatchAll 判断 method.value，
-    # method.value="/api/protocol/http" 时 IsMatchAll 返回 false → 规则被跳过。
-    # 铁证：schedule task 中不含 nonwildcard 规则名。
+    local svc_probe_rule="fd-fd-SERVICE-${FD_CALLER}"
     local has_a1="yes"
-    if grep -qE "\[CircuitBreaker\] schedule task.*nonwildcard" "$svc_sdk_cb_log" 2>/dev/null; then
-        has_a1="no"
-    fi
-    log_info "用例 ${case_tag} [A.1] SERVICE 级拒绝非通配 method：schedule task 含 nonwildcard=$(grep -cE 'schedule task.*nonwildcard' "$svc_sdk_cb_log" 2>/dev/null || echo 0) (期望 0, got ${has_a1})"
 
-    log_step "用例 ${case_tag} [A.2] 段A-通配：创建 method.value=* 探测规则（SERVICE 级应接受）"
-    local sched_before_a2
-    sched_before_a2=$(grep -cE "\[CircuitBreaker\] schedule task" "$svc_sdk_cb_log" 2>/dev/null || echo "0")
-
-    local fd_body_a2
-    fd_body_a2=$(RULE_NAME="fd-fd-SERVICE-${FD_CALLER}-wildcard" NAMESPACE="$NAMESPACE" SERVICE_NAME="$FD_SVC_CALLEE" \
-        FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="*" \
-        build_fault_detect_rule_body)
-    create_fault_detect_rule "$fd_body_a2" > /dev/null 2>&1 || true
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [A.2] 等待 SDK 拉取探测规则"
-
-    # 验证：通配 method 的探测规则应被 SERVICE 级选中。
+    log_info "${step_prefix}${case_tag} [A] 预期生效的主动探测规则: ${svc_probe_rule}（复用 SERVICE 用例已有规则，method=*, interval=${FD_PROBE_INTERVAL}s, port=0）"
+    log_step "${step_prefix}${case_tag} [A] 段A-通配：验证已有 SERVICE 探测规则（method=*）被 schedule task 选中"
+    # 验证：已有 SERVICE 探测规则 method=* 已被 schedule task 选中。
     # selectFaultDetectRules 对 SERVICE 级用 IsMatchAll 判断 method.value="*" → 返回 true → 规则被选中。
-    # 铁证：schedule task 中出现 wildcard 规则名。
+    # 铁证：schedule task 中出现 SERVICE 探测规则名（不含 wildcard 后缀，即 SERVICE 用例创建的规则）。
+    # 使用 \b 边界匹配确保精确匹配规则名（不与 -wildcard 等后缀规则混淆）。
     local has_a2="no"
-    if grep -qE "\[CircuitBreaker\] schedule task.*wildcard" "$svc_sdk_cb_log" 2>/dev/null; then
+    if grep -qE "\[CircuitBreaker\] schedule task.*${svc_probe_rule}\b" "$svc_sdk_cb_log" 2>/dev/null; then
         has_a2="yes"
     fi
-    log_info "用例 ${case_tag} [A.2] SERVICE 级接受通配 method：schedule task 含 wildcard=$(grep -cE 'schedule task.*wildcard' "$svc_sdk_cb_log" 2>/dev/null || echo 0) (期望 >0, got ${has_a2})"
+    log_info "${step_prefix}${case_tag} [A] SERVICE 级接受通配 method（已有规则 ${svc_probe_rule}）：schedule task 含该规则=$(grep -cE "schedule task.*${svc_probe_rule}\b" "$svc_sdk_cb_log" 2>/dev/null || echo 0) (期望 >0, got ${has_a2})"
 
     if [[ "$has_a1" == "yes" && "$has_a2" == "yes" ]]; then
         a_pass="yes"
     fi
 
     # ── 段 B：METHOD 级 method 过滤 + 完整闭环 ──
-    log_step "用例 ${case_tag} [B.1] 段B：创建 /echo + /api/protocol/http 两条探测规则（METHOD 级只应选中 /echo）"
+    # /echo 匹配复用用例二已创建的 fd-fd-METHOD-CircuitBreakerFDMethodCaller（method=/echo，
+    # 与本段所需规则完全等价），不再新建冗余的 -echo 规则；仅新建 -nonmatch 验证"非匹配 method 被拒绝"。
+    log_step "${step_prefix}${case_tag} [B.1] 段B：复用 /echo 探测规则 + 新建 /api/protocol/http 探测规则（METHOD 级只应选中 /echo）"
     local method_consumer_log="${LOG_DIR}/fd_method_consumer.log"
     local method_sdk_cb_log="${BUILD_DIR}/fd_method_consumer_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
+    local method_probe_rule="fd-fd-METHOD-${FD_METHOD_CALLER}"
 
     local sched_before_b
     sched_before_b=$(grep -cE "\[CircuitBreaker\] schedule task" "$method_sdk_cb_log" 2>/dev/null || echo "0")
 
-    # 创建 method.value=/echo 的探测规则（与熔断规则 METHOD 级 destination.method=/echo 一致）
-    local fd_body_b1
-    fd_body_b1=$(RULE_NAME="fd-fd-METHOD-${FD_METHOD_CALLER}-echo" NAMESPACE="$NAMESPACE" SERVICE_NAME="$FD_METHOD_CALLEE" \
-        FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="/echo" \
-        build_fault_detect_rule_body)
-    create_fault_detect_rule "$fd_body_b1" > /dev/null 2>&1 || true
-
-    # 创建 method.value=/api/protocol/http 的探测规则（应被 METHOD 级 selectFaultDetectRules 拒绝）
+    # 创建 method.value=/api/protocol/http 的探测规则（应被 METHOD 级 selectFaultDetectRules 拒绝）。
+    # method.value=/echo 的探测规则由用例二的 fd-fd-METHOD-CircuitBreakerFDMethodCaller 提供，无需重建。
     local fd_body_b2
     fd_body_b2=$(RULE_NAME="fd-fd-METHOD-${FD_METHOD_CALLER}-nonmatch" NAMESPACE="$NAMESPACE" SERVICE_NAME="$FD_METHOD_CALLEE" \
         FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="/api/protocol/http" \
         build_fault_detect_rule_body)
     create_fault_detect_rule "$fd_body_b2" > /dev/null 2>&1 || true
+    log_info "${step_prefix}${case_tag} [B] 预期生效的主动探测规则: ${method_probe_rule}（复用用例二已有规则，应被选中，method=/echo）; fd-fd-METHOD-${FD_METHOD_CALLER}-nonmatch（应被拒绝，method=/api/protocol/http）"
 
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [B.1] 等待 SDK 拉取探测规则"
+    wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [B.1] 等待 SDK 拉取探测规则"
 
-    local sched_after_b has_b_filter
-    sched_after_b=$(grep -cE "\[CircuitBreaker\] schedule task" "$method_sdk_cb_log" 2>/dev/null || echo "0")
-    # 验证：只有 /echo 的 schedule task 出现（METHOD 级只应选中与 resource.path 匹配的规则）
-    if [[ "$sched_after_b" -gt "$sched_before_b" ]] && \
-        grep -qE "\[CircuitBreaker\] schedule task.*/echo" "$method_sdk_cb_log" 2>/dev/null; then
+    local has_b_filter
+    # 验证：/echo 的 schedule task 出现（METHOD 级只应选中与 resource.path 匹配的规则）。
+    # 复用的 fd-fd-METHOD-* 规则 method=/echo，被选中后 schedule task 含 path=/echo；
+    # -nonmatch（method=/api/protocol/http）不匹配 resource.path=/echo，不会出现 schedule task。
+    if grep -qE "\[CircuitBreaker\] schedule task.*path=/echo" "$method_sdk_cb_log" 2>/dev/null; then
         has_b_filter="yes"
     else
         has_b_filter="no"
     fi
-    log_info "用例 ${case_tag} [B.1] METHOD 级 method 过滤：schedule task ${sched_before_b}→${sched_after_b}, /echo match=${has_b_filter}"
+    log_info "${step_prefix}${case_tag} [B.1] METHOD 级 method 过滤：/echo match=${has_b_filter}（复用规则 ${method_probe_rule}）"
 
     # 段 B 闭环验证（复用已有 METHOD consumer，触发 /echo 路径熔断）
-    log_step "用例 ${case_tag} [B.2] 段B-闭环：触发熔断 OPEN"
+    log_step "${step_prefix}${case_tag} [B.2] 段B-闭环：触发熔断 OPEN"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_TRIGGER_COUNT" "用例 ${case_tag} B-trigger"
+    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_TRIGGER_COUNT" "${step_prefix}${case_tag} B-trigger"
     local b_trigger_abort="$CASE_ABORT"
 
-    log_step "用例 ${case_tag} [B.3] 段B-闭环：维持 OPEN"
-    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "用例 ${case_tag} [B.3] 等待（探测持续失败，应维持 OPEN）"
-    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_VERIFY_COUNT" "用例 ${case_tag} B-maintain"
+    log_step "${step_prefix}${case_tag} [B.3] 段B-闭环：维持 OPEN"
+    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "${step_prefix}${case_tag} [B.3] 等待（探测持续失败，应维持 OPEN）"
+    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} B-maintain"
     local b_keep_abort="$CASE_ABORT"
 
-    log_step "用例 ${case_tag} [B.4] 段B-闭环：探活恢复"
+    log_step "${step_prefix}${case_tag} [B.4] 段B-闭环：探活恢复"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
-    wait_seconds "$WAIT_RECOVER_SECONDS" "用例 ${case_tag} [B.4] 等待主动探测推动 CLOSE"
-    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_VERIFY_COUNT" "用例 ${case_tag} B-recover"
+    wait_seconds "$WAIT_RECOVER_SECONDS" "${step_prefix}${case_tag} [B.4] 等待主动探测推动 CLOSE"
+    run_burst "$FD_METHOD_CONSUMER_PORT" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} B-recover"
     local b_recover_ok="$CASE_OK"
 
-    log_step "用例 ${case_tag} [B.5] 段B-闭环：日志佐证"
+    log_step "${step_prefix}${case_tag} [B.5] 段B-闭环：日志佐证"
     local b_has_schedule b_has_statechg
     _probe_log_evidence "$method_sdk_cb_log" b_has_schedule b_has_statechg
-    log_info "用例 ${case_tag} [B.5] 日志佐证：探测调度=${b_has_schedule}, 状态切换=${b_has_statechg}"
+    log_info "${step_prefix}${case_tag} [B.5] 日志佐证：探测调度=${b_has_schedule}, 状态切换=${b_has_statechg}"
 
     if [[ "$has_b_filter" == "yes" ]] \
         && [[ "$b_trigger_abort" -ge 1 ]] && [[ "$b_keep_abort" -ge 1 ]] \
@@ -1301,12 +1315,13 @@ case_fault_detect_proto_method() {
     # ── 段 C：HTTP Headers 验证 ──
     # 策略：PUT 更新已有探测规则加 X-Health-Probe header。
     # 通过 HTTP API 确认规则 body 含 headers（主验证），provider 日志作为辅助（依赖 SDK revision 感知）。
-    log_step "用例 ${case_tag} [C.1] 段C：PUT 更新已有探测规则加 X-Health-Probe header"
+    log_step "${step_prefix}${case_tag} [C.1] 段C：PUT 更新已有探测规则加 X-Health-Probe header"
     local c_rule_name="fd-fd-SERVICE-${FD_CALLER}"
+    log_info "${step_prefix}${case_tag} [C] 预期生效的主动探测规则: ${c_rule_name}（复用 SERVICE 用例已有规则，PUT 更新加 X-Health-Probe header, method=*, interval=${FD_PROBE_INTERVAL}s）"
     local c_rule_id
     c_rule_id=$(query_fault_detect_rule_id_by_name "$c_rule_name") || true
     if [[ -z "$c_rule_id" ]]; then
-        log_error "用例 ${case_tag} [C.1] 未找到 SERVICE 探测规则 ${c_rule_name}，无法验证 headers"
+        log_error "${step_prefix}${case_tag} [C.1] 未找到 SERVICE 探测规则 ${c_rule_name}，无法验证 headers"
         return
     fi
 
@@ -1317,17 +1332,17 @@ case_fault_detect_proto_method() {
         FD_HTTP_HEADERS='[{"key":"X-Health-Probe","value":"true"}]' \
         build_fault_detect_rule_body)
     update_fault_detect_rule "$c_rule_id" "$fd_body_c"
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [C.1] 等待规则更新生效"
+    wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [C.1] 等待规则更新生效"
 
     # 验证探测调度仍存在
     local c_has_schedule="no"
     if grep -qE "\[CircuitBreaker\] schedule task.*${c_rule_name}" "$svc_sdk_cb_log" 2>/dev/null; then
         c_has_schedule="yes"
     fi
-    log_info "用例 ${case_tag} [C.1] header 探测规则调度：${c_has_schedule}"
+    log_info "${step_prefix}${case_tag} [C.1] header 探测规则调度：${c_has_schedule}"
 
     # 通过 HTTP API 查询规则 body，确认 headers 已写入
-    log_step "用例 ${case_tag} [C.2] 段C：HTTP API 查询确认规则含 X-Health-Probe header"
+    log_step "${step_prefix}${case_tag} [C.2] 段C：HTTP API 查询确认规则含 X-Health-Probe header"
     local c_api_has_header="no"
     local c_resp
     c_resp=$(curl -s --connect-timeout 5 --max-time 10 \
@@ -1336,19 +1351,19 @@ case_fault_detect_proto_method() {
     if echo "$c_resp" | grep -q "X-Health-Probe"; then
         c_api_has_header="yes"
     fi
-    log_info "用例 ${case_tag} [C.2] HTTP API 确认规则含 header：${c_api_has_header}"
+    log_info "${step_prefix}${case_tag} [C.2] HTTP API 确认规则含 header：${c_api_has_header}"
 
     # 等待探测周期，验证 provider 日志（辅助验证，依赖 SDK revision 感知）
-    log_step "用例 ${case_tag} [C.3] 段C：等待探测周期，验证 provider 日志含 X-Health-Probe header"
-    wait_seconds "$((FD_PROBE_INTERVAL * 3 + 2))" "用例 ${case_tag} [C.3] 等待探测请求到达 provider"
+    log_step "${step_prefix}${case_tag} [C.3] 段C：等待探测周期，验证 provider 日志含 X-Health-Probe header"
+    wait_seconds "$((FD_PROBE_INTERVAL * 3 + 2))" "${step_prefix}${case_tag} [C.3] 等待探测请求到达 provider"
     local c_has_header="no"
     if grep -q "X-Health-Probe=true" "${LOG_DIR}/fd_provider_a.log" 2>/dev/null; then
         c_has_header="yes"
     fi
-    log_info "用例 ${case_tag} [C.3] provider 日志含 X-Health-Probe header：${c_has_header}"
+    log_info "${step_prefix}${case_tag} [C.3] provider 日志含 X-Health-Probe header：${c_has_header}"
 
     # PUT 恢复：去掉 headers
-    log_step "用例 ${case_tag} [C.4] 段C：PUT 恢复探测规则（去掉 X-Health-Probe header）"
+    log_step "${step_prefix}${case_tag} [C.4] 段C：PUT 恢复探测规则（去掉 X-Health-Probe header）"
     local fd_body_c_restore
     fd_body_c_restore=$(RULE_NAME="$c_rule_name" NAMESPACE="$NAMESPACE" SERVICE_NAME="$FD_SVC_CALLEE" \
         FD_PROBE_INTERVAL="$FD_PROBE_INTERVAL" FD_PROBE_METHOD_VALUE="*" \
@@ -1362,8 +1377,8 @@ case_fault_detect_proto_method() {
     fi
 
     # ── 汇总判定 ──
-    print_block "用例 ${case_tag} 判定指标" \
-        "段A-SERVICE过滤 : 拒绝非通配=${has_a1} (期望 yes), 接受通配=${has_a2} (期望 yes)" \
+    print_block "${step_prefix}${case_tag} 判定指标" \
+        "段A-SERVICE过滤 : 拒绝非通配(段B.2等价覆盖)=${has_a1} (期望 yes), 接受通配=${has_a2} (期望 yes)" \
         "段B-METHOD过滤  : /echo匹配=${has_b_filter} (期望 yes)" \
         "段B-闭环        : trigger_abort=${b_trigger_abort}, keep_abort=${b_keep_abort}, recover_ok=${b_recover_ok}/${FD_VERIFY_COUNT}" \
         "段B-日志佐证    : 调度=${b_has_schedule}, 状态切换=${b_has_statechg}" \
@@ -1388,6 +1403,8 @@ case_fault_detect_proto_method() {
 case_fault_detect_instance() {
     _CASE_RESULT="FAIL"
     local case_tag="实例级"
+    local case_num="3"
+    local step_prefix="用例${case_num} "
     local caller="$FD_INSTANCE_CALLER"
     local callee_service="$FD_INSTANCE_CALLEE"
     local consumer_name="fd_instance_consumer"
@@ -1401,13 +1418,15 @@ case_fault_detect_instance() {
         "探测规则 : HTTP GET /echo, interval=${FD_PROBE_INTERVAL}s, port=0(实例端口)" \
         "预期闭环 : 仅 b 故障触发 b 实例 OPEN -> b 被路由摘除业务落 a(ok) -> 恢复 b 探测探活 -> b 实例 CLOSE 重新可选"
 
+    log_info "${step_prefix}${case_tag} 预期生效的主动探测规则: fd-fd-INSTANCE-${caller}（protocol=HTTP, method=*, interval=${FD_PROBE_INTERVAL}s, port=0）"
+
     # 步骤1：环境复位（a/b 均 200）
-    log_step "用例 ${case_tag} [1] 环境复位：provider-a/b 均返回 200"
+    log_step "${step_prefix}${case_tag} [1] 环境复位：provider-a/b 均返回 200"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
 
     # 步骤2：启动 consumer + 下发 INSTANCE 级熔断规则 + 探测规则
-    log_step "用例 ${case_tag} [2] 启动 consumer 并下发规则"
+    log_step "${step_prefix}${case_tag} [2] 启动 consumer 并下发规则"
     start_consumer "$consumer_name" "$caller" "$consumer_port" "$consumer_log" "$callee_service" || {
         _CASE_RESULT="FAIL"; return
     }
@@ -1425,20 +1444,20 @@ case_fault_detect_instance() {
         build_fault_detect_rule_body)
     create_fault_detect_rule "$fd_body" > /dev/null || { _CASE_RESULT="FAIL"; return; }
 
-    wait_seconds "$WAIT_RULE_READY_SECONDS" "用例 ${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
+    wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [2] 等待 SDK 拉取熔断/探测规则就绪"
 
     # 步骤3：仅 b 置 500 触发 b 实例 OPEN（a 保持 200）
-    log_step "用例 ${case_tag} [3] 触发 b 实例熔断：仅 provider-b 置 500，burst ${FD_TRIGGER_COUNT} 次"
+    log_step "${step_prefix}${case_tag} [3] 触发 b 实例熔断：仅 provider-b 置 500，burst ${FD_TRIGGER_COUNT} 次"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "true"
-    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "用例 ${case_tag} 触发-OPEN"
+    run_burst "$consumer_port" "$FD_TRIGGER_COUNT" "${step_prefix}${case_tag} 触发-OPEN"
     local trigger_fail="$CASE_FAIL"
 
     # 步骤4：维持 OPEN —— b 仍 500，b 被路由摘除，业务请求应（绝大多数）落 a 返回 200。
     # 容忍 1 次抖动：b 刚 OPEN 的瞬间可能有 1 个在途请求仍命中 b（500），故判定用 ok >= N-1。
-    log_step "用例 ${case_tag} [4] 维持 OPEN：b 保持 500，等待 > sleepWindow，业务请求应全落 a(200)"
-    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "用例 ${case_tag} [4] 等待（b 探测持续失败，b 维持 OPEN 被摘除）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 维持-OPEN(b被摘除)"
+    log_step "${step_prefix}${case_tag} [4] 维持 OPEN：b 保持 500，等待 > sleepWindow，业务请求应全落 a(200)"
+    wait_seconds "$WAIT_KEEP_OPEN_SECONDS" "${step_prefix}${case_tag} [4] 等待（b 探测持续失败，b 维持 OPEN 被摘除）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 维持-OPEN(b被摘除)"
     local keep_ok="$CASE_OK"
 
     # 步骤5：恢复 b，等待恢复推动 b 实例 half-open->close 重新可选。
@@ -1446,16 +1465,16 @@ case_fault_detect_instance() {
     # 因此 b 的最终 close 通常由 half-open 态业务请求探活推动；主动探测在 b OPEN 期间也持续
     # 探测 b（探测调度=yes 佐证），两者共同保障恢复。本步等待足够长（sleepWindow + 多个探测/
     # 半开周期）后发 burst，验证 b 已重新可选（业务请求能再次落到 b）。
-    log_step "用例 ${case_tag} [5] 探活恢复：provider-b 置 200，等待恢复推动 b 实例 CLOSE 重新可选"
+    log_step "${step_prefix}${case_tag} [5] 探活恢复：provider-b 置 200，等待恢复推动 b 实例 CLOSE 重新可选"
     provider_set_error "$PROVIDER_B_PORT" "false"
-    wait_seconds "$WAIT_RECOVER_SECONDS" "用例 ${case_tag} [5] 等待 b 实例 half-open->close 恢复（sleepWindow + 多个周期）"
-    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "用例 ${case_tag} 恢复-CLOSE(a/b均可选)"
+    wait_seconds "$WAIT_RECOVER_SECONDS" "${step_prefix}${case_tag} [5] 等待 b 实例 half-open->close 恢复（sleepWindow + 多个周期）"
+    run_burst "$consumer_port" "$FD_VERIFY_COUNT" "${step_prefix}${case_tag} 恢复-CLOSE(a/b均可选)"
     local recover_ok="$CASE_OK"
 
     # 步骤6：日志佐证 —— 探测调度在跑 + 出现 INSTANCE 级 b 实例 half-open->close。
     # 不再用"provider-b 探测请求增量"作铁证：provider 为三个用例共享，探测计数会串扰；且 INSTANCE
     # 级 b 的恢复实际由 half-open 业务请求探活推动（探测探活请求不一定落在恢复窗口），增量判定不可靠。
-    log_step "用例 ${case_tag} [6] 校验 SDK 熔断日志（探测调度 + INSTANCE 级状态切换）"
+    log_step "${step_prefix}${case_tag} [6] 校验 SDK 熔断日志（探测调度 + INSTANCE 级状态切换）"
     local sdk_cb_log="${BUILD_DIR}/${consumer_name}_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
     local has_schedule="no" has_inst_statechg="no" _retry
     for _retry in $(seq 1 12); do
@@ -1473,11 +1492,11 @@ case_fault_detect_instance() {
         [[ "$has_schedule" == "yes" && "$has_inst_statechg" == "yes" ]] && break
         sleep 0.5
     done
-    log_info "用例 ${case_tag} [6] 日志佐证：探测调度=${has_schedule}, INSTANCE状态切换=${has_inst_statechg} (来源 ${sdk_cb_log})"
+    log_info "${step_prefix}${case_tag} [6] 日志佐证：探测调度=${has_schedule}, INSTANCE状态切换=${has_inst_statechg} (来源 ${sdk_cb_log})"
 
     # 判定（INSTANCE 级专属指标；维持/探活 ok 容忍 1 次抖动用 >= N-1）
     local ok_threshold=$((FD_VERIFY_COUNT - 1))
-    print_block "用例 ${case_tag} 判定指标" \
+    print_block "${step_prefix}${case_tag} 判定指标" \
         "触发 b OPEN : fail=${trigger_fail} (期望 >=1，b 被选中时 500)" \
         "维持 OPEN   : ok=${keep_ok}/${FD_VERIFY_COUNT} (期望 >=${ok_threshold}，b 被摘除业务落 a)" \
         "探活 CLOSE  : ok=${recover_ok}/${FD_VERIFY_COUNT} (期望 >=${ok_threshold}，b 恢复可选)" \
