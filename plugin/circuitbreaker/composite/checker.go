@@ -111,8 +111,8 @@ func (c *ResourceHealthChecker) start() {
 		if rule.GetInterval() > 0 {
 			interval = time.Duration(rule.GetInterval()) * time.Second
 		}
-		c.log.Infof("[FaultDetect] schedule task: resource=%s, protocol=%s, interval=%+v, rule=%s",
-			c.resource.String(), protocol, interval, rule.GetName())
+		c.log.Infof("[FaultDetect] schedule task: resource=%s, protocol=%s, interval=%+v, rule=%s, id=%s, rev=%s",
+			c.resource.String(), protocol, interval, rule.GetName(), rule.GetId(), rule.GetRevision())
 		c.executor.IntervalExecute(interval, checkFunc)
 	}
 	if c.resource.GetLevel() != fault_tolerance.Level_INSTANCE {

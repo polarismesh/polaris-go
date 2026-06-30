@@ -176,7 +176,9 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 						faultDetector.Revision, c.res.String())
 					return
 				}
-				c.log.Debugf("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
+				// 探测规则内容发生变更（revision 不同）→ 重建 checker 应用新规则，属事件级状态变化，
+				// 用 INFO 让"探测规则更新被感知并应用"在默认级别可见（含 old->new revision 对比）。
+				c.log.Infof("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
 					curRule.Revision, faultDetector.Revision, c.res.String())
 				curChecker.stop()
 			}
