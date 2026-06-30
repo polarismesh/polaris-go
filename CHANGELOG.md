@@ -8,6 +8,61 @@
 
 ### 添加的特性
 
+#### 熔断（Circuit Breaking）
+
+- **服务级 / 接口级熔断（`plugin/circuitbreaker/composite`）**：`composite`
+  熔断器补齐服务（SERVICE）与接口（METHOD/INTERFACE）维度的规则匹配与状态
+  机，新增 `rule_dictionary.go` 规则字典按资源级别索引规则、`default.go`
+  默认熔断兜底，`breaker.go` / `counter.go` / `checker.go` 完成多级资源的
+  统计、半开探活与状态流转。
+- **熔断自定义降级响应（Fallback）**：规则命中 OPEN 时可按服务端配置注入
+  自定义降级响应（HTTP 状态码 / Header / Body）。`counter.buildFallbackInfo`
+  增加 `GetEnable()` 显式判断，避免 proto 零值 message 在 `enable=false`
+  时误注入降级响应。
+- **主动故障探测（Fault Detect）**：新增 `ResourceHealthChecker` 主动探测
+  能力，OPEN 状态下按 `faultDetectConfig` 周期性探活，探活成功后驱动
+  熔断器回到 CLOSE。支持 HTTP / TCP / UDP 三类探测器，并扩展协议 / 方法维度
+  匹配（`targetService.api`）；探测上报走 `record=false`，避免探测流量自身
+  扩充探测目标形成自循环。探测日志按「状态变化立即 INFO、连续失败 30s 定时
+  INFO、连续成功静默」收敛，三类探测器 `lastErr` 加锁保证并发安全。
+- **熔断事件上报与监控指标**：新增 `pkg/model/event/circuitbreaker.go`，
+  在熔断状态转换（Open / HalfOpen / Close）时构造 `CircuitBreaker<Event>`
+  事件上报到 EventReporter；`event_type` 采用 `"CircuitBreaker"+EventName`
+  组合格式以对齐服务端 pushgateway 仅保留 `event_type` 的约束，规则名 / 资源
+  类型 / 前后状态 / 错误率 / 慢调用阈值等打包进 `labels`。Prometheus
+  Reporter 同步补齐熔断相关监控指标采集。
+- **`examples/circuitbreaker/`**：完整重构为端到端验证套件，覆盖
+  `newCircuitBreakerCaller` / `invokeHandlerCaller` 两种调用写法，含 10 个
+  熔断用例（`verify_circuitbreaker.sh`）与 6 个主动探测用例
+  （`verify_faultdetect.sh`），并提供 `mock_event_server.py` 校验事件上报、
+  `test.md` / `fault-detect.md` 详尽用例文档（带源码行号引用）。
+
+### 修复的 BUG
+
+- **`ResourceHealthChecker` 主动探测两处阻断**：`checker.go` 补全 executor
+  注入（修复 nil panic）与 `instanceExpireIntervalMill` 初始化；`rule.go`
+  主动探测启动门控从 `fallbackConfig.enable` 修正为 `faultDetectConfig.enable`，
+  并修复 `sortFaultDetectRules` 把规则 copy 到空 slice 导致丢数据的问题。
+- **探测器日志 nil panic**：测试 / 未初始化场景下 `GetDetectLogger()` 返回
+  nil，经 `ContextLogger` fallback 后触发 `nil.Logger.Debugf/Errorf` 的
+  SIGSEGV。修复：HTTP / TCP / UDP 探测器统一加双层 nil guard。
+- **`cleanInstances` 内存泄漏**：清理实例时同步清理
+  `detectLastResult` / `detectLastReportTime` / `lastDetectErr`，避免残留。
+
+### 兼容性说明
+
+- **熔断 SERVICE / METHOD 级规则、Fallback、主动探测、事件上报 均为增量能力**，
+  规则 `enable=false` 或服务端无下发时行为不变，存量仅使用实例级熔断的用户
+  无感知。
+- **`pkg/model/circuitbreaker.go` / `pkg/model/service.go` 结构体扩展字段**：
+  均为新增字段，不改变既有字段语义，自定义 `CircuitBreaker` 实现需关注新增的
+  Fallback / FaultDetect 相关接口方法。
+
+
+## [v1.7.1-rc3] - 2026-06-11
+
+### 添加的特性
+
 #### 限流（Rate Limiting）
 
 - **`plugin/ratelimiter/reject_concurrency`**：新增并发数限流插件，纯本地原子
@@ -146,7 +201,7 @@
   做 `Info ==` 等值比较，不影响调用语义。
 
 
-## [v1.7.1-rc2] - 2024-05-21
+## [v1.7.1-rc2] - 2026-05-21
 
 ### 添加的特性
 
@@ -191,7 +246,7 @@
   `consumer.weightAdjust` 的用户不受影响。
 
 
-## [v1.7.1-rc1] - 2024-04-10
+## [v1.7.1-rc1] - 2026-03-27
 
 ### 添加的特性
 
@@ -204,7 +259,7 @@
 - **无损上下线规则获取适配服务端新字段**：服务端字段调整后客户端同步更新解析逻辑。
 
 
-## [v1.7.0] - 2024-03-02
+## [v1.7.0] - 2026-03-02
 
 ### 添加的特性
 
@@ -224,7 +279,7 @@
 - **限流获取配额 `panic` 修复**。
 
 
-## [v1.6.1-1] - 2024-01-29
+## [v1.6.1-1] - 2025-12-23
 
 > 将 `v1.6.1.1` 更名为 `v1.6.1-1`，以符合 go mod 规范。
 
@@ -234,7 +289,7 @@
 - **Go 接口陷阱（underlying value is nil）修复**：与 v1.7.0 同步的 backport。
 
 
-## [v1.6.1] - 2024-02-11（pre-release）
+## [v1.6.1] - 2025-02-11（pre-release）
 
 ### 修复的 BUG
 
@@ -243,7 +298,7 @@
 - **移除未使用的文件**。
 
 
-## [v1.6.0] - 2024-01-21（pre-release）
+## [v1.6.0] - 2025-01-21（pre-release）
 
 ### 添加的特性
 
@@ -269,6 +324,25 @@
 - **修复服务列表监听可能导致 OOM 的问题**。
 - **修复熔断器 `panic`**。
 - **修复路由匹配失败默认转为返回全部实例**。
+
+
+## [v1.5.9] - 2025-02-11
+
+> 基于 `release-v1.5.x` 维护分支发布。
+
+### 修复的 BUG
+
+- **修复分布式限流场景下 RPC 连接泄漏的问题**：从主线 cherry-pick 回 1.5.x
+  维护分支。
+
+
+## [v1.5.8] - 2024-08-26
+
+> 基于 `release-v1.5.x` 维护分支发布。
+
+### 修复的 BUG
+
+- **修复路由匹配失败默认转为返回全部实例的问题**。
 
 
 ## [0.9.0] - 2021-5-7
