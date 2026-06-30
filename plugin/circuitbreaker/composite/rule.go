@@ -135,7 +135,10 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 }
 
 func (c *RuleContainer) realRefreshHealthCheck() {
-	c.log.Infof("[FaultDetect] start to pull fault detect rule for resource=%s", c.res.String())
+	// 本函数被高频触发：每个 service 下 SERVICE/METHOD/INSTANCE 各级 resource × 每次服务端规则
+	// 缓存事件（OnEvent）都会执行一遍。故入口不打 INFO（否则刷屏），仅 Debug 记录刷新触发；
+	// 真正"开始拉取探测规则"的 INFO 移到门控通过、即将 SyncGetServiceRule 处，做到名实相符。
+	c.log.Debugf("[FaultDetect] refresh health check triggered for resource=%s", c.res.String())
 	counters, exist := c.breaker.getLevelResourceCounters(c.res.GetLevel()).get(c.res)
 	faultDetectEnabled := false
 	var currentActiveRule *fault_tolerance.CircuitBreakerRule
@@ -148,6 +151,7 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFaultDetectConfig() != nil &&
 		currentActiveRule.GetFaultDetectConfig().GetEnable() {
 		engineFlow := c.engineFlow
+		c.log.Debugf("[FaultDetect] start to pull fault detect rule for resource=%s", c.res.String())
 		resp, err := engineFlow.SyncGetServiceRule(model.EventFaultDetect, &model.GetServiceRuleRequest{
 			Namespace: c.res.GetService().Namespace,
 			Service:   c.res.GetService().Service,
