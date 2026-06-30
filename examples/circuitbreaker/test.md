@@ -791,7 +791,7 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 - 熔断规则 `faultDetectConfig.enable=true` 是探测启动门控；门控关闭则 SDK 不创建 `ResourceHealthChecker`
 - 探测器按 `interval` 周期 GET `/echo`，结果经 `doReport(stat, record=false)` 上报，不触发实例重新注册
 - HALF_OPEN 态下探测结果与业务请求共用恢复判定：连续成功达 `consecutiveSuccess` 即 `HALF_OPEN → CLOSE`，任一失败回 `OPEN`
-- 日志佐证 grep 各 consumer 独立 SDK 日志 `.build/<name>_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log`（非 stdout）：探测调度铁证用 `[CircuitBreaker] schedule task`（不用宽松 `[FaultDetect]`/`health check`，会被"is disabled"关停日志误判）；状态切换关键字小写 `status change: half-open -> close`
+- 日志佐证 grep 各 consumer 独立 SDK 日志 `.build/<name>_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log`（非 stdout）：探测调度铁证用 `[FaultDetect] schedule task`（checker.go 日志前缀已统一为 `[FaultDetect]`，靠 `schedule task` 独有关键字区分——关停日志 `[FaultDetect] health check ... is disabled` 不含 `schedule task`，不会误判；该日志含 `rule=, id=, rev=` 可溯源规则）；状态切换关键字小写 `status change: half-open -> close`
 - 退出时熔断规则删除、**探测规则保留复用**（FaultDetectRule 无 enable 字段）
 
 ---

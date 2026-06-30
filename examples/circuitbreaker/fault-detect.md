@@ -363,15 +363,38 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | Provider 日志 | `.logs/fd_provider_a.log` / `.logs/fd_provider_b.log` |
 
 步骤 6 必须 grep 该文件（而非 consumer 应用日志）：
-- 探测调度关键字：**`[CircuitBreaker] schedule task`**（`checker.go`，探测周期任务真正注册）。
-  不能用宽松的 `[FaultDetect]` / `health check`：关停日志
-  `[FaultDetect] health check for ... is disabled, now stop the previous checker` 同时含这两个词，
-  会把"探测被关停"误判为"探测调度=yes"。
+- 探测调度关键字：**`[FaultDetect] schedule task`**（`checker.go`，探测周期任务真正注册）。
+  `checker.go` 日志前缀已统一为 `[FaultDetect]`，故必须靠 **`schedule task`** 这个独有关键字区分：
+  关停日志 `[FaultDetect] health check for ... is disabled, now stop the previous checker`
+  **不含** `schedule task`，因此 grep `[FaultDetect] schedule task` 不会把"探测被关停"误判为"探测调度=yes"。
+  该日志现含 `rule=<规则名>, id=<规则ID>, rev=<revision>`，多条探测规则时可凭 rule/id 区分来源。
 - 状态切换关键字（**小写连字符**，非驼峰）：`status change: half-open -> close` / `open -> half-open`；
   INSTANCE 级额外要求该行含 `INSTANCE`（区分是 b 实例而非其它资源恢复）。
 
 > SDK 日志（zap+lumberjack）带写缓冲，consumer 运行中关键字可能尚未落盘，步骤 6 对关键字做带超时
 > 重试（12 次 × 0.5s，最多约 6s）等待落盘，避免误报 no。
+
+### 探测日志级别说明（默认 INFO 级别下哪些可见）
+
+`checker.go` / `rule.go` 的探测日志按"事件级 INFO / 周期级 DEBUG"分级，默认 INFO 级别下只保留有意义的事件：
+
+| 日志 | 级别 | 含义 |
+|------|------|------|
+| `[FaultDetect] schedule task: ... rule=, id=, rev=` | **INFO** | 探测周期任务注册（探测启动/重新调度） |
+| `[FaultDetect] schedule expire task: ... interval=5s` | **INFO** | 注册"过期实例清理"周期任务（仅 SERVICE/METHOD 级，按 `checkPeriod` 间隔清理探测失败且长期无流量的僵尸实例） |
+| `[FaultDetect] detect status change: rule=, instance=, success=` | **INFO** | 探测探活结果翻转（成功↔失败，事件级） |
+| `[CircuitBreaker] OnEvent processing ... eventType: fault_detect` | **INFO** | 感知到探测规则变更事件 |
+| `[FaultDetect] fault detect rule revision changed (旧->新) ... rebuild checker` | **INFO** | 探测规则内容更新被感知并重建 checker（仅已有 checker 且 revision 变化时） |
+| `[FaultDetect] health check ... is disabled, now stop the previous checker` | **INFO** | 真停掉了一个已存在的 checker（探测从开→关） |
+| `[FaultDetect] refresh health check triggered` | DEBUG | 每个 resource 例行刷新被触发（高频，归 DEBUG 防刷屏） |
+| `[FaultDetect] start to pull fault detect rule` | DEBUG | 门控通过、即将拉取探测规则 |
+| `[FaultDetect] detect still failing` | DEBUG | 连续失败的 30s 定时汇报（周期级常态） |
+| `[FaultDetect] health check ... is disabled (no active checker)` | DEBUG | 该资源本就没配探测，例行判定门控不通过 |
+| `[FaultDetect] clean instance from health check tasks` | DEBUG | 过期实例被清理 |
+
+> **探测规则更新感知的完整证据链**（默认 INFO 级别）：`OnEvent processing ... fault_detect`（感知事件）→ `fault detect rule revision changed (旧rev -> 新rev)`（规则内容真变了、重建 checker）→ `schedule task ... rule=, id=, rev=`（新规则重新调度）。三条 INFO 串起即"感知→应用→调度"。
+>
+> **为何同一服务 `refresh health check triggered` 高频出现**：`commonReport` 每次业务调用为同一服务构造 SERVICE+METHOD+INSTANCE 三级 resource，各建一个 RuleContainer；服务端规则缓存每次更新触发 `OnEvent` → 该服务所有 resource 各刷新一次。这是设计使然（非 bug），故入口刷新日志归 DEBUG。
 
 ---
 
@@ -387,7 +410,7 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | `探测调度=no` | grep 错文件（grep 了 consumer stdout 而非 SDK 日志）；或 `faultDetectConfig.enable` 未生效 | 确认 grep 的是 `.build/<name>_run/.../polaris-circuitbreaker.log` |
 | 规则创建失败 | Polaris 鉴权未通过或服务不存在 | 检查 `POLARIS_TOKEN`；确认被调服务已注册 |
 | 端口占用 | 上次脚本未正常退出 | 执行 `./cleanup.sh -f` 后重试 |
-| D 段 `disabled_stop=no` | PUT `faultDetectConfig.enable=false` 后 SDK 未收到 push；或规则 id 错导致更新无效 | 检查 `polaris-circuitbreaker.log` 是否有 `[FaultDetect] start to pull fault detect rule`；确认 `cb_rule_id` 正确 |
+| D 段 `disabled_stop=no` | PUT `faultDetectConfig.enable=false` 后 SDK 未收到 push；或规则 id 错导致更新无效 | 检查 `polaris-circuitbreaker.log` 是否有 `[CircuitBreaker] OnEvent processing ... fault_detect`（感知事件，INFO）；确认 `cb_rule_id` 正确（`start to pull fault detect rule` 已降 DEBUG，需 `--debug` 才可见） |
 | D 段 `resume_schedule=no` | PUT `enable=true` 后 schedule task 行数未增加 | grep SDK 日志确认是否有新 `schedule task`；检查 `WAIT_RULE_READY_SECONDS` 是否够长 |
 | D 段 `new_interval=no` | PUT 探测规则 interval 后 SDK 未重建 checker | 检查是否有 `fault detect rule revision changed`；确认 PUT 是否成功（返回 200） |
 
