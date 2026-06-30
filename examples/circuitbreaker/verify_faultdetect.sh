@@ -846,7 +846,7 @@ run_burst() {
 #   注意：SDK 内部熔断日志不写到 consumer 应用日志（stdout），而是落在独立文件
 #   ${BUILD_DIR}/<name>_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log，
 #   因此必须 grep 该文件而非 consumer_log，否则探测调度/状态切换永远匹配不到（误报 no）。
-#   关键字大小写需与真实日志一致：调度日志为 "[CircuitBreaker] schedule task"，
+#   关键字大小写需与真实日志一致：调度日志为 "[FaultDetect] schedule task"，
 #   状态切换为小写 "status change: half-open -> close"（不是驼峰 HalfOpen/Close）。
 #   SDK 日志（zap+lumberjack）带写缓冲，consumer 运行中关键字可能尚未落盘，故带超时重试
 #   （12 次 * 0.5s，最多约 6s）等待落盘。
@@ -859,12 +859,12 @@ _probe_log_evidence() {
     # （= printf -v has_schedule）会写到本函数的 local 而非调用方的变量，导致调用方读到空值。
     local _sched="no" _stchg="no" _retry
     for _retry in $(seq 1 12); do
-        # 探测调度铁证只认 "schedule task"（composite/checker.go:100，探测周期任务真正注册）。
-        # 不能用宽松的 [FaultDetect]/health check：关停日志
-        # "[FaultDetect] health check for ... is disabled, now stop the previous checker" 同时含
-        # [FaultDetect] 和 health check，会把"探测被关停"误判为"探测调度=yes"。
+        # 探测调度铁证认 "[FaultDetect] schedule task"（composite/checker.go，探测周期任务真正注册）。
+        # checker.go 日志已统一为 [FaultDetect] 前缀，故必须靠 "schedule task" 这个独有关键字区分：
+        # 关停日志 "[FaultDetect] health check for ... is disabled, now stop the previous checker"
+        # 不含 "schedule task"，因此 grep "schedule task" 不会把"探测被关停"误判为"探测调度=yes"。
         if [[ "$_sched" == "no" ]] && \
-            grep -qE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null; then
+            grep -qE "\[FaultDetect\] schedule task" "$sdk_cb_log" 2>/dev/null; then
             _sched="yes"
         fi
         if [[ "$_stchg" == "no" ]] && \
@@ -986,7 +986,7 @@ _run_probe_abort_case() {
     if [[ "$d_phase" == "toggle" ]]; then
         # 记录步骤6时刻的 schedule task 行数（用于步骤8判断恢复后是否新增）
         local schedule_before_d
-        schedule_before_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
+        schedule_before_d=$(grep -cE "\[FaultDetect\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
 
         # 步骤7：PUT 熔断规则 faultDetectConfig.enable=false，验证探测停止
         log_step "${step_prefix}${case_tag} [7] D段-toggle：关闭探测（PUT faultDetectConfig.enable=false）"
@@ -1010,7 +1010,7 @@ _run_probe_abort_case() {
         update_circuitbreaker_rule "$cb_rule_id" "$cb_body"
         wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [8] 等待 SDK 感知规则变更（探测应重新启动）"
         local schedule_after_d
-        schedule_after_d=$(grep -cE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
+        schedule_after_d=$(grep -cE "\[FaultDetect\] schedule task" "$sdk_cb_log" 2>/dev/null || echo "0")
         if [[ "$schedule_after_d" -gt "$schedule_before_d" ]]; then
             d_resume_schedule="yes"
         else
@@ -1029,7 +1029,7 @@ _run_probe_abort_case() {
         update_fault_detect_rule "$fd_rule_id" "$fd_body_updated"
         wait_seconds "$WAIT_RULE_READY_SECONDS" "${step_prefix}${case_tag} [7] 等待 SDK 感知探测规则变更（应重建 checker）"
         # 验证 SDK 日志中出现 interval=${FD_PROBE_INTERVAL_UPDATED}s 的 schedule task
-        if grep -qE "\[CircuitBreaker\] schedule task.*interval=${FD_PROBE_INTERVAL_UPDATED}s" "$sdk_cb_log" 2>/dev/null; then
+        if grep -qE "\[FaultDetect\] schedule task.*interval=${FD_PROBE_INTERVAL_UPDATED}s" "$sdk_cb_log" 2>/dev/null; then
             d_new_interval="yes"
         else
             d_new_interval="no"
@@ -1239,7 +1239,7 @@ case_fault_detect_proto_method() {
     # 铁证：schedule task 中出现 SERVICE 探测规则名（不含 wildcard 后缀，即 SERVICE 用例创建的规则）。
     # 使用 \b 边界匹配确保精确匹配规则名（不与 -wildcard 等后缀规则混淆）。
     local has_a2="no"
-    if grep -qE "\[CircuitBreaker\] schedule task.*${svc_probe_rule}\b" "$svc_sdk_cb_log" 2>/dev/null; then
+    if grep -qE "\[FaultDetect\] schedule task.*${svc_probe_rule}\b" "$svc_sdk_cb_log" 2>/dev/null; then
         has_a2="yes"
     fi
     log_info "${step_prefix}${case_tag} [A] SERVICE 级接受通配 method（已有规则 ${svc_probe_rule}）：schedule task 含该规则=$(grep -cE "schedule task.*${svc_probe_rule}\b" "$svc_sdk_cb_log" 2>/dev/null || echo 0) (期望 >0, got ${has_a2})"
@@ -1257,7 +1257,7 @@ case_fault_detect_proto_method() {
     local method_probe_rule="fd-fd-METHOD-${FD_METHOD_CALLER}"
 
     local sched_before_b
-    sched_before_b=$(grep -cE "\[CircuitBreaker\] schedule task" "$method_sdk_cb_log" 2>/dev/null || echo "0")
+    sched_before_b=$(grep -cE "\[FaultDetect\] schedule task" "$method_sdk_cb_log" 2>/dev/null || echo "0")
 
     # 创建 method.value=/api/protocol/http 的探测规则（应被 METHOD 级 selectFaultDetectRules 拒绝）。
     # method.value=/echo 的探测规则由用例二的 fd-fd-METHOD-CircuitBreakerFDMethodCaller 提供，无需重建。
@@ -1274,7 +1274,7 @@ case_fault_detect_proto_method() {
     # 验证：/echo 的 schedule task 出现（METHOD 级只应选中与 resource.path 匹配的规则）。
     # 复用的 fd-fd-METHOD-* 规则 method=/echo，被选中后 schedule task 含 path=/echo；
     # -nonmatch（method=/api/protocol/http）不匹配 resource.path=/echo，不会出现 schedule task。
-    if grep -qE "\[CircuitBreaker\] schedule task.*path=/echo" "$method_sdk_cb_log" 2>/dev/null; then
+    if grep -qE "\[FaultDetect\] schedule task.*path=/echo" "$method_sdk_cb_log" 2>/dev/null; then
         has_b_filter="yes"
     else
         has_b_filter="no"
@@ -1336,7 +1336,7 @@ case_fault_detect_proto_method() {
 
     # 验证探测调度仍存在
     local c_has_schedule="no"
-    if grep -qE "\[CircuitBreaker\] schedule task.*${c_rule_name}" "$svc_sdk_cb_log" 2>/dev/null; then
+    if grep -qE "\[FaultDetect\] schedule task.*${c_rule_name}" "$svc_sdk_cb_log" 2>/dev/null; then
         c_has_schedule="yes"
     fi
     log_info "${step_prefix}${case_tag} [C.1] header 探测规则调度：${c_has_schedule}"
@@ -1478,10 +1478,11 @@ case_fault_detect_instance() {
     local sdk_cb_log="${BUILD_DIR}/${consumer_name}_run/polaris/log/circuitbreaker/polaris-circuitbreaker.log"
     local has_schedule="no" has_inst_statechg="no" _retry
     for _retry in $(seq 1 12); do
-        # 探测调度铁证只认 "schedule task"（不用宽松 [FaultDetect]/health check，避免被
-        # "is disabled, now stop the previous checker" 关停日志误判为 yes）。
+        # 探测调度铁证认 "[FaultDetect] schedule task"，靠 "schedule task" 独有关键字区分：
+        # 关停日志 "[FaultDetect] health check ... is disabled, now stop the previous checker"
+        # 不含 "schedule task"，故不会被误判为 yes。
         if [[ "$has_schedule" == "no" ]] && \
-            grep -qE "\[CircuitBreaker\] schedule task" "$sdk_cb_log" 2>/dev/null; then
+            grep -qE "\[FaultDetect\] schedule task" "$sdk_cb_log" 2>/dev/null; then
             has_schedule="yes"
         fi
         # INSTANCE 级状态切换：日志含 level=INSTANCE 的 half-open->close（b 实例恢复）
