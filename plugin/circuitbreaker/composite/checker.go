@@ -100,7 +100,7 @@ func NewResourceHealthChecker(res model.Resource, faultDetector *fault_tolerance
 
 func (c *ResourceHealthChecker) start() {
 	if c.executor == nil {
-		c.log.Errorf("[CircuitBreaker] health checker executor is nil, skip schedule for resource=%s",
+		c.log.Errorf("[FaultDetect] health checker executor is nil, skip schedule for resource=%s",
 			c.resource.String())
 		return
 	}
@@ -111,19 +111,19 @@ func (c *ResourceHealthChecker) start() {
 		if rule.GetInterval() > 0 {
 			interval = time.Duration(rule.GetInterval()) * time.Second
 		}
-		c.log.Infof("[CircuitBreaker] schedule task: resource=%s, protocol=%s, interval=%+v, rule=%s",
-			c.resource.String(), protocol, interval, rule.GetName())
+		c.log.Infof("[FaultDetect] schedule task: resource=%s, protocol=%s, interval=%+v, rule=%s, id=%s, rev=%s",
+			c.resource.String(), protocol, interval, rule.GetName(), rule.GetId(), rule.GetRevision())
 		c.executor.IntervalExecute(interval, checkFunc)
 	}
 	if c.resource.GetLevel() != fault_tolerance.Level_INSTANCE {
 		checkPeriod := c.circuitBreaker.checkPeriod
-		c.log.Infof("[CircuitBreaker] schedule expire task: resource=%s, interval=%+v", c.resource.String(), checkPeriod)
+		c.log.Infof("[FaultDetect] schedule expire task: resource=%s, interval=%+v", c.resource.String(), checkPeriod)
 		c.executor.IntervalExecute(checkPeriod, c.cleanInstances)
 	}
 }
 
 func (c *ResourceHealthChecker) stop() {
-	c.log.Infof("[CircuitBreaker] health checker for resource=%s has stopped", c.resource.String())
+	c.log.Infof("[FaultDetect] health checker for resource=%s has stopped", c.resource.String())
 	atomic.StoreInt32(&c.stopped, 1)
 }
 
@@ -150,7 +150,7 @@ func (c *ResourceHealthChecker) cleanInstances() {
 				// 清理过期实例：周期任务的内部状态变更日志，使用 Debug 级别。
 				// 大规模实例过期（如容器批量重启）时可能产生大量输出，
 				// 生产环境通常无需关注此信息，故采用 Debug 级别按需开启。
-				c.log.Debugf("[CircuitBreaker] clean instance from health check tasks, resource=%s, expired node=%s, lastReportMilli=%d",
+				c.log.Debugf("[FaultDetect] clean instance from health check tasks, resource=%s, expired node=%s, lastReportMilli=%d",
 					c.resource.String(), k, lastReportMilli)
 			}
 		}
@@ -234,10 +234,10 @@ func (c *ResourceHealthChecker) checkResource(protocol fault_tolerance.FaultDete
 }
 
 // doCheck 执行一次实例探测并上报结果。
-// 探测日志收敛策略：
-//   - 状态变化（成功→失败、失败→成功）：立即 INFO 打印，便于运维感知实例健康翻转。
+// 探测日志收敛策略（均带 rule 名，便于多条探测规则并存时区分日志来源）：
+//   - 状态变化（成功→失败、失败→成功）：立即 INFO 打印，便于运维感知实例健康翻转（事件级）。
 //   - 状态不变：
-//   - 连续失败：按 detectStatusReportPeriod（30s）定时 INFO 汇总，避免每周期刷屏。
+//   - 连续失败：按 detectStatusReportPeriod（30s）定时 Debug 汇总（周期级常态，避免刷屏淹没事件）。
 //   - 连续成功：不打印（静默，避免噪声淹没关键事件）。
 //   - 探测底层异常（err != nil）与 plugin not found：保持 Debug/Warn 即时打印（不在收敛范围内）。
 //
@@ -246,8 +246,8 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 	rule *fault_tolerance.FaultDetectRule) bool {
 	checker, ok := c.healthCheckers[protocol]
 	if !ok {
-		c.log.Warnf("plugin not found, skip health check for instance=%s:%d, resource=%s, protocol=%s",
-			ins.GetHost(), ins.GetPort(), c.resource.String(), protocol.String())
+		c.log.Warnf("plugin not found, skip health check for instance=%s:%d, rule=%s, resource=%s, protocol=%s",
+			ins.GetHost(), ins.GetPort(), rule.GetName(), c.resource.String(), protocol.String())
 		return false
 	}
 	ret, err := checker.DetectInstance(ins, rule)
@@ -263,8 +263,8 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 		c.detectLastResult[instanceKey] = false
 		c.detectMu.Unlock()
 		if !hasErrRecord || lastErr != errMsg {
-			c.log.Warnf("[FaultDetect] doCheck failed, resource=%s, instance=%s, protocol=%s, err=%v",
-				c.resource.String(), instanceKey, protocol.String(), err)
+			c.log.Warnf("[FaultDetect] doCheck failed, rule=%s, resource=%s, instance=%s, protocol=%s, err=%v",
+				rule.GetName(), c.resource.String(), instanceKey, protocol.String(), err)
 		}
 		return false
 	}
@@ -283,18 +283,21 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 	c.detectMu.Unlock()
 
 	if changed {
-		c.log.Infof("[CircuitBreaker] detect status change: instance=%s, resource=%s, protocol=%s, "+
+		// 状态翻转（成功↔失败）属事件级，立即 INFO 打印；带 rule 名便于多探测规则时区分来源。
+		c.log.Infof("[FaultDetect] detect status change: rule=%s, instance=%s, resource=%s, protocol=%s, "+
 			"success=%v, code=%s, delay=%+v",
-			instanceKey, c.resource.String(), protocol.String(), isSuccess, ret.GetCode(), ret.GetDelay())
+			rule.GetName(), instanceKey, c.resource.String(), protocol.String(), isSuccess, ret.GetCode(), ret.GetDelay())
 	} else if !isSuccess {
 		c.detectMu.Lock()
 		lastReport, hasReport := c.detectLastReportTime[instanceKey]
 		if !hasReport || now.Sub(lastReport) >= detectStatusReportPeriod {
 			c.detectLastReportTime[instanceKey] = now
 			c.detectMu.Unlock()
-			c.log.Infof("[CircuitBreaker] detect still failing: instance=%s, resource=%s, protocol=%s, "+
+			// 连续失败的定时汇报属周期级常态（状态未变），降级 Debug，避免长期故障实例每 30s 刷屏
+			// 淹没真正的状态翻转事件；带 rule 名便于多探测规则时区分来源。
+			c.log.Debugf("[FaultDetect] detect still failing: rule=%s, instance=%s, resource=%s, protocol=%s, "+
 				"code=%s, delay=%+v (reported every %v)",
-				instanceKey, c.resource.String(), protocol.String(), ret.GetCode(), ret.GetDelay(),
+				rule.GetName(), instanceKey, c.resource.String(), protocol.String(), ret.GetCode(), ret.GetDelay(),
 				detectStatusReportPeriod)
 		} else {
 			c.detectMu.Unlock()
@@ -310,7 +313,7 @@ func (c *ResourceHealthChecker) doCheck(ins model.Instance, protocol fault_toler
 	}
 	// 探测结果走 record=false 上报：仅参与熔断状态机统计，不触发实例重新注册进探测集合
 	if err := c.circuitBreaker.reportFaultDetectStat(stat); err != nil {
-		c.log.Errorf("[CircuitBreaker] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
+		c.log.Errorf("[FaultDetect] report resource stat error, resource=%s, err=%s", c.resource.String(), err.Error())
 	}
 	return isSuccess
 }

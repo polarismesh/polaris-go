@@ -69,8 +69,9 @@ var (
 		CalleeInstance,
 		CallerNamespace,
 		CallerService,
-		RuleName,
+		CallerIP,
 		MetricNameLabel,
+		RuleName,
 	}
 )
 
@@ -255,7 +256,7 @@ func (us *CircuitBreakerOpenStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *CircuitBreakerOpenStrategy) InitMetricValue(dataSource interface{}) float64 {
-	gauge, ok := dataSource.(model.CircuitBreakGauge)
+	gauge, ok := dataSource.(*model.CircuitBreakGauge)
 	if !ok {
 		return 0
 	}
@@ -271,7 +272,7 @@ func (us *CircuitBreakerOpenStrategy) InitMetricValue(dataSource interface{}) fl
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *CircuitBreakerOpenStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	gauge, ok := dataSource.(model.CircuitBreakGauge)
+	gauge, ok := dataSource.(*model.CircuitBreakGauge)
 	if !ok {
 		return
 	}
@@ -302,7 +303,7 @@ func (us *CircuitBreakerHalfOpenStrategy) GetStrategyName() string {
 
 // 根据数据源的内容获取第一次创建metric的时候的初始值
 func (us *CircuitBreakerHalfOpenStrategy) InitMetricValue(dataSource interface{}) float64 {
-	gauge, ok := dataSource.(model.CircuitBreakGauge)
+	gauge, ok := dataSource.(*model.CircuitBreakGauge)
 	if !ok {
 		return 0
 	}
@@ -318,7 +319,7 @@ func (us *CircuitBreakerHalfOpenStrategy) InitMetricValue(dataSource interface{}
 
 // 根据metric自身的value值和聚合数据源T的值来更新metric的value
 func (us *CircuitBreakerHalfOpenStrategy) UpdateMetricValue(targetValue StatMetric, dataSource interface{}) {
-	gauge, ok := dataSource.(model.CircuitBreakGauge)
+	gauge, ok := dataSource.(*model.CircuitBreakGauge)
 	if !ok {
 		return
 	}

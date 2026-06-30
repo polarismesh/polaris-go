@@ -54,6 +54,15 @@
 #   4. 启动 Consumer 并发请求 → 累计失败 → 验证熔断生效
 #   5. 通过 /switch 接口翻转 provider 状态 → 验证恢复链路
 #   6. 清理规则与进程
+#
+# 可观测性验证（监控指标 + 事件上报，告知性子步骤，参考 verify_ratelimit.sh 8.x/9.x）:
+#   - 用例 1/2/3/4 复用各自原有的 consumer 与熔断规则，不新增业务进程；
+#     全局仅额外启动 1 个 mock pushgateway（Python）捕获熔断状态切换事件。
+#   - consumer yaml 在 global 段追加 statReporter(prometheus pull) + eventReporter(pushgateway)：
+#       * 监控指标：curl consumer 自身 /metrics(业务端口+10000) → circuitbreaker_open{callee_service,rule_name,...}
+#       * 事件上报：mock pushgateway 捕获 event_name=CircuitBreakerOpen/Close 且 rule_name 匹配
+#   - 该子步骤为告知性输出，不改变熔断用例本身的 PASS/FAIL；
+#     可用环境变量 OBSERV_ENABLE=false 整体关闭。
 # =============================================================================
 
 set -euo pipefail
@@ -138,15 +147,35 @@ TRIGGER_REQUEST_COUNT="${TRIGGER_REQUEST_COUNT:-15}"
 # 验证恢复时的请求次数
 RECOVERY_REQUEST_COUNT="${RECOVERY_REQUEST_COUNT:-10}"
 # 等待 SDK 拉取规则 + 缓存就绪的秒数
-WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-5}"
+WAIT_RULE_READY_SECONDS="${WAIT_RULE_READY_SECONDS:-3}"
 # 等待熔断 sleepWindow 后进入半开（与下方规则模板的 sleep_window 配合）
 # 用例需要执行两轮"触发→熔断→恢复"，把等待时长压短可显著减少端到端耗时；
 # sleepWindow 由 _gen_rule.py 写为 6s，这里多给 2s buffer。
-WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-8}"
+WAIT_HALF_OPEN_SECONDS="${WAIT_HALF_OPEN_SECONDS:-7}"
 
 # 默认运行的子用例集合（逗号分隔），可通过 --only 缩小范围
 RUN_CASES="${RUN_CASES:-instance,service,interface,old_instance,http_status,default_rule,modify_rule,protocol_method,pathtype,all_dead_fallback}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
+
+# ===== 可观测性验证（监控指标 + 事件上报）配置 =====
+# 设计：复用用例 1/2/3/4 原有的 consumer 与熔断规则，不新增业务进程；
+#       全局仅额外启动 1 个 mock pushgateway（Python）捕获熔断事件。
+#   - consumer yaml 在 global 段追加 statReporter(prometheus pull) + eventReporter(pushgateway)
+#   - 每个 consumer 的 /metrics 端口 = 业务端口 + 10000（避免多实例端口冲突）
+#   - 所有 consumer 的事件都 POST 到同一个 mock server（${MOCK_CB_EVENT_PORT}）
+# OBSERV_ENABLE=false 时整体跳过可观测性子步骤（默认开启）
+OBSERV_ENABLE="${OBSERV_ENABLE:-true}"
+# mock pushgateway 监听端口（与 ratelimit 的 19090 错开，避免并行跑时冲突）
+MOCK_CB_EVENT_PORT="${MOCK_CB_EVENT_PORT:-19091}"
+# consumer prometheus /metrics 端口偏移：业务端口 + 该偏移。
+# 用 20000 而非 10000，避免与 provider-a/b（28081/28082）等端口冲突
+# （18081+10000=28081 会撞 provider-a，故必须用更大偏移）。
+METRICS_PORT_OFFSET="${METRICS_PORT_OFFSET:-20000}"
+# prometheus push 模式配置（用例7 用）：pushgateway 地址和推送间隔
+# 设为空则由用户运行时指定；默认 127.0.0.1:9091
+POLARIS_METRICS_PUSH_ADDR="${POLARIS_METRICS_PUSH_ADDR:-}"
+# push 模式下的指标推送间隔（单位：秒）；默认 5s，对齐默认 pull 聚合周期
+POLARIS_METRICS_INTERVAL="${POLARIS_METRICS_INTERVAL:-5s}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -221,6 +250,13 @@ CONSUMER_PIDS=()
 
 # 创建过的熔断规则 ID 列表（脚本退出前会逐个删除）
 CREATED_RULE_IDS=()
+
+# 可观测性：mock pushgateway PID + 捕获事件文件（JSON-lines）。
+# 全局共享：所有用例的熔断事件都写入同一个文件，按 rule_name / service 区分。
+MOCK_CB_EVENT_PID=""
+CB_EVENTS_FILE="${LOG_DIR}/captured_cb_events.json"
+# 可观测性运行期状态：mock server 是否真正起来（起不来则降级为"仅探测指标"）
+OBSERV_EVENT_READY="false"
 
 # ======================== 工具函数 ========================
 # 注意：日志统一写到 stderr，避免在 `result=$(some_func)` 这类命令替换里被一起捕获，
@@ -321,6 +357,12 @@ cleanup() {
             log_info "已停止 ${pid_var} (PID: $pid)"
         fi
     done
+    # mock pushgateway（可观测性事件捕获）
+    if [[ -n "$MOCK_CB_EVENT_PID" ]] && kill -0 "$MOCK_CB_EVENT_PID" 2>/dev/null; then
+        kill "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+        wait "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+        log_info "已停止 mock pushgateway (PID: $MOCK_CB_EVENT_PID)"
+    fi
 }
 
 trap cleanup EXIT
@@ -706,6 +748,7 @@ def could_affect_caller(item):
 
 filtered = [it for it in items if match_role(it)]
 strangers = []
+stranger_ids = []
 lines = []
 for it in filtered:
     name = it.get('name', '')
@@ -733,14 +776,16 @@ for it in filtered:
     lines.append(f'{en}  {level:<8} {name}  {src_str} → {dst_str}{path_str}  (id={rid}){affects_mark}')
     if expected and name not in expected and affects:
         strangers.append(name)
+        stranger_ids.append(rid)
 if not lines:
     print('TABLE')
 else:
     print('TABLE\t' + '\n'.join(lines))
 print('STRANGER\t' + ','.join(strangers))
+print('STRANGER_IDS\t' + ','.join(stranger_ids))
 " <<< "$resp" 2>/dev/null || true)
 
-    local table_part stranger_part
+    local table_part stranger_part stranger_ids_part
     # table_part 必须捕获所有命中行：Python 把规则用 \n 嵌在 TABLE 那一行后，
     # awk 按 \n 切 record 后会得到 "TABLE\ton1" / "on2" / "on3" 等多条 record。
     # 用状态机在 TABLE 行打印 tab 后内容、in_t 段打印其余行、STRANGER 行退出，
@@ -756,7 +801,9 @@ print('STRANGER\t' + ','.join(strangers))
         in_t { print }
     ')
     # STRANGER 行只有一行规则名（逗号分隔），单行提取无影响
-    stranger_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER/{print substr($0, index($0, "\t")+1); exit}')
+    stranger_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER\t/{print substr($0, index($0, "\t")+1); exit}')
+    # STRANGER_IDS 行是逗号分隔的规则 id 列表
+    stranger_ids_part=$(echo "$parsed" | awk -F'\t' '/^STRANGER_IDS\t/{print substr($0, index($0, "\t")+1); exit}')
 
     if [[ -z "$table_part" ]]; then
         log_info "[规则巡检] ${role} ${ns}/${service} 当前无任何熔断规则"
@@ -771,12 +818,65 @@ print('STRANGER\t' + ','.join(strangers))
     if [[ -n "$stranger_part" ]]; then
         log_warn "[规则巡检] ${role}维度检测到本用例预期之外的规则: ${stranger_part}"
         log_warn "[规则巡检] 这些规则可能干扰本用例的统计（错误条件/阈值/触发率），建议先到控制台清理"
+        # 将陌生规则 id 列表输出到全局变量，供调用方做 disable 操作
+        _INSPECT_STRANGER_IDS="$stranger_ids_part"
         if [[ "${STRICT_RULE_CHECK:-false}" == "true" ]]; then
             log_error "[规则巡检] STRICT_RULE_CHECK=true，因存在陌生规则提前终止用例"
             return 1
         fi
     elif [[ -n "$table_part" ]]; then
         log_info "[规则巡检] ${role}维度仅本用例预期内的规则，无干扰风险"
+        _INSPECT_STRANGER_IDS=""
+    else
+        _INSPECT_STRANGER_IDS=""
+    fi
+    return 0
+}
+
+# precheck_and_disable_stranger_rules <caller> <caller_ns> <callee> <callee_ns> [expected ...]
+# 在启动 consumer 之前巡检主调和被调维度的规则，自动关闭 source=*/* 的通配干扰规则。
+# 返回 0 表示通过（干扰规则已关闭或无干扰规则），返回 1 表示 STRICT_RULE_CHECK 失败。
+precheck_and_disable_stranger_rules() {
+    local caller="$1"
+    local caller_ns="${2:-$NAMESPACE}"
+    local callee="$3"
+    local callee_ns="${4:-$NAMESPACE}"
+    shift 4 || true
+
+    log_step "[规则巡检] 启动前检查并关闭残留的 source=*/* 通配干扰规则"
+    local has_stranger=false
+
+    # 主调维度
+    if inspect_caller_rules "$caller" "$caller_ns" "$@"; then
+        if [[ -n "${_INSPECT_STRANGER_IDS:-}" ]]; then
+            has_stranger=true
+            IFS=',' read -ra stranger_id_arr <<< "$_INSPECT_STRANGER_IDS"
+            for sid in "${stranger_id_arr[@]}"; do
+                [[ -z "$sid" ]] && continue
+                disable_circuitbreaker_rule "$sid"
+            done
+        fi
+    else
+        return 1
+    fi
+
+    # 被调维度
+    if inspect_callee_rules "$callee" "$callee_ns" "$caller" "$@"; then
+        if [[ -n "${_INSPECT_STRANGER_IDS:-}" ]]; then
+            has_stranger=true
+            IFS=',' read -ra stranger_id_arr <<< "$_INSPECT_STRANGER_IDS"
+            for sid in "${stranger_id_arr[@]}"; do
+                [[ -z "$sid" ]] && continue
+                disable_circuitbreaker_rule "$sid"
+            done
+        fi
+    else
+        return 1
+    fi
+
+    if [[ "$has_stranger" == "true" ]]; then
+        log_info "[规则巡检] 干扰规则已关闭，等待 ${WAIT_RULE_READY_SECONDS}s 让服务端同步..."
+        sleep "$WAIT_RULE_READY_SECONDS"
     fi
     return 0
 }
@@ -847,6 +947,27 @@ enable_circuitbreaker_rule() {
         --header "X-Polaris-Token:${POLARIS_TOKEN}" \
         --header 'Content-Type: application/json' \
         --data-raw "${body}" > /dev/null 2>&1 || true
+}
+
+# disable_circuitbreaker_rule <id>
+# 通过 PUT /naming/v1/circuitbreaker/rules/enable 传入 enable=false 关闭规则。
+# 与 enable_circuitbreaker_rule 对称，用于在用例启动前关闭残留的通配（source=*/*）规则。
+disable_circuitbreaker_rule() {
+    local rule_id="$1"
+    local body
+    body=$(python3 -c "import json; print(json.dumps([{'id': '${rule_id}', 'enable': False}]))")
+    local http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 \
+        --request PUT "${POLARIS_HTTP_ADDR}/naming/v1/circuitbreaker/rules/enable" \
+        --header "X-Polaris-Token:${POLARIS_TOKEN}" \
+        --header 'Content-Type: application/json' \
+        --data-raw "${body}" 2>/dev/null || echo "000")
+    if [[ "$http_code" == "200" ]]; then
+        log_info "[规则巡检] 已关闭无关规则 (id=${rule_id})"
+    else
+        log_warn "[规则巡检] 关闭无关规则失败 (id=${rule_id}, HTTP=${http_code})，请手动关闭"
+    fi
 }
 
 # ======================== 规则 body 生成（python3 + 环境变量传参） ========================
@@ -1580,6 +1701,60 @@ generate_consumer_polaris_yaml() {
     # 第三参数控制是否启用全死全活；默认 true
     # 用例 10（all_dead_fallback）阶段 B 会传 "false"，验证全死全活关闭时 GetOneInstance 失败
     local enable_recover_all="${3:-true}"
+    # 第四参数控制是否启用可观测性（监控指标 + 事件上报）；默认 false
+    # 用例 1/2/3/4 会传 "true"，在 global 段追加 statReporter / eventReporter；
+    # 用例 7 也传 "true"，但通过 METRICS_TYPE=push 将监控数据改为 push 模式。
+    local enable_observ="${4:-false}"
+
+    # 可观测性 global 段：
+    #   statReporter —— 默认 pull 暴露 /metrics，METRICS_TYPE=push 时 push 到远程 pushgateway
+    #   eventReporter —— pushgateway POST 事件到 ${POLARIS_EVENT_ADDR}
+    # 注意：占位符 ${...} 用单引号字面量，由 SDK os.ExpandEnv 展开；脚本启动 consumer 前 export。
+    local observ_block=""
+    local metrics_type="${METRICS_TYPE:-pull}"
+    if [[ "$enable_observ" == "true" ]]; then
+        if [[ "$metrics_type" == "push" ]]; then
+            observ_block=$(cat <<'YAML'
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: push
+        address: '${POLARIS_METRICS_PUSH_ADDR}'
+        interval: '${POLARIS_METRICS_INTERVAL}'
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+    plugin:
+      pushgateway:
+        address: '${POLARIS_EVENT_ADDR}'
+YAML
+)
+        else
+            observ_block=$(cat <<'YAML'
+  statReporter:
+    enable: true
+    chain:
+      - prometheus
+    plugin:
+      prometheus:
+        type: pull
+        metricHost: 127.0.0.1
+        metricPort: '${POLARIS_METRICS_PORT}'
+  eventReporter:
+    enable: true
+    chain:
+      - pushgateway
+    plugin:
+      pushgateway:
+        address: '${POLARIS_EVENT_ADDR}'
+YAML
+)
+        fi
+    fi
 
     local default_block=""
     if [[ "$enable_default" == "true" ]]; then
@@ -1613,6 +1788,7 @@ global:
       - ${POLARIS_SERVER}:8091
     token: ${POLARIS_TOKEN}
     connectTimeout: 3s
+${observ_block}
 consumer:
   circuitBreaker:
     enable: true
@@ -1718,11 +1894,17 @@ start_consumer() {
     local enable_default_rule="${6:-false}"
     # 第七参数（可选）：是否启用全死全活；默认 true
     local enable_recover_all="${7:-true}"
+    # 第八参数（可选）：是否启用可观测性（监控指标 + 事件上报）；默认 false
+    local enable_observ="${8:-false}"
+    # 第九参数（可选）：prometheus pull /metrics 端口；默认 业务端口 + METRICS_PORT_OFFSET
+    local metrics_port="${9:-$((port + METRICS_PORT_OFFSET))}"
+    # 第十参数（可选）：mock pushgateway 地址；默认空（不上报远端）
+    local event_addr="${10:-}"
 
     # 注意：workdir 不能与二进制输出路径同名，理由同 start_provider。
     local workdir="${BUILD_DIR}/${name}_run"
     mkdir -p "$workdir"
-    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule" "$enable_recover_all"
+    generate_consumer_polaris_yaml "$workdir" "$enable_default_rule" "$enable_recover_all" "$enable_observ"
 
     if lsof -ti :"${port}" > /dev/null 2>&1; then
         log_warn "端口 ${port} 已被占用，尝试终止已有进程..."
@@ -1731,15 +1913,28 @@ start_consumer() {
         [[ -n "$existing_pid" ]] && kill "$existing_pid" 2>/dev/null && sleep 1 || true
     fi
 
-    log_info "编译 ${name}..."
-    (cd "$src_dir" && go build -o "${BUILD_DIR}/${name}" .)
+    local binary="${BUILD_DIR}/${name}"
+    # 若二进制已存在且比源码 main.go 更新，跳过编译（消除重复 go build）
+    if [[ -f "$binary" ]] && [[ "$binary" -nt "${src_dir}/main.go" ]]; then
+        log_info "${name} 二进制已是最新，跳过编译"
+    else
+        log_info "编译 ${name}..."
+        (cd "$src_dir" && go build -o "$binary" .)
+    fi
     if command -v xattr &> /dev/null; then
-        xattr -c "${BUILD_DIR}/${name}" 2>/dev/null || true
+        xattr -c "$binary" 2>/dev/null || true
     fi
 
     # 同 start_provider：子进程必须 detach 标准 fd，避免被 r=$(case_xxx) 命令替换的
     # 子 shell 持有捕获管道导致主 shell 卡死。
-    (cd "$workdir" && exec "${BUILD_DIR}/${name}" \
+    # POLARIS_METRICS_PORT / POLARIS_EVENT_ADDR / POLARIS_METRICS_PUSH_ADDR 等仅在该子 shell
+    # 内 export，供 yaml 中 ${...} 占位符经 SDK os.ExpandEnv 展开；不污染主 shell 环境。
+    (cd "$workdir" \
+        && export POLARIS_METRICS_PORT="$metrics_port" \
+        && export POLARIS_EVENT_ADDR="$event_addr" \
+        && export POLARIS_METRICS_PUSH_ADDR="${POLARIS_METRICS_PUSH_ADDR:-}" \
+        && export POLARIS_METRICS_INTERVAL="${POLARIS_METRICS_INTERVAL:-5s}" \
+        && exec "$binary" \
         --selfNamespace "$NAMESPACE" \
         --selfService "$self_service" \
         --selfRegister=false \
@@ -1868,6 +2063,183 @@ run_burst() {
     log_info "[${label}] total=${CASE_TOTAL}, ok=${CASE_OK}, fail=${CASE_FAIL}, abort=${CASE_ABORT}, fallback=${CASE_FALLBACK}"
 }
 
+# ======================== 可观测性验证（监控指标 + 事件上报） ========================
+# 启动全局唯一的 mock pushgateway，捕获所有用例的熔断事件到 JSON-lines 文件。
+# 在 main() 步骤 B（provider 集群就绪）之后调用一次；cleanup 时停止。
+# 失败（python3 缺失 / 端口占用）时降级：OBSERV_EVENT_READY=false，事件子步骤跳过、指标仍探测。
+start_mock_cb_event_server() {
+    if [[ "$OBSERV_ENABLE" != "true" ]]; then
+        log_info "[可观测性] OBSERV_ENABLE=false，跳过监控+事件验证"
+        return 0
+    fi
+    if [[ ! -f "${SCRIPT_DIR}/mock_event_server.py" ]]; then
+        log_warn "[可观测性] 未找到 mock_event_server.py，事件验证降级为跳过（指标验证仍执行）"
+        return 0
+    fi
+    rm -f "$CB_EVENTS_FILE"
+    # mock server 必须 detach 标准 fd，避免被后续 r=$(case_xxx) 命令替换的子 shell
+    # 继承捕获管道导致主 shell 卡死（与 start_consumer 同理）。
+    (exec python3 "${SCRIPT_DIR}/mock_event_server.py" "$CB_EVENTS_FILE" "$MOCK_CB_EVENT_PORT" \
+        < /dev/null > "${LOG_DIR}/mock_cb_event_server.log" 2>&1) &
+    MOCK_CB_EVENT_PID=$!
+    disown "$MOCK_CB_EVENT_PID" 2>/dev/null || true
+    sleep 1
+    if ! kill -0 "$MOCK_CB_EVENT_PID" 2>/dev/null; then
+        log_warn "[可观测性] mock_event_server 启动失败，事件验证降级为跳过（指标验证仍执行）"
+        MOCK_CB_EVENT_PID=""
+        return 0
+    fi
+    OBSERV_EVENT_READY="true"
+    log_info "[可观测性] mock pushgateway (PID=${MOCK_CB_EVENT_PID}) 监听 :${MOCK_CB_EVENT_PORT}，事件写入 ${CB_EVENTS_FILE}"
+    return 0
+}
+
+# _probe_cb_metric <metrics_port> <callee_service> <rule_name>
+# 探测 consumer 自身暴露的 prometheus /metrics，确认熔断指标已上报。
+# 断言：存在 circuitbreaker_open 指标行，且该行 label 命中 callee_service / rule_name。
+# 说明：circuitbreaker_open 是 gauge（Open 时 +1、HalfOpen 时 -1），探测发生在 recover 之后，
+#       数值可能已回落到 0，因此判定"指标行存在"即证明上报链路打通，不强求 value>0。
+# 返回：命中打印 "OK <匹配行数>"；未命中打印 "MISS <原因>"。输出到 stdout 供调用方捕获。
+_probe_cb_metric() {
+    local metrics_port="$1"
+    local callee_service="$2"
+    local rule_name="$3"
+
+    local body code attempt
+    for attempt in 1 2 3 4 5; do
+        body=$(curl -s --connect-timeout 3 --max-time 5 \
+            -w '\n%{http_code}' "http://127.0.0.1:${metrics_port}/metrics" 2>/dev/null || echo "")
+        code=$(echo "$body" | tail -1)
+        body=$(echo "$body" | sed '$d')
+        if echo "$body" | grep -q "circuitbreaker_open"; then
+            break
+        fi
+        log_info "[可观测性][指标] 第 ${attempt}/5 次轮询未见 circuitbreaker_open（HTTP=${code}, body_len=${#body}），等 6s..." >&2
+        [[ $attempt -lt 5 ]] && sleep 6
+    done
+
+    if [[ -z "$body" ]]; then
+        echo "MISS /metrics(${metrics_port})返回空"
+        return 0
+    fi
+    if ! echo "$body" | grep -q "circuitbreaker_open"; then
+        echo "MISS 未找到circuitbreaker_open指标"
+        return 0
+    fi
+
+    # 打印所有 circuitbreaker_* 指标行供审计
+    log_info "[可观测性][指标] --- circuitbreaker_* 指标行 ---" >&2
+    echo "$body" | grep "^circuitbreaker_" | while IFS= read -r line; do
+        log_info "[可观测性][指标]   ${line}" >&2
+    done
+    log_info "[可观测性][指标] --- end ---" >&2
+
+    # 校验 label：callee_service 与 rule_name 至少各命中一行
+    local hit_svc hit_rule
+    hit_svc=$(echo "$body" | grep "circuitbreaker_open" | grep -c "callee_service=\"${callee_service}\"" || echo 0)
+    hit_rule=$(echo "$body" | grep "circuitbreaker_open" | grep -c "rule_name=\"${rule_name}\"" || echo 0)
+    if [[ "$hit_svc" -ge 1 ]] && [[ "$hit_rule" -ge 1 ]]; then
+        echo "OK svc命中${hit_svc}行/rule命中${hit_rule}行"
+        return 0
+    fi
+    echo "MISS label不匹配(svc=${callee_service}命中${hit_svc}/rule=${rule_name}命中${hit_rule})"
+    return 0
+}
+
+# _verify_cb_event <rule_name> <callee_service>
+# 解析全局 captured_cb_events.json，校验本用例的熔断事件已上报。
+# 断言：存在 event_name=CircuitBreakerOpen 且 rule_name / service 与本用例匹配。
+# 返回：命中打印 "OK <Open次数>/<Close次数>"；未命中打印 "MISS <原因>"。
+_verify_cb_event() {
+    local rule_name="$1"
+    local callee_service="$2"
+
+    if [[ "$OBSERV_EVENT_READY" != "true" ]]; then
+        echo "SKIP mock server未就绪"
+        return 0
+    fi
+    if [[ ! -f "$CB_EVENTS_FILE" ]]; then
+        echo "MISS 事件文件不存在"
+        return 0
+    fi
+
+    # python3 解析 JSON-lines，统计本用例的 Open / Close 事件数并校验字段
+    local result
+    result=$(RULE_NAME="$rule_name" CALLEE_SVC="$callee_service" NS="$NAMESPACE" \
+        python3 -c "
+import json, os, sys
+rule = os.environ['RULE_NAME']
+svc  = os.environ['CALLEE_SVC']
+ns   = os.environ['NS']
+open_cnt = close_cnt = 0
+for line in open('${CB_EVENTS_FILE}', encoding='utf-8'):
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        e = json.loads(line)
+    except Exception:
+        continue
+    # 事件按 rule_name + service 归属到本用例；service 为被调服务名
+    if e.get('rule_name') != rule or e.get('service') != svc or e.get('namespace') != ns:
+        continue
+    name = e.get('event_name')
+    if name == 'CircuitBreakerOpen':
+        open_cnt += 1
+    elif name == 'CircuitBreakerClose':
+        close_cnt += 1
+if open_cnt >= 1:
+    print('OK %d %d' % (open_cnt, close_cnt))
+else:
+    print('MISS 未找到匹配的CircuitBreakerOpen事件(rule=%s svc=%s)' % (rule, svc))
+" 2>/dev/null || echo "MISS python3解析异常")
+    echo "$result"
+    return 0
+}
+
+# _verify_observability <用例名> <metrics_port> <callee_service> <rule_name>
+# 可观测性子步骤总入口（告知性，不影响熔断核心用例的 PASS/FAIL）：
+#   1) 探测 /metrics 的 circuitbreaker_open 指标
+#   2) 校验 mock pushgateway 捕获的 CircuitBreakerOpen/Close 事件
+# 仅打印结果到日志，便于人工对账；调用方在 stop_consumer 之前调用（此时 consumer 仍存活，
+# /metrics 端口可达）。
+_verify_observability() {
+    local case_label="$1"
+    local metrics_port="$2"
+    local callee_service="$3"
+    local rule_name="$4"
+
+    if [[ "$OBSERV_ENABLE" != "true" ]]; then
+        return 0
+    fi
+
+    log_step "${case_label} [可观测性] 监控指标 + 事件上报验证（复用本用例 consumer/规则，告知性）"
+    print_block "${case_label} 可观测性验证（不影响核心判定）" \
+        "目标:   验证熔断状态切换触发了 SDK 监控指标 + 事件上报两条链路" \
+        "指标:   curl consumer 自身 /metrics(${metrics_port}) → 找 circuitbreaker_open{callee_service=${callee_service},rule_name=${rule_name}}" \
+        "事件:   mock pushgateway 捕获 event_name=CircuitBreakerOpen 且 rule_name=${rule_name}、service=${callee_service}" \
+        "说明:   circuitbreaker_open 为 gauge，探测在 recover 后数值可能回落到 0，故只断言指标行存在" \
+        "判定:   告知性输出，不改变熔断用例本身的 PASS/FAIL"
+
+    local metric_ret event_ret
+    metric_ret=$(_probe_cb_metric "$metrics_port" "$callee_service" "$rule_name")
+    event_ret=$(_verify_cb_event "$rule_name" "$callee_service")
+
+    if [[ "$metric_ret" == OK* ]]; then
+        log_info "${case_label} [可观测性][指标] ✅ ${metric_ret}"
+    else
+        log_warn "${case_label} [可观测性][指标] ⚠️ ${metric_ret}（不影响核心判定）"
+    fi
+    if [[ "$event_ret" == OK* ]]; then
+        log_info "${case_label} [可观测性][事件] ✅ ${event_ret}（Open/Close 次数）"
+    elif [[ "$event_ret" == SKIP* ]]; then
+        log_info "${case_label} [可观测性][事件] ⏭ ${event_ret}"
+    else
+        log_warn "${case_label} [可观测性][事件] ⚠️ ${event_ret}（不影响核心判定）"
+    fi
+    return 0
+}
+
 # ======================== 三个子用例 ========================
 # 每个子用例返回 0=PASS / 非0=FAIL，并把结论 echo 到 stdout
 # 用例编号严格顺序递增（参考 examples/route 规约）
@@ -1925,15 +2297,29 @@ case_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例1.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例1.2 启动 instance consumer"
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则（source=*/* 的通配规则）──
+    # 残留的通配规则（如用例10创建的 cb-instance-CircuitBreakerHttpStatusCaller）
+    # 会在 consumer 启动后立即被命中，导致 INSTANCE 级同时存在两条规则计数，
+    # 干扰本用例的触发/验证/恢复判定。
+    if ! precheck_and_disable_stranger_rules "$INSTANCE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${INSTANCE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例1.2 启动 instance consumer（开启可观测性：监控指标 + 事件上报）"
+    # 开启可观测性：enable_default_rule=false, enable_recover_all=true, enable_observ=true,
+    # metrics_port=业务端口+10000, event_addr 指向全局 mock pushgateway。
+    local instance_metrics_port=$((INSTANCE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "instance_consumer" "$INSTANCE_CONSUMER_DIR" \
-        "$INSTANCE_CALLER" "$INSTANCE_CONSUMER_PORT" "${LOG_DIR}/instance_consumer.log"; then
+        "$INSTANCE_CALLER" "$INSTANCE_CONSUMER_PORT" "${LOG_DIR}/instance_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$instance_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
+    # 启动后再次巡检：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$INSTANCE_CALLER" "$NAMESPACE" \
         "cb-instance-${INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -1941,7 +2327,7 @@ case_instance() {
         return 1
     fi
 
-    # 巡检被调维度的熔断规则
+    # 被调维度复核：确认无残留通配规则
     if ! inspect_callee_rules "$SERVICE_NAME" "$NAMESPACE" "$INSTANCE_CALLER" \
         "cb-instance-${INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -1998,6 +2384,9 @@ case_instance() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "实例级恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（INSTANCE 级规则名 cb-instance-<caller>）
+    _verify_observability "用例1" "$instance_metrics_port" "$SERVICE_NAME" "cb-instance-${INSTANCE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -2107,15 +2496,24 @@ case_service() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例2.1] provider-a → 500 / provider-b → 500（模拟整服务不可用）"
 
-    log_step "用例2.2 启动 service consumer"
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$SERVICE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-service-${SERVICE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例2.2 启动 service consumer（开启可观测性：监控指标 + 事件上报）"
+    local service_metrics_port=$((SERVICE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "service_consumer" "$SERVICE_CONSUMER_DIR" \
-        "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" "${LOG_DIR}/service_consumer.log"; then
+        "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" "${LOG_DIR}/service_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$service_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$SERVICE_CALLER" "$NAMESPACE" \
         "cb-service-${SERVICE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -2182,11 +2580,65 @@ case_service() {
     run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级恢复-轮2"
     local r2_recover_ok=$CASE_OK
 
+    # ───── fallback 子阶段：不重启 consumer，在原 cb-service 规则上切换自定义降级 ─────
+    # 复用仍在运行的 Decorator consumer，PUT 更新规则的 fallbackConfig.enable toggle，
+    # SDK 感知 revision 变更后自动重建计数器并应用新 fallback 配置（无需重启 consumer）。
+    local svc_fallback=0
+    local svc_fb_off_abort=0
+    if [[ -n "$rule_id" ]]; then
+        # ── 正向：enable=true → 熔断 OPEN 后透传 HTTP 599 ──
+        log_step "用例2.10 [fallback 正向] PUT 更新 cb-service-${SERVICE_CALLER} 打开自定义降级（enable=true, code=599）"
+        local fb_body
+        fb_body=$(build_rule_body_service_fallback_on)
+        if update_circuitbreaker_rule "service_fallback_on" "$rule_id" "$fb_body"; then
+            sleep "$WAIT_RULE_READY_SECONDS"
+
+            log_step "用例2.11 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次（复用运行中 consumer）"
+            provider_set_error "$PROVIDER_A_PORT" "true"
+            provider_set_error "$PROVIDER_B_PORT" "true"
+            run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback正向触发"
+
+            log_step "用例2.12 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 fallback（HTTP 599）"
+            sleep 1
+            run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback正向验证"
+            svc_fallback=$CASE_FALLBACK
+
+            # ── 反向：enable=false → enable 短路 → 熔断 OPEN 回退为 503/ABORT ──
+            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
+            log_step "用例2.13 [fallback 反向] PUT 更新 cb-service-${SERVICE_CALLER} 关闭自定义降级（enable=false）"
+            local fb_off_body
+            fb_off_body=$(build_rule_body_service_fallback_off)
+            if update_circuitbreaker_rule "service_fallback_off" "$rule_id" "$fb_off_body"; then
+                sleep "$WAIT_RULE_READY_SECONDS"
+
+                log_step "用例2.14 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次（复用运行中 consumer）"
+                run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback反向触发"
+
+                log_step "用例2.15 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望回退为 abort（503，不下发 599）"
+                sleep 1
+                run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback反向验证"
+                svc_fb_off_abort=$CASE_ABORT
+            else
+                log_error "[用例2.13] PUT 关闭 fallback 失败"
+            fi
+
+            provider_set_error "$PROVIDER_A_PORT" "false"
+            provider_set_error "$PROVIDER_B_PORT" "false"
+        else
+            log_error "[用例2.10] PUT 打开 fallback 失败"
+        fi
+    else
+        log_warn "[用例2.10] 未取得 cb-service 规则 id，跳过 fallback 子阶段"
+    fi
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（SERVICE 级规则名 cb-service-<caller>）
+    _verify_observability "用例2" "$service_metrics_port" "$SERVICE_NAME" "cb-service-${SERVICE_CALLER}"
+
     stop_consumer "$consumer_pid"
 
     # ───── InvokeHandler 子阶段：验证手动编排模式同样能触发 SERVICE 级熔断 ─────
     # 复用 Decorator 阶段的规则（相同 selfService + 相同规则）
-    log_step "用例2.10 [InvokeHandler] 启动 invokeHandler consumer（selfService=${SERVICE_CALLER}）"
+    log_step "用例2.16 [InvokeHandler] 启动 invokeHandler consumer（selfService=${SERVICE_CALLER}）"
     if ! start_consumer "service_invoke_consumer" "$INVOKE_HANDLER_CONSUMER_DIR" \
         "$SERVICE_CALLER" "$SERVICE_INVOKE_CONSUMER_PORT" \
         "${LOG_DIR}/service_invoke_consumer.log"; then
@@ -2195,18 +2647,18 @@ case_service() {
     fi
     local invoke_pid="$_STARTED_PID"
 
-    log_step "用例2.11 [InvokeHandler] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次"
+    log_step "用例2.17 [InvokeHandler] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$SERVICE_INVOKE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级InvokeHandler触发"
     local i_trigger_fail=$CASE_FAIL
 
-    log_step "用例2.12 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
+    log_step "用例2.18 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
     sleep 1
     run_burst "$SERVICE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级InvokeHandler验证"
     local i_verify_abort=$CASE_ABORT
 
-    log_step "用例2.13 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    log_step "用例2.19 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     sleep "$WAIT_HALF_OPEN_SECONDS"
@@ -2214,84 +2666,6 @@ case_service() {
     local i_recover_ok=$CASE_OK
 
     stop_consumer "$invoke_pid"
-
-    # ───── fallback 子阶段：在原 cb-service 规则上打开自定义降级，验证降级响应生效 ─────
-    # 复用 Decorator 阶段创建的同一条规则（id=$rule_id），通过 PUT 追加 fallbackConfig.enable=true。
-    # 打开后，熔断 OPEN 的响应从 ABORT(503) 变为 FALLBACK(HTTP 599 + body "degraded")——两者
-    # 都代表熔断已生效，只是有无 fallback 决定表现形态。规则 revision 变更会触发 SDK counter 重建，
-    # 因此 PUT 后需等待规则下发并重启 consumer，确保拿到带 fallback 的新规则。
-    local svc_fallback=0
-    local svc_fb_off_abort=0
-    if [[ -n "$rule_id" ]]; then
-        # ── 正向：enable=true → 熔断 OPEN 后透传 HTTP 599 ──
-        log_step "用例2.14 [fallback 正向] PUT 更新 cb-service-${SERVICE_CALLER} 打开自定义降级（enable=true, code=599）"
-        local fb_body
-        fb_body=$(build_rule_body_service_fallback_on)
-        if update_circuitbreaker_rule "service_fallback_on" "$rule_id" "$fb_body"; then
-            sleep "$WAIT_RULE_READY_SECONDS"
-
-            log_step "用例2.15 [fallback 正向] 重启 consumer（selfService=${SERVICE_CALLER}），加载带 fallback 的新规则"
-            if start_consumer "service_fallback_consumer" "$SERVICE_CONSUMER_DIR" \
-                "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" \
-                "${LOG_DIR}/service_fallback_consumer.log"; then
-                local fb_pid="$_STARTED_PID"
-
-                log_step "用例2.16 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次触发熔断"
-                provider_set_error "$PROVIDER_A_PORT" "true"
-                provider_set_error "$PROVIDER_B_PORT" "true"
-                run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback正向触发"
-
-                log_step "用例2.17 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 fallback（HTTP 599）"
-                sleep 1
-                run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback正向验证"
-                svc_fallback=$CASE_FALLBACK
-
-                provider_set_error "$PROVIDER_A_PORT" "false"
-                provider_set_error "$PROVIDER_B_PORT" "false"
-                stop_consumer "$fb_pid"
-            else
-                log_error "[用例2.15] fallback 正向 consumer 启动失败"
-            fi
-
-            # ── 反向：enable=false → enable 短路 → 熔断 OPEN 回退为 503/ABORT ──
-            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
-            log_step "用例2.18 [fallback 反向] PUT 更新 cb-service-${SERVICE_CALLER} 关闭自定义降级（enable=false）"
-            local fb_off_body
-            fb_off_body=$(build_rule_body_service_fallback_off)
-            if update_circuitbreaker_rule "service_fallback_off" "$rule_id" "$fb_off_body"; then
-                sleep "$WAIT_RULE_READY_SECONDS"
-
-                log_step "用例2.19 [fallback 反向] 重启 consumer，加载 enable=false 的规则"
-                if start_consumer "service_fallback_off_consumer" "$SERVICE_CONSUMER_DIR" \
-                    "$SERVICE_CALLER" "$SERVICE_CONSUMER_PORT" \
-                    "${LOG_DIR}/service_fallback_off_consumer.log"; then
-                    local fb_off_pid="$_STARTED_PID"
-
-                    log_step "用例2.20 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次触发熔断"
-                    provider_set_error "$PROVIDER_A_PORT" "true"
-                    provider_set_error "$PROVIDER_B_PORT" "true"
-                    run_burst "$SERVICE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "服务级fallback反向触发"
-
-                    log_step "用例2.21 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望回退为 abort（503，不下发 599）"
-                    sleep 1
-                    run_burst "$SERVICE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "服务级fallback反向验证"
-                    svc_fb_off_abort=$CASE_ABORT
-
-                    provider_set_error "$PROVIDER_A_PORT" "false"
-                    provider_set_error "$PROVIDER_B_PORT" "false"
-                    stop_consumer "$fb_off_pid"
-                else
-                    log_error "[用例2.19] fallback 反向 consumer 启动失败"
-                fi
-            else
-                log_error "[用例2.18] PUT 关闭 fallback 失败"
-            fi
-        else
-            log_error "[用例2.14] PUT 打开 fallback 失败"
-        fi
-    else
-        log_warn "[用例2.14] 未取得 cb-service 规则 id，跳过 fallback 子阶段"
-    fi
 
     if [[ "$r1_trigger_fail" -ge 1 ]] && [[ "$r1_verify_abort" -ge 1 ]] && [[ "$r1_recover_ok" -ge 1 ]] \
         && [[ "$r2_trigger_fail" -ge 1 ]] && [[ "$r2_verify_abort" -ge 1 ]] && [[ "$r2_recover_ok" -ge 1 ]] \
@@ -2389,14 +2763,24 @@ case_interface() {
     provider_set_error "$PROVIDER_B_PORT" "true" "true"
     log_info "[用例3.1] provider-a/b 的 /echo 与 /order 均返回 500，/info 恒为 500"
 
-    log_step "用例3.2 启动 interface consumer"
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$INTERFACE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-interface-${INTERFACE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例3.2 启动 interface consumer（开启可观测性：监控指标 + 事件上报）"
+    local interface_metrics_port=$((INTERFACE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "interface_consumer" "$INTERFACE_CONSUMER_DIR" \
-        "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" "${LOG_DIR}/interface_consumer.log"; then
+        "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" "${LOG_DIR}/interface_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$interface_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定。
     # 接口级用例合并为 1 条规则，预期只有 cb-interface-merged。
     if ! inspect_caller_rules "$INTERFACE_CALLER" "$NAMESPACE" "cb-interface-${INTERFACE_CALLER}"; then
@@ -2505,11 +2889,67 @@ case_interface() {
     run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "/slow 恢复" "/slow"
     local slow_recover_ok=$CASE_OK
 
+    # ───── fallback 子阶段：不重启 consumer，在原 cb-interface 规则上切换自定义降级 ─────
+    # 复用仍在运行的 Decorator consumer，PUT 更新规则的 fallbackConfig.enable toggle。
+    # fallbackConfig 是 Rule 级字段，三个 block（/echo /order /slow）共享。对 /echo trigger
+    # 触发 echo-block 熔断 OPEN 后验证降级响应。
+    local iface_fallback=0
+    local iface_fb_off_abort=0
+    if [[ -n "$rule_id" ]]; then
+        # ── 正向：enable=true → /echo 熔断 OPEN 后透传 HTTP 599 ──
+        log_step "用例3.15 [fallback 正向] PUT 更新 cb-interface-${INTERFACE_CALLER} 打开自定义降级（enable=true, code=599）"
+        local fb_body
+        fb_body=$(build_rule_body_interface_fallback_on)
+        if update_circuitbreaker_rule "interface_fallback_on" "$rule_id" "$fb_body"; then
+            sleep "$WAIT_RULE_READY_SECONDS"
+
+            log_step "用例3.16 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo（复用运行中 consumer）"
+            provider_set_error "$PROVIDER_A_PORT" "true"
+            provider_set_error "$PROVIDER_B_PORT" "true"
+            run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback正向触发" "/echo"
+
+            log_step "用例3.17 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望出现 fallback（HTTP 599）"
+            sleep 1
+            run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback正向验证" "/echo"
+            iface_fallback=$CASE_FALLBACK
+
+            # ── 反向：enable=false → enable 短路 → /echo 熔断 OPEN 回退为 503/ABORT ──
+            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
+            log_step "用例3.18 [fallback 反向] PUT 更新 cb-interface-${INTERFACE_CALLER} 关闭自定义降级（enable=false）"
+            local fb_off_body
+            fb_off_body=$(build_rule_body_interface_fallback_off)
+            if update_circuitbreaker_rule "interface_fallback_off" "$rule_id" "$fb_off_body"; then
+                sleep "$WAIT_RULE_READY_SECONDS"
+
+                log_step "用例3.19 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo（复用运行中 consumer）"
+                run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback反向触发" "/echo"
+
+                log_step "用例3.20 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望回退为 abort（503，不下发 599）"
+                sleep 1
+                run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback反向验证" "/echo"
+                iface_fb_off_abort=$CASE_ABORT
+            else
+                log_error "[用例3.18] PUT 关闭 fallback 失败"
+            fi
+
+            provider_set_error "$PROVIDER_A_PORT" "false"
+            provider_set_error "$PROVIDER_B_PORT" "false"
+        else
+            log_error "[用例3.15] PUT 打开 fallback 失败"
+        fi
+    else
+        log_warn "[用例3.15] 未取得 cb-interface 规则 id，跳过 fallback 子阶段"
+    fi
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件
+    # METHOD 级 /echo 块对应规则名 cb-interface-<caller>（/order、/slow 为独立子规则）
+    _verify_observability "用例3" "$interface_metrics_port" "$SERVICE_NAME" "cb-interface-${INTERFACE_CALLER}"
+
     stop_consumer "$consumer_pid"
 
     # ───── InvokeHandler 子阶段：验证手动编排模式同样能触发 METHOD 级熔断 ─────
     # 复用 Decorator 阶段的规则（相同 selfService + 相同规则）
-    log_step "用例3.15 [InvokeHandler] 启动 invokeHandler consumer（selfService=${INTERFACE_CALLER}）"
+    log_step "用例3.21 [InvokeHandler] 启动 invokeHandler consumer（selfService=${INTERFACE_CALLER}）"
     if ! start_consumer "interface_invoke_consumer" "$INVOKE_HANDLER_CONSUMER_DIR" \
         "$INTERFACE_CALLER" "$INTERFACE_INVOKE_CONSUMER_PORT" \
         "${LOG_DIR}/interface_invoke_consumer.log"; then
@@ -2518,18 +2958,18 @@ case_interface() {
     fi
     local invoke_pid="$_STARTED_PID"
 
-    log_step "用例3.16 [InvokeHandler] trigger: a=500/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo"
+    log_step "用例3.22 [InvokeHandler] trigger: a=500/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo"
     provider_set_error "$PROVIDER_A_PORT" "true"
     provider_set_error "$PROVIDER_B_PORT" "true"
     run_burst "$INTERFACE_INVOKE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级InvokeHandler触发"
     local i_trigger_fail=$CASE_FAIL
 
-    log_step "用例3.17 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
+    log_step "用例3.23 [InvokeHandler] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次，期望出现 abort"
     sleep 1
     run_burst "$INTERFACE_INVOKE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级InvokeHandler验证"
     local i_verify_abort=$CASE_ABORT
 
-    log_step "用例3.18 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
+    log_step "用例3.24 [InvokeHandler] recover: a/b 翻回 200, 等 ${WAIT_HALF_OPEN_SECONDS}s"
     provider_set_error "$PROVIDER_A_PORT" "false"
     provider_set_error "$PROVIDER_B_PORT" "false"
     sleep "$WAIT_HALF_OPEN_SECONDS"
@@ -2537,84 +2977,6 @@ case_interface() {
     local i_recover_ok=$CASE_OK
 
     stop_consumer "$invoke_pid"
-
-    # ───── fallback 子阶段：在原 cb-interface 规则上打开自定义降级，验证降级响应生效 ─────
-    # 复用 Decorator 阶段创建的同一条 merged 规则（id=$rule_id），通过 PUT 在顶层追加
-    # fallbackConfig.enable=true（fallbackConfig 是 Rule 级字段，三个 block 共享）。对 /echo
-    # trigger 触发 echo-block 熔断 OPEN 后，响应从 ABORT(503) 变为 FALLBACK(HTTP 599 + "degraded")。
-    # 规则 revision 变更触发 SDK counter 重建，故 PUT 后等待下发并重启 consumer。
-    local iface_fallback=0
-    local iface_fb_off_abort=0
-    if [[ -n "$rule_id" ]]; then
-        # ── 正向：enable=true → /echo 熔断 OPEN 后透传 HTTP 599 ──
-        log_step "用例3.19 [fallback 正向] PUT 更新 cb-interface-${INTERFACE_CALLER} 打开自定义降级（enable=true, code=599）"
-        local fb_body
-        fb_body=$(build_rule_body_interface_fallback_on)
-        if update_circuitbreaker_rule "interface_fallback_on" "$rule_id" "$fb_body"; then
-            sleep "$WAIT_RULE_READY_SECONDS"
-
-            log_step "用例3.20 [fallback 正向] 重启 consumer（selfService=${INTERFACE_CALLER}），加载带 fallback 的新规则"
-            if start_consumer "interface_fallback_consumer" "$INTERFACE_CONSUMER_DIR" \
-                "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" \
-                "${LOG_DIR}/interface_fallback_consumer.log"; then
-                local fb_pid="$_STARTED_PID"
-
-                log_step "用例3.21 [fallback 正向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo 触发熔断"
-                provider_set_error "$PROVIDER_A_PORT" "true"
-                provider_set_error "$PROVIDER_B_PORT" "true"
-                run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback正向触发" "/echo"
-
-                log_step "用例3.22 [fallback 正向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望出现 fallback（HTTP 599）"
-                sleep 1
-                run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback正向验证" "/echo"
-                iface_fallback=$CASE_FALLBACK
-
-                provider_set_error "$PROVIDER_A_PORT" "false"
-                provider_set_error "$PROVIDER_B_PORT" "false"
-                stop_consumer "$fb_pid"
-            else
-                log_error "[用例3.20] fallback 正向 consumer 启动失败"
-            fi
-
-            # ── 反向：enable=false → enable 短路 → /echo 熔断 OPEN 回退为 503/ABORT ──
-            # PUT 改 revision 触发 SDK counter 重建，状态从 Close 重新开始，无需显式 recover。
-            log_step "用例3.23 [fallback 反向] PUT 更新 cb-interface-${INTERFACE_CALLER} 关闭自定义降级（enable=false）"
-            local fb_off_body
-            fb_off_body=$(build_rule_body_interface_fallback_off)
-            if update_circuitbreaker_rule "interface_fallback_off" "$rule_id" "$fb_off_body"; then
-                sleep "$WAIT_RULE_READY_SECONDS"
-
-                log_step "用例3.24 [fallback 反向] 重启 consumer，加载 enable=false 的规则"
-                if start_consumer "interface_fallback_off_consumer" "$INTERFACE_CONSUMER_DIR" \
-                    "$INTERFACE_CALLER" "$INTERFACE_CONSUMER_PORT" \
-                    "${LOG_DIR}/interface_fallback_off_consumer.log"; then
-                    local fb_off_pid="$_STARTED_PID"
-
-                    log_step "用例3.25 [fallback 反向] trigger: a/b=500, 发 ${TRIGGER_REQUEST_COUNT} 次到 /echo 触发熔断"
-                    provider_set_error "$PROVIDER_A_PORT" "true"
-                    provider_set_error "$PROVIDER_B_PORT" "true"
-                    run_burst "$INTERFACE_CONSUMER_PORT" "$TRIGGER_REQUEST_COUNT" "接口级fallback反向触发" "/echo"
-
-                    log_step "用例3.26 [fallback 反向] verify: 再发 ${RECOVERY_REQUEST_COUNT} 次到 /echo，期望回退为 abort（503，不下发 599）"
-                    sleep 1
-                    run_burst "$INTERFACE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "接口级fallback反向验证" "/echo"
-                    iface_fb_off_abort=$CASE_ABORT
-
-                    provider_set_error "$PROVIDER_A_PORT" "false"
-                    provider_set_error "$PROVIDER_B_PORT" "false"
-                    stop_consumer "$fb_off_pid"
-                else
-                    log_error "[用例3.24] fallback 反向 consumer 启动失败"
-                fi
-            else
-                log_error "[用例3.23] PUT 关闭 fallback 失败"
-            fi
-        else
-            log_error "[用例3.19] PUT 打开 fallback 失败"
-        fi
-    else
-        log_warn "[用例3.19] 未取得 cb-interface 规则 id，跳过 fallback 子阶段"
-    fi
 
     # 通过条件：
     #   /echo 两轮 trigger / verify / recover 全部满足
@@ -2716,16 +3078,24 @@ case_old_instance() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例4.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例4.2 启动 old-instance consumer（旧版散装写法）"
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${OLD_INSTANCE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
+    log_step "用例4.2 启动 old-instance consumer（旧版散装写法，开启可观测性：监控指标 + 事件上报）"
+    local old_instance_metrics_port=$((OLD_INSTANCE_CONSUMER_PORT + METRICS_PORT_OFFSET))
     if ! start_consumer "old_instance_consumer" "$OLD_INSTANCE_CONSUMER_DIR" \
-        "$OLD_INSTANCE_CALLER" "$OLD_INSTANCE_CONSUMER_PORT" "${LOG_DIR}/old_instance_consumer.log"; then
+        "$OLD_INSTANCE_CALLER" "$OLD_INSTANCE_CONSUMER_PORT" "${LOG_DIR}/old_instance_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "$old_instance_metrics_port" "127.0.0.1:${MOCK_CB_EVENT_PORT}"; then
         echo "FAIL"
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调现有的熔断规则，避免遗留规则干扰本用例的判定
-    # 用例4 与用例1 共用 cb-instance-v5（source=*/*）
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$OLD_INSTANCE_CALLER" "$NAMESPACE" "cb-instance-${OLD_INSTANCE_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -2788,6 +3158,9 @@ case_old_instance() {
     sleep "$WAIT_HALF_OPEN_SECONDS"
     run_burst "$OLD_INSTANCE_CONSUMER_PORT" "$RECOVERY_REQUEST_COUNT" "旧版实例级恢复-轮2"
     local r2_recover_ok=$CASE_OK
+
+    # 可观测性子步骤：consumer 仍存活时探测指标 + 事件（INSTANCE 级规则名 cb-instance-<old_caller>）
+    _verify_observability "用例4" "$old_instance_metrics_port" "$SERVICE_NAME" "cb-instance-${OLD_INSTANCE_CALLER}"
 
     stop_consumer "$consumer_pid"
 
@@ -2868,6 +3241,13 @@ case_http_status() {
     provider_set_error "$PROVIDER_B_PORT" "false"
     log_info "[用例5.1] 复位 provider-a → 200 / provider-b → 200"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例5.2 启动 http_status consumer（统一装饰器写法）"
     if ! start_consumer "http_status_consumer" "$INSTANCE_CONSUMER_DIR" \
         "$HTTP_STATUS_CALLER" "$HTTP_STATUS_CONSUMER_PORT" "${LOG_DIR}/http_status_consumer.log"; then
@@ -2876,6 +3256,7 @@ case_http_status() {
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$HTTP_STATUS_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3094,6 +3475,16 @@ case_default_rule() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例6.1] provider-a → 200 / provider-b → 500"
 
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    # 用例6 验证默认规则兜底，要求无任何同名规则；若残留 source=*/* 的通配规则
+    # 会覆盖默认规则（dictionary.Lookup 命中服务端规则 > 默认规则），
+    # 导致本用例失去验证意义。
+    if ! precheck_and_disable_stranger_rules "$DEFAULT_RULE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-no-rule-${DEFAULT_RULE_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     log_step "用例6.2 启动 default-rule consumer（defaultRuleEnable=true）"
     if ! start_consumer "default_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
         "$DEFAULT_RULE_CALLER" "$DEFAULT_RULE_CONSUMER_PORT" \
@@ -3103,8 +3494,7 @@ case_default_rule() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检主调与被调维度的现有规则——本用例预期没有任何同名/同 source 的规则；
-    # 若存在陌生规则会导致默认规则被覆盖，使本用例失去验证意义。
+    # 启动后复核：确认无任何规则命中（默认规则生效的前提）
     if ! inspect_caller_rules "$DEFAULT_RULE_CALLER" "$NAMESPACE" \
         "cb-no-rule-${DEFAULT_RULE_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -3198,14 +3588,28 @@ case_modify_rule() {
     provider_set_error "$PROVIDER_B_PORT" "true"
     log_info "[用例7.1] provider-a → 200 / provider-b → 500"
 
-    log_step "用例7.2 启动 modify_rule consumer"
-    if ! start_consumer "modify_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
-        "$MODIFY_RULE_CALLER" "$MODIFY_RULE_CONSUMER_PORT" "${LOG_DIR}/modify_rule_consumer.log"; then
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    # 用例7 创建 cb-instance-CircuitBreakerHttpStatusCaller (source=*/MODIFY_RULE_CALLER)，
+    # 但残留的 source=*/* 同名规则会与即将创建的规则冲突。
+    if ! precheck_and_disable_stranger_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         echo "FAIL"
         return 1
     fi
+
+    log_step "用例7.2 启动 modify_rule consumer（事件+监控数据 push 到服务端 pushgateway）"
+    export METRICS_TYPE=push
+    if ! start_consumer "modify_rule_consumer" "$INSTANCE_CONSUMER_DIR" \
+        "$MODIFY_RULE_CALLER" "$MODIFY_RULE_CONSUMER_PORT" "${LOG_DIR}/modify_rule_consumer.log" \
+        "false" "true" "$OBSERV_ENABLE" "" ""; then
+        unset METRICS_TYPE
+        echo "FAIL"
+        return 1
+    fi
+    unset METRICS_TYPE
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$MODIFY_RULE_CALLER" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3333,6 +3737,14 @@ case_protocol_method() {
 
     log_step "用例8.1 启动 PM consumer"
     # 复用 newCircuitBreakerCaller 二进制 + inferProtocolMethod 自动推断 Protocol/Method
+
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    if ! precheck_and_disable_stranger_rules "$PM_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-proto-meth-${PM_CALLER}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     if ! start_consumer "pm_consumer" "$CALLER_CONSUMER_DIR" \
         "$PM_CALLER" "$PM_CONSUMER_PORT" "${LOG_DIR}/pm_consumer.log"; then
         echo "FAIL"
@@ -3340,7 +3752,7 @@ case_protocol_method() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    # 巡检 1 条规则（含 13 BC），caller 维度只有 1 条
+    # 启动后复核：确认 consumer 只拉到了预期的规则
     if ! inspect_caller_rules "$PM_CALLER" "$NAMESPACE" \
         "cb-proto-meth-${PM_CALLER}"; then
         stop_consumer "$consumer_pid"
@@ -3503,6 +3915,17 @@ case_pathtype() {
         "      不存在对全部 BC 都不匹配的'反向 path',故反向验证不适用于合并规则结构。"
 
     log_step "用例9.1 启动 pathtype consumer"
+
+    # ── 规则巡检：在启动 consumer 之前关闭干扰规则 ──
+    local expected_rules=(
+        "cb-pathtype-${PATHTYPE_CALLER}"
+    )
+    if ! precheck_and_disable_stranger_rules "$PATHTYPE_CALLER" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "${expected_rules[@]}"; then
+        echo "FAIL"
+        return 1
+    fi
+
     if ! start_consumer "pathtype_consumer" "$CALLER_CONSUMER_DIR" \
         "$PATHTYPE_CALLER" "$PATHTYPE_CONSUMER_PORT" "${LOG_DIR}/pathtype_consumer.log"; then
         echo "FAIL"
@@ -3510,9 +3933,7 @@ case_pathtype() {
     fi
     local consumer_pid="$_STARTED_PID"
 
-    local expected_rules=(
-        "cb-pathtype-${PATHTYPE_CALLER}"
-    )
+    # 启动后复核：确认 consumer 只拉到了预期的规则
     if ! inspect_caller_rules "$PATHTYPE_CALLER" "$NAMESPACE" "${expected_rules[@]}"; then
         stop_consumer "$consumer_pid"
         echo "FAIL"
@@ -3637,12 +4058,22 @@ _run_all_dead_phase() {
 
     # ── 全死全活开启 ──
     log_step "用例10 [${phase_label}.1] 启动 consumer（enableRecoverAll=true）"
+
+    # ── 规则巡检：在启动 consumer 之前关闭残留的同名规则 ──
+    # 用例10 子阶段共享同名规则 cb-instance-${HTTP_STATUS_CALLER}，
+    # 若上一轮运行残留了同名规则，create 会失败或产生重复规则。
+    if ! precheck_and_disable_stranger_rules "$caller" "$NAMESPACE" \
+        "$SERVICE_NAME" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
+        return 1
+    fi
+
     if ! start_consumer "${phase_label}_consumer" "$consumer_dir" \
         "$caller" "$port" "$log_file" "false" "true"; then
         return 1
     fi
     local consumer_pid="$_STARTED_PID"
 
+    # 启动后复核：确认 consumer 只拉到了预期的规则（干扰规则已在启动前关闭）
     if ! inspect_caller_rules "$caller" "$NAMESPACE" "cb-instance-${HTTP_STATUS_CALLER}"; then
         stop_consumer "$consumer_pid"
         return 1
@@ -3852,6 +4283,10 @@ main() {
 
     log_info "等待 5s 让服务发现缓存就绪..."
     sleep 5
+
+    # === 步骤B2：启动全局 mock pushgateway（可观测性事件捕获，唯一额外进程） ===
+    log_step "步骤B2 启动 mock pushgateway（监控+事件验证用，全局共享）"
+    start_mock_cb_event_server
 
     # === 步骤C：执行子用例 ===
     local results=()

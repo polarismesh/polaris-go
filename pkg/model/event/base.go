@@ -28,10 +28,11 @@ type BaseEvent interface {
 type BaseEventType int
 
 const (
-	InstanceEventType  BaseEventType = iota
-	ConfigEventType    BaseEventType = iota
-	LosslessEventType  BaseEventType = iota
-	RateLimitEventType BaseEventType = iota
+	InstanceEventType       BaseEventType = iota
+	ConfigEventType         BaseEventType = iota
+	LosslessEventType       BaseEventType = iota
+	RateLimitEventType      BaseEventType = iota
+	CircuitBreakerEventType BaseEventType = iota
 )
 
 func (b BaseEventType) EventTypeString() string {
@@ -44,6 +45,8 @@ func (b BaseEventType) EventTypeString() string {
 		return "Lossless"
 	case RateLimitEventType:
 		return "RateLimiting"
+	case CircuitBreakerEventType:
+		return "CircuitBreaker"
 	default:
 		return "Unknown"
 	}
@@ -71,6 +74,14 @@ const (
 	RateLimitStart EventName = "RateLimitStart"
 	// RateLimitEnd 限流结束事件，状态从 LIMITED 变为 UNLIMITED 时触发
 	RateLimitEnd EventName = "RateLimitEnd"
+	// CircuitBreakerOpen 熔断打开事件，状态切换到 Open 时触发
+	CircuitBreakerOpen EventName = "CircuitBreakerOpen"
+	// CircuitBreakerHalfOpen 熔断半开事件，状态切换到 HalfOpen 时触发
+	CircuitBreakerHalfOpen EventName = "CircuitBreakerHalfOpen"
+	// CircuitBreakerClose 熔断关闭事件，状态切换到 Close 时触发
+	CircuitBreakerClose EventName = "CircuitBreakerClose"
+	// CircuitBreakerDestroy 熔断规则销毁事件，规则被删除或替换时触发
+	CircuitBreakerDestroy EventName = "CircuitBreakerDestroy"
 )
 
 // BaseEventImpl 扁平化事件结构，与服务端 ClientEventRequest 格式对齐
@@ -113,10 +124,13 @@ type BaseEventImpl struct {
 	CurrentStatus string `json:"current_status,omitempty"`
 	// PreviousStatus 上一次配额分配的状态（LIMITED / UNLIMITED）
 	PreviousStatus string `json:"previous_status,omitempty"`
-	// ResourceType 限流资源类型（QPS / CONCURRENCY）
+	// ResourceType 限流资源类型（QPS / CONCURRENCY）；熔断事件复用为 SERVICE / METHOD / INSTANCE
 	ResourceType string `json:"resource_type,omitempty"`
-	// RuleName 命中的限流规则名称
+	// RuleName 命中的限流规则名称；熔断事件复用为熔断规则名
 	RuleName string `json:"rule_name,omitempty"`
+
+	// AdditionalParams 熔断事件扩展参数：isolation_object / failure_rate / slow_call_duration
+	AdditionalParams map[string]string `json:"additional_params,omitempty"`
 }
 
 func (c *BaseEventImpl) SetClientIP(ip string) {

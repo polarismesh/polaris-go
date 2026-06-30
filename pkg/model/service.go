@@ -798,9 +798,22 @@ type RateLimitGauge struct {
 // CircuitBreakGauge Circuit Break Gauge
 type CircuitBreakGauge struct {
 	EmptyInstanceGauge
+	// ChangeInstance 被熔断实例，仅 INSTANCE 级有值；SERVICE/METHOD 级为 nil
 	ChangeInstance Instance
-	Method         string
-	CBStatus       CircuitBreakerStatus
+	// Method 被调方法（METHOD 级生效）
+	Method string
+	// Subset 被调实例分组（INSTANCE 级取实例 LogicSet）
+	Subset string
+	// CalleeService 被调服务的命名空间与服务名
+	CalleeService *ServiceKey
+	// CallerService 主调服务的命名空间与服务名，可能为 nil
+	CallerService *ServiceKey
+	// Level 熔断资源级别："SERVICE" / "METHOD" / "INSTANCE"
+	Level string
+	// RuleName 触发熔断的规则名
+	RuleName string
+	// CBStatus 熔断状态 Open/HalfOpen/Close
+	CBStatus CircuitBreakerStatus
 }
 
 // GetCircuitBreakerStatus 获取当前实例熔断状态
@@ -814,11 +827,12 @@ func (cbg *CircuitBreakGauge) GetCalledInstance() Instance {
 }
 
 // 检测指标是否合法
+// INSTANCE 级熔断必须携带具体被熔断实例；SERVICE/METHOD 级无实例维度，允许 ChangeInstance 为 nil。
 func (cbg *CircuitBreakGauge) Validate() error {
-	if !reflect2.IsNil(cbg.ChangeInstance) {
-		return nil
+	if cbg.Level == "INSTANCE" && reflect2.IsNil(cbg.ChangeInstance) {
+		return NewSDKError(ErrCodeAPIInvalidArgument, nil, "empty change instance for instance-level gauge")
 	}
-	return NewSDKError(ErrCodeAPIInvalidArgument, nil, "empty change instance")
+	return nil
 }
 
 // APICallKey API调用的唯一标识

@@ -98,7 +98,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 	resourceCounters := c.breaker.getLevelResourceCounters(c.res.GetLevel())
 	cbRule := c.getCircuitBreakerRule(resp)
 	if cbRule == nil {
-		if _, exist := resourceCounters.remove(c.res); exist {
+		if old, exist := resourceCounters.remove(c.res); exist {
+			// 规则被删除，旧 counters 即将被丢弃，上报熔断销毁事件
+			old.reportDestroyEvent()
 			c.log.Infof("[CircuitBreaker] removed counters for resource: %s, scheduling health check", c.res.String())
 			c.scheduleHealthCheck()
 		}
@@ -106,9 +108,9 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 	}
 	c.log.Debugf("[CircuitBreaker] matched rule: %s (id: %s, revision: %s) for resource: %s",
 		cbRule.Name, cbRule.Id, cbRule.Revision, c.res.String())
-	counters, exist := resourceCounters.get(c.res)
+	oldCounters, exist := resourceCounters.get(c.res)
 	if exist {
-		activeRule := counters.CurrentActiveRule()
+		activeRule := oldCounters.CurrentActiveRule()
 		if activeRule.Id == cbRule.Id && activeRule.Revision == cbRule.Revision {
 			c.log.Debugf("[CircuitBreaker] rule unchanged for resource: %s, skipping update", c.res.String())
 			return
@@ -117,10 +119,14 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 			"new rule: %s (id: %s, revision: %s)", c.res.String(), activeRule.Name, activeRule.Id,
 			activeRule.Revision, cbRule.Name, cbRule.Id, cbRule.Revision)
 	}
-	counters, err = newResourceCounters(c.res, cbRule, c.breaker)
+	counters, err := newResourceCounters(c.res, cbRule, c.breaker)
 	if err != nil {
 		c.log.Errorf("[CircuitBreaker] new resource counters fail: %+v", err)
 		return
+	}
+	// 规则发生变更，旧 counters 即将被新 counters 覆盖，上报熔断销毁事件
+	if exist {
+		oldCounters.reportDestroyEvent()
 	}
 	resourceCounters.put(c.res, counters)
 	c.log.Infof("[CircuitBreaker] created new counters, applied rule: %s (id: %s, revision: %s) for resource: %s",
@@ -129,7 +135,10 @@ func (c *RuleContainer) realRefreshCircuitBreaker() {
 }
 
 func (c *RuleContainer) realRefreshHealthCheck() {
-	c.log.Infof("[FaultDetect] start to pull fault detect rule for resource=%s", c.res.String())
+	// 本函数被高频触发：每个 service 下 SERVICE/METHOD/INSTANCE 各级 resource × 每次服务端规则
+	// 缓存事件（OnEvent）都会执行一遍。故入口不打 INFO（否则刷屏），仅 Debug 记录刷新触发；
+	// 真正"开始拉取探测规则"的 INFO 移到门控通过、即将 SyncGetServiceRule 处，做到名实相符。
+	c.log.Debugf("[FaultDetect] refresh health check triggered for resource=%s", c.res.String())
 	counters, exist := c.breaker.getLevelResourceCounters(c.res.GetLevel()).get(c.res)
 	faultDetectEnabled := false
 	var currentActiveRule *fault_tolerance.CircuitBreakerRule
@@ -142,6 +151,7 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 	if currentActiveRule != nil && currentActiveRule.Enable && currentActiveRule.GetFaultDetectConfig() != nil &&
 		currentActiveRule.GetFaultDetectConfig().GetEnable() {
 		engineFlow := c.engineFlow
+		c.log.Debugf("[FaultDetect] start to pull fault detect rule for resource=%s", c.res.String())
 		resp, err := engineFlow.SyncGetServiceRule(model.EventFaultDetect, &model.GetServiceRuleRequest{
 			Namespace: c.res.GetService().Namespace,
 			Service:   c.res.GetService().Service,
@@ -166,7 +176,9 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 						faultDetector.Revision, c.res.String())
 					return
 				}
-				c.log.Debugf("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
+				// 探测规则内容发生变更（revision 不同）→ 重建 checker 应用新规则，属事件级状态变化，
+				// 用 INFO 让"探测规则更新被感知并应用"在默认级别可见（含 old->new revision 对比）。
+				c.log.Infof("[FaultDetect] fault detect rule revision changed (%s -> %s) for resource=%s, rebuild checker",
 					curRule.Revision, faultDetector.Revision, c.res.String())
 				curChecker.stop()
 			}
@@ -183,9 +195,15 @@ func (c *RuleContainer) realRefreshHealthCheck() {
 		}
 	}
 	if !faultDetectEnabled {
-		c.log.Infof("[FaultDetect] health check for resource=%s is disabled, now stop the previous checker", c.res.String())
+		// 仅在真的停掉了一个已存在的 checker（探测从开启变为关闭，属状态变化事件）时打 INFO；
+		// 否则（该资源本就没配探测，仅刷新时例行判定门控不通过）降级 DEBUG，避免每次规则
+		// 复检/push 事件对未配探测的 METHOD/INSTANCE 资源重复刷屏淹没真正的状态切换事件。
 		if checker, ok := c.breaker.delResourceHealthChecker(c.res); ok {
+			c.log.Infof("[FaultDetect] health check for resource=%s is disabled, now stop the previous checker",
+				c.res.String())
 			checker.stop()
+		} else {
+			c.log.Debugf("[FaultDetect] health check for resource=%s is disabled (no active checker)", c.res.String())
 		}
 		if c.res.GetLevel() != fault_tolerance.Level_INSTANCE {
 			svcKey := c.res.GetService()

@@ -144,10 +144,12 @@ func (s *PrometheusReporter) Init(ctx *plugin.InitContext) error {
 		adminPort := ctx.Config.GetGlobal().GetAdmin().GetPort()
 		if s.cfg.port == adminPort {
 			log.GetBaseLogger().Infof("[metrics]init action, pull port is same as admin port, register metrics path")
-			handler := promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})
+			mh := &metricsHttpHandler{
+				handler: promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}),
+			}
 			s.initCtx.Config.GetGlobal().GetAdmin().RegisterPath(model.AdminHandler{
 				Path:        "/metrics",
-				HandlerFunc: handler.ServeHTTP,
+				HandlerFunc: mh.ServeHTTP,
 			})
 		}
 	}
@@ -188,9 +190,9 @@ func (s *PrometheusReporter) ReportStat(metricsType model.MetricType, metricsVal
 			if s.circuitBreakerCollector == nil || val == nil {
 				return nil
 			}
-			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val)
-			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] CircuitBreakStat received: method=%s cbStatus=%v labels=%v",
-				val.Method, val.CBStatus, labels)
+			labels := statcommon.ConvertCircuitBreakGaugeToLabels(val, s.bindIP)
+			s.logCtx.GetStatReportLogger().Debugf("[metrics][report] CircuitBreakStat received: method=%s status=%s labels=%v",
+				val.Method, val.CBStatus.GetStatus(), labels)
 			s.circuitBreakerCollector.CollectStatInfo(val, labels, statcommon.CircuitBreakerStrategy,
 				statcommon.CircuitBreakerLabelOrder)
 		}
@@ -316,7 +318,7 @@ func (pa *PullAction) Close() {
 }
 
 func (pa *PullAction) doAggregation(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pa.cfg.Interval)
 	lastRevisionLogTime := time.Time{}
 
 	action := func() {
@@ -424,18 +426,33 @@ type PushAction struct {
 	reporter *PrometheusReporter
 	cfg      *Config
 	pusher   *push.Pusher
+	// resolvedAddress 解析后的 pushgateway 地址：优先使用 cfg.Address，
+	// 为空时通过 Polaris 服务发现获取，避免 Init 时机过早导致的超时
+	resolvedAddress string
+	// push 失败日志收敛字段：首次 ERROR，后续同一错误每 30s 一次 WARN
+	lastPushErr    string
+	lastPushErrLog time.Time
 }
 
 func (pa *PushAction) Init(initCtx *plugin.InitContext, reporter *PrometheusReporter) {
+	pa.initCtx = initCtx
+	pa.reporter = reporter
 	cfgValue := initCtx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
 	if cfgValue == nil {
 		return
 	}
 	pa.cfg = cfgValue.(*Config)
-	pa.pusher = push.
-		New(pa.cfg.Address, _defaultJobName).
-		Gatherer(pa.reporter.registry).
-		Grouping(_defaultJobInstance, pa.initCtx.SDKContextID)
+	// address 非空直接创建 pusher；为空则推迟到首轮 push 周期时通过服务发现解析地址，
+	// 避免 Init 时 SDK 尚未完全就绪导致 SyncGetOneInstance 超时。
+	if pa.cfg.Address != "" {
+		pa.resolvedAddress = pa.cfg.Address
+		reporter.logCtx.GetStatReportLogger().Infof(
+			"[metrics][push] pushgateway address from config: %s", pa.resolvedAddress)
+		pa.pusher = push.
+			New(pa.resolvedAddress, _defaultJobName).
+			Gatherer(reporter.registry).
+			Grouping(_defaultJobInstance, initCtx.SDKContextID)
+	}
 }
 
 func (pa *PushAction) Close() {
@@ -456,6 +473,26 @@ func (pa *PushAction) Run(ctx context.Context) {
 				}
 			}()
 
+			// 首次 push 时若 pusher 为 nil（address 为空且 Init 时未创建），
+			// 通过 Polaris 服务发现懒解析地址。此时 SDK 已运行一段时间，
+			// 服务发现连接已就绪，避免 Init 时机过早导致的超时。
+			if pa.pusher == nil {
+				addr, err := resolvePushAddress(pa.initCtx, pa.cfg)
+				if err != nil {
+					pa.reporter.logCtx.GetStatReportLogger().Debugf(
+						"[metrics][push] pushgateway service discovery pending: %v, will retry next cycle", err)
+					return
+				}
+				pa.resolvedAddress = addr
+				pa.reporter.logCtx.GetStatReportLogger().Infof(
+					"[metrics][push] pushgateway address resolved via service discovery (%s/%s): %s",
+					pa.cfg.PushGatewayNamespace, pa.cfg.PushGatewayService, pa.resolvedAddress)
+				pa.pusher = push.
+					New(pa.resolvedAddress, _defaultJobName).
+					Gatherer(pa.reporter.registry).
+					Grouping(_defaultJobInstance, pa.initCtx.SDKContextID)
+			}
+
 			pa.reporter.logCtx.GetStatReportLogger().Debugf("[metrics][push] start push stat metrics to pushgateway")
 
 			statcommon.PutDataFromContainerInOrder(pa.reporter.metricVecCaches, pa.reporter.insCollector,
@@ -466,14 +503,26 @@ func (pa *PushAction) Run(ctx context.Context) {
 
 			insCount := len(pa.reporter.insCollector.CollectValues())
 			rlCount := len(pa.reporter.rateLimitCollector.CollectValues())
+			// 若地址由服务发现解析，日志中打印实际地址；否则与 old 行为一致
+			addr := pa.cfg.Address
+			if addr == "" {
+				addr = pa.resolvedAddress
+			}
 			pa.reporter.logCtx.GetStatReportLogger().Debugf(
 				"[metrics][push] aggregation done: insMetrics=%d rateLimitMetrics=%d, pushing to %s",
-				insCount, rlCount, pa.cfg.Address)
+				insCount, rlCount, addr)
 
 			if err := pa.pusher.
 				Push(); err != nil {
-				pa.reporter.logCtx.GetStatReportLogger().Errorf("push metrics to pushgateway fail: %s", err.Error())
+				pa.logPushError(err)
 				return
+			}
+
+			// push 成功：若之前有失败记录，输出恢复 INFO 级别日志（首次恢复，事件级）
+			if pa.lastPushErr != "" {
+				pa.reporter.logCtx.GetStatReportLogger().Infof(
+					"[metrics][push] push metrics to pushgateway recovered (was failing: %s)", pa.lastPushErr)
+				pa.lastPushErr = ""
 			}
 
 			insRevision := pa.reporter.insCollector.IncRevision()
@@ -495,6 +544,53 @@ func (pa *PushAction) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// logPushError 收敛 push 失败日志：首次 ERROR，后续同一错误 30s WARN。
+// 对齐 checker.go detectLogError 的收敛模式。
+func (pa *PushAction) logPushError(err error) {
+	errStr := err.Error()
+	now := time.Now()
+	// 首次失败 / 距上次打印超时 / 错误信息变更 → 打印
+	if pa.lastPushErr != errStr || now.Sub(pa.lastPushErrLog) >= pushErrLogInterval {
+		if pa.lastPushErr == "" {
+			pa.reporter.logCtx.GetStatReportLogger().Errorf(
+				"push metrics to pushgateway fail: %s", errStr)
+		} else {
+			pa.reporter.logCtx.GetStatReportLogger().Warnf(
+				"push metrics to pushgateway still failing (last error unchanged for %v): %s",
+				now.Sub(pa.lastPushErrLog).Round(time.Second), errStr)
+		}
+		pa.lastPushErrLog = now
+	}
+	pa.lastPushErr = errStr
+}
+
+// resolvePushAddress 解析 pushgateway 地址。
+// 优先使用 cfg.Address，为空时通过 Polaris 服务发现查 pushgateway 实例。
+// 设置 5s 超时 + 1 次重试，避免 cold start 时的默认 1s 超时过早失败。
+func resolvePushAddress(initCtx *plugin.InitContext, cfg *Config) (string, error) {
+	if initCtx == nil || initCtx.ValueCtx == nil || initCtx.ValueCtx.GetEngine() == nil {
+		return "", fmt.Errorf("pushgateway service discovery unavailable: engine not ready")
+	}
+	svc := cfg.PushGatewayService
+	ns := cfg.PushGatewayNamespace
+	req := &model.GetOneInstanceRequest{
+		FlowID:    uint64(time.Now().Unix()),
+		Service:   svc,
+		Namespace: ns,
+	}
+	req.SetTimeout(5 * time.Second)
+	req.SetRetryCount(1)
+	resp, err := initCtx.ValueCtx.GetEngine().SyncGetOneInstance(req)
+	if err != nil {
+		return "", fmt.Errorf("fail to get pushgateway instance from service %s/%s: %w", ns, svc, err)
+	}
+	instances := resp.GetInstances()
+	if len(instances) == 0 {
+		return "", fmt.Errorf("pushgateway service %s/%s has no instances", ns, svc)
+	}
+	return fmt.Sprintf("%s:%d", instances[0].GetHost(), instances[0].GetPort()), nil
 }
 
 // Info 插件信息.

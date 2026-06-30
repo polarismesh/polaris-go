@@ -28,8 +28,12 @@ func init() {
 }
 
 const (
-	defaultReportInterval = 1 * time.Minute
-	defaultMetricPort     = 28080
+	defaultReportInterval       = 1 * time.Minute
+	defaultMetricPort           = 28080
+	defaultPushGatewayNamespace = "Polaris"
+	defaultPushGatewayService   = "polaris.pushgateway"
+	// pushErrLogInterval push 失败日志收敛间隔：首次 ERROR，后续同一错误每 30s 一次 WARN
+	pushErrLogInterval = 30 * time.Second
 )
 
 // Config prometheus 的配置
@@ -40,6 +44,10 @@ type Config struct {
 	port     int           `yaml:"-"`
 	Interval time.Duration `yaml:"interval"`
 	Address  string        `yaml:"address"`
+	// pushgateway 服务发现配置：仅 push 模式 + address 为空时生效，
+	// 通过 Polaris 服务发现懒解析地址。
+	PushGatewayNamespace string `yaml:"pushGatewayNamespace"`
+	PushGatewayService   string `yaml:"pushGatewayService"`
 }
 
 // Verify verify config
@@ -60,5 +68,11 @@ func (c *Config) SetDefault() {
 	}
 	if c.Interval == 0 {
 		c.Interval = 15 * time.Second
+	}
+	if c.PushGatewayNamespace == "" {
+		c.PushGatewayNamespace = defaultPushGatewayNamespace
+	}
+	if c.PushGatewayService == "" {
+		c.PushGatewayService = defaultPushGatewayService
 	}
 }

@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/modern-go/reflect2"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
@@ -194,11 +196,17 @@ var (
 	CircuitBreakerGaugeLabelOrder map[string]LabelValueSupplier = map[string]LabelValueSupplier{
 		CalleeNamespace: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return val.GetCalledInstance().GetNamespace()
+			if val.CalleeService != nil {
+				return val.CalleeService.Namespace
+			}
+			return ""
 		},
 		CalleeService: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return val.GetCalledInstance().GetService()
+			if val.CalleeService != nil {
+				return val.CalleeService.Service
+			}
+			return ""
 		},
 		CalleeMethod: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
@@ -206,19 +214,32 @@ var (
 		},
 		CalleeSubset: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return val.GetCalledInstance().GetLogicSet()
+			return val.Subset
 		},
 		CalleeInstance: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return fmt.Sprintf("%s:%d", val.GetCalledInstance().GetHost(), val.GetCalledInstance().GetPort())
+			if reflect2.IsNil(val.ChangeInstance) {
+				return ""
+			}
+			return fmt.Sprintf("%s:%d", val.ChangeInstance.GetHost(), val.ChangeInstance.GetPort())
 		},
 		CallerNamespace: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return val.GetNamespace()
+			if val.CallerService != nil {
+				return val.CallerService.Namespace
+			}
+			return ""
 		},
 		CallerService: func(args interface{}) string {
 			val := args.(*model.CircuitBreakGauge)
-			return val.GetService()
+			if val.CallerService != nil {
+				return val.CallerService.Service
+			}
+			return ""
+		},
+		RuleName: func(args interface{}) string {
+			val := args.(*model.CircuitBreakGauge)
+			return val.RuleName
 		},
 	}
 )
@@ -254,10 +275,11 @@ func ConvertRateLimitGaugeToLabels(val *model.RateLimitGauge) map[string]string 
 	return labels
 }
 
-func ConvertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge) map[string]string {
+func ConvertCircuitBreakGaugeToLabels(val *model.CircuitBreakGauge, bindIP string) map[string]string {
 	labels := make(map[string]string)
 	for label, supplier := range CircuitBreakerGaugeLabelOrder {
 		labels[label] = supplier(val)
 	}
+	labels[CallerIP] = bindIP
 	return labels
 }

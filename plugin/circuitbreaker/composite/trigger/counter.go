@@ -27,10 +27,11 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// StatusChangeHandler
+// StatusChangeHandler 熔断状态机的状态切换回调，由资源级计数器实现。
 type StatusChangeHandler interface {
-	// CloseToOpen
-	CloseToOpen(breaker string)
+	// CloseToOpen 由 trigger 触发熔断时调用。
+	// breaker 为触发的规则/块名；reason 为触发原因描述（含触发类型、实际值、阈值、窗口），用于事件上报。
+	CloseToOpen(breaker string, reason string)
 	// OpenToHalfOpen
 	OpenToHalfOpen()
 	// HalfOpenToClose

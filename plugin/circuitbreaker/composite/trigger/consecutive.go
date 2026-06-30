@@ -18,6 +18,7 @@
 package trigger
 
 import (
+	"fmt"
 	"sync/atomic"
 )
 
@@ -55,7 +56,8 @@ func (c *ConsecutiveCounter) Report(success bool) {
 			c.log.Infof("[CircuitBreaker][ConsecutiveCounter] triggered CloseToOpen, ruleName: %s, ruleID: %s, "+
 				"ruleRev: %s, currentSum(%d), maxCount(%d), resource(%s)",
 				c.ruleName, c.ruleID, c.ruleRevision, currentSum, c.maxCount, c.res.String())
-			c.handler.CloseToOpen(c.ruleName)
+			reason := fmt.Sprintf("CONSECUTIVE_ERROR:%d (threshold:%d)", currentSum, c.maxCount)
+			c.handler.CloseToOpen(c.ruleName, reason)
 		}
 	} else {
 		atomic.StoreInt32(&c.consecutiveErrors, 0)
