@@ -41,12 +41,15 @@ env:
 jobs:
   unit-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.19", "1.20", "1.21", "1.22", "1.23", "1.24"]
     steps:
       # Setup the environment.
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: ${{ matrix.go }}
       # Checkout latest code
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -57,13 +60,15 @@ jobs:
           go mod download
 
       # Run unit tests (no external Polaris server required)
+      # -gcflags=all=-l disables inlining, required by gomonkey patches (plugin/healthcheck/utils)
       - name: Run unit tests
         run: |
-          go test -count=1 -timeout=10m -coverprofile=coverage_unit.txt \
+          go test -count=1 -timeout=10m -gcflags=all=-l -coverprofile=coverage_unit.txt \
             -coverpkg=./api/...,./pkg/...,./plugin/... \
             ./api/... ./pkg/... ./plugin/...
 
       - name: Upload coverage reports to Codecov
+        if: matrix.go == '1.21'
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage_unit.txt
