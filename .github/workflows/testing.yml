@@ -8,22 +8,25 @@
 #
 # https://opensource.org/licenses/BSD-3-Clause
 #
-# Unless required by applicable law or agreed to in writing, software distributed
-# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR
 # CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
 
-name: Go
+name: Testing
 
 on:
   push:
     branches:
     - main
+    - release/*
     - feature/**
   pull_request:
     branches:
     - main
+    - release/*
     - feature/**
 
 permissions:
@@ -36,18 +39,14 @@ env:
   GOPROXY: https://goproxy.cn,direct
 
 jobs:
-  build:
+  unit-test:
     runs-on: ubuntu-latest
-    # strategy set
-    strategy:
-      matrix:
-        go: ["1.19", "1.20", "1.21", "1.22", "1.23", "1.24"]
     steps:
       # Setup the environment.
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.21'
       # Checkout latest code
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -57,31 +56,17 @@ jobs:
         run: |
           go mod download
 
-      # Build to verify compilation
-      - name: Build
-        run: go build -v ./...
-
-      # Execute vert check
-      # - name: vert check
-      #   run: bash vert.sh -install && bash vert.sh
-
-      # Run tests
-      - name: run tests
-        continue-on-error: true
+      # Run unit tests (no external Polaris server required)
+      - name: Run unit tests
         run: |
-          set -ex         # Exit on error; debugging enabled.
-          set -o pipefail # Fail a pipe if any sub-command fails.
-          
-          cd ./test
-          for line in $(cat suit.txt)
-          do
-            if [[ "${line}" == "" ]]; then
-              continue
-            fi
-            export SDK_SUIT_TEST=${line}
-            echo "SDK_SUIT_TEST=${SDK_SUIT_TEST}"
-            go test -timeout=120m -v -covermode=count -coverprofile=coverage_${line}.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
-          done
+          go test -count=1 -timeout=10m -coverprofile=coverage_unit.txt \
+            -coverpkg=./api/...,./pkg/...,./plugin/... \
+            ./api/... ./pkg/... ./plugin/...
 
-      - name: Coverage
-        run: bash <(curl -s https://codecov.io/bash)
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage_unit.txt
+          flags: unittests
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

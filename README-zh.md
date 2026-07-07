@@ -1,7 +1,7 @@
 # Polaris Go
 
-[![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg?token=EK9174H91T)](https://codecov.io/gh/polarismesh/polaris-go)
-[![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
+[![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg)](https://app.codecov.io/gh/polarismesh/polaris-go)
+[![Go](https://github.com/polarismesh/polaris-go/actions/workflows/testing.yml/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/polarismesh/polaris-go?style=flat-square)](https://github.com/polarismesh/polaris-go)
@@ -15,7 +15,6 @@ README：
 - [介绍](#介绍)
 - [如何使用](#如何使用)
 - [使用示例](#使用示例)
-- [开发框架](#开发框架)
 
 ## 介绍
 
@@ -58,15 +57,4 @@ API的快速使用指南，可以参考：[QuickStart](examples/quickstart)
 - [熔断示例](https://github.com/polarismesh/polaris-go/tree/main/examples/circuitbreaker)
 - [限流示例](https://github.com/polarismesh/polaris-go/tree/main/examples/ratelimit)
 - [配置中心示例](https://github.com/polarismesh/polaris-go/tree/main/examples/configuration)
-
-## 开发框架
-
-通常，开发者使用开源或者自研的 HTTP 或者 RPC 框架开发分布式服务。北极星提供多个框架和北极星 SDK 的集成方案和实现。如果你在使用这些框架，不需要直接调用北极星 SDK，就可以使用北极星的服务治理功能。
-
-- dubbo-go
-  - [registry and discovery](https://github.com/apache/dubbo-go/tree/main/registry)
-  - [routing](https://github.com/apache/dubbo-go/tree/main/cluster/router)
-  - [circuit breaker and rate limiter](https://github.com/apache/dubbo-go/tree/main/filter)
-  - [examples](https://github.com/apache/dubbo-go-samples/tree/master/polaris)
-- [grpc-go](https://github.com/polarismesh/grpc-go-polaris)
 

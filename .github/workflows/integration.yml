@@ -1,0 +1,86 @@
+# Tencent is pleased to support the open source community by making polaris-go available.
+#
+# Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
+#
+# Licensed under the BSD 3-Clause License (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# https://opensource.org/licenses/BSD-3-Clause
+#
+# Unless required by applicable law or agreed to in writing, software distributed
+# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
+
+
+name: Integration
+
+on:
+  push:
+    branches:
+    - main
+    - release/*
+    - feature/**
+  pull_request:
+    branches:
+    - main
+    - release/*
+    - feature/**
+
+permissions:
+  contents: write
+
+# Always force the use of Go modules
+env:
+  GO111MODULE: on
+  GOSUMDB: off
+  GOPROXY: https://goproxy.cn,direct
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # strategy set
+    strategy:
+      matrix:
+        go: ["1.19", "1.20", "1.21", "1.22", "1.23", "1.24"]
+    steps:
+      # Setup the environment.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      # Checkout latest code
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Download dependencies
+      - name: Download dependencies
+        run: |
+          go mod download
+
+      # Build to verify compilation
+      - name: Build
+        run: go build -v ./...
+
+      # Execute vert check
+      # - name: vert check
+      #   run: bash vert.sh -install && bash vert.sh
+
+      # Run tests
+      - name: run tests
+        continue-on-error: true
+        run: |
+          set -ex         # Exit on error; debugging enabled.
+          set -o pipefail # Fail a pipe if any sub-command fails.
+          
+          cd ./test
+          for line in $(cat suit.txt)
+          do
+            if [[ "${line}" == "" ]]; then
+              continue
+            fi
+            export SDK_SUIT_TEST=${line}
+            echo "SDK_SUIT_TEST=${SDK_SUIT_TEST}"
+            go test -timeout=120m -v -covermode=count -coverprofile=coverage_${line}.txt -coverpkg=github.com/polarismesh/polaris-go/api,github.com/polarismesh/polaris-go/pkg,github.com/polarismesh/polaris-go/plugin
+          done

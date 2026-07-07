@@ -1,7 +1,7 @@
 # Polaris Go
 
-[![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg?token=EK9174H91T)](https://codecov.io/gh/polarismesh/polaris-go)
-[![Go](https://github.com/polarismesh/polaris-go/workflows/Go/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
+[![codecov](https://codecov.io/gh/polarismesh/polaris-go/branch/main/graph/badge.svg)](https://app.codecov.io/gh/polarismesh/polaris-go)
+[![Go](https://github.com/polarismesh/polaris-go/actions/workflows/testing.yml/badge.svg?branch=main)](https://github.com/polarismesh/polaris-go/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)](https://goproxy.cn/stats/github.com/polarismesh/polaris-go/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/polarismesh/polaris-go.svg)](https://pkg.go.dev/github.com/polarismesh/polaris-go)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/polarismesh/polaris-go?style=flat-square)](https://github.com/polarismesh/polaris-go)
@@ -13,7 +13,6 @@ README：
 - [Introduction](#introduction)
 - [How to use](#how-to-use)
 - [Examples](#examples)
-- [Frameworks](#frameworks)
 
 ## Introduction
 
@@ -61,15 +60,4 @@ A polaris-examples module is included in our project for you to get started with
 - [circuit breaker example](https://github.com/polarismesh/polaris-go/tree/main/examples/circuitbreaker)
 - [rate limiter example](https://github.com/polarismesh/polaris-go/tree/main/examples/ratelimit)
 - [config center example](https://github.com/polarismesh/polaris-go/tree/main/examples/configuration)
-
-## Frameworks
-
-Developers usually use HTTP or RPC frameworks to develop distributed service. Polaris SDK is already integrated into some development frameworks. If using these frameworks, you can enable Polaris Service Governance functions without using Polaris SDK directly.
-
-- dubbo-go
-  - [registry and discovery](https://github.com/apache/dubbo-go/tree/main/registry)
-  - [routing](https://github.com/apache/dubbo-go/tree/main/cluster/router)
-  - [circuit breaker and rate limiter](https://github.com/apache/dubbo-go/tree/main/filter)
-  - [examples](https://github.com/apache/dubbo-go-samples/tree/master/polaris)
-- [grpc-go](https://github.com/polarismesh/grpc-go-polaris)
 

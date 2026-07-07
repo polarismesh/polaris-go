@@ -18,12 +18,12 @@ on:
   push:
     branches:
       - main
-      - release*
+      - release/*
       - feature/**
   pull_request:
     branches:
       - main
-      - release*
+      - release/*
       - feature/**
 
 env:
