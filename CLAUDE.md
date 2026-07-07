@@ -44,10 +44,12 @@ go mod download
 # 快速构建验证（查看是否有编译错误）
 go build -v ./...
 
-# 快速运行单个测试套件（需要本地 Polaris 服务端运行在 127.0.0.1:8091）
+# 快速运行单个集成测试套件
+# 集成测试自带 mock Polaris 服务端（mock.NewNamingServer + 本地 gRPC server），无需外部服务端
+# 通过 SDK_SUIT_TEST 环境变量指定套件，套件名见 test/suit.txt
 cd ./test
 export SDK_SUIT_TEST=ConsumerTestingSuite
-go test -timeout=120m -v
+go test -timeout=120m -v -run "Test$"
 
 # 格式化代码和 import（提交前必须执行）
 bash import-format.sh
@@ -115,6 +117,8 @@ go mod download
 
 所有可用套件名称列在 `test/suit.txt` 中：
 `ConsumerTestingSuite`、`ProviderTestingSuite`、`LBTestingSuite`、`CircuitBreakSuite`、`HealthCheckTestingSuite`、`HealthCheckAlwaysTestingSuite`、`NearbyTestingSuite`、`RuleRoutingTestingSuite`、`DstMetaTestingSuite`、`SetDivisionTestingSuite`、`CanaryTestingSuite`、`CacheTestingSuite`、`ServiceUpdateSuite`、`ServerSwitchSuite`、`DefaultServerSuite`、`CacheFastUpdateSuite`、`ServerFailOverSuite`、`EventSubscribeSuit`、`InnerServiceLBTestingSuite`、`LocalNormalTestingSuite`、`RuleChangeTestingSuite`、`RemoteNormalTestingSuite`
+
+> 注意：`suit.txt` 列了 22 个，但 `all_suite_test.go` 的 `suitFunc` map 中部分套件被注释或为空函数，实际真正跑测试的约 16 个。详见下文「测试结构」段落。
 
 ## 架构说明
 
@@ -286,6 +290,26 @@ go mod verify
 
 入口文件 `test/all_suite_test.go` 读取 `SDK_SUIT_TEST`（未设置时回退读取 `suit.txt`）来决定注册哪些套件。
 
+**集成测试自带 mock 服务端，不依赖外部 Polaris 服务端**：每个套件的 `SetUpSuite` 用 `mock.NewNamingServer()` 建内存 mock 服务端，灌入测试数据（服务/实例/命名空间），再用 `net.Listen` 在 `127.0.0.1:<固定端口>` 起真实 gRPC server 挂上 mock，然后创建真实 SDK Context 连接这个本地 gRPC server，走完整真实调用链（`GetInstances` → gRPC → mock → 缓存/路由/LB → 断言）。端口定义在 `test/common/constant.go`。
+
+**`suit.txt` 列出 22 个套件，但并非全部生效**：`all_suite_test.go` 的 `suitFunc` map 里，`CircuitBreakSuite`/`HealthCheckTestingSuite`/`HealthCheckAlwaysTestingSuite` 整段被注释未注册，`CanaryTestingSuite` 函数体为空，`RuleChangeTestingSuite`/`RemoteNormalTestingSuite` 是 `func() {}` 空函数。实际真正跑测试的约 16 个套件。新增套件时记得在 `suitFunc` map 里实际注册。
+
+**gomonkey 注意事项**：`plugin/healthcheck/utils/detection_utils_test.go` 使用 `github.com/agiledragon/gomonkey v2.0.2`（项目里唯一一处）。gomonkey 通过改写函数入口字节码实现打桩，有两个限制：
+1. **被测函数不能被内联**——gomonkey 打桩会静默失败。跑该包测试时必须加 `-gcflags=all=-l` 禁用内联，否则 4 个断言全 FAIL（测试正常执行但打桩不生效，函数返回真实值）。
+2. **gomonkey v2.0.2 仅支持 amd64**（只有 `jmp_amd64.go`）。CI 的 `ubuntu-latest`（linux amd64）能编译运行；macOS arm64 本地直接 build failed（`undefined: buildJmpDirective`），需升级到 `gomonkey/v2 v2.14.0+` 才有 arm64 支持。
+
+## 单元测试
+
+`api/`、`pkg/`、`plugin/` 下的标准 `Test*` 函数（约 52 个 `_test.go` 文件）是不依赖任何外部服务的纯单元测试，与 `test/` 下的 gocheck 集成测试天然隔离。快速跑单元测试：
+
+```bash
+# 跑全量单元测试并产出覆盖率（实测整体约 19%，耗时约 1 分钟）
+# -count=1 禁用缓存；-gcflags=all=-l 让 gomonkey 打桩生效
+go test -count=1 -timeout=10m -gcflags=all=-l \
+  -coverprofile=coverage_unit.txt -coverpkg=./api/...,./pkg/...,./plugin/... \
+  ./api/... ./pkg/... ./plugin/...
+```
+
 ## 代码风格
 
 项目通过 golangci-lint（`.golangci.yml`）和 revive（`revive.toml`）强制执行编码规范，关键约束如下：
@@ -344,15 +368,15 @@ git commit -s
 
 ## CI
 
-GitHub Actions 在 Go 1.19、1.20、1.21、1.22、1.23、1.24 多个版本上运行测试（`ubuntu-latest`）。PR 需通过所有检查后方可合并。贡献代码请提交至 `main` 分支。
+GitHub Actions 在 `ubuntu-latest` 上运行，PR 需通过所有检查后方可合并。贡献代码请提交至 `main` 分支。三个 workflow 文件在 `.github/workflows/`：
 
-CI 流程包括：
-1. 下载依赖（`go mod download`）
-2. 编译验证（`go build -v ./...`）
-3. 遍历 `test/suit.txt` 中的所有测试套件运行集成测试
-4. 覆盖率上报（Codecov）
+- **`testing.yml`（name: Testing）**：集成测试。matrix 跑 Go 1.19–1.24 六个版本，遍历 `test/suit.txt` 中所有套件（`continue-on-error: true`，套件失败不阻断 CI——部分套件有并发 flaky）。仅 `go=1.21` 版本上传覆盖率到 Codecov（`codecov/codecov-action@v4`，`flags: integration`），避免 6 个版本重复上传。覆盖率文件在 `test/coverage_<suite>.txt`，用 `-coverpkg` 指定被测范围为 `api/pkg/plugin`（集成测试代码在 `test/` 包，不加 `-coverpkg` 会显示 0%）。
+- **`golangci-lint.yml`**：静态检查。单版本 Go 1.21，用 `golangci/golangci-lint-action@v9`（版本固定 `v2.11.4`），`--new-from-rev=origin/main` 只检查相对 main 的新增问题。
+- **`revive.yml`**：辅助 lint。单版本 Go 1.21，用 `morphy2k/revive-action@v2` + `revive.toml` 配置。
 
-另外还有 golangci-lint 和 revive 的独立 CI 工作流。
+**Codecov 上传需要 `CODECOV_TOKEN` secret**（仓库 Settings → Secrets 配置）。公开仓库的受保护分支（`main`）上传要求 token，否则上传静默失败但不阻断 CI。
+
+**覆盖率来源**：集成测试自带 mock 服务端，CI 上能跑出 30%+ 真实覆盖率（单个 ConsumerTestingSuite 约 33.7%）。`api/pkg/plugin` 下的标准单元测试覆盖率约 19%，可按需用上文「单元测试」段落的命令本地验证。
 
 ## Pull Request 规范
 
