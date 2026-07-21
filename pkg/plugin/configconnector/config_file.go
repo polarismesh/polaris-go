@@ -67,10 +67,35 @@ func (c *ConfigFile) String() string {
 	_, _ = bf.WriteString("file_name=" + c.FileName)
 	_, _ = bf.WriteString("version=" + strconv.FormatUint(c.Version, 10))
 	_, _ = bf.WriteString("encrypt=" + strconv.FormatBool(c.Encrypted))
+	// 加密场景下对敏感 tag 值做掩码，避免解密后的明文数据密钥等敏感信息进入日志
+	maskedTags := maskTags(c.Tags, c.Encrypted)
 	//nolint: errchkjson
-	data, _ := json.Marshal(c.Tags)
+	data, _ := json.Marshal(maskedTags)
 	_, _ = bf.WriteString("tags=" + string(data))
 	return bf.String()
+}
+
+// maskedTagValue 加密场景下敏感 tag 掩码后的占位值
+const maskedTagValue = "******"
+
+// maskTags 对加密场景下的敏感 Tag 值进行掩码处理。
+// tags      待处理的配置文件标签切片，允许为 nil（非加密场景原样返回，加密场景返回长度一致的新切片）。
+// encrypted 是否为加密配置；仅加密场景才对敏感 tag 做掩码，非加密场景直接返回入参 tags。
+// 返回值    加密场景返回掩码后的新切片（不修改入参元素，避免污染缓存/上游对象），非加密场景返回原 tags。
+// 掩码目标  internal-datakey（解密后的明文数据密钥）与 internal-encryptalgo（加密算法标识）。
+func maskTags(tags []*ConfigFileTag, encrypted bool) []*ConfigFileTag {
+	if !encrypted {
+		return tags
+	}
+	masked := make([]*ConfigFileTag, len(tags))
+	for i, tag := range tags {
+		if tag != nil && (tag.Key == ConfigFileTagKeyDataKey || tag.Key == ConfigFileTagKeyEncryptAlgo) {
+			masked[i] = &ConfigFileTag{Key: tag.Key, Value: maskedTagValue}
+			continue
+		}
+		masked[i] = tag
+	}
+	return masked
 }
 
 type ConfigFileTag struct {

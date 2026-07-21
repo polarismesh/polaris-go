@@ -108,8 +108,26 @@ func (c *defaultConfigFile) HasContent() bool {
 func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFileMetadata, newContent string, persistent model.Persistent) error {
 	oldContent := c.content
 
-	c.logCtx.GetBaseLogger().Infof("[Config] update content. file = %+v, old content = %s, new content = %s",
-		configFileMetadata, oldContent, newContent)
+	// 无论是否加密，配置变更日志均不打印配置内容明文，仅打印不可逆的 Md5、version 及加密标识用于判断变更。
+	//
+	// 此处依赖两个前提：(1) 同一 repo 的 fireChangeEvent 串行触发（初始 pull 仅构造时一次，
+	// 其后均来自 mainLoop 单 goroutine 的长轮询通知）；(2) fireChangeEvent 先 Store 新文件到
+	// remoteConfigFileRef 再回调本 listener。故 loadRemoteFile() 取到的即为本次变更的新文件。
+	// 若未来同一文件的 pull 被并发化，此处 md5/version 可能与本次 event 错配（仅影响日志，不影响功能）。
+	// 删除(NotExist)场景 remoteConfigFileRef 被重置为空，loadRemoteFile() 返回 nil，按零值打印即可。
+	var (
+		encrypted  bool
+		newMd5     string
+		newVersion uint64
+	)
+	if rf := c.fileRepo.loadRemoteFile(); rf != nil {
+		encrypted = rf.GetEncrypted()
+		newMd5 = rf.GetMd5()
+		newVersion = rf.GetVersion()
+	}
+
+	c.logCtx.GetBaseLogger().Infof("[Config] update content. file = %+v, encrypted = %v, newMd5 = %s, newVersion = %d",
+		configFileMetadata, encrypted, newMd5, newVersion)
 
 	var changeType model.ChangeType
 
