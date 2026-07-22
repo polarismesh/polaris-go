@@ -778,6 +778,8 @@ type ServiceCallResult struct {
 	RuleName string
 	// 可选，主调服务实例的服务信息
 	SourceService *ServiceInfo
+	// Timestamp 调用发生时间戳，可选；未设置时审计插件用上报时刻近似
+	Timestamp time.Time
 }
 
 // RateLimitGauge Rate Limit Gauge
@@ -967,6 +969,31 @@ func (s *ServiceCallResult) GetCallerNamespace() string {
 		return s.SourceService.Namespace
 	}
 	return ""
+}
+
+// SetTimestamp 设置调用发生时间戳，用于审计日志记录调用时刻。
+// 未设置时审计插件回退到上报时刻（globalCtx.Now()）。
+func (s *ServiceCallResult) SetTimestamp(t time.Time) *ServiceCallResult {
+	s.Timestamp = t
+	return s
+}
+
+// GetTimestamp 获取调用发生时间戳。
+func (s *ServiceCallResult) GetTimestamp() time.Time {
+	return s.Timestamp
+}
+
+// SetCalledIP 设置主调实例 IP，用于审计日志记录主调方 IP。
+// 复用 CalledIP 字段；未设置时审计插件回退到 GetBindIP()。
+func (s *ServiceCallResult) SetCalledIP(ip string) *ServiceCallResult {
+	s.CalledIP = ip
+	return s
+}
+
+// SetCallerService 设置主调服务信息，复用 SourceService 字段。
+func (s *ServiceCallResult) SetCallerService(info *ServiceInfo) *ServiceCallResult {
+	s.SourceService = info
+	return s
 }
 
 // APICallResult sdk api调用结果

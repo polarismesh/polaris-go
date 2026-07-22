@@ -155,6 +155,8 @@ const (
 	RateLimitLogger
 	// CircuitBreakerLogger 熔断日志对象
 	CircuitBreakerLogger
+	// AuditLogger 服务调用审计日志对象
+	AuditLogger
 	// MaxLogger 日志对象总量
 	MaxLogger
 )
@@ -222,6 +224,11 @@ func (c *container) SetRateLimitLogger(logger Logger) {
 // SetCircuitBreakerLogger 设置熔断日志对象
 func (c *container) SetCircuitBreakerLogger(logger Logger) {
 	c.loggers[CircuitBreakerLogger].Store(&logger)
+}
+
+// SetAuditLogger 设置审计日志对象
+func (c *container) SetAuditLogger(logger Logger) {
+	c.loggers[AuditLogger].Store(&logger)
 }
 
 // GetBaseLogger 获取基础日志对象
@@ -332,6 +339,15 @@ func (c *container) GetCircuitBreakerLogger() Logger {
 	return *(value.(*Logger))
 }
 
+// GetAuditLogger 获取审计日志对象
+func (c *container) GetAuditLogger() Logger {
+	value := c.loggers[AuditLogger].Load()
+	if reflect2.IsNil(value) {
+		return nil
+	}
+	return *(value.(*Logger))
+}
+
 // SetBaseLogger 全局设置基础日志对象
 func SetBaseLogger(logger Logger) {
 	logContainer.SetBaseLogger(logger)
@@ -390,6 +406,11 @@ func SetRateLimitLogger(logger Logger) {
 // SetCircuitBreakerLogger 全局设置熔断日志对象
 func SetCircuitBreakerLogger(logger Logger) {
 	logContainer.SetCircuitBreakerLogger(logger)
+}
+
+// SetAuditLogger 全局设置审计日志对象
+func SetAuditLogger(logger Logger) {
+	logContainer.SetAuditLogger(logger)
 }
 
 // GetBaseLogger 获取全局基础日志对象
@@ -455,6 +476,11 @@ func GetRateLimitLogger() Logger {
 // GetCircuitBreakerLogger 获取全局熔断日志对象
 func GetCircuitBreakerLogger() Logger {
 	return logContainer.GetCircuitBreakerLogger()
+}
+
+// GetAuditLogger 获取全局审计日志对象
+func GetAuditLogger() Logger {
+	return logContainer.GetAuditLogger()
 }
 
 // Options defines the set of options for component logging package.

@@ -34,6 +34,7 @@ type ContextLogger struct {
 	authLogger           Logger
 	rateLimitLogger      Logger
 	circuitBreakerLogger Logger
+	auditLogger          Logger
 }
 
 // Init 获取基础日志记录器.
@@ -50,6 +51,7 @@ func (c *ContextLogger) Init() {
 	c.authLogger = GetAuthLogger()
 	c.rateLimitLogger = GetRateLimitLogger()
 	c.circuitBreakerLogger = GetCircuitBreakerLogger()
+	c.auditLogger = GetAuditLogger()
 }
 
 // AddFields 为所有日志记录器添加固定字段（如客户端标签），返回新的 ContextLogger 实例。
@@ -75,6 +77,7 @@ func (c *ContextLogger) AddFields(labels map[string]string) {
 	c.authLogger = LoggerWithFields(c.authLogger, kvs...)
 	c.rateLimitLogger = LoggerWithFields(c.rateLimitLogger, kvs...)
 	c.circuitBreakerLogger = LoggerWithFields(c.circuitBreakerLogger, kvs...)
+	c.auditLogger = LoggerWithFields(c.auditLogger, kvs...)
 }
 
 // GetBaseLogger 获取基础日志记录器.
@@ -171,4 +174,12 @@ func (c *ContextLogger) GetCircuitBreakerLogger() Logger {
 		return GetCircuitBreakerLogger()
 	}
 	return c.circuitBreakerLogger
+}
+
+// GetAuditLogger 获取审计日志记录器.
+func (c *ContextLogger) GetAuditLogger() Logger {
+	if c == nil {
+		return GetAuditLogger()
+	}
+	return c.auditLogger
 }

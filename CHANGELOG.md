@@ -4,6 +4,63 @@
 
 本项目所有重要的变更都必须记录在本文件中。
 
+## [v1.7.2-snapshot] - 2026-07-22
+
+### 添加的特性
+
+#### 可观测性 / 审计（Audit）
+
+- **服务调用审计日志插件（`plugin/metrics/callauditlog`）**：作为 `StatReporter`
+  链的一环，逐条将 `UpdateServiceCallResult` 上报的服务调用结果落盘到独立审计
+  文件。记录字段包括主调 / 被调服务与命名空间、主调 IP、被调实例
+  （host:port / ID）、接口方法、耗时（ms）、返回码、调用状态与生效规则名。
+- **异步非阻塞写盘**：`ReportStat` 仅在业务 goroutine 上做构造 + 非阻塞入队，
+  由后台 goroutine 异步刷盘；缓冲队列满时丢弃新条目并按 `flushInterval` 收敛
+  打印累计丢弃告警，绝不阻塞业务调用或中断 reporter 链；构造与写盘路径均有
+  recover 兜底，单条异常不影响后续消费。
+- **格式与轮转**：支持 `json`（字段自动转义）与 `kv`（`key="value"`，字符串
+  值统一加引号并转义，保证「一行一条」不被字段内空格 / 换行破坏）两种格式；
+  基于 lumberjack 的文件轮转，单文件大小、保留天数、备份数、是否压缩均可配。
+- **opt-in 启用与零副作用**：插件重写 `IsEnable`，仅当
+  `global.statReporter.enable=true` 且 `chain` 显式包含 `callAuditLog` 时才
+  初始化；未启用时不创建后台 goroutine、不生成审计文件、不改写全局日志对象，
+  对存量应用无任何副作用。配置非法（`format` 非 json/kv、`bufferSize` /
+  `flushInterval` 为负）为 fail-fast，初始化直接失败。
+- **`pkg/model/service.go`**：`ServiceCallResult` 新增 `Timestamp` 字段，并
+  补充 `SetTimestamp` / `GetTimestamp` / `SetCalledIP` / `SetCallerService`
+  方法，便于调用方显式填充审计所需的调用时刻、主调 IP 与主调服务信息。
+- **`pkg/log`**：新增 `AuditLogger` 日志对象槽位及 `GetAuditLogger` /
+  `SetAuditLogger` / `ContextLogger.GetAuditLogger`，将审计 logger 纳入统一
+  日志管理。
+- **`examples/audit/`**：新增审计日志示例，含连接远程真实服务端的
+  `examples/audit/` 与自带 mock Polaris、可自包含运行的 `examples/audit/local/`，
+  均附 `verify.sh` 与 README 说明。
+
+#### 配置管理 / 敏感数据脱敏（Configuration）
+
+- **配置变更日志脱敏（`pkg/flow/configuration/model.go`，`repoChangeListener`）**：
+  无论配置是否加密，配置变更日志均不再打印配置内容明文，改为打印不可逆的
+  `Md5`、`version` 与 `encrypted` 加密标识，仅用于判断变更而不泄露内容。
+- **`ConfigFile.String()` 敏感 Tag 掩码（`pkg/plugin/configconnector/config_file.go`）**：
+  加密场景下对 `internal-datakey`（解密后的明文数据密钥）与
+  `internal-encryptalgo`（加密算法标识）两个敏感 tag 做掩码（`******`），
+  新增 `maskTags` 辅助函数；非加密场景保持原样输出。
+- 补充 `maskTags` / `String` 与 `repoChangeListener`（加密 / 明文 / 删除场景）
+  单元测试，并经 `-race` 验证。
+
+### 兼容性说明
+
+- **审计日志为增量、opt-in 能力**：未在 `statReporter.chain` 中启用时行为完全
+  不变，存量用户升级无感知、无额外后台 goroutine 或磁盘写入。
+- **`ServiceCallResult` 扩展字段与方法均为新增**，不改变既有字段语义。
+- **审计语义为尽力而为（best-effort）**：缓冲队列满会丢弃、进程退出时尽力
+  排空但瞬时迟到条目可能丢失，均不保证不丢；对完整性有强合规要求的场景需结合
+  队列容量规划与丢弃告警监控评估。
+- **配置变更日志输出变化**：配置变更日志（`repoChangeListener`）不再包含配置
+  内容明文，仅输出 `Md5` / `version` / `encrypted` 标识；若此前依赖该日志抓取
+  配置内容，需改用其它方式获取。此为日志行为变化，不影响 SDK 功能与接口。
+
+
 ## [v1.7.1] - 2026-07-15
 
 ### 添加的特性

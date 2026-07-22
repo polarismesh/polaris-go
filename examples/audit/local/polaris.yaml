@@ -1,0 +1,37 @@
+global:
+  serverConnector:
+    # 本地自包含集成测试的 mock Polaris 服务端地址（端口见 examples/audit/local）
+    addresses:
+    - 127.0.0.1:18091
+  # statReporter：统计上报配置。callAuditLog（服务调用审计日志）为 opt-in 插件，
+  # 仅当 enable=true 且 chain 中显式包含 callAuditLog 时才会初始化并工作；
+  # 未加入 chain 时插件不创建后台 goroutine、不生成审计文件，对应用零副作用。
+  statReporter:
+    # 是否启用统计上报，默认 true
+    enable: true
+    chain:
+    # 启用服务调用审计日志插件；可与 prometheus 等其它上报插件并列
+    - callAuditLog
+    plugin:
+      callAuditLog:
+        # 审计行格式：json（默认，字段自动转义）或 kv（key="value" 空格分隔，值统一加引号并转义）
+        # 非法取值（既非 json 也非 kv）会导致 SDK 初始化失败（fail-fast）
+        format: json
+        # 审计日志文件路径；留空则使用默认 ./polaris/log/audit/polaris-audit.log
+        rotateOutputPath: ./polaris/log/audit/polaris-audit.log
+        # 单个日志文件最大体积（MB），超过后触发轮转，默认 100
+        rotationMaxSize: 100
+        # 历史日志最长保留天数，默认 30
+        rotationMaxAge: 30
+        # 最多保留的历史轮转文件数，默认 10
+        rotationMaxBackups: 10
+        # 是否 gzip 压缩历史轮转日志，默认 true
+        compress: true
+        # 异步写盘缓冲队列容量，默认 4096；队列满时新审计条目将被丢弃（best-effort，不保证不丢）
+        bufferSize: 4096
+        # 丢弃告警收敛间隔，默认 5s；队列满发生丢弃时，每隔该时间最多打印一次累计丢弃汇总
+        # 注意：这是告警收敛周期，不是刷盘周期——队列内有数据即被后台异步写盘，无需等待该间隔
+        flushInterval: 5s
+consumer:
+  circuitBreaker:
+    enable: false

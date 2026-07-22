@@ -45,6 +45,8 @@ const (
 	DefaultRateLimitLogLevel = DefaultLogLevel
 	// DefaultCircuitBreakerLogLevel 默认熔断日志级别
 	DefaultCircuitBreakerLogLevel = DefaultLogLevel
+	// DefaultAuditLogLevel 默认审计日志级别
+	DefaultAuditLogLevel = DefaultLogLevel
 	// 默认基础日志名
 	baseLoggerName = "base"
 	// 默认统计日志名
@@ -69,6 +71,8 @@ const (
 	rateLimitLoggerName = "ratelimit"
 	// 默认熔断日志名
 	circuitBreakerLoggerName = "circuitbreaker"
+	// 默认审计日志名
+	auditLoggerName = "audit"
 )
 
 const (
@@ -106,6 +110,8 @@ const (
 	DefaultRateLimitLogRotationPath = "/ratelimit/polaris-ratelimit.log"
 	// DefaultCircuitBreakerLogRotationPath 默认熔断日志滚动文件
 	DefaultCircuitBreakerLogRotationPath = "/circuitbreaker/polaris-circuitbreaker.log"
+	// DefaultAuditLogRotationPath 默认审计日志滚动文件
+	DefaultAuditLogRotationPath = "/audit/polaris-audit.log"
 	// DefaultBaseLogRotationFile 默认基础日志滚动文件全路径
 	DefaultBaseLogRotationFile = DefaultLogRotationRootDir + DefaultBaseLogRotationPath
 	// DefaultStatLogRotationFile 默认统计日志滚动文件全路径
@@ -130,4 +136,6 @@ const (
 	DefaultRateLimitLogRotationFile = DefaultLogRotationRootDir + DefaultRateLimitLogRotationPath
 	// DefaultCircuitBreakerLogRotationFile 默认熔断日志滚动文件全路径
 	DefaultCircuitBreakerLogRotationFile = DefaultLogRotationRootDir + DefaultCircuitBreakerLogRotationPath
+	// DefaultAuditLogRotationFile 默认审计日志滚动文件全路径
+	DefaultAuditLogRotationFile = DefaultLogRotationRootDir + DefaultAuditLogRotationPath
 )
