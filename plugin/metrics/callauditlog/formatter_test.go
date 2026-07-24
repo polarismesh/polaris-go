@@ -67,12 +67,15 @@ func TestBuildAuditEntry_FullFields(t *testing.T) {
 	r.SetTimestamp(now)
 	r.RuleName = "rule-1"
 
-	e := buildAuditEntry(r, "127.0.0.1", now.Add(time.Second))
+	e := buildAuditEntry(r, "127.0.0.1", "client-uid-1", now.Add(time.Second))
 	if e.CallerService != "order-svc" || e.CallerNamespace != "Prod" {
 		t.Errorf("caller mismatch: service=%s namespace=%s", e.CallerService, e.CallerNamespace)
 	}
 	if e.CallerIP != "10.0.1.5" {
 		t.Errorf("callerIP should use CalledIP, got %s", e.CallerIP)
+	}
+	if e.CallerID != "client-uid-1" {
+		t.Errorf("callerID should use clientID, got %s", e.CallerID)
 	}
 	if e.CalleeService != "user-svc" || e.CalleeNamespace != "Prod" {
 		t.Errorf("callee mismatch: service=%s namespace=%s", e.CalleeService, e.CalleeNamespace)
@@ -113,9 +116,12 @@ func TestBuildAuditEntry_Fallbacks(t *testing.T) {
 	r.SetRetCode(500)
 	r.SetDelay(10 * time.Millisecond)
 
-	e := buildAuditEntry(r, "192.168.1.1", now)
+	e := buildAuditEntry(r, "192.168.1.1", "client-uid-2", now)
 	if e.CallerIP != "192.168.1.1" {
 		t.Errorf("callerIP should fallback to clientIP, got %s", e.CallerIP)
+	}
+	if e.CallerID != "client-uid-2" {
+		t.Errorf("callerID should use clientID, got %s", e.CallerID)
 	}
 	if e.Timestamp != now.Format(time.RFC3339Nano) {
 		t.Errorf("timestamp should fallback to now, got %s", e.Timestamp)
@@ -129,7 +135,7 @@ func TestBuildAuditEntry_Fallbacks(t *testing.T) {
 func TestBuildAuditEntry_NilPointers(t *testing.T) {
 	now := time.Now()
 	r := &model.ServiceCallResult{}
-	e := buildAuditEntry(r, "127.0.0.1", now)
+	e := buildAuditEntry(r, "127.0.0.1", "client-uid-3", now)
 	if e.CalleeHost != "" {
 		t.Errorf("calleeHost should be empty when CalledInstance nil, got %s", e.CalleeHost)
 	}
@@ -143,7 +149,7 @@ func TestBuildAuditEntry_NilPointers(t *testing.T) {
 
 // TestFormatJSON_Valid 测试场景:JSON 输出合法且以换行结尾。
 func TestFormatJSON_Valid(t *testing.T) {
-	e := &auditEntry{Timestamp: "ts", CallerService: "svc", RetStatus: "success"}
+	e := &auditEntry{Timestamp: "ts", CallerService: "svc", CallerID: "uid-1", RetStatus: "success"}
 	b := formatJSON(e)
 	if len(b) == 0 || b[len(b)-1] != '\n' {
 		t.Fatalf("formatJSON should end with newline: %v", b)
@@ -155,11 +161,14 @@ func TestFormatJSON_Valid(t *testing.T) {
 	if m["caller_service"] != "svc" {
 		t.Errorf("caller_service mismatch: %v", m["caller_service"])
 	}
+	if m["caller_id"] != "uid-1" {
+		t.Errorf("caller_id mismatch: %v", m["caller_id"])
+	}
 }
 
 // TestFormatKV_Contains 测试场景:KV 输出含各字段键值对(字符串值带引号)且以换行结尾。
 func TestFormatKV_Contains(t *testing.T) {
-	e := &auditEntry{Timestamp: "ts", CallerService: "svc", DelayMs: 50, RuleName: "r1"}
+	e := &auditEntry{Timestamp: "ts", CallerService: "svc", CallerID: "uid-1", DelayMs: 50, RuleName: "r1"}
 	b := formatKV(e)
 	s := string(b)
 	if !strings.HasSuffix(s, "\n") {
@@ -167,6 +176,9 @@ func TestFormatKV_Contains(t *testing.T) {
 	}
 	if !strings.Contains(s, `caller_service="svc"`) {
 		t.Errorf("formatKV missing caller_service: %s", s)
+	}
+	if !strings.Contains(s, `caller_id="uid-1"`) {
+		t.Errorf("formatKV missing caller_id: %s", s)
 	}
 	if !strings.Contains(s, "delay_ms=50") {
 		t.Errorf("formatKV missing delay_ms: %s", s)

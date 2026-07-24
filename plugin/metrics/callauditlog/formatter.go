@@ -36,6 +36,8 @@ type auditEntry struct {
 	CallerNamespace string `json:"caller_namespace"`
 	// CallerIP 主调方 IP
 	CallerIP string `json:"caller_ip"`
+	// CallerID 主调方 SDK 客户端唯一标识(GetClientId,标识发起调用的 SDK 客户端)
+	CallerID string `json:"caller_id"`
 	// CalleeNamespace 被调服务命名空间
 	CalleeNamespace string `json:"callee_namespace"`
 	// CalleeService 被调服务名
@@ -59,12 +61,14 @@ type auditEntry struct {
 // buildAuditEntry 从服务调用结果构造审计条目。
 // val      服务调用结果,字段缺失时按降级策略填充。
 // clientIP 主调方 IP 兜底值(GetBindIP),当 val.CalledIP 为空时使用。
+// clientID 主调方 SDK 客户端唯一标识(GetClientId),写入审计条目 caller_id。
 // now      上报时刻,当 val.Timestamp 未设置时作为调用时间兜底。
 // 返回填充完成的审计条目,不会因 nil 指针 panic。
-func buildAuditEntry(val *model.ServiceCallResult, clientIP string, now time.Time) *auditEntry {
+func buildAuditEntry(val *model.ServiceCallResult, clientIP, clientID string, now time.Time) *auditEntry {
 	entry := &auditEntry{
 		CallerService:   val.GetCallerService(),
 		CallerNamespace: val.GetCallerNamespace(),
+		CallerID:        clientID,
 		Method:          val.GetMethod(),
 		RetCode:         val.GetRetCodeValue(),
 		RetStatus:       string(val.GetRetStatus()),
@@ -114,6 +118,7 @@ func formatKV(e *auditEntry) []byte {
 	fmt.Fprintf(&buf, " caller_namespace=%q", e.CallerNamespace)
 	fmt.Fprintf(&buf, " caller_service=%q", e.CallerService)
 	fmt.Fprintf(&buf, " caller_ip=%q", e.CallerIP)
+	fmt.Fprintf(&buf, " caller_id=%q", e.CallerID)
 	fmt.Fprintf(&buf, " callee_namespace=%q", e.CalleeNamespace)
 	fmt.Fprintf(&buf, " callee_service=%q", e.CalleeService)
 	fmt.Fprintf(&buf, " callee_host=%q", e.CalleeHost)

@@ -60,6 +60,8 @@ type CallAuditLogReporter struct {
 	logCtx *log.ContextLogger
 	// clientIP 主调方 IP 兜底值(GetBindIP)
 	clientIP string
+	// clientID 主调方 SDK 客户端唯一标识(GetClientId),写入审计条目 caller_id
+	clientID string
 
 	// sink 审计日志轮转 sink
 	sink *lumberjack.Logger
@@ -112,6 +114,7 @@ func (r *CallAuditLogReporter) Init(ctx *plugin.InitContext) error {
 	r.PluginBase = plugin.NewPluginBase(ctx)
 	r.logCtx = ctx.ValueCtx.GetContextLogger()
 	r.clientIP = ctx.Config.GetGlobal().GetAPI().GetBindIP()
+	r.clientID = ctx.ValueCtx.GetClientId()
 	cfgValue := ctx.Config.GetGlobal().GetStatReporter().GetPluginConfig(PluginName)
 	if cfg, ok := cfgValue.(*Config); ok {
 		r.cfg = cfg
@@ -154,7 +157,7 @@ func (r *CallAuditLogReporter) ReportStat(metricsType model.MetricType, metricsV
 	if !ok || val == nil {
 		return nil
 	}
-	entry := buildAuditEntry(val, r.clientIP, r.globalCtx.Now())
+	entry := buildAuditEntry(val, r.clientIP, r.clientID, r.globalCtx.Now())
 	select {
 	case r.queue <- entry:
 	default:

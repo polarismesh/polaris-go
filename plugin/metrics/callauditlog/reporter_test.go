@@ -87,6 +87,7 @@ func buildReporter(t *testing.T, cfg *Config, spy *spyLogger, startFlush bool) *
 		globalCtx: &stubValueContext{nowVal: time.Now()},
 		logCtx:    cl,
 		clientIP:  "127.0.0.1",
+		clientID:  "test-client-id",
 		formatFn:  formatJSON,
 		queue:     make(chan *auditEntry, cfg.BufferSize),
 	}
