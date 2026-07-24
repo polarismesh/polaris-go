@@ -12,6 +12,8 @@ global:
     chain:
     # 启用服务调用审计日志插件；可与 prometheus 等其它上报插件并列
     - callAuditLog
+    # 启用 prometheus 监控数据上报（参考 examples/quickstart/consumer）
+    - prometheus
     plugin:
       callAuditLog:
         # 审计行格式：json（默认，字段自动转义）或 kv（key="value" 空格分隔，值统一加引号并转义）
@@ -32,6 +34,18 @@ global:
         # 丢弃告警收敛间隔，默认 5s；队列满发生丢弃时，每隔该时间最多打印一次累计丢弃汇总
         # 注意：这是告警收敛周期，不是刷盘周期——队列内有数据即被后台异步写盘，无需等待该间隔
         flushInterval: 5s
+      prometheus:
+        # 上报模式：push（推送到 pushgateway）或 pull（SDK 暴露 HTTP 端口供 Prometheus 拉取），默认 pull
+        type: push
+        # 上报周期
+        interval: 10s
+        # pushgateway 地址：留空则通过下方 pushGatewayNamespace/Service 经 Polaris 服务发现自动解析，
+        # 复用 -server 指定的服务端连接，无需额外指定地址（推荐，适配本 demo 的 -server 覆盖机制）。
+        # 如 pushgateway 地址固定，可显式填写，形如 <host>:9091（支持 ${ENV} 占位，加载时由 os.ExpandEnv 替换）：
+        # address: ${POLARIS_SERVER}:9091
+        # pushgateway 服务发现配置（仅在 address 留空时生效），默认即为以下值
+        pushGatewayNamespace: Polaris
+        pushGatewayService: polaris.pushgateway
 consumer:
   circuitBreaker:
     enable: false

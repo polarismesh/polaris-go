@@ -42,10 +42,34 @@ go build -o audit_test main.go && ./audit_test
 
 并以 `集成测试通过：审计日志已生成` 结尾。
 
+## 日志汇总
+
+`verify.sh` 参考 `examples/auth`，把 demo 标准输出与 SDK 文件日志统一汇总到脚本目录下的 `.logs/`，编译产物集中到 `.build/`（均已被 `.gitignore` 忽略）：
+
+```
+examples/audit/local/
+├── .build/audit_test                    # 编译产物
+└── .logs/
+    ├── verify-audit-local-<时间戳>.log  # 脚本自身输出（双写，去 ANSI 颜色）
+    ├── audit_test.log                   # demo 进程 stdout/stderr（含 mock 服务端 + SDK 日志）
+    └── run/polaris/log/                 # SDK 文件日志
+        ├── base | network | cache | ...
+        └── audit/polaris-audit.log      # 审计日志（本 demo 的核心产物）
+```
+
+实现方式（不改 Go 代码）：demo 在 `.logs/run` 作为工作目录运行（脚本先把 `polaris.yaml` 复制过去），SDK 与审计日志相对工作目录落到 `run/polaris/log/`；stdout 用 `tee` 同时输出到终端与 `audit_test.log`。
+
+清理由上级目录的 `cleanup.sh` 统一处理（覆盖 `local/.build`、`local/.logs`）：
+
+```bash
+cd examples/audit
+bash cleanup.sh -f
+```
+
 ## 配置说明
 
 - `polaris.yaml`：`global.serverConnector.addresses` 指向本地 mock 端口（`127.0.0.1:18091`）；`global.statReporter` 启用 `callAuditLog` 插件并配置日志路径/格式/轮转。
-- 审计日志默认写入 `./polaris/log/audit/polaris-audit.log`。
+- 审计日志的 `rotateOutputPath` 为 `./polaris/log/audit/polaris-audit.log`（相对进程工作目录）。经 `verify.sh` 运行时工作目录为 `.logs/run`，审计日志实际落在 `.logs/run/polaris/log/audit/polaris-audit.log`；直接手动运行则落在 `examples/audit/local/polaris/log/audit/polaris-audit.log`。
 
 ## 注意事项
 

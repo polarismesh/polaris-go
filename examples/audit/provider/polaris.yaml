@@ -1,0 +1,5 @@
+global:
+  serverConnector:
+    # 占位地址，运行时由命令行 -server 参数覆盖
+    addresses:
+    - 127.0.0.1:8091
