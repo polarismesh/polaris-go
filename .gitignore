@@ -41,3 +41,4 @@ specs/
 /examples/**/gateway
 /examples/**/simple-gateway
 /examples/**/simple-consumer
+/examples/configuration/gray/cloud/dist/
