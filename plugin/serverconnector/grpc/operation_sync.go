@@ -36,6 +36,13 @@ import (
 	connector "github.com/polarismesh/polaris-go/plugin/serverconnector/common"
 )
 
+const (
+	// logConfigMetadataMaxBytes ReportClient 成功日志中 config_metadata 的最大打印字节数。
+	// config_metadata 含监听配置文件列表（namespace/group/file_name/version/md5），
+	// 监听大量配置文件时 JSON 可达数 KB，超限截断并标注总长度，避免日志行过长。
+	logConfigMetadataMaxBytes = 2048
+)
+
 // RegisterInstance 同步注册服务
 func (g *Connector) RegisterInstance(req *model.InstanceRegisterRequest, header map[string]string) (*model.InstanceRegisterResponse, error) {
 	if err := g.waitDiscoverReady(); err != nil {
@@ -325,13 +332,21 @@ func (g *Connector) ReportClient(req *model.ReportClientRequest) (*model.ReportC
 		return nil, model.NewSDKError(model.ErrCodeServerUserError, nil, errMsg)
 	}
 	g.connManager.ReportSuccess(conn.ConnID, int32(serverCodeType), endTime.Sub(startTime))
+	// config_metadata 含监听配置文件列表，完整打印便于排查服务端 PUSH 生效查询的目标依据；
+	// 超限截断并在末尾标注总长度，避免监听大量配置文件时日志行过长。
+	configMeta := req.ConfigMetadata
+	if len(configMeta) > logConfigMetadataMaxBytes {
+		configMeta = configMeta[:logConfigMetadataMaxBytes] +
+			fmt.Sprintf("...(truncated, total %d bytes)", len(req.ConfigMetadata))
+	}
 	g.logCtx.GetBaseLogger().Infof(
-		"reportClient success: clientID %s, opKey %s, reqID %s, connID %s, serverCode %d, cost %v, location {Region:%s, Zone:%s, Campus:%s}, configEnabled %v, configMetadataLen %d",
+		"reportClient success: clientID %s, opKey %s, reqID %s, connID %s, serverCode %d, cost %v, "+
+			"location {Region:%s, Zone:%s, Campus:%s}, configEnabled %v, configMetadataLen %d, configMetadata %s",
 		req.ID, opKey, reqID, conn.ConnID, pbResp.GetCode().GetValue(), endTime.Sub(startTime),
 		pbResp.GetClient().GetLocation().GetRegion().GetValue(),
 		pbResp.GetClient().GetLocation().GetZone().GetValue(),
 		pbResp.GetClient().GetLocation().GetCampus().GetValue(),
-		req.ConfigEnabled, len(req.ConfigMetadata))
+		req.ConfigEnabled, len(req.ConfigMetadata), configMeta)
 	// 持久化本地信息
 	if nil != req.PersistHandler {
 		if err = req.PersistHandler(pbResp); err != nil {
