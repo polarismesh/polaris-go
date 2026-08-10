@@ -345,10 +345,16 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 	}); err != nil {
 		return err
 	}
-	// 运维主动查询才触发，频率低；生产环境需可见以便排查"查询结果为何如此"
+	// 运维主动查询才触发，频率低；生产环境需可见以便排查"查询结果为何如此"。
+	// 反解 ACK JSON 取查询三元组与生效版本/摘要用于诊断：低频路径上的一次额外反序列化代价可接受。
 	if l := w.logger(); l != nil {
-		l.Infof("client event ack sent, index %d, clientID %s, ackBytes %d",
-			event.GetIndex(), w.clientID, len(ackContent))
+		var ack clientEventAck
+		_ = json.Unmarshal([]byte(ackContent), &ack)
+		l.Infof("client event ack sent, index %d, clientID %s, namespace %s, group %s, "+
+			"file %s, version %d, md5 %s, applied %v, reason %s, ackBytes %d",
+			event.GetIndex(), w.clientID,
+			ack.Config.Namespace, ack.Config.Group, ack.Config.FileName,
+			ack.Version, ack.Md5, ack.Applied, ack.Reason, len(ackContent))
 	}
 	return nil
 }
