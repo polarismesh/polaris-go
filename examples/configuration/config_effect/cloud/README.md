@@ -41,8 +41,8 @@ cd cloud
 ```bash
 unzip client.zip && cd client
 
-# 1. 发布全量基线配置(已存在则跳过)
-POLARIS_TOKEN=xxx ./client.sh setup --polaris-server <服务端地址> --content effect-content-v1
+# 1. 发布 3 份全量基线配置(base name 派生 -1/-2/-3.yaml，已存在则跳过)
+POLARIS_TOKEN=xxx ./client.sh setup --polaris-server <服务端地址> --content effect-content-v
 
 # 2. 启动常驻客户端(自动订阅配置 + 建 WatchClientEvents 长连接 + 暴露 HTTP)
 POLARIS_TOKEN=xxx ./client.sh start --polaris-server <服务端地址> --port 18091

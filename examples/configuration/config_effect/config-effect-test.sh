@@ -36,12 +36,12 @@ POLARIS_TOKEN="${POLARIS_TOKEN:-}"
 MAINTAIN_PORT="${MAINTAIN_PORT:-8090}"
 NAMESPACE="${NAMESPACE:-default}"
 FILE_GROUP="${FILE_GROUP:-polaris-config-example}"
-FILE_NAME="${FILE_NAME:-config-effect-example.yaml}"
+FILE_NAME="${FILE_NAME:-config-effect-example}"
 CLIENT_PORT="${CLIENT_PORT:-18091}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-# 验证用的配置内容(具有辨识度，便于自动判定)
-CONFIG_CONTENT="effect-content-v1"
+# 验证用的配置内容 base(具有辨识度，便于自动判定)，main.go 派生 effect-content-v1/v2/v3
+CONFIG_CONTENT="${CONFIG_CONTENT:-effect-content-v}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -71,7 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --maintain-port <端口>   服务端 maintain HTTP 端口 (默认: 8090)"
             echo "  --namespace <命名空间>   命名空间 (默认: default)"
             echo "  --group <配置组>         配置文件组 (默认: polaris-config-example)"
-            echo "  --file <文件名>          配置文件名 (默认: config-effect-example.yaml)"
+            echo "  --file <base name>      配置文件 base name，派生 -1/-2/-3.yaml (默认: config-effect-example)"
             echo "  --port <端口>            客户端 HTTP 观察端口 (默认: 18091)"
             echo "  --debug                  启用 debug 日志 (默认: 关闭)"
             exit 0
@@ -155,12 +155,22 @@ get_client_id() {
     curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/clientid" 2>/dev/null
 }
 
-# get_config_field 从客户端 /config 接口提取指定字段。
-# 入参: field (version|md5|content)
-get_config_field() {
-    local field="$1"
+# get_file_field 从客户端 /config 接口的 files 数组中，按文件名提取指定字段。
+# 入参: file_name field (version|md5|content)
+get_file_field() {
+    local file="$1" field="$2"
     curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/config" 2>/dev/null \
-        | grep -oE "\"${field}\":[^,}]*" | head -1 | sed "s/\"${field}\"://;s/\"//g"
+        | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for f in d.get('files', []):
+        if f.get('fileName') == sys.argv[1]:
+            print(f.get(sys.argv[2], ''))
+            break
+except Exception:
+    pass
+" "$file" "$field" 2>/dev/null
 }
 
 # ======================== 生成临时 polaris.yaml ========================
@@ -219,9 +229,9 @@ start_client() {
 # 返回值：服务端响应 JSON (apiservice.Response)，其中 clientEvent.content 为客户端 ACK content。
 # 入参: client_id
 query_config_effect() {
-    local client_id="$1"
+    local client_id="$1" file="$2"
     # PUSH content：单点查询目标配置文件（kind=config + 三元组，snake_case）
-    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${FILE_NAME}\"}}"
+    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
     local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${client_id}&content=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")"
     log_info "调服务端 maintain: ${url}"
     local resp
@@ -322,7 +332,7 @@ main() {
     log_step "步骤 2/5 生成配置与发布全量基线"
     generate_polaris_yaml "${BUILD_DIR}/polaris-client.yaml"
 
-    log_info "通过 config-effect-demo setup 准备全量基线(content=${CONFIG_CONTENT}, 已存在则跳过)..."
+    log_info "通过 config-effect-demo setup 准备 3 份全量基线(base=${FILE_NAME}, content=${CONFIG_CONTENT}, 派生 -1/-2/-3.yaml, 已存在则跳过)..."
     (cd "${BUILD_DIR}" && "./config-effect-demo" \
         -action=setup \
         -config="${BUILD_DIR}/polaris-client.yaml" \
@@ -338,27 +348,51 @@ main() {
     kill -0 "$PID_CLIENT" 2>/dev/null || { log_error "客户端启动失败"; cat "${LOG_DIR}/client.log" 2>/dev/null; exit 1; }
     wait_for_http "http://127.0.0.1:${CLIENT_PORT}/health" 30 "客户端" "$PID_CLIENT" || exit 1
 
-    log_step "步骤 4/5 验证客户端已拉取基线配置"
-    local client_version client_md5 client_content
-    # 轮询 /config 直到拿到非空 version/md5
+    log_step "步骤 4/5 验证客户端已拉取全部基线配置"
+    # 派生 3 个配置文件名
+    local file_names=()
+    local i
+    for i in 1 2 3; do
+        file_names+=("${FILE_NAME}-${i}.yaml")
+    done
+
+    # 轮询 /config 直到 3 个文件都拿到非空 version/md5
     local waited=0
+    local all_ready=false
     while [[ $waited -lt 30 ]]; do
-        client_version=$(get_config_field "version")
-        client_md5=$(get_config_field "md5")
-        client_content=$(get_config_field "content")
-        if [[ -n "$client_version" && "$client_version" != "0" && -n "$client_md5" ]]; then
-            break
-        fi
+        all_ready=true
+        for fname in "${file_names[@]}"; do
+            local v m
+            v=$(get_file_field "$fname" "version")
+            m=$(get_file_field "$fname" "md5")
+            if [[ -z "$v" || "$v" == "0" || -z "$m" ]]; then
+                all_ready=false
+                break
+            fi
+        done
+        [[ "$all_ready" == "true" ]] && break
         sleep 1
         waited=$((waited + 1))
     done
-    if [[ -z "$client_version" || "$client_version" == "0" || -z "$client_md5" ]]; then
-        log_error "客户端未拉取到配置文件 (version=${client_version}, md5=${client_md5})"
-        record_result "0" "客户端拉取配置" "FAIL" "version=${client_version},md5=${client_md5}"
+
+    # 记录每个文件的拉取结果
+    for fname in "${file_names[@]}"; do
+        local v m c
+        v=$(get_file_field "$fname" "version")
+        m=$(get_file_field "$fname" "md5")
+        c=$(get_file_field "$fname" "content")
+        if [[ -z "$v" || "$v" == "0" || -z "$m" ]]; then
+            log_error "客户端未拉取到配置文件 ${fname} (version=${v}, md5=${m})"
+            record_result "0" "客户端拉取配置 ${fname}" "FAIL" "version=${v},md5=${m}"
+        else
+            log_info "客户端本地生效配置 ${fname}: version=${v}, md5=${m}, content=${c}"
+            record_result "0" "客户端拉取配置 ${fname}" "PASS" "version=${v},md5=${m}"
+        fi
+    done
+    if [[ "$all_ready" != "true" ]]; then
+        log_error "存在配置文件未拉取成功，终止验证"
         exit 1
     fi
-    log_info "客户端本地生效配置: version=${client_version}, md5=${client_md5}, content=${client_content}"
-    record_result "0" "客户端拉取配置" "PASS" "version=${client_version},md5=${client_md5}"
 
     log_step "步骤 5/5 通过服务端 maintain 接口下发配置生效查询并校验 ACK"
     local client_id
@@ -375,46 +409,59 @@ main() {
     log_info "等待 WatchClientEvents 长连接建立 (5s)..."
     sleep 5
 
-    local resp
-    resp=$(query_config_effect "$client_id")
-    log_info "服务端响应: ${resp}"
-
-    local ack_applied ack_version ack_md5
-    ack_applied=$(extract_ack_field "$resp" "applied") || { record_result "2" "解析 ACK" "FAIL" "解析失败"; exit 1; }
-    ack_version=$(extract_ack_field "$resp" "version") || true
-    ack_md5=$(extract_ack_field "$resp" "md5") || true
-
     local overall_pass=true
+    local case_idx=0
+    for fname in "${file_names[@]}"; do
+        case_idx=$((case_idx + 1))
+        log_step "  文件 ${case_idx}/${#file_names[@]}: ${fname}"
 
-    # 校验 1：applied 必须为 true（客户端确实在监听该配置文件）
-    if [[ "$ack_applied" == "True" ]]; then
-        log_info "✅ [用例 2.1 ACK applied=true] PASS - 客户端确认监听该配置文件"
-        record_result "2.1" "ACK applied=true" "PASS" "applied=True"
-    else
-        log_error "❌ [用例 2.1 ACK applied=true] FAIL - applied=${ack_applied} (期望 True)"
-        record_result "2.1" "ACK applied=true" "FAIL" "applied=${ack_applied}"
-        overall_pass=false
-    fi
+        local client_version client_md5
+        client_version=$(get_file_field "$fname" "version")
+        client_md5=$(get_file_field "$fname" "md5")
 
-    # 校验 2：ACK version 与客户端本地 version 一致
-    if [[ -n "$ack_version" && "$ack_version" == "$client_version" ]]; then
-        log_info "✅ [用例 2.2 ACK version 一致] PASS - ACK version=${ack_version} == 客户端 version=${client_version}"
-        record_result "2.2" "ACK version 一致" "PASS" "ack=${ack_version},client=${client_version}"
-    else
-        log_error "❌ [用例 2.2 ACK version 一致] FAIL - ACK version=${ack_version} != 客户端 version=${client_version}"
-        record_result "2.2" "ACK version 一致" "FAIL" "ack=${ack_version},client=${client_version}"
-        overall_pass=false
-    fi
+        local resp
+        resp=$(query_config_effect "$client_id" "$fname")
+        log_info "服务端响应: ${resp}"
 
-    # 校验 3：ACK md5 与客户端本地 md5 一致
-    if [[ -n "$ack_md5" && "$ack_md5" == "$client_md5" ]]; then
-        log_info "✅ [用例 2.3 ACK md5 一致] PASS - ACK md5=${ack_md5} == 客户端 md5=${client_md5}"
-        record_result "2.3" "ACK md5 一致" "PASS" "ack=${ack_md5},client=${client_md5}"
-    else
-        log_error "❌ [用例 2.3 ACK md5 一致] FAIL - ACK md5=${ack_md5} != 客户端 md5=${client_md5}"
-        record_result "2.3" "ACK md5 一致" "FAIL" "ack=${ack_md5},client=${client_md5}"
-        overall_pass=false
-    fi
+        local ack_applied ack_version ack_md5
+        ack_applied=$(extract_ack_field "$resp" "applied") || {
+            record_result "2.${case_idx}" "解析 ACK ${fname}" "FAIL" "解析失败"
+            overall_pass=false
+            continue
+        }
+        ack_version=$(extract_ack_field "$resp" "version") || true
+        ack_md5=$(extract_ack_field "$resp" "md5") || true
+
+        # 校验 1：applied 必须为 true（客户端确实在监听该配置文件）
+        if [[ "$ack_applied" == "True" ]]; then
+            log_info "✅ [用例 2.${case_idx}.1 ACK applied=true] PASS - ${fname}"
+            record_result "2.${case_idx}.1" "ACK applied=true ${fname}" "PASS" "applied=True"
+        else
+            log_error "❌ [用例 2.${case_idx}.1 ACK applied=true] FAIL - ${fname} applied=${ack_applied} (期望 True)"
+            record_result "2.${case_idx}.1" "ACK applied=true ${fname}" "FAIL" "applied=${ack_applied}"
+            overall_pass=false
+        fi
+
+        # 校验 2：ACK version 与客户端本地 version 一致
+        if [[ -n "$ack_version" && "$ack_version" == "$client_version" ]]; then
+            log_info "✅ [用例 2.${case_idx}.2 ACK version 一致] PASS - ${fname} version=${ack_version}"
+            record_result "2.${case_idx}.2" "ACK version 一致 ${fname}" "PASS" "ack=${ack_version},client=${client_version}"
+        else
+            log_error "❌ [用例 2.${case_idx}.2 ACK version 一致] FAIL - ${fname} ack=${ack_version} != client=${client_version}"
+            record_result "2.${case_idx}.2" "ACK version 一致 ${fname}" "FAIL" "ack=${ack_version},client=${client_version}"
+            overall_pass=false
+        fi
+
+        # 校验 3：ACK md5 与客户端本地 md5 一致
+        if [[ -n "$ack_md5" && "$ack_md5" == "$client_md5" ]]; then
+            log_info "✅ [用例 2.${case_idx}.3 ACK md5 一致] PASS - ${fname} md5=${ack_md5}"
+            record_result "2.${case_idx}.3" "ACK md5 一致 ${fname}" "PASS" "ack=${ack_md5},client=${client_md5}"
+        else
+            log_error "❌ [用例 2.${case_idx}.3 ACK md5 一致] FAIL - ${fname} ack=${ack_md5} != client=${client_md5}"
+            record_result "2.${case_idx}.3" "ACK md5 一致 ${fname}" "FAIL" "ack=${ack_md5},client=${client_md5}"
+            overall_pass=false
+        fi
+    done
 
     # ==================== 结果汇总 ====================
     echo ""
@@ -422,13 +469,8 @@ main() {
     echo -e "${BLUE}║          配置生效查询验证结果汇总                 ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "  配置文件:        ${NAMESPACE}/${FILE_GROUP}/${FILE_NAME}"
+    echo "  配置文件 base:   ${NAMESPACE}/${FILE_GROUP}/${FILE_NAME} (派生 -1/-2/-3.yaml)"
     echo "  客户端 clientID: ${client_id}"
-    echo "  客户端 version:  ${client_version}"
-    echo "  客户端 md5:      ${client_md5}"
-    echo "  ACK applied:      ${ack_applied}"
-    echo "  ACK version:      ${ack_version}"
-    echo "  ACK md5:          ${ack_md5}"
     echo ""
     echo "  用例明细:"
     awk -F',' 'NR>1 { printf "    [%s] %s: %s (%s)\n", $2, $3, $4, $5 }' "$RESULT_FILE"

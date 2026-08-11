@@ -46,9 +46,9 @@ chmod +x config-effect-test.sh
 # 指定服务端地址与鉴权 token
 ./config-effect-test.sh --polaris-server 10.0.0.1 --polaris-token <token>
 
-# 指定 maintain 端口与配置文件
+# 指定 maintain 端口与配置文件 base name
 ./config-effect-test.sh --maintain-port 8090 --namespace default \
-  --group polaris-config-example --file config-effect-example.yaml
+  --group polaris-config-example --file config-effect-example
 
 # 启用 SDK debug 日志排查
 ./config-effect-test.sh --debug
@@ -63,7 +63,7 @@ chmod +x config-effect-test.sh
 | `--maintain-port` | `8090` | 服务端 maintain HTTP 端口 |
 | `--namespace` | `default` | 命名空间 |
 | `--group` | `polaris-config-example` | 配置文件组 |
-| `--file` | `config-effect-example.yaml` | 配置文件名 |
+| `--file` | `config-effect-example` | 配置文件 base name，派生 -1/-2/-3.yaml |
 | `--port` | `18091` | 客户端 HTTP 观察端口 |
 | `--debug` | 关 | 启用 SDK debug 日志 |
 
@@ -71,18 +71,18 @@ chmod +x config-effect-test.sh
 
 | 编号 | 用例 | 期望 |
 |------|------|------|
-| 0 | 客户端拉取基线配置 | `/config` 返回非空 version/md5 |
+| 0 | 客户端拉取 3 份基线配置 | `/config` files 数组中 3 个文件 version/md5 非空 |
 | 1 | 获取 clientID | 客户端 `/clientid` 非空 |
-| 2.1 | ACK applied=true | 客户端确认监听该配置文件 |
-| 2.2 | ACK version 一致 | ACK version == 客户端本地 version |
-| 2.3 | ACK md5 一致 | ACK md5 == 客户端本地 md5 |
+| 2.x.1 | ACK applied=true | 每个配置文件 applied=true (x=1/2/3) |
+| 2.x.2 | ACK version 一致 | 每个文件 ACK version == 客户端本地 version |
+| 2.x.3 | ACK md5 一致 | 每个文件 ACK md5 == 客户端本地 md5 |
 
 ## 客户端 HTTP 接口
 
 客户端 `run` 模式常驻运行，暴露：
 
 - `GET /health` — 健康检查，初始拉取完成后返回 200
-- `GET /config` — 当前生效配置快照（含 namespace/fileGroup/fileName/version/md5/content/clientId）
+- `GET /config` — 当前生效配置快照：`{clientId, files:[{namespace,fileGroup,fileName,version,md5,content,ready}]}`（3 个文件）
 - `GET /clientid` — SDK 的 clientID（供验证脚本拼接服务端 maintain 查询 URL）
 
 ## 清理

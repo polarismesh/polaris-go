@@ -28,9 +28,9 @@ POLARIS_SERVER="${POLARIS_SERVER:-}"
 POLARIS_TOKEN="${POLARIS_TOKEN:-}"
 NAMESPACE="default"
 FILE_GROUP="polaris-config-example"
-FILE_NAME="config-effect-example.yaml"
+FILE_NAME="config-effect-example"
 PORT="18091"
-CONTENT="effect-content-v1"
+CONTENT="effect-content-v"
 DEBUG_MODE=false
 
 # 颜色输出
@@ -60,9 +60,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --polaris-token <令牌>   北极星鉴权令牌 (默认: 空)"
             echo "  --namespace <命名空间>   命名空间 (默认: default)"
             echo "  --group <配置组>         配置文件组 (默认: polaris-config-example)"
-            echo "  --file <文件名>          配置文件名 (默认: config-effect-example.yaml)"
+            echo "  --file <base name>      配置文件 base name，派生 -1/-2/-3.yaml (默认: config-effect-example)"
             echo "  --port <端口>            run 模式 HTTP 监听端口 (默认: 18091)"
-            echo "  --content <内容>         setup 模式写入的基线内容 (默认: effect-content-v1)"
+            echo "  --content <内容base>     setup 模式写入的内容 base，派生 1/2/3 后缀 (默认: effect-content-v)"
             echo "  --debug                  启用 SDK debug 日志"
             exit 0
             ;;
@@ -97,7 +97,7 @@ debug_flag=""
 
 # do_setup 发布全量基线(已存在则跳过)。前台执行，完成即退出。
 do_setup() {
-    log_info "发布全量基线: ${NAMESPACE}/${FILE_GROUP}/${FILE_NAME}, content=${CONTENT}"
+    log_info "发布 3 份全量基线: ${NAMESPACE}/${FILE_GROUP}/${FILE_NAME}-(1/2/3).yaml, content base=${CONTENT}"
     POLARIS_SERVER="$POLARIS_SERVER" POLARIS_TOKEN="$POLARIS_TOKEN" \
         "$BIN" -action=setup \
         -config="${SCRIPT_DIR}/polaris.yaml" \

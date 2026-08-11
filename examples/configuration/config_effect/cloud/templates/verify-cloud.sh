@@ -29,7 +29,7 @@ MAINTAIN_PORT="${MAINTAIN_PORT:-8090}"
 CLIENT_PORT="${CLIENT_PORT:-18091}"
 NAMESPACE="${NAMESPACE:-default}"
 FILE_GROUP="${FILE_GROUP:-polaris-config-example}"
-FILE_NAME="${FILE_NAME:-config-effect-example.yaml}"
+FILE_NAME="${FILE_NAME:-config-effect-example}"
 WAIT_WATCHER_SEC="${WAIT_WATCHER_SEC:-5}"
 
 # 颜色输出
@@ -61,7 +61,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --client-port <端口>     客户端 HTTP 观察端口 (默认: 18091)"
             echo "  --namespace <命名空间>   命名空间 (默认: default)"
             echo "  --group <配置组>         配置文件组 (默认: polaris-config-example)"
-            echo "  --file <文件名>          配置文件名 (默认: config-effect-example.yaml)"
+            echo "  --file <base name>      配置文件 base name，派生 -1/-2/-3.yaml (默认: config-effect-example)"
             echo "  --wait-watcher <秒>      等待 WatchClientEvents 长连接建立 (默认: 5)"
             exit 0
             ;;
@@ -95,19 +95,70 @@ setup_test_log() {
 }
 setup_test_log "$@"
 
-# 从客户端 /config 接口提取指定 JSON 字段(依赖 python3)
-# 入参: field (version|md5|content)
-get_config_field() {
-    local field="$1"
+# 从客户端 /config 接口的 files 数组中，按文件名提取指定字段(依赖 python3)
+# 入参: file_name field (version|md5|content)
+get_file_field() {
+    local file="$1" field="$2"
     curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/config" 2>/dev/null \
         | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
-    print(d.get('${field}', ''))
+    for f in d.get('files', []):
+        if f.get('fileName') == sys.argv[1]:
+            print(f.get(sys.argv[2], ''))
+            break
 except Exception:
     print('')
-" 2>/dev/null
+" "$file" "$field" 2>/dev/null
+}
+
+# do_push 向服务端 maintain 接口 PUSH 单个配置文件的生效查询。
+# 入参: file_name。成功时全局 RESP/HTTP_CODE 填入服务端响应与状态码，返回 0；失败返回 1。
+# 鉴权失败(401/403)或路由不存在(404)直接 exit 1(对所有文件都失败，无谓重试)。
+do_push() {
+    local file="$1"
+    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
+    local encoded
+    encoded=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")
+    local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${CLIENT_ID}&content=${encoded}"
+    log_info "调服务端: ${url}"
+
+    local http_info
+    http_info=$(mktemp)
+    local curl_exit=0
+    RESP=$(curl -sS --connect-timeout 10 --max-time 20 \
+        -H "X-Polaris-Token: ${POLARIS_TOKEN}" \
+        -w "\n__HTTP_CODE__%{http_code}\n__EXIT__%{exitcode}\n" \
+        "$url" 2>"$http_info") || curl_exit=$?
+    HTTP_CODE=$(echo "$RESP" | grep -oE '__HTTP_CODE__[0-9]+' | sed 's/__HTTP_CODE__//')
+    RESP=$(echo "$RESP" | sed '/^__HTTP_CODE__/,/^__EXIT__/d; /^__EXIT__/d')
+    local curl_err
+    curl_err=$(cat "$http_info")
+    rm -f "$http_info"
+
+    if [[ -z "$RESP" && -z "$HTTP_CODE" ]]; then
+        log_error "curl 调用失败 (退出码 ${curl_exit}): ${curl_err}"
+        log_error "确认 maintain 端口 ${MAINTAIN_PORT} 可达、路径 /maintain/v1/clients/event 存在"
+        log_error "诊断: curl -v ${url}"
+        return 1
+    fi
+    log_info "HTTP 状态码: ${HTTP_CODE:-unknown}"
+    log_info "服务端响应: ${RESP}"
+    if [[ "$HTTP_CODE" == "401" || "$HTTP_CODE" == "403" ]]; then
+        log_error "鉴权失败 (HTTP ${HTTP_CODE})，确认 POLARIS_TOKEN 正确"
+        exit 1
+    fi
+    if [[ "$HTTP_CODE" == "404" ]]; then
+        log_error "maintain 接口路径不存在 (HTTP 404)"
+        log_error "确认服务端已实现 WatchClientEvents 且 maintain 路由含 /maintain/v1/clients/event"
+        exit 1
+    fi
+    if [[ "$HTTP_CODE" != "200" ]]; then
+        log_error "服务端返回非 200 (HTTP ${HTTP_CODE})，响应: ${RESP}"
+        return 1
+    fi
+    return 0
 }
 
 echo ""
@@ -120,7 +171,7 @@ echo "  客户端 HTTP:     127.0.0.1:${CLIENT_PORT}"
 echo "  配置文件:        ${NAMESPACE}/${FILE_GROUP}/${FILE_NAME}"
 echo ""
 
-log_step "步骤 1/4 获取客户端 clientID 与本地生效配置"
+log_step "步骤 1/3 获取客户端 clientID 与本地生效配置"
 
 CLIENT_ID=$(curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/clientid" 2>/dev/null)
 if [[ -z "$CLIENT_ID" ]]; then
@@ -129,76 +180,64 @@ if [[ -z "$CLIENT_ID" ]]; then
 fi
 log_info "clientID: ${CLIENT_ID}"
 
-# 轮询 /config 直到拿到非空 version/md5
+# 派生 3 个配置文件名
+FILE_NAMES=()
+for i in 1 2 3; do
+    FILE_NAMES+=("${FILE_NAME}-${i}.yaml")
+done
+
+# 轮询 /config 直到 3 个文件都拿到非空 version/md5
 waited=0
+ALL_READY=false
 while [[ $waited -lt 30 ]]; do
-    CLIENT_VERSION=$(get_config_field "version")
-    CLIENT_MD5=$(get_config_field "md5")
-    if [[ -n "$CLIENT_VERSION" && "$CLIENT_VERSION" != "0" && -n "$CLIENT_MD5" ]]; then
-        break
-    fi
+    ALL_READY=true
+    for fname in "${FILE_NAMES[@]}"; do
+        v=$(get_file_field "$fname" "version")
+        m=$(get_file_field "$fname" "md5")
+        if [[ -z "$v" || "$v" == "0" || -z "$m" ]]; then
+            ALL_READY=false
+            break
+        fi
+    done
+    [[ "$ALL_READY" == "true" ]] && break
     sleep 1
     waited=$((waited + 1))
 done
-if [[ -z "$CLIENT_VERSION" || "$CLIENT_VERSION" == "0" || -z "$CLIENT_MD5" ]]; then
-    log_error "客户端未拉取到配置文件 (version=${CLIENT_VERSION}, md5=${CLIENT_MD5})"
-    log_error "确认已通过 client.sh setup 发布基线配置"
+if [[ "$ALL_READY" != "true" ]]; then
+    log_error "客户端未拉取到全部配置文件，确认已通过 client.sh setup 发布 3 份基线配置"
     exit 1
 fi
-CLIENT_CONTENT=$(get_config_field "content")
-log_info "本地生效配置: version=${CLIENT_VERSION}, md5=${CLIENT_MD5}, content 长度=${#CLIENT_CONTENT}"
+for fname in "${FILE_NAMES[@]}"; do
+    v=$(get_file_field "$fname" "version")
+    m=$(get_file_field "$fname" "md5")
+    c=$(get_file_field "$fname" "content")
+    log_info "本地生效配置 ${fname}: version=${v}, md5=${m}, content 长度=${#c}"
+done
 
-log_step "步骤 2/4 等待 WatchClientEvents 长连接建立"
+log_step "步骤 2/3 等待 WatchClientEvents 长连接建立"
 log_info "等待 ${WAIT_WATCHER_SEC}s ..."
 sleep "$WAIT_WATCHER_SEC"
 
-log_step "步骤 3/4 调服务端 maintain 接口下发配置生效查询"
+log_step "步骤 3/3 循环 3 个配置文件下发配置生效查询并校验 ACK"
 
-# PUSH content: 单点查询目标配置文件(kind=config + 三元组，snake_case)
-PUSH_CONTENT="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${FILE_NAME}\"}}"
-# URL 编码 content 参数
-ENCODED_CONTENT=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$PUSH_CONTENT" 2>/dev/null || echo "$PUSH_CONTENT")
-MAINTAIN_URL="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${CLIENT_ID}&content=${ENCODED_CONTENT}"
-log_info "调服务端: ${MAINTAIN_URL}"
+OVERALL_PASS=true
+CASE_IDX=0
+for fname in "${FILE_NAMES[@]}"; do
+    CASE_IDX=$((CASE_IDX + 1))
+    log_step "  文件 ${CASE_IDX}/${#FILE_NAMES[@]}: ${fname}"
 
-# -w 输出 HTTP 状态码，-S 显示错误，不吞 stderr 便于诊断
-HTTP_INFO=$(mktemp)
-RESP=$(curl -sS --connect-timeout 10 --max-time 20 \
-    -H "X-Polaris-Token: ${POLARIS_TOKEN}" \
-    -w "\n__HTTP_CODE__%{http_code}\n__EXIT__%{exitcode}\n" \
-    "$MAINTAIN_URL" 2>"$HTTP_INFO") || CURL_EXIT=$?
-HTTP_CODE=$(echo "$RESP" | grep -oE '__HTTP_CODE__[0-9]+' | sed 's/__HTTP_CODE__//')
-RESP=$(echo "$RESP" | sed '/^__HTTP_CODE__/,/^__EXIT__/d; /^__EXIT__/d')
-CURL_ERR=$(cat "$HTTP_INFO")
-rm -f "$HTTP_INFO"
+    cv=$(get_file_field "$fname" "version")
+    cm=$(get_file_field "$fname" "md5")
+    cc=$(get_file_field "$fname" "content")
 
-if [[ -z "$RESP" && -z "$HTTP_CODE" ]]; then
-    log_error "curl 调用失败 (退出码 ${CURL_EXIT:-0}): ${CURL_ERR}"
-    log_error "确认 maintain 端口 ${MAINTAIN_PORT} 可达、路径 /maintain/v1/clients/event 存在"
-    log_error "诊断: curl -v ${MAINTAIN_URL}"
-    exit 1
-fi
-log_info "HTTP 状态码: ${HTTP_CODE:-unknown}"
-log_info "服务端响应: ${RESP}"
+    if ! do_push "$fname"; then
+        log_error "❌ [文件 ${fname}] PUSH 失败"
+        OVERALL_PASS=false
+        continue
+    fi
 
-if [[ "$HTTP_CODE" == "401" || "$HTTP_CODE" == "403" ]]; then
-    log_error "鉴权失败 (HTTP ${HTTP_CODE})，确认 POLARIS_TOKEN 正确"
-    exit 1
-fi
-if [[ "$HTTP_CODE" == "404" ]]; then
-    log_error "maintain 接口路径不存在 (HTTP 404)"
-    log_error "确认服务端已实现 WatchClientEvents 且 maintain 路由含 /maintain/v1/clients/event"
-    exit 1
-fi
-if [[ "$HTTP_CODE" != "200" ]]; then
-    log_error "服务端返回非 200 (HTTP ${HTTP_CODE})，响应: ${RESP}"
-    exit 1
-fi
-
-log_step "步骤 4/4 校验 ACK"
-
-# 解析 ACK content 字段(服务端响应 resp.clientEvent.content)
-ACK_JSON=$(echo "$RESP" | python3 -c "
+    # 解析 ACK content 字段(服务端响应 resp.clientEvent.content)
+    ACK_JSON=$(echo "$RESP" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -208,66 +247,66 @@ except Exception as e:
     sys.stderr.write(str(e) + '\n')
     sys.exit(1)
 " 2>/dev/null) || {
-    log_error "解析服务端响应失败，原始响应: $RESP"
-    exit 1
-}
-if [[ -z "$ACK_JSON" ]]; then
-    log_error "服务端响应无 clientEvent.content，可能客户端未建立长连接或服务端不支持"
-    log_error "排查: 1)查客户端 client.log 是否有 'stream established' 日志"
-    log_error "      2)确认服务端已实现 WatchClientEvents 接口"
-    exit 1
-fi
-log_info "ACK content: ${ACK_JSON}"
+        log_error "❌ [文件 ${fname}] 解析服务端响应失败"
+        OVERALL_PASS=false
+        continue
+    }
+    if [[ -z "$ACK_JSON" ]]; then
+        log_error "❌ [文件 ${fname}] 服务端响应无 clientEvent.content"
+        log_error "  排查: 查客户端 client.log 是否有 'stream established' 日志"
+        OVERALL_PASS=false
+        continue
+    fi
+    log_info "ACK content: ${ACK_JSON}"
 
-# 从 ACK content JSON 提取字段
-ACK_APPLIED=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('applied',''))" 2>/dev/null || echo "")
-ACK_VERSION=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version',''))" 2>/dev/null || echo "")
-ACK_MD5=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('md5',''))" 2>/dev/null || echo "")
-ACK_CONTENT=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('content',''))" 2>/dev/null || echo "")
+    # 从 ACK content JSON 提取字段
+    ACK_APPLIED=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('applied',''))" 2>/dev/null || echo "")
+    ACK_VERSION=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version',''))" 2>/dev/null || echo "")
+    ACK_MD5=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('md5',''))" 2>/dev/null || echo "")
+    ACK_CONTENT=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('content',''))" 2>/dev/null || echo "")
 
-echo ""
-echo "  对比项        客户端本地            ACK 应答"
-echo "  -----------   -------------------   -------------------"
-echo "  applied       (客户端在监听)        ${ACK_APPLIED}"
-echo "  version       ${CLIENT_VERSION}      ${ACK_VERSION}"
-echo "  md5           ${CLIENT_MD5}      ${ACK_MD5}"
-echo "  content 长度  ${#CLIENT_CONTENT}      ${#ACK_CONTENT}"
-echo ""
+    echo ""
+    echo "  对比项        客户端本地            ACK 应答  (${fname})"
+    echo "  -----------   -------------------   -------------------"
+    echo "  applied       (客户端在监听)        ${ACK_APPLIED}"
+    echo "  version       ${cv}      ${ACK_VERSION}"
+    echo "  md5           ${cm}      ${ACK_MD5}"
+    echo "  content 长度  ${#cc}      ${#ACK_CONTENT}"
+    echo ""
 
-OVERALL_PASS=true
+    # 校验 1: applied 必须为 True
+    if [[ "$ACK_APPLIED" == "True" ]]; then
+        log_info "✅ [校验 1] ${fname} ACK applied=true"
+    else
+        log_error "❌ [校验 1] ${fname} ACK applied=${ACK_APPLIED} (期望 True)"
+        OVERALL_PASS=false
+    fi
 
-# 校验 1: applied 必须为 True
-if [[ "$ACK_APPLIED" == "True" ]]; then
-    log_info "✅ [校验 1] ACK applied=true — 客户端确认监听该配置文件"
-else
-    log_error "❌ [校验 1] ACK applied=${ACK_APPLIED} (期望 True) — 客户端可能未监听该文件"
-    OVERALL_PASS=false
-fi
+    # 校验 2: version 一致
+    if [[ -n "$ACK_VERSION" && "$ACK_VERSION" == "$cv" ]]; then
+        log_info "✅ [校验 2] ${fname} ACK version 一致 (${ACK_VERSION})"
+    else
+        log_error "❌ [校验 2] ${fname} ACK version=${ACK_VERSION} != 客户端 ${cv}"
+        OVERALL_PASS=false
+    fi
 
-# 校验 2: version 一致
-if [[ -n "$ACK_VERSION" && "$ACK_VERSION" == "$CLIENT_VERSION" ]]; then
-    log_info "✅ [校验 2] ACK version 一致 (${ACK_VERSION})"
-else
-    log_error "❌ [校验 2] ACK version=${ACK_VERSION} != 客户端 ${CLIENT_VERSION}"
-    OVERALL_PASS=false
-fi
+    # 校验 3: md5 一致
+    if [[ -n "$ACK_MD5" && "$ACK_MD5" == "$cm" ]]; then
+        log_info "✅ [校验 3] ${fname} ACK md5 一致 (${ACK_MD5})"
+    else
+        log_error "❌ [校验 3] ${fname} ACK md5=${ACK_MD5} != 客户端 ${cm}"
+        OVERALL_PASS=false
+    fi
 
-# 校验 3: md5 一致
-if [[ -n "$ACK_MD5" && "$ACK_MD5" == "$CLIENT_MD5" ]]; then
-    log_info "✅ [校验 3] ACK md5 一致 (${ACK_MD5})"
-else
-    log_error "❌ [校验 3] ACK md5=${ACK_MD5} != 客户端 ${CLIENT_MD5}"
-    OVERALL_PASS=false
-fi
-
-# 校验 4: content 一致(客户端本地内容应包含在 ACK content 中，或被截断标记)
-if [[ "$ACK_CONTENT" == "$CLIENT_CONTENT" ]]; then
-    log_info "✅ [校验 4] ACK content 与客户端本地一致"
-else
-    log_warn "⚠️  [校验 4] ACK content 与客户端本地不完全一致"
-    log_warn "    客户端长度=${#CLIENT_CONTENT}, ACK 长度=${#ACK_CONTENT}"
-    log_warn "    若配置超 512KB 会被截断(正常)，否则需排查"
-fi
+    # 校验 4: content 一致(客户端本地内容应包含在 ACK content 中，或被截断标记)
+    if [[ "$ACK_CONTENT" == "$cc" ]]; then
+        log_info "✅ [校验 4] ${fname} ACK content 与客户端本地一致"
+    else
+        log_warn "⚠️  [校验 4] ${fname} ACK content 与客户端本地不完全一致"
+        log_warn "    客户端长度=${#cc}, ACK 长度=${#ACK_CONTENT}"
+        log_warn "    若配置超 512KB 会被截断(正常)，否则需排查"
+    fi
+done
 
 echo ""
 if [[ "$OVERALL_PASS" == "true" ]]; then
