@@ -514,6 +514,10 @@ type ConfigFileContentItem struct {
 	Version   uint64 `json:"version"`
 	Md5       string `json:"md5"`
 	Content   string `json:"content"`
+	// EffectiveTime 配置在客户端本地的实际生效时刻（int64 毫秒时间戳），
+	// 取自 ConfigFileRepo 在 fireChangeEvent 时记录的 time.Now().UnixMilli()。
+	// 未拉取到远端文件时为零值（omitempty 省略）。
+	EffectiveTime int64 `json:"effective_time,omitempty"`
 }
 
 // GetWatchedConfigFileContent 按 (namespace, group, fileName) 查询单个监听配置文件的元数据与内容。
@@ -548,6 +552,7 @@ func (c *ConfigFileFlow) GetWatchedConfigFileContent(namespace, fileGroup, fileN
 	item.Version = cf.GetVersion()
 	item.Md5 = cf.GetMd5()
 	item.Content = cf.GetContent()
+	item.EffectiveTime = repo.getEffectiveTime()
 	return item, true
 }
 

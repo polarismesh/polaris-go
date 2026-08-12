@@ -59,8 +59,12 @@ type ConfigFileRepo struct {
 	notifiedVersion uint64
 	// 从服务端获取的原始配置对象 *configconnector.ConfigFile
 	remoteConfigFileRef *atomic.Value
-	retryPolicy         retryPolicy
-	listeners           []ConfigFileRepoChangeListener
+	// effectiveTime 配置在客户端本地的实际生效时刻（int64 毫秒时间戳）。
+	// 每次 fireChangeEvent 写入非删除配置时更新为 time.Now().UnixMilli()，
+	// 覆盖首次拉取与变更更新；供配置生效查询 ACK 上报。未生效过返回 0。
+	effectiveTime atomic.Value
+	retryPolicy   retryPolicy
+	listeners     []ConfigFileRepoChangeListener
 
 	persistHandler *CachePersistHandler
 
@@ -124,6 +128,16 @@ func newConfigFileRepo(globalCtx sdk.ValueContext, metadata model.ConfigFileMeta
 
 func (r *ConfigFileRepo) GetNotifiedVersion() uint64 {
 	return r.notifiedVersion
+}
+
+// getEffectiveTime 返回配置在客户端本地的实际生效时刻（int64 毫秒时间戳）。
+// 配置从未生效过（仅初始化未拉取成功）时返回 0。
+func (r *ConfigFileRepo) getEffectiveTime() int64 {
+	val := r.effectiveTime.Load()
+	if val == nil {
+		return 0
+	}
+	return val.(int64)
 }
 
 func (r *ConfigFileRepo) loadRemoteFile() *configconnector.ConfigFile {
@@ -466,6 +480,12 @@ func (r *ConfigFileRepo) fireChangeEvent(f *configconnector.ConfigFile) {
 		r.remoteConfigFileRef = &atomic.Value{}
 	} else {
 		r.remoteConfigFileRef.Store(f)
+		// 记录配置在本地实际生效的时刻（毫秒时间戳），供配置生效查询 ACK 上报。
+		// 仅在写入非删除配置时更新，删除场景保留上次生效时间（此时 ACK applied 通常为 false，时间字段不输出）。
+		// 语义说明：effectiveTime 不持久化到本地缓存（缓存仅存 ConfigFile 内容），故进程重启后
+		// 重新拉取会记为本次拉取时刻；fallback 本地缓存场景（fallbackIfNecessary）记为本次恢复时刻
+		// 而非缓存文件原始生效时间——该边角场景的时间偏新可接受，避免为它改 ConfigFile 结构与缓存格式。
+		r.effectiveTime.Store(time.Now().UnixMilli())
 	}
 
 	for i, listener := range r.listeners {

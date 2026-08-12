@@ -79,13 +79,16 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 				"default+g1+f1": {
 					Namespace: "default", Group: "g1", FileName: "f1",
 					Version: 3, Md5: "md5_1", Content: "config-body",
+					EffectiveTime: 1723458600123,
 				},
 			},
 		},
 	}
 	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"f1"}}`
+	raw := w.buildAckContent(push)
+	assert.Contains(t, raw, `"effective_time":1723458600123`, "命中时 ACK 应回带 effective_time")
 	var ack clientEventAck
-	assert.NoError(t, json.Unmarshal([]byte(w.buildAckContent(push)), &ack))
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
 	assert.Equal(t, "config", ack.Kind)
 	assert.Equal(t, "default", ack.Config.Namespace)
 	assert.Equal(t, "g1", ack.Config.Group)
@@ -93,6 +96,7 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 	assert.Equal(t, uint64(3), ack.Version)
 	assert.Equal(t, "md5_1", ack.Md5)
 	assert.Equal(t, "config-body", ack.Content, "ACK 应含配置文件内容")
+	assert.Equal(t, int64(1723458600123), ack.EffectiveTime, "ACK 应回带配置生效时间")
 	assert.True(t, ack.Applied)
 }
 
@@ -123,12 +127,15 @@ func TestBuildAckContent_ConfigMiss(t *testing.T) {
 		configFlow: &mockConfigFlow{items: []configflow.ConfigFileMetadataItem{}},
 	}
 	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"f1"}}`
+	raw := w.buildAckContent(push)
+	assert.NotContains(t, raw, "effective_time", "未命中时 effective_time 应 omitempty 省略")
 	var ack clientEventAck
-	assert.NoError(t, json.Unmarshal([]byte(w.buildAckContent(push)), &ack))
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
 	assert.False(t, ack.Applied)
 	assert.Equal(t, "config", ack.Kind)
 	assert.Equal(t, "default", ack.Config.Namespace)
 	assert.Equal(t, reasonNotWatched, ack.Reason, "未监听应回 not_watched 便于运维区分")
+	assert.Equal(t, int64(0), ack.EffectiveTime, "未命中时生效时间应为零值")
 }
 
 // TestBuildAckContent_NilConfigFlow 配置中心未启用时 applied=false 且 reason=config_disabled。

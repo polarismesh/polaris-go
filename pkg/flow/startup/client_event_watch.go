@@ -389,6 +389,7 @@ func (w *ClientEventWatcher) buildAckContent(pushContent string) string {
 	}
 	ack.Version = item.Version
 	ack.Md5 = item.Md5
+	ack.EffectiveTime = item.EffectiveTime
 	ack.Applied = true
 	// 超大配置截断：gRPC 服务端默认消息体上限 4MB，超限会导致 ACK 发送失败、服务端 waiter 超时。
 	// md5 仍为完整内容的摘要，服务端可据此校验并按需另行拉取全量内容。
@@ -474,6 +475,10 @@ type clientEventAck struct {
 	Config  clientEventQueryCfg `json:"config"`
 	Version uint64              `json:"version,omitempty"`
 	Md5     string              `json:"md5,omitempty"`
+	// EffectiveTime 配置在客户端本地的实际生效时刻（int64 毫秒时间戳），
+	// 取自客户端首次拉取或变更更新时记录的 time.Now().UnixMilli()。
+	// applied=true 时输出；未拉取到或 applied=false 时 omitempty 省略。
+	EffectiveTime int64 `json:"effective_time,omitempty"`
 	// Content 为客户端当前持有的配置文件内容，命中监听文件时返回（即便为空串也显式输出，
 	// 供服务端区分"内容为空"与"未返回内容"）。未命中场景(applied=false)不进入此分支。
 	Content string `json:"content"`
