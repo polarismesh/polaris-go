@@ -18,6 +18,8 @@
 package configuration
 
 import (
+	"fmt"
+	"sort"
 	"sync/atomic"
 	"testing"
 
@@ -104,4 +106,51 @@ func TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyPool(t *testing.T) {
 	items := flow.GetWatchedConfigFileMetadata()
 	assert.NotNil(t, items)
 	assert.Equal(t, 0, len(items))
+}
+
+// TestConfigFileFlow_GetWatchedConfigFileMetadata_DeterministicOrder 回归「map 遍历序随机导致
+// config_metadata 每次序列化顺序不同、误判订阅变化而反复落盘」的问题：
+// 多次调用返回的列表必须按 (namespace, group, file_name) 排序且各次完全一致。
+func TestConfigFileFlow_GetWatchedConfigFileMetadata_DeterministicOrder(t *testing.T) {
+	// 构造多个监听文件，命名刻意乱序，放大 map 遍历的随机性
+	pool := map[string]*ConfigFileRepo{}
+	notified := map[string]uint64{}
+	files := []struct{ ns, group, name string }{
+		{"default", "g2", "f10"}, {"default", "g1", "f2"}, {"default", "g1", "f1"},
+		{"default", "g1", "f20"}, {"default", "g3", "f1"}, {"default", "g1", "f3"},
+	}
+	for i, f := range files {
+		key := fmt.Sprintf("k%d", i)
+		ref := &atomic.Value{}
+		ref.Store(&configconnector.ConfigFile{
+			Namespace: f.ns, FileGroup: f.group, FileName: f.name, Version: uint64(i + 1), Md5: "md5",
+		})
+		pool[key] = &ConfigFileRepo{
+			configFileMetadata:  &model.DefaultConfigFileMetadata{Namespace: f.ns, FileGroup: f.group, FileName: f.name},
+			remoteConfigFileRef: ref,
+		}
+		notified[key] = uint64(i + 1)
+	}
+	flow := &ConfigFileFlow{configFilePool: pool, notifiedVersion: notified}
+
+	// 多次调用，断言每次都有序且彼此完全一致
+	var prev []ConfigFileMetadataItem
+	for round := 0; round < 30; round++ {
+		items := flow.GetWatchedConfigFileMetadata()
+		assert.Equal(t, len(files), len(items))
+		sorted := sort.SliceIsSorted(items, func(i, j int) bool {
+			if items[i].Namespace != items[j].Namespace {
+				return items[i].Namespace < items[j].Namespace
+			}
+			if items[i].Group != items[j].Group {
+				return items[i].Group < items[j].Group
+			}
+			return items[i].FileName < items[j].FileName
+		})
+		assert.True(t, sorted, "第 %d 次调用返回应有序", round)
+		if prev != nil {
+			assert.Equal(t, prev, items, "第 %d 次调用顺序应与首次一致", round)
+		}
+		prev = items
+	}
 }

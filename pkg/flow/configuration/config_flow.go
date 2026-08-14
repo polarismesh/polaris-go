@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -481,6 +482,10 @@ type ConfigFileMetadataItem struct {
 // 内部持有 fclock 读锁遍历 configFilePool，调用期间配置文件列表不会被并发修改；
 // 返回值始终非 nil（池为空时返回空切片），调用方可直接序列化为 JSON。
 // receiver 为 nil 时（配置中心未启用，指针被装入接口）返回空切片，避免解引用 panic。
+// 返回前按 (namespace, group, file_name) 排序：configFilePool 是 map，遍历序随机，若不排序，
+// 每次序列化出的 config_metadata 字符串顺序都不同，会把「同一份监听列表」误判为「订阅变化」，
+// 导致 client_info.json 每个上报周期都被重写一遍（多余的磁盘 I/O 与日志）；排序后字符串稳定，
+// 变化检测才真实反映监听集合的增删。
 func (c *ConfigFileFlow) GetWatchedConfigFileMetadata() []ConfigFileMetadataItem {
 	if c == nil {
 		return []ConfigFileMetadataItem{}
@@ -506,6 +511,16 @@ func (c *ConfigFileFlow) GetWatchedConfigFileMetadata() []ConfigFileMetadataItem
 		}
 		items = append(items, item)
 	}
+	// 排序保证序列化结果确定，与监听集合的内容一一对应（与遍历顺序无关）
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Namespace != items[j].Namespace {
+			return items[i].Namespace < items[j].Namespace
+		}
+		if items[i].Group != items[j].Group {
+			return items[i].Group < items[j].Group
+		}
+		return items[i].FileName < items[j].FileName
+	})
 	return items
 }
 
