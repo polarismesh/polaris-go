@@ -113,6 +113,21 @@ func TestClientInfoNeedsPersist(t *testing.T) {
 	locB := &model.Location{Region: "ap", Zone: "z2", Campus: "c1"}
 	const emptyWatch = `{"kind":"config","config_watch":[]}`
 	const oneWatch = `{"kind":"config","config_watch":[{"namespace":"default","group":"g1","file_name":"f1"}]}`
+	// 同一组监听文件、仅数组顺序不同的两份快照，用于验证顺序免疫
+	const twoWatchAB = `{"kind":"config","config_watch":[` +
+		`{"namespace":"default","group":"g1","file_name":"f1","version":3,"md5":"m1"},` +
+		`{"namespace":"default","group":"g2","file_name":"f2","version":5,"md5":"m2"}]}`
+	const twoWatchBA = `{"kind":"config","config_watch":[` +
+		`{"namespace":"default","group":"g2","file_name":"f2","version":5,"md5":"m2"},` +
+		`{"namespace":"default","group":"g1","file_name":"f1","version":3,"md5":"m1"}]}`
+	// 与 twoWatchAB 同集合但 f1 的 version 不同，用于验证 version 变化会触发写入
+	const twoWatchABVersionBump = `{"kind":"config","config_watch":[` +
+		`{"namespace":"default","group":"g1","file_name":"f1","version":4,"md5":"m1"},` +
+		`{"namespace":"default","group":"g2","file_name":"f2","version":5,"md5":"m2"}]}`
+	// 与 twoWatchAB 同集合但 f2 的 md5 不同，用于验证 md5 变化会触发写入
+	const twoWatchABMd5Change = `{"kind":"config","config_watch":[` +
+		`{"namespace":"default","group":"g1","file_name":"f1","version":3,"md5":"m1"},` +
+		`{"namespace":"default","group":"g2","file_name":"f2","version":5,"md5":"m2x"}]}`
 
 	tests := []struct {
 		name               string
@@ -177,6 +192,54 @@ func TestClientInfoNeedsPersist(t *testing.T) {
 			lastConfigMetadata: emptyWatch,
 			newConfigMetadata:  oneWatch,
 			want:               true,
+		},
+		{
+			name:               "顺序免疫_同集合不同顺序_跳过",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: twoWatchAB,
+			newConfigMetadata:  twoWatchBA,
+			want:               false,
+		},
+		{
+			name:               "顺序免疫_自比较_跳过",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: twoWatchAB,
+			newConfigMetadata:  twoWatchAB,
+			want:               false,
+		},
+		{
+			name:               "仅version变化_写入",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: twoWatchAB,
+			newConfigMetadata:  twoWatchABVersionBump,
+			want:               true,
+		},
+		{
+			name:               "仅md5变化_写入",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: twoWatchAB,
+			newConfigMetadata:  twoWatchABMd5Change,
+			want:               true,
+		},
+		{
+			name:               "无法解析时回退字符串比较_内容不同_写入",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: `not-json`,
+			newConfigMetadata:  `still-not-json-but-different`,
+			want:               true,
+		},
+		{
+			name:               "无法解析时回退字符串比较_内容相同_跳过",
+			lastLocation:       locA,
+			newLocation:        locA,
+			lastConfigMetadata: `not-json`,
+			newConfigMetadata:  `not-json`,
+			want:               false,
 		},
 	}
 

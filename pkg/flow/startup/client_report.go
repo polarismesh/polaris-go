@@ -246,12 +246,70 @@ func (r *ReportClientCallBack) persistHandlerWithLocationCheck(message proto.Mes
 // clientInfoNeedsPersist 判断本次 ReportClient 响应相比上次持久化结果是否需要重新写入 client_info.json。
 // lastLocation 为 nil 表示首次写入（本地缓存未加载到），必然需要写入。
 // location 或 configMetadata 任一变化即需写入：configMetadata 纳入判断是为了让订阅列表变化
-// （新增/移除配置文件监听）能刷新文件，避免 config_watch 停留在首次写入的过期快照。
+// （新增/移除配置文件监听、或已监听文件的 version/md5 变化）能刷新文件，避免 config_watch 停留在过期快照。
+// configMetadata 采用「与数组顺序无关的集合语义」比较（见 configWatchSetEqual），对客户端 map 遍历序、
+// 服务端回显重排都免疫，杜绝把同一份监听列表误判为变化而反复落盘；解析失败时回退为字符串比较。
 // 抽为包级纯函数便于单测，无需构造 ReportClientCallBack 依赖。
 func clientInfoNeedsPersist(lastLocation *model.Location, newLocation *model.Location,
 	lastConfigMetadata, newConfigMetadata string) bool {
-	locationChanged := lastLocation == nil || *lastLocation != *newLocation
-	return locationChanged || lastConfigMetadata != newConfigMetadata
+	// 地域变化（含首次写入）必然需要落盘
+	if lastLocation == nil || *lastLocation != *newLocation {
+		return true
+	}
+	// 订阅元数据按集合语义比较；无法解析时回退字符串比较
+	if equal, ok := configWatchSetEqual(lastConfigMetadata, newConfigMetadata); ok {
+		return !equal
+	}
+	return lastConfigMetadata != newConfigMetadata
+}
+
+// configWatchItem 用于语义比较的单个监听文件项，对应 config_metadata.config_watch 数组元素。
+// 字段均可比较，可直接作为 map key 用于集合判等。
+type configWatchItem struct {
+	Namespace string `json:"namespace"`
+	Group     string `json:"group"`
+	FileName  string `json:"file_name"`
+	Version   uint64 `json:"version"`
+	Md5       string `json:"md5"`
+}
+
+// configWatchSetEqual 以「与数组顺序无关的集合语义」比较两份 config_metadata 的 config_watch 是否一致。
+// 仅当两者的监听文件集合（namespace/group/file_name/version/md5 五项）完全相同时返回 equal=true。
+// ok=false 表示任一输入无法解析为预期的 config_watch 结构，调用方应回退为字符串比较。
+func configWatchSetEqual(lastConfigMetadata, newConfigMetadata string) (equal bool, ok bool) {
+	lastSet, ok1 := configWatchItemSet(lastConfigMetadata)
+	newSet, ok2 := configWatchItemSet(newConfigMetadata)
+	if !ok1 || !ok2 {
+		return false, false
+	}
+	if len(lastSet) != len(newSet) {
+		return false, true
+	}
+	for item := range lastSet {
+		if _, exists := newSet[item]; !exists {
+			return false, true
+		}
+	}
+	return true, true
+}
+
+// configWatchItemSet 解析 config_metadata JSON，把 config_watch 数组转成可判等的 item 集合（去重、无序）。
+// 空串视为合法的「无监听」快照，返回空集合；解析失败返回 (nil, false)。
+func configWatchItemSet(configMetadata string) (map[configWatchItem]struct{}, bool) {
+	if configMetadata == "" {
+		return map[configWatchItem]struct{}{}, true
+	}
+	var payload struct {
+		ConfigWatch []configWatchItem `json:"config_watch"`
+	}
+	if err := json.Unmarshal([]byte(configMetadata), &payload); err != nil {
+		return nil, false
+	}
+	set := make(map[configWatchItem]struct{}, len(payload.ConfigWatch))
+	for _, it := range payload.ConfigWatch {
+		set[it] = struct{}{}
+	}
+	return set, true
 }
 
 // persistShared 写入固定名共享文件 client_info.json，供下次重启回退读取。
