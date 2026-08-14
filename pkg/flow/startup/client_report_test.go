@@ -20,12 +20,21 @@ package startup
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/polarismesh/polaris-go/pkg/config"
 	configflow "github.com/polarismesh/polaris-go/pkg/flow/configuration"
+	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
+	"github.com/polarismesh/polaris-go/pkg/plugin/localregistry"
+	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
 
 // TestConfigMetadataPayload_Marshal 验证 ReportClient 上报 config_metadata 的 JSON 结构，
@@ -178,4 +187,100 @@ func TestClientInfoNeedsPersist(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// nopLogger 覆盖 persistHandler/updateLocation 触达的 Infof/Warnf/Errorf，嵌入 log.Logger 占位其余方法。
+type nopLogger struct {
+	log.Logger
+}
+
+func (nopLogger) Infof(string, ...interface{})  {}
+func (nopLogger) Warnf(string, ...interface{})  {}
+func (nopLogger) Errorf(string, ...interface{}) {}
+
+// fakePersistRegistry 嵌入 InstancesRegistry 接口，仅覆盖本测试用到的 PersistMessage。
+type fakePersistRegistry struct {
+	localregistry.InstancesRegistry
+}
+
+func (f *fakePersistRegistry) PersistMessage(string, proto.Message) error { return nil }
+
+// fakePersistValueContext 嵌入 ValueContext 接口，仅覆盖本测试用到的方法。
+type fakePersistValueContext struct {
+	sdk.ValueContext
+}
+
+func (f *fakePersistValueContext) GetClientId() string { return "race-client" }
+
+func (f *fakePersistValueContext) SetCurrentLocation(*model.Location, model.SDKError) bool {
+	return false
+}
+
+// fakePersistConfiguration 及其内部链嵌入配置接口，令 updateLocation 读到空 location providers 以进入读分支。
+type fakePersistConfiguration struct{ config.Configuration }
+
+func (fakePersistConfiguration) GetGlobal() config.GlobalConfig { return fakePersistGlobalConfig{} }
+
+type fakePersistGlobalConfig struct{ config.GlobalConfig }
+
+func (fakePersistGlobalConfig) GetLocation() config.LocationConfig {
+	return fakePersistLocationConfig{}
+}
+
+type fakePersistLocationConfig struct{ config.LocationConfig }
+
+func (fakePersistLocationConfig) GetProviders() []*config.LocationProviderConfigImpl { return nil }
+
+// TestReportClientCallBack_PersistLocationConcurrent 回归 P1：
+// persistHandlerWithLocationCheck（写 lastLocation/lastConfigMetadata）与 updateLocation（读 lastLocation）
+// 可能被定时任务 Process 与 TriggerNow 的 doReportNow 并发触发。此测试在多协程下高频交错两条路径，
+// 配合 go test -race 验证 persistMu 对这两个字段的保护（去掉锁即报 race）。
+func TestReportClientCallBack_PersistLocationConcurrent(t *testing.T) {
+	origin := log.GetBaseLogger()
+	log.SetBaseLogger(nopLogger{})
+	defer log.SetBaseLogger(origin)
+	logCtx := &log.ContextLogger{}
+	logCtx.Init()
+
+	cb := &ReportClientCallBack{
+		registry:      &fakePersistRegistry{},
+		configuration: fakePersistConfiguration{},
+		globalCtx:     &fakePersistValueContext{},
+		logCtx:        logCtx,
+	}
+	buildResp := func(region, metadata string) *apiservice.Response {
+		return &apiservice.Response{
+			Client: &apiservice.Client{
+				Location: &apimodel.Location{
+					Region: &wrapperspb.StringValue{Value: region},
+					Zone:   &wrapperspb.StringValue{Value: "z1"},
+					Campus: &wrapperspb.StringValue{Value: "c1"},
+				},
+				ConfigMetadata: &wrapperspb.StringValue{Value: metadata},
+			},
+		}
+	}
+
+	const workers = 8
+	const iters = 200
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				if id%2 == 0 {
+					// 交替地域与订阅元数据，强制走入持久化写入分支
+					region, metadata := "ap-guangzhou", `{"kind":"config","config_watch":[]}`
+					if i%2 == 0 {
+						region, metadata = "ap-shenzhen", `{"kind":"config","config_watch":[{"namespace":"default"}]}`
+					}
+					_ = cb.persistHandlerWithLocationCheck(buildResp(region, metadata))
+				} else {
+					cb.updateLocation(&model.Location{Region: "ap-guangzhou", Zone: "z1", Campus: "c1"}, nil)
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
 }

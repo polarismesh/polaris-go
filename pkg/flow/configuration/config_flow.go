@@ -156,12 +156,13 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		c.configFileCache.Store(cacheKey, configFile)
 		c.logCtx.GetBaseLogger().Infof("[ConfigFileFlow] 配置文件已订阅并加入长轮询池. file=%s/%s/%s, version=%d",
 			req.Namespace, req.FileGroup, req.FileName, fileRepo.getVersion())
-		// 通知监听列表变化，异步触发即时 ReportClient 上报，避免阻塞配置获取流程与持锁
+		// 通知监听列表变化以触发即时 ReportClient 上报。
+		// 回调（TriggerNow）本身非阻塞（CAS + 内部起协程），直接同步调用即可，无需再包一层 go。
 		c.fclock.RLock()
 		onWatchChanged := c.onWatchChanged
 		c.fclock.RUnlock()
 		if onWatchChanged != nil {
-			go onWatchChanged()
+			onWatchChanged()
 		}
 	}
 	return configFile, nil
@@ -493,11 +494,15 @@ func (c *ConfigFileFlow) GetWatchedConfigFileMetadata() []ConfigFileMetadataItem
 			Namespace: metadata.GetNamespace(),
 			Group:     metadata.GetFileGroup(),
 			FileName:  metadata.GetFileName(),
-			Version:   c.getConfigFileNotifiedVersion(cacheKey, false),
 		}
-		// md5 取本地已落盘的远端配置文件内容 MD5；repo 尚未拉取到文件时留空
+		// version 与 md5 统一取自同一次 loadRemoteFile 快照（即本地实际生效的配置），保证自一致——
+		// 若 version 取 notifiedVersion 而 md5 取 remoteConfigFileRef，长轮询并发更新瞬间会拼出
+		// "version 旧、md5 新" 的撕裂组合。尚未拉取到文件时 version 回退 notifiedVersion、md5 留空。
 		if cf := repo.loadRemoteFile(); cf != nil {
+			item.Version = cf.GetVersion()
 			item.Md5 = cf.GetMd5()
+		} else {
+			item.Version = c.getConfigFileNotifiedVersion(cacheKey, false)
 		}
 		items = append(items, item)
 	}
@@ -513,18 +518,29 @@ type ConfigFileContentItem struct {
 	FileName  string `json:"file_name"`
 	Version   uint64 `json:"version"`
 	Md5       string `json:"md5"`
-	Content   string `json:"content"`
+	// Content 为配置文件的源内容（SourceContent）：非加密配置即应用生效内容；加密配置为密文。
+	// 取源内容而非 GetContent() 的原因有二：
+	//  1. Md5 是服务端对源内容的摘要，回传源内容才能保证 md5(content) 自洽，可供服务端校验；
+	//  2. 加密配置的 GetContent() 是解密后的明文，回传明文会把本仓库刻意保护的敏感内容（配置
+	//     变更日志已对加密 tag 打码）经 ACK 明文回传，扩大暴露面。密文回传不泄露明文，且服务端
+	//     作为配置来源本就可据此校验版本与摘要。
+	Content string `json:"content"`
 	// EffectiveTime 配置在客户端本地的实际生效时刻（int64 毫秒时间戳），
 	// 取自 ConfigFileRepo 在 fireChangeEvent 时记录的 time.Now().UnixMilli()。
 	// 未拉取到远端文件时为零值（omitempty 省略）。
 	EffectiveTime int64 `json:"effective_time,omitempty"`
+	// Pulled 标记是否已拉取到远端文件（仅内部使用，不进入 ACK JSON）。
+	// 已订阅但尚未拉取成功（首次拉取失败/重试中）时为 false，供调用方区分「未生效」与「已生效」。
+	Pulled bool `json:"-"`
 }
 
 // GetWatchedConfigFileContent 按 (namespace, group, fileName) 查询单个监听配置文件的元数据与内容。
-// 命中返回 (item, true)；未监听或未拉取到远端文件返回 (zero, false)。
+// 未监听返回 (zero, false)；已监听但尚未拉取到远端文件返回 (item, true) 且 item.Pulled=false；
+// 已拉取返回 (item, true) 且 item.Pulled=true，version/md5/content/effectiveTime 齐全。
 // version/md5/content 三者统一取自同一次 loadRemoteFile 快照，保证自一致——
 // 若分别从 notifiedVersion 与 remoteConfigFileRef 取，长轮询并发更新时会返回
 // "version 旧、content 新" 的撕裂组合，导致服务端误判配置是否生效。
+// content 取 SourceContent（加密配置为密文），与 md5 自洽且不回传解密明文，详见字段注释。
 // 内部持有 fclock 读锁，并发安全；receiver 为 nil 时返回 (zero, false) 避免解引用 panic。
 func (c *ConfigFileFlow) GetWatchedConfigFileContent(namespace, fileGroup, fileName string) (ConfigFileContentItem, bool) {
 	if c == nil {
@@ -545,14 +561,16 @@ func (c *ConfigFileFlow) GetWatchedConfigFileContent(namespace, fileGroup, fileN
 	// 单次快照取值，保证 version/md5/content 自一致
 	cf := repo.loadRemoteFile()
 	if cf == nil {
-		// 尚未拉取到远端文件：仅回退 notifiedVersion，内容与 md5 留空
+		// 已订阅但尚未拉取到远端文件（首次拉取失败/重试中）：仅回退 notifiedVersion，
+		// Pulled=false 供调用方按「未生效」处理
 		item.Version = c.getConfigFileNotifiedVersion(cacheKey, false)
 		return item, true
 	}
 	item.Version = cf.GetVersion()
 	item.Md5 = cf.GetMd5()
-	item.Content = cf.GetContent()
+	item.Content = cf.GetSourceContent()
 	item.EffectiveTime = repo.getEffectiveTime()
+	item.Pulled = true
 	return item, true
 }
 

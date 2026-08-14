@@ -22,6 +22,7 @@ package startup
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -77,6 +78,11 @@ type ReportClientCallBack struct {
 	interval      time.Duration
 	reporterChain []statreporter.StatReporter
 	logCtx        *log.ContextLogger
+	// persistMu 保护 lastLocation 与 lastConfigMetadata 的并发读写。
+	// persistHandlerWithLocationCheck 会被两条协程路径触发：定时任务 Process 与 TriggerNow 的
+	// doReportNow 都同步调 connector.ReportClient，后者内部回调 PersistHandler；grpc 连接器每次
+	// 独立取连接、不在调用间串行化，故这两个字段的读改写必须自行加锁。
+	persistMu sync.Mutex
 	// lastLocation 记录上次成功持久化的地域信息，用于对比判断是否需要重新写入 client_info.json
 	lastLocation *model.Location
 	// lastConfigMetadata 记录上次成功持久化的配置订阅元数据（ReportClient 响应中的 config_metadata），
@@ -154,9 +160,12 @@ func (r *ReportClientCallBack) loadLocalClientReportResult() {
 		Campus: location.GetCampus().GetValue(),
 	}
 	// 初始化 lastLocation，避免首次上报时与缓存相同的 location 也触发重复写入
-	r.lastLocation = loc
 	// 初始化 lastConfigMetadata，避免重启后首次上报与缓存相同的 configMetadata 也触发重复写入
+	// 构造期单协程调用，此处加锁仅为与运行期读写保持一致的同步约定
+	r.persistMu.Lock()
+	r.lastLocation = loc
 	r.lastConfigMetadata = resp.GetClient().GetConfigMetadata().GetValue()
+	r.persistMu.Unlock()
 	r.updateLocation(loc, nil)
 }
 
@@ -215,6 +224,9 @@ func (r *ReportClientCallBack) persistHandlerWithLocationCheck(message proto.Mes
 		Campus: loc.GetCampus().GetValue(),
 	}
 	newConfigMetadata := resp.GetClient().GetConfigMetadata().GetValue()
+	// 检查-持久化-回写是一个读改写临界区，可能被 Process 与 doReportNow 并发进入，必须持锁
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
 	// 地域与配置订阅元数据均未变化时跳过写入，避免不必要的磁盘 I/O
 	if !clientInfoNeedsPersist(r.lastLocation, newLocation, r.lastConfigMetadata, newConfigMetadata) {
 		return nil
@@ -291,8 +303,12 @@ func (r *ReportClientCallBack) updateLocation(location *model.Location, lastErr 
 	}
 
 	if nil != location {
+		// 读取 lastLocation 判断是否需要打印变更日志；persistHandler 可能并发回写该字段，需持锁
+		r.persistMu.Lock()
+		locationChanged := r.lastLocation == nil || *r.lastLocation != *location
+		r.persistMu.Unlock()
 		// 只在地域信息首次获取或发生变化时打印日志，避免重复输出相同内容
-		if r.lastLocation == nil || *r.lastLocation != *location {
+		if locationChanged {
 			r.logCtx.GetBaseLogger().Infof("current client area info is {Region:%s, Zone:%s, Campus:%s}",
 				location.Region, location.Zone, location.Campus)
 		}

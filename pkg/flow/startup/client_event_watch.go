@@ -63,6 +63,8 @@ const (
 	reasonConfigDisabled = "config_disabled"
 	// reasonNotWatched 客户端未监听该配置文件
 	reasonNotWatched = "not_watched"
+	// reasonPending 客户端已监听该配置文件但尚未拉取生效（首次拉取失败/重试中）
+	reasonPending = "pending"
 )
 
 var (
@@ -221,11 +223,23 @@ func (w *ClientEventWatcher) logConnectFailure(err error) {
 
 // shouldLogFailureAsWarn 判断本次建流失败记 warn（true）还是 error（false）。
 // failCount 为当前连续失败次数（从 1 开始计）；err 为本次失败原因。
-// 仅服务端 client 缓存未命中且处于前 watchNotFoundWarnCount 次时返回 true——该场景可自愈。
-// 其余错误（含超出次数的 NotFound）返回 false，以 error 暴露真实故障。
+// 瞬时网络错误（Unavailable/DeadlineExceeded，服务端滚动重启/网络抖动的典型表现）始终记 warn——
+// 配置生效查询是旁路观测能力，其断连是主发现链路故障的伴生症状，真实 outage 由主链路告警暴露，
+// 此处记 error 只会在发布窗口制造告警噪音；配合既有降频，长期不可用也不会刷屏。
+// 服务端 client 缓存未命中（NotFound）仅在前 watchNotFoundWarnCount 次记 warn（启动竞态可自愈）；
+// 超出该次数仍 NotFound 说明客户端上报确有异常，升 error 以便排查。其余错误一律记 error。
 // 抽为包级纯函数便于单测，无需注入可捕获级别的 logger。
 func shouldLogFailureAsWarn(failCount int, err error) bool {
+	if isTransientNetworkError(err) {
+		return true
+	}
 	return failCount <= watchNotFoundWarnCount && isClientNotFound(err)
+}
+
+// isTransientNetworkError 判断错误是否为瞬时网络错误（gRPC Unavailable/DeadlineExceeded）。
+// 这类错误多由服务端滚动重启、负载摘除或网络抖动引起，退避重连即可自愈，不代表持续性故障。
+func isTransientNetworkError(err error) bool {
+	return hasGRPCCode(err, codes.Unavailable) || hasGRPCCode(err, codes.DeadlineExceeded)
 }
 
 // isUnimplemented 判断错误是否为 gRPC Unimplemented（服务端未实现该接口）。
@@ -336,7 +350,8 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 			err = errHandlePushPanic
 		}
 	}()
-	ackContent := w.buildAckContent(event.GetContent())
+	ack := w.buildAck(event.GetContent())
+	ackContent := w.marshalAck(ack)
 	if err := stream.Send(&apiservice.ClientEvent{
 		Type:     apiservice.ClientEvent_ACK,
 		ClientId: w.clientID,
@@ -346,10 +361,8 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 		return err
 	}
 	// 运维主动查询才触发，频率低；生产环境需可见以便排查"查询结果为何如此"。
-	// 反解 ACK JSON 取查询三元组与生效版本/摘要用于诊断：低频路径上的一次额外反序列化代价可接受。
+	// 直接使用已构造的 ack 结构体字段打日志，无需把 ackContent 再反序列化一遍。
 	if l := w.logger(); l != nil {
-		var ack clientEventAck
-		_ = json.Unmarshal([]byte(ackContent), &ack)
 		l.Infof("client event ack sent, index %d, clientID %s, namespace %s, group %s, "+
 			"file %s, version %d, md5 %s, applied %v, reason %s, ackBytes %d",
 			event.GetIndex(), w.clientID,
@@ -359,33 +372,46 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 	return nil
 }
 
-// buildAckContent 解析 PUSH content 按 kind 分发，构造 ACK content JSON。
-// kind=config：按 config.{namespace,group,file_name} 查本地监听文件，
-// 命中回 version/md5/content/applied=true；content 超过上限时截断并置 content_truncated。
-// 未知 kind 或解析失败：回带 reason 的最小 ACK（applied=false），保证不阻塞服务端 waiter。
+// buildAckContent 构造并序列化 ACK content JSON，为 buildAck + marshalAck 的便捷封装。
+// 供需要字符串形式的调用方（含单测）使用；handlePush 走 buildAck 以避免序列化后再反解。
 func (w *ClientEventWatcher) buildAckContent(pushContent string) string {
+	return w.marshalAck(w.buildAck(pushContent))
+}
+
+// buildAck 解析 PUSH content 按 kind 分发，构造 ACK 结构体（未序列化）。
+// kind=config：按 config.{namespace,group,file_name} 查本地监听文件，
+// 命中且已生效回 version/md5/content/applied=true；content 超过上限时截断并置 content_truncated。
+// 已监听但尚未拉取生效回 applied=false + reason=pending；未监听回 not_watched；
+// 未知 kind 或解析失败：回带 reason 的最小 ACK（applied=false），保证不阻塞服务端 waiter。
+func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
 	var query clientEventQuery
 	if err := json.Unmarshal([]byte(pushContent), &query); err != nil {
 		if l := w.logger(); l != nil {
 			l.Warnf("unmarshal push content failed, clientID %s: %v", w.clientID, err)
 		}
-		return w.marshalAck(clientEventAck{Applied: false, Reason: reasonBadContent})
+		return clientEventAck{Applied: false, Reason: reasonBadContent}
 	}
 	if query.Kind != "config" {
-		return w.marshalAck(clientEventAck{Kind: query.Kind, Applied: false, Reason: reasonUnknownKind})
+		return clientEventAck{Kind: query.Kind, Applied: false, Reason: reasonUnknownKind}
 	}
 	ack := clientEventAck{Kind: query.Kind, Config: query.Config, Applied: false}
 	if w.configFlow == nil {
 		// 配置中心未启用
 		ack.Reason = reasonConfigDisabled
-		return w.marshalAck(ack)
+		return ack
 	}
 	item, ok := w.configFlow.GetWatchedConfigFileContent(
 		query.Config.Namespace, query.Config.Group, query.Config.FileName)
 	if !ok {
 		// 客户端未监听该配置文件
 		ack.Reason = reasonNotWatched
-		return w.marshalAck(ack)
+		return ack
+	}
+	if !item.Pulled {
+		// 已监听但尚未拉取到远端文件（首次拉取失败/重试中），配置未生效
+		ack.Version = item.Version
+		ack.Reason = reasonPending
+		return ack
 	}
 	ack.Version = item.Version
 	ack.Md5 = item.Md5
@@ -406,7 +432,7 @@ func (w *ClientEventWatcher) buildAckContent(pushContent string) string {
 	} else {
 		ack.Content = item.Content
 	}
-	return w.marshalAck(ack)
+	return ack
 }
 
 // marshalAck 序列化 ACK；失败时记日志并回退为带 reason 的最小应答，避免服务端收到无法诊断的空对象。

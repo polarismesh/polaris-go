@@ -50,6 +50,8 @@ func (l *capturingLogger) Errorf(format string, args ...interface{}) {
 func TestLogConnectFailure_LevelByError(t *testing.T) {
 	notFound := status.Error(codes.NotFound, "client not found in cache")
 	unavailable := status.Error(codes.Unavailable, "connection refused")
+	deadlineExceeded := status.Error(codes.DeadlineExceeded, "i/o timeout")
+	permissionDenied := status.Error(codes.PermissionDenied, "token invalid")
 
 	tests := []struct {
 		name      string
@@ -80,9 +82,30 @@ func TestLogConnectFailure_LevelByError(t *testing.T) {
 			wantError: 1,
 		},
 		{
-			name:      "非 NotFound 错误首次即 error",
+			name:      "瞬时错误 Unavailable 首次记 warn",
 			failCount: 1,
 			err:       unavailable,
+			wantWarn:  1,
+			wantError: 0,
+		},
+		{
+			name:      "瞬时错误 Unavailable 高连续失败仍记 warn",
+			failCount: watchLogSuppressAfter,
+			err:       unavailable,
+			wantWarn:  1,
+			wantError: 0,
+		},
+		{
+			name:      "瞬时错误 DeadlineExceeded 记 warn",
+			failCount: 2,
+			err:       deadlineExceeded,
+			wantWarn:  1,
+			wantError: 0,
+		},
+		{
+			name:      "非瞬时错误 PermissionDenied 首次即 error",
+			failCount: 1,
+			err:       permissionDenied,
 			wantWarn:  0,
 			wantError: 1,
 		},
@@ -224,6 +247,8 @@ func TestIsClientNotFound(t *testing.T) {
 func TestShouldLogFailureAsWarn(t *testing.T) {
 	notFound := status.Error(codes.NotFound, "client not found in cache")
 	unavailable := status.Error(codes.Unavailable, "connection refused")
+	deadlineExceeded := status.Error(codes.DeadlineExceeded, "i/o timeout")
+	permissionDenied := status.Error(codes.PermissionDenied, "token invalid")
 
 	tests := []struct {
 		name      string
@@ -250,9 +275,33 @@ func TestShouldLogFailureAsWarn(t *testing.T) {
 			want:      false,
 		},
 		{
-			name:      "首次非 NotFound 错误直接 error",
+			name:      "瞬时错误 Unavailable 首次记 warn",
 			failCount: 1,
 			err:       unavailable,
+			want:      true,
+		},
+		{
+			name:      "瞬时错误 Unavailable 高连续失败仍记 warn",
+			failCount: 100,
+			err:       unavailable,
+			want:      true,
+		},
+		{
+			name:      "瞬时错误 DeadlineExceeded 记 warn",
+			failCount: 1,
+			err:       deadlineExceeded,
+			want:      true,
+		},
+		{
+			name:      "非瞬时错误 PermissionDenied 记 error",
+			failCount: 1,
+			err:       permissionDenied,
+			want:      false,
+		},
+		{
+			name:      "普通非 gRPC 错误记 error",
+			failCount: 1,
+			err:       errors.New("some network error"),
 			want:      false,
 		},
 		{

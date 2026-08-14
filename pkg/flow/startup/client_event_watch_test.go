@@ -25,11 +25,10 @@ import (
 	"strings"
 	"testing"
 
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	configflow "github.com/polarismesh/polaris-go/pkg/flow/configuration"
 )
@@ -79,7 +78,7 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 				"default+g1+f1": {
 					Namespace: "default", Group: "g1", FileName: "f1",
 					Version: 3, Md5: "md5_1", Content: "config-body",
-					EffectiveTime: 1723458600123,
+					EffectiveTime: 1723458600123, Pulled: true,
 				},
 			},
 		},
@@ -107,7 +106,7 @@ func TestBuildAckContent_ConfigEmptyContent(t *testing.T) {
 		clientID: "c1",
 		configFlow: &mockConfigFlow{
 			contentItems: map[string]configflow.ConfigFileContentItem{
-				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1", Content: ""},
+				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1", Content: "", Pulled: true},
 			},
 		},
 	}
@@ -136,6 +135,29 @@ func TestBuildAckContent_ConfigMiss(t *testing.T) {
 	assert.Equal(t, "default", ack.Config.Namespace)
 	assert.Equal(t, reasonNotWatched, ack.Reason, "未监听应回 not_watched 便于运维区分")
 	assert.Equal(t, int64(0), ack.EffectiveTime, "未命中时生效时间应为零值")
+}
+
+// TestBuildAckContent_ConfigPending 已监听但尚未拉取生效（Pulled=false）时 applied=false 且 reason=pending，
+// 不回带 content/md5/effective_time，供服务端区分"未生效"与"已生效"。
+func TestBuildAckContent_ConfigPending(t *testing.T) {
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				// 仅回退到 notifiedVersion，无 content/md5/effectiveTime，Pulled=false
+				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1", Version: 2, Pulled: false},
+			},
+		},
+	}
+	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"f1"}}`
+	raw := w.buildAckContent(push)
+	assert.NotContains(t, raw, "effective_time", "未生效时 effective_time 应 omitempty 省略")
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.False(t, ack.Applied, "未拉取生效不应置 applied=true")
+	assert.Equal(t, reasonPending, ack.Reason, "已监听未生效应回 pending 便于与 not_watched 区分")
+	assert.Equal(t, uint64(2), ack.Version, "pending 时仍回带已知版本供服务端参考")
+	assert.Empty(t, ack.Content, "未生效时不回带内容")
 }
 
 // TestBuildAckContent_NilConfigFlow 配置中心未启用时 applied=false 且 reason=config_disabled。
@@ -222,7 +244,7 @@ func TestBuildAckContent_ContentTruncated(t *testing.T) {
 		configFlow: &mockConfigFlow{
 			contentItems: map[string]configflow.ConfigFileContentItem{
 				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1",
-					Version: 7, Md5: "md5_big", Content: big},
+					Version: 7, Md5: "md5_big", Content: big, Pulled: true},
 			},
 		},
 	}
@@ -243,7 +265,7 @@ func TestBuildAckContent_ContentNotTruncatedAtLimit(t *testing.T) {
 		clientID: "c1",
 		configFlow: &mockConfigFlow{
 			contentItems: map[string]configflow.ConfigFileContentItem{
-				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1", Content: exact},
+				"default+g1+f1": {Namespace: "default", Group: "g1", FileName: "f1", Content: exact, Pulled: true},
 			},
 		},
 	}
