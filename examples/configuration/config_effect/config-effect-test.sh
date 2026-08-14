@@ -43,6 +43,17 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 # 验证用的配置内容 base(具有辨识度，便于自动判定)，main.go 派生 effect-content-v1/v2/v3
 CONFIG_CONTENT="${CONFIG_CONTENT:-effect-content-v}"
 
+# ======================== 加密配置（第 1 个文件） ========================
+# 第 ENCRYPT_FILE_INDEX 个派生文件作为「加密配置」验证端到端加解密 + 生效查询链路。
+# SDK 的 CreateConfigFile/UpdateConfigFile 不带 Encrypted/Tags（见 transferToConfigFile），
+# 无法创建加密配置，故改用服务端 console HTTP 接口 (POST /config/v1/configfiles) 创建。
+ENCRYPT_FILE_INDEX="${ENCRYPT_FILE_INDEX:-1}"
+# 加密算法名，与 SDK crypto/aes filter 注册的算法名一致（plugin/configfilter/crypto/aes）。
+ENCRYPT_ALGO="${ENCRYPT_ALGO:-AES}"
+# 服务端返回码：ExecuteSuccess / ExistedResource(已存在则转 PUT 更新)
+CODE_EXECUTE_SUCCESS=200000
+CODE_EXISTED_RESOURCE=400201
+
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -171,6 +182,101 @@ try:
 except Exception:
     pass
 " "$file" "$field" 2>/dev/null
+}
+
+# ======================== 加密配置准备（console HTTP 接口） ========================
+
+# console_api_url 拼接服务端 console 配置接口 URL。console 与 maintain 同属一个 HTTP server，复用 MAINTAIN_PORT。
+# 入参: path (如 /configfiles 或 /configfiles/release)
+console_api_url() {
+    echo "http://${POLARIS_SERVER}:${MAINTAIN_PORT}/config/v1$1"
+}
+
+# console_post 向 console 配置接口发送一次写请求并回显响应体。
+# 入参: method(POST|PUT) path body_json
+console_post() {
+    local method="$1" path="$2" body="$3"
+    curl -s --connect-timeout 10 --max-time 20 -X "$method" \
+        -H "X-Polaris-Token: ${POLARIS_TOKEN}" -H "Content-Type: application/json" \
+        -d "$body" "$(console_api_url "$path")" 2>/dev/null || true
+}
+
+# resp_code 提取 console 响应 JSON 的 code 字段（数字）。
+resp_code() {
+    echo "$1" | python3 -c 'import sys,json
+try:
+    print(json.load(sys.stdin).get("code",""))
+except Exception:
+    pass' 2>/dev/null
+}
+
+# create_or_update_config_file 通过 console 接口创建或更新一个配置文件。
+# 入参: file_name content encrypted(true|false)
+# 先 POST 创建；若已存在(code=400201)则 PUT 更新。返回非 0 表示失败。
+create_or_update_config_file() {
+    local file="$1" fcontent="$2" encrypted="$3"
+    local body
+    body=$(python3 -c 'import json,sys
+print(json.dumps({
+    "namespace": sys.argv[1], "group": sys.argv[2], "name": sys.argv[3],
+    "content": sys.argv[4], "format": "yaml",
+    "encrypted": sys.argv[5] == "true", "encrypt_algo": sys.argv[6],
+}))' "$NAMESPACE" "$FILE_GROUP" "$file" "$fcontent" "$encrypted" "$ENCRYPT_ALGO")
+
+    local resp code
+    resp=$(console_post POST "/configfiles" "$body")
+    code=$(resp_code "$resp")
+    if [[ "$code" == "$CODE_EXECUTE_SUCCESS" ]]; then
+        log_info "console 创建配置文件成功: ${file} (encrypted=${encrypted}, algo=${ENCRYPT_ALGO})"
+        return 0
+    fi
+    if [[ "$code" == "$CODE_EXISTED_RESOURCE" ]]; then
+        log_info "配置文件已存在，转为更新: ${file} (encrypted=${encrypted})"
+        resp=$(console_post PUT "/configfiles" "$body")
+        code=$(resp_code "$resp")
+        if [[ "$code" == "$CODE_EXECUTE_SUCCESS" ]]; then
+            log_info "console 更新配置文件成功: ${file}"
+            return 0
+        fi
+    fi
+    log_error "console 创建/更新配置文件失败: ${file}, 响应: ${resp}"
+    return 1
+}
+
+# publish_config_file 通过 console 接口发布一个配置文件（全量 release）。
+# release name 带时间戳保证唯一，避免重复执行时因 release 名冲突而发布失败。
+# 入参: file_name
+publish_config_file() {
+    local file="$1"
+    local body
+    body=$(python3 -c 'import json,sys,time
+print(json.dumps({
+    "namespace": sys.argv[1], "group": sys.argv[2], "file_name": sys.argv[3],
+    "name": "%s-release-%d" % (sys.argv[3], int(time.time())),
+}))' "$NAMESPACE" "$FILE_GROUP" "$file")
+
+    local resp code
+    resp=$(console_post POST "/configfiles/release" "$body")
+    code=$(resp_code "$resp")
+    if [[ "$code" == "$CODE_EXECUTE_SUCCESS" ]]; then
+        log_info "console 发布配置文件成功: ${file}"
+        return 0
+    fi
+    log_error "console 发布配置文件失败: ${file}, 响应: ${resp}"
+    return 1
+}
+
+# setup_encrypted_file 将第 ENCRYPT_FILE_INDEX 个派生文件创建/更新为加密配置并发布。
+# 放在 demo setup（全量明文基线）之后调用，确保最终态为加密——即便 demo setup 先把该文件建成明文，
+# 此处也会覆盖为加密；重复执行具有自纠正性。
+setup_encrypted_file() {
+    local enc_file="${FILE_NAME}-${ENCRYPT_FILE_INDEX}.yaml"
+    local enc_content="${CONFIG_CONTENT}${ENCRYPT_FILE_INDEX}"
+    log_info "通过 console 接口准备加密配置文件: ${enc_file} (algo=${ENCRYPT_ALGO}, 明文内容=${enc_content})"
+    create_or_update_config_file "$enc_file" "$enc_content" "true" || return 1
+    publish_config_file "$enc_file" || return 1
+    log_info "加密配置文件已就绪: ${enc_file}"
+    return 0
 }
 
 # ======================== 生成临时 polaris.yaml ========================
@@ -342,6 +448,12 @@ main() {
         exit 1
     }
 
+    # 将第 ${ENCRYPT_FILE_INDEX} 个文件改为加密配置（SDK 建不了加密配置，走 console HTTP 接口）
+    setup_encrypted_file || {
+        log_error "加密配置文件准备失败，请确认 console 接口 (${POLARIS_SERVER}:${MAINTAIN_PORT}/config/v1) 可达且 token 有写权限"
+        exit 1
+    }
+
     log_step "步骤 3/5 启动客户端"
     start_client
     sleep 1
@@ -349,6 +461,8 @@ main() {
     wait_for_http "http://127.0.0.1:${CLIENT_PORT}/health" 30 "客户端" "$PID_CLIENT" || exit 1
 
     log_step "步骤 4/5 验证客户端已拉取全部基线配置"
+    # 总体通过标记：在步骤 4（拉取/解密校验）与步骤 5（ACK 校验）间共享，任一环失败即置 false
+    local overall_pass=true
     # 派生 3 个配置文件名
     local file_names=()
     local i
@@ -394,6 +508,22 @@ main() {
         exit 1
     fi
 
+    # 加密配置端到端解密校验：第 ${ENCRYPT_FILE_INDEX} 个文件在客户端侧应被 crypto filter 解密回明文基线。
+    # /config 快照的 content 字段是经 SDK 解密后的生效内容（model.ConfigFile.GetContent），
+    # 与预期明文一致即证明「密文下发 → SDK 解密 → 明文生效」链路正确。
+    local enc_file="${FILE_NAME}-${ENCRYPT_FILE_INDEX}.yaml"
+    local enc_expect="${CONFIG_CONTENT}${ENCRYPT_FILE_INDEX}"
+    local enc_actual
+    enc_actual=$(get_file_field "$enc_file" "content")
+    if [[ "$enc_actual" == "$enc_expect" ]]; then
+        log_info "✅ [用例 3 加密配置解密一致] PASS - ${enc_file} 解密后内容=${enc_actual}"
+        record_result "3" "加密配置解密一致 ${enc_file}" "PASS" "decrypted=${enc_actual}"
+    else
+        log_error "❌ [用例 3 加密配置解密一致] FAIL - ${enc_file} 解密后=${enc_actual} != 期望明文=${enc_expect}"
+        record_result "3" "加密配置解密一致 ${enc_file}" "FAIL" "decrypted=${enc_actual},expect=${enc_expect}"
+        overall_pass=false
+    fi
+
     log_step "步骤 5/5 通过服务端 maintain 接口下发配置生效查询并校验 ACK"
     local client_id
     client_id=$(get_client_id)
@@ -409,7 +539,7 @@ main() {
     log_info "等待 WatchClientEvents 长连接建立 (5s)..."
     sleep 5
 
-    local overall_pass=true
+    # overall_pass 已在步骤 4 开头声明，此处直接沿用
     local case_idx=0
     for fname in "${file_names[@]}"; do
         case_idx=$((case_idx + 1))

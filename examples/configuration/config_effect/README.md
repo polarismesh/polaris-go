@@ -28,12 +28,21 @@
                 └──────────────────────────────────────────────────────────┘
 ```
 
+## 加密配置（第 1 个文件）
+
+派生的第 1 个文件（`-1.yaml`）作为**加密配置**参与验证，覆盖「密文下发 → SDK crypto filter 解密 → 明文生效 → ACK 应答」的完整链路。
+
+- **创建方式**：polaris-go SDK 的 `CreateConfigFile`/`UpdateConfigFile` 不携带 `Encrypted`/`Tags`（`transferToConfigFile` 仅映射 `namespace/group/name/content`），无法创建加密配置。因此脚本改用服务端 console HTTP 接口 `POST /config/v1/configfiles`（body 带 `encrypted:true, encrypt_algo:"AES"`）创建，再 `POST /config/v1/configfiles/release` 发布。
+- **客户端解密**：crypto/aes filter 默认启用（非 agent 模式），`run` 模式订阅到加密的 `-1.yaml` 会自动解密，`GetContent()` 返回明文。
+- **一致性**：生效查询校验只比对 `applied/version/md5`。ACK 回带的 `content` 为**源内容（密文）**、`md5` 为源内容摘要，与客户端 `/config` 快照的 `md5` 同源（同为服务端密文摘要），因此加密与非加密文件的校验逻辑一致，脚本无需特判。
+
 ## 前置条件
 
 1. 北极星服务端（Polaris Server **商业版**）已启动，且已更新含 `WatchClientEvents` 逻辑的版本
 2. Go 环境已安装
 3. 服务端 maintain HTTP 端口可达（默认 `8090`，可用 `--maintain-port` 指定）
 4. 配置文件组 `polaris-config-example`（默认）已存在，或客户端有创建权限
+5. 服务端 console 配置接口（`/config/v1/configfiles`，与 maintain 同端口）可达，且 `--polaris-token` 具备配置写权限（用于创建/发布加密的第 1 个文件）
 
 ## 使用方法
 
@@ -76,6 +85,7 @@ chmod +x config-effect-test.sh
 | 2.x.1 | ACK applied=true | 每个配置文件 applied=true (x=1/2/3) |
 | 2.x.2 | ACK version 一致 | 每个文件 ACK version == 客户端本地 version |
 | 2.x.3 | ACK md5 一致 | 每个文件 ACK md5 == 客户端本地 md5 |
+| 3 | 加密配置解密一致 | 第 1 个文件（加密）解密后 content == 明文基线 `effect-content-v1` |
 
 ## 客户端 HTTP 接口
 
@@ -102,3 +112,5 @@ chmod +x config-effect-test.sh
 | `applied=false` | 客户端未订阅该配置文件（检查 `/config` 的 version/md5 非空） |
 | version/md5 不一致 | 客户端在 PUSH 时配置已变更但本地尚未 watch 到最新（重跑或延长等待） |
 | maintain 接口鉴权失败 | `--polaris-token` 未传或无效 |
+| 加密文件准备失败（步骤 2 报错退出） | console 配置接口（`/config/v1/configfiles`，与 maintain 同端口）不可达，或 token 无配置写权限 |
+| 用例 3「加密配置解密一致」FAIL | 客户端 crypto/aes filter 未启用（确认非 agent 模式），或服务端下发的 `encrypt_algo` 不是 `AES` |
