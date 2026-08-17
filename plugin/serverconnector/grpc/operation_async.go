@@ -15,6 +15,8 @@
  * specific language governing permissions and limitations under thhe License.
  */
 
+// Package grpc 实现基于 gRPC 的 Polaris 服务端连接器，负责与 naming/config 集群的
+// 长连接管理、服务发现与上报等同步/异步调用，以及 WatchClientEvents 等双向流交互。
 package grpc
 
 import (
