@@ -18,6 +18,7 @@
 package startup
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"runtime/debug"
@@ -31,6 +32,7 @@ import (
 	configflow "github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/plugin/configfilter/crypto/rsa"
 )
 
 const (
@@ -417,10 +419,13 @@ func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
 	ack.Md5 = item.Md5
 	ack.EffectiveTime = item.EffectiveTime
 	ack.Applied = true
-	// 加密配置透传算法与数据密钥，供接收方解密密文 content；均取自同一次快照，与 version/md5 自一致
+	// 加密配置：content 为 AES 密文，data_key 用 PUSH 下发的 RSA 公钥加密后再回传，
+	// 与 GetConfigFile 链路对称（请求方持私钥、应答方用公钥包对称密钥），禁止回传明文 data_key。
 	ack.Encrypted = item.Encrypted
 	ack.EncryptAlgo = item.EncryptAlgo
-	ack.DataKey = item.DataKey
+	if item.Encrypted {
+		ack.DataKey = wrapAckDataKey(item.DataKey, query.PublicKey, w)
+	}
 	// 超大配置截断：gRPC 服务端默认消息体上限 4MB，超限会导致 ACK 发送失败、服务端 waiter 超时。
 	// md5 仍为完整内容的摘要，服务端可据此校验并按需另行拉取全量内容。
 	if len(item.Content) > watchMaxAckContentBytes {
@@ -486,10 +491,37 @@ func (w *ClientEventWatcher) logger() log.Logger {
 	return w.logCtx.GetBaseLogger()
 }
 
+// wrapAckDataKey 用查询方 RSA 公钥加密对称数据密钥，返回 base64(RSA密文)。
+// 与 GetConfigFile 中服务端用 SDK 公钥加密 DataKey 同一套 rsa.EncryptToBase64。
+// 缺公钥、缺密钥或加密失败时返回空串（omitempty 省略），绝不回传明文 data_key。
+func wrapAckDataKey(plainDataKeyB64, publicKeyB64 string, w *ClientEventWatcher) string {
+	if plainDataKeyB64 == "" || publicKeyB64 == "" {
+		return ""
+	}
+	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
+	if err != nil {
+		if l := w.logger(); l != nil {
+			l.Warnf("decode data_key failed, clientID %s: %v", w.clientID, err)
+		}
+		return ""
+	}
+	wrapped, err := rsa.EncryptToBase64(rawKey, publicKeyB64)
+	if err != nil {
+		if l := w.logger(); l != nil {
+			l.Warnf("rsa wrap data_key failed, clientID %s: %v", w.clientID, err)
+		}
+		return ""
+	}
+	return wrapped
+}
+
 // clientEventQuery 服务端 PUSH 下发的查询指令 JSON 结构
 type clientEventQuery struct {
-	Kind   string              `json:"kind"`
-	Config clientEventQueryCfg `json:"config"`
+	Kind string `json:"kind"`
+	// PublicKey 查询方生成的 RSA 公钥（PKCS1 DER 再 base64），用于加密 ACK 中的对称 data_key。
+	// 与 GetConfigFile 请求里 SDK 下发的 PublicKey 同一编码；缺省时加密配置不回传 data_key。
+	PublicKey string              `json:"public_key,omitempty"`
+	Config    clientEventQueryCfg `json:"config"`
 }
 
 // clientEventQueryCfg 查询目标配置文件三元组（snake_case 与服务端配置中心一致）
@@ -521,8 +553,8 @@ type clientEventAck struct {
 	Encrypted bool `json:"encrypted,omitempty"`
 	// EncryptAlgo 加密算法（如 AES），仅加密配置输出
 	EncryptAlgo string `json:"encrypt_algo,omitempty"`
-	// DataKey 数据密钥（base64 明文），仅加密配置输出。
-	// 接收方为服务端（密钥属主）且查询入口有 token 鉴权；该字段禁止进入任何日志。
+	// DataKey 对称数据密钥的 RSA 密文（base64），仅加密配置且 PUSH 携带 public_key 时输出。
+	// 查询方用对应 RSA 私钥解密得到原始 AES key，再解密 content。禁止进入任何日志。
 	DataKey string `json:"data_key,omitempty"`
 	Applied bool   `json:"applied"`
 	// Reason applied=false 的具体原因，便于运维区分"未监听"与"配置中心未启用"等场景

@@ -24,9 +24,10 @@
   `not_watched / config_disabled / pending / bad_content / unknown_kind` 等场景便于运维定位。
 - **加密配置 ACK 携带算法与数据密钥**：加密配置的 ACK 中 `content` 为密文（源内容，
   与 `md5` 自洽，不回传解密明文），并新增 `encrypted` / `encrypt_algo` / `data_key`
-  （base64 明文数据密钥，均 `omitempty`）三个字段，接收方可据此解密密文、核对客户端
-  实际生效的明文内容（`AES-CBC-PKCS7`，IV 取 `key[:16]`）。取值与 version/md5/content
-  来自同一次快照，保证自一致；非加密配置 ACK 零变化。
+  （均 `omitempty`）。查询方在 PUSH 中下发 RSA 公钥（与 GetConfigFile 对称），SDK 用该
+  公钥加密对称 `data_key` 后回传；查询方用 RSA 私钥解开后再 AES 解密 `content`
+  （`AES-CBC-PKCS7`，IV 取 `key[:16]`）。无公钥或加密失败时不回传明文 `data_key`。
+  取值与 version/md5/content 来自同一次快照；非加密配置 ACK 零变化。
 - **clientID 多 context 唯一性**：同进程创建多个 `SDKContext` 时，自第二个起 clientID
   追加 `-<seq>` 后缀，避免服务端按 clientID 互相覆盖；首个保持原格式，向后兼容。
 - **`examples/configuration/config_effect/`**：新增配置生效查询端到端验证 demo，
@@ -44,10 +45,9 @@
   不受影响。
 - **ACK 加密字段为纯增量**（`omitempty`）：仅加密配置输出，旧服务端/旧调用方忽略未知
   字段，无兼容性问题。
-- **加密配置 `data_key` 随 ACK 明文下发**：ACK 接收方为服务端（数据密钥属主，密钥本由
-  服务端生成并持有），maintain 查询入口有 token 鉴权，信任模型与 console 拉取配置接口
-  一致；SDK 日志不落 `data_key`（`ConfigFile.String()` 已掩码，ACK 日志只打标量字段）。
-  若对接收方通道有额外合规要求，升级前请评估该暴露面。
+- **加密配置 `data_key` 用查询方 RSA 公钥加密后回传**：与 GetConfigFile 相同，请求方
+  持 RSA 私钥、应答方用公钥包对称密钥；无公钥时省略 `data_key`，不回传明文。
+  SDK 日志不落 `data_key`（`ConfigFile.String()` 已掩码，ACK 日志只打标量字段）。
 - **`ReportClient` 默认上报间隔 2min → 60s**（`DefaultReportClientIntervalDuration`，
   `polaris.yaml` 注释默认同步调整）：会提高全量客户端上报频率，升级前请确认服务端
   CMDB/location 查询容量。

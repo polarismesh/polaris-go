@@ -7,8 +7,8 @@
 #   2. 本脚本调服务端 maintain 接口 GET /maintain/v1/clients/event 向该 clientID PUSH 配置生效查询
 #   3. 客户端经长连接回 ACK(含 version/md5/content/applied)，服务端原样透传给本脚本
 #   4. 本脚本解析 ACK，校验 applied=true 且 version/md5/content 与客户端本地一致
-#   5. 加密文件(默认第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key，
-#      本脚本用 data_key 解密 ACK 密文(AES-CBC，IV=key[:16])，断言与客户端生效明文一致
+#   5. 加密文件(默认第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
+#      本脚本用查询私钥解开 data_key 后再 AES 解密密文，断言与客户端生效明文一致
 #
 # 前置条件:
 #   1. 客户端已通过 client.sh start 启动并就绪(本目录 x86-bin 在跑)
@@ -89,7 +89,7 @@ if [[ -z "$POLARIS_SERVER" ]]; then
     exit 1
 fi
 if ! command -v openssl &> /dev/null; then
-    echo -e "${RED}openssl 未安装，加密文件 ACK 密文解密校验依赖 openssl${NC}"
+    echo -e "${RED}openssl 未安装，加密文件 ACK 依赖 openssl 生成 RSA 公钥并解密密文${NC}"
     exit 1
 fi
 
@@ -131,7 +131,7 @@ except Exception:
 " "$file" "$field" 2>/dev/null
 }
 
-# decrypt_ack_content 用 ACK 回带的 data_key 解密 ACK 回带的密文 content。
+# decrypt_ack_content 用 AES 密钥（base64 明文）解密 ACK 回带的密文 content。
 # 与 SDK crypto/aes 实现对齐（plugin/configfilter/crypto/aes）：
 # 密文 = base64(AES-CBC-PKCS7(明文, key))，IV 取 key[:16]。
 # 入参: cipher_b64 key_b64（均为 base64 字符串）；stdout 输出解密后的明文，失败返回非 0。
@@ -151,12 +151,34 @@ decrypt_ack_content() {
         openssl enc -d "-${cipher}" -K "$key_hex" -iv "${key_hex:0:32}" 2>/dev/null
 }
 
+init_query_rsa() {
+    QUERY_RSA_PRIV="${LOG_DIR}/query_rsa_priv.pem"
+    openssl genrsa -out "$QUERY_RSA_PRIV" 1024 2>/dev/null
+    QUERY_PUBLIC_KEY=$(openssl rsa -in "$QUERY_RSA_PRIV" -RSAPublicKey_out -outform DER 2>/dev/null | openssl base64 -A)
+    if [[ -z "$QUERY_PUBLIC_KEY" ]]; then
+        log_error "生成查询 RSA 公钥失败"
+        exit 1
+    fi
+}
+
+unwrap_rsa_datakey() {
+    local cipher_b64="$1"
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl rsautl -decrypt -inkey "$QUERY_RSA_PRIV" 2>/dev/null | openssl base64 -A
+}
+
 # do_push 向服务端 maintain 接口 PUSH 单个配置文件的生效查询。
 # 入参: file_name。成功时全局 RESP/HTTP_CODE 填入服务端响应与状态码，返回 0；失败返回 1。
 # 鉴权失败(401/403)或路由不存在(404)直接 exit 1(对所有文件都失败，无谓重试)。
 do_push() {
     local file="$1"
-    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
+    local push_content
+    push_content=$(python3 -c 'import json,sys
+print(json.dumps({
+    "kind": "config",
+    "public_key": sys.argv[4],
+    "config": {"namespace": sys.argv[1], "group": sys.argv[2], "file_name": sys.argv[3]},
+}))' "$NAMESPACE" "$FILE_GROUP" "$file" "$QUERY_PUBLIC_KEY")
     local encoded
     encoded=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")
     local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${CLIENT_ID}&content=${encoded}"
@@ -257,6 +279,9 @@ done
 log_step "步骤 2/3 等待 WatchClientEvents 长连接建立"
 log_info "等待 ${WAIT_WATCHER_SEC}s ..."
 sleep "$WAIT_WATCHER_SEC"
+
+init_query_rsa
+log_info "已生成查询 RSA 密钥对，公钥将随 PUSH 下发"
 
 log_step "步骤 3/3 循环 3 个配置文件下发配置生效查询并校验 ACK"
 
@@ -382,10 +407,11 @@ except Exception as e:
             OVERALL_PASS=false
         fi
 
-        # 校验 5.2: 用 ACK 回带的 data_key 解密 ACK 密文 content，应等于客户端本地生效明文
+        # 校验 5.2: 用查询私钥解开 RSA 加密的 data_key，再 AES 解密密文，应等于客户端本地生效明文
         local_plain=""
         if [[ -n "$ACK_DATAKEY" && -n "$ACK_CONTENT" ]]; then
-            local_plain=$(decrypt_ack_content "$ACK_CONTENT" "$ACK_DATAKEY") || true
+            aes_key_b64=$(unwrap_rsa_datakey "$ACK_DATAKEY") || true
+            local_plain=$(decrypt_ack_content "$ACK_CONTENT" "$aes_key_b64") || true
             if [[ -n "$local_plain" && "$local_plain" == "$cc" ]]; then
                 log_info "✅ [校验 5.2] ${fname} 接收方解密一致 (解密后=${local_plain})"
             else

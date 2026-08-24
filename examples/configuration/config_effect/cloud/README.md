@@ -72,7 +72,7 @@ POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \
 
 - **创建方式**：SDK 的 `CreateConfigFile` 不带 `Encrypted`/`Tags`，无法创建加密配置。`client.sh setup` 在 SDK 明文基线之后，改用服务端 console HTTP 接口（`POST /config/v1/configfiles`，与 maintain 同端口，body 带 `encrypted:true, encrypt_algo:"AES"`）覆盖创建并发布；重复执行具有自纠正性。
 - **客户端解密**：crypto/aes filter 需显式挂链才生效——`config.configFilter.chain` 默认为空链，不解密时 `/config` 快照的 `content` 为密文。模板 `polaris.yaml` 已配置 `chain: [crypto]`（默认启用 AES/RSA 条目，非 agent 模式下生效），客户端订阅到加密的 `-1.yaml` 会自动解密，`/config` 快照的 `content` 为生效明文。
-- **ACK 加密元信息**：加密配置的 ACK 回带 `content` 为**源内容（密文）**，并额外携带 `encrypted:true`、`encrypt_algo`、`data_key`（base64 明文数据密钥），接收方可据此解密（`AES-CBC-PKCS7`，IV 取 `key[:16]`，与 SDK `plugin/configfilter/crypto/aes` 实现对齐）。`verify-cloud.sh` 校验 5.1 断言元信息齐全，校验 5.2 用 `data_key` 经 openssl 解密 ACK 密文并断言等于客户端 `/config` 的生效明文。
+- **ACK 加密元信息**：加密配置的 ACK 回带 `content` 为**源内容（密文）**，并额外携带 `encrypted:true`、`encrypt_algo`、`data_key`（查询方 RSA 公钥加密后的对称密钥）。`verify-cloud.sh` 在 PUSH 中下发 `public_key`，校验 5.1 断言元信息齐全，校验 5.2 用查询私钥解开 `data_key` 后再 AES 解密并断言等于客户端 `/config` 的生效明文。
 
 ## 验证原理
 

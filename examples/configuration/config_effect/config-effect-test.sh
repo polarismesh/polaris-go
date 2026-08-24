@@ -23,12 +23,13 @@
 # 验证原理:
 #   - 客户端启动后通过 ReportClient 上报 clientID，并建立 WatchClientEvents 长连接
 #   - 脚本读取客户端 /clientid 与 /config，获得 clientID 与本地生效配置 version/md5
-#   - 脚本调服务端 maintain 接口向该 clientID PUSH 查询 {kind:config, config:{ns,group,file}}
+#   - 脚本调服务端 maintain 接口向该 clientID PUSH 查询
+#     {kind:config, public_key:<RSA公钥>, config:{ns,group,file}}
 #   - 服务端通过 stream 下发 PUSH，客户端回 ACK，服务端把 ACK.clientEvent.content 透传回脚本
 #     (服务端投递链路有收敛延迟/首事件冷路径丢弃，无 clientEvent 时脚本自动重试)
 #   - 脚本解析 ACK content，断言 applied=true 且 version/md5 与客户端 /config 一致
-#   - 加密配置的 ACK 额外携带 encrypted/encrypt_algo/data_key，脚本用 data_key 解密
-#     密文 content（AES-CBC，IV=key[:16]），断言解密结果等于明文基线
+#   - 加密配置的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
+#     脚本用查询私钥解开 data_key 后再 AES 解密密文 content，断言等于明文基线
 # =============================================================================
 
 set -euo pipefail
@@ -345,8 +346,14 @@ start_client() {
 # 入参: client_id
 query_config_effect() {
     local client_id="$1" file="$2"
-    # PUSH content：单点查询目标配置文件（kind=config + 三元组，snake_case）
-    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
+    # PUSH content：单点查询 + 查询方 RSA 公钥（与 GetConfigFile 对称，供 SDK 加密 data_key）
+    local push_content
+    push_content=$(python3 -c 'import json,sys
+print(json.dumps({
+    "kind": "config",
+    "public_key": sys.argv[4],
+    "config": {"namespace": sys.argv[1], "group": sys.argv[2], "file_name": sys.argv[3]},
+}))' "$NAMESPACE" "$FILE_GROUP" "$file" "$QUERY_PUBLIC_KEY")
     local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${client_id}&content=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")"
     log_info "调服务端 maintain: ${url}"
     local resp
@@ -416,7 +423,7 @@ record_result() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'),$1,$2,$3,$4" >> "$RESULT_FILE"
 }
 
-# decrypt_ack_content 用 ACK 回带的 data_key 解密 ACK 回带的密文 content。
+# decrypt_ack_content 用 AES 密钥（base64 明文）解密 ACK 回带的密文 content。
 # 与 SDK crypto/aes 实现对齐（plugin/configfilter/crypto/aes）：
 # 密文 = base64(AES-CBC-PKCS7(明文, key))，IV 取 key[:16]。
 # 入参: cipher_b64 key_b64（均为 base64 字符串）；stdout 输出解密后的明文，失败返回非 0。
@@ -434,6 +441,24 @@ decrypt_ack_content() {
     esac
     echo "$cipher_b64" | base64 -d 2>/dev/null | \
         openssl enc -d "-${cipher}" -K "$key_hex" -iv "${key_hex:0:32}" 2>/dev/null
+}
+
+# init_query_rsa 生成 RSA-1024 PKCS1 密钥对：公钥随 PUSH 下发，私钥解开 ACK data_key。
+init_query_rsa() {
+    QUERY_RSA_PRIV="${LOG_DIR}/query_rsa_priv.pem"
+    openssl genrsa -out "$QUERY_RSA_PRIV" 1024 2>/dev/null
+    QUERY_PUBLIC_KEY=$(openssl rsa -in "$QUERY_RSA_PRIV" -RSAPublicKey_out -outform DER 2>/dev/null | openssl base64 -A)
+    if [[ -z "$QUERY_PUBLIC_KEY" ]]; then
+        log_error "生成查询 RSA 公钥失败"
+        exit 1
+    fi
+}
+
+# unwrap_rsa_datakey 用查询私钥解开 ACK 中 RSA 加密的 data_key，stdout 输出 base64(明文 AES key)。
+unwrap_rsa_datakey() {
+    local cipher_b64="$1"
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl rsautl -decrypt -inkey "$QUERY_RSA_PRIV" 2>/dev/null | openssl base64 -A
 }
 
 # ======================== 主流程 ========================
@@ -467,7 +492,7 @@ main() {
         exit 1
     fi
     if ! command -v openssl &> /dev/null; then
-        log_error "openssl 未安装，用例 4 依赖 openssl 解密 ACK 密文"
+        log_error "openssl 未安装，用例 4 依赖 openssl 生成 RSA 公钥并解密 ACK 密文"
         exit 1
     fi
     log_info "Go 版本: $(go version)"
@@ -588,6 +613,9 @@ main() {
     log_info "等待 WatchClientEvents 长连接建立 (5s)..."
     sleep 5
 
+    init_query_rsa
+    log_info "已生成查询 RSA 密钥对，公钥将随 PUSH 下发"
+
     # overall_pass 已在步骤 4 开头声明，此处直接沿用
     local case_idx=0
     local enc_resp=""
@@ -679,9 +707,11 @@ main() {
             overall_pass=false
         fi
 
-        # 校验 4.2：用 ACK 回带的 data_key 解密密文 content，应得到明文基线
+        # 校验 4.2：用查询私钥解开 RSA 加密的 data_key，再 AES 解密密文，应得到明文基线
         if [[ -n "$ack_datakey" && -n "$ack_cipher" ]]; then
-            ack_plain=$(decrypt_ack_content "$ack_cipher" "$ack_datakey") || true
+            local aes_key_b64
+            aes_key_b64=$(unwrap_rsa_datakey "$ack_datakey") || true
+            ack_plain=$(decrypt_ack_content "$ack_cipher" "$aes_key_b64") || true
             if [[ -n "$ack_plain" && "$ack_plain" == "$enc_expect" ]]; then
                 log_info "✅ [用例 4.2 接收方解密一致] PASS - ${enc_file} 解密后=${ack_plain}"
                 record_result "4.2" "接收方解密一致 ${enc_file}" "PASS" "decrypted=${ack_plain}"
