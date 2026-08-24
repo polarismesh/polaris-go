@@ -352,6 +352,10 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 			err = errHandlePushPanic
 		}
 	}()
+	if l := w.logger(); l != nil {
+		l.Debugf("client event push received, index %d, clientID %s, content %s",
+			event.GetIndex(), w.clientID, event.GetContent())
+	}
 	ack := w.buildAck(event.GetContent())
 	ackContent := w.marshalAck(ack)
 	if err := stream.Send(&apiservice.ClientEvent{
@@ -424,7 +428,7 @@ func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
 	ack.Encrypted = item.Encrypted
 	ack.EncryptAlgo = item.EncryptAlgo
 	if item.Encrypted {
-		ack.DataKey = wrapAckDataKey(item.DataKey, query.PublicKey, w)
+		ack.DataKey = w.wrapAckDataKey(item.DataKey, query.PublicKey)
 	}
 	// 超大配置截断：gRPC 服务端默认消息体上限 4MB，超限会导致 ACK 发送失败、服务端 waiter 超时。
 	// md5 仍为完整内容的摘要，服务端可据此校验并按需另行拉取全量内容。
@@ -494,8 +498,16 @@ func (w *ClientEventWatcher) logger() log.Logger {
 // wrapAckDataKey 用查询方 RSA 公钥加密对称数据密钥，返回 base64(RSA密文)。
 // 与 GetConfigFile 中服务端用 SDK 公钥加密 DataKey 同一套 rsa.EncryptToBase64。
 // 缺公钥、缺密钥或加密失败时返回空串（omitempty 省略），绝不回传明文 data_key。
-func wrapAckDataKey(plainDataKeyB64, publicKeyB64 string, w *ClientEventWatcher) string {
-	if plainDataKeyB64 == "" || publicKeyB64 == "" {
+func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKeyB64 string) string {
+	if plainDataKeyB64 == "" {
+		return ""
+	}
+	if publicKeyB64 == "" {
+		// 查询方未在 PUSH 中下发 public_key，无法加密回传，接收方将拿不到 data_key、无法核对明文。
+		// 这是查询入口的配置缺失（而非 SDK 异常），记 warn 使其可被直接定位，避免只看到字段缺失。
+		if l := w.logger(); l != nil {
+			l.Warnf("push has no public_key, ack omits data_key for encrypted config, clientID %s", w.clientID)
+		}
 		return ""
 	}
 	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
