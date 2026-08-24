@@ -43,3 +43,4 @@ specs/
 /examples/**/simple-consumer
 /examples/**/dist/
 /examples/**/logs/
+/examples/**/log/
