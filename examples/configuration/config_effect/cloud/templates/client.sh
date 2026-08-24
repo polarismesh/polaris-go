@@ -15,7 +15,7 @@
 #                      # 注: --content 传内容 base(demo 派生 1/2/3 后缀)。setup 除 3 份明文基线外，
 #                      #     还会经 console 接口(maintain 端口)把第 1 份(-1.yaml)覆盖为
 #                      #     加密配置(encrypt_algo=AES)并发布
-#   ./client.sh status --polaris-server 172.16.0.5 --port 18091
+#   ./client.sh status --port 18091
 #   ./client.sh stop
 #   ./client.sh restart --polaris-server 172.16.0.5 --port 18091
 #
@@ -71,7 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "用法: $0 <start|stop|status|setup|restart> [选项]"
             echo ""
             echo "选项:"
-            echo "  --polaris-server <地址>  北极星服务端地址 (必填)"
+            echo "  --polaris-server <地址>  北极星服务端地址 (setup/start/restart 必填; stop/status 不需要)"
             echo "  --polaris-token <令牌>   北极星鉴权令牌 (默认: 空)"
             echo "  --maintain-port <端口>   服务端 maintain/console HTTP 端口 (默认: 8090，setup 建加密配置依赖)"
             echo "  --namespace <命名空间>   命名空间 (默认: default)"
@@ -97,11 +97,17 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $(date '+%H:%M:%S') $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $(date '+%H:%M:%S') $*"; }
 
 # ======================== 前置校验 ========================
-if [[ ! -x "$BIN" ]]; then
+# stop/status 只查本地 pid/HTTP,不连服务端,也不依赖二进制仍在。
+need_server=false
+need_bin=false
+case "$ACTION" in
+    setup|start|restart) need_server=true; need_bin=true ;;
+esac
+if [[ "$need_bin" == "true" && ! -x "$BIN" ]]; then
     log_error "x86-bin 不存在或不可执行: ${BIN}"
     exit 1
 fi
-if [[ -z "$POLARIS_SERVER" ]]; then
+if [[ "$need_server" == "true" && -z "$POLARIS_SERVER" ]]; then
     log_error "需要 --polaris-server <地址>"
     exit 1
 fi
