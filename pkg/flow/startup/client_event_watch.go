@@ -352,8 +352,9 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 			err = errHandlePushPanic
 		}
 	}()
+	// 运维主动查询才触发，频率低；生产环境需可见 PUSH 原文与 ACK 正文，便于核对公钥与生效结果。
 	if l := w.logger(); l != nil {
-		l.Debugf("client event push received, index %d, clientID %s, content %s",
+		l.Infof("client event push received, index %d, clientID %s, content %s",
 			event.GetIndex(), w.clientID, event.GetContent())
 	}
 	ack := w.buildAck(event.GetContent())
@@ -366,14 +367,12 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 	}); err != nil {
 		return err
 	}
-	// 运维主动查询才触发，频率低；生产环境需可见以便排查"查询结果为何如此"。
-	// 直接使用已构造的 ack 结构体字段打日志，无需把 ackContent 再反序列化一遍。
 	if l := w.logger(); l != nil {
 		l.Infof("client event ack sent, index %d, clientID %s, namespace %s, group %s, "+
-			"file %s, version %d, md5 %s, applied %v, encrypted %v, reason %s, ackBytes %d",
+			"file %s, version %d, md5 %s, applied %v, encrypted %v, reason %s, ackBytes %d, content %s",
 			event.GetIndex(), w.clientID,
 			ack.Config.Namespace, ack.Config.Group, ack.Config.FileName,
-			ack.Version, ack.Md5, ack.Applied, ack.Encrypted, ack.Reason, len(ackContent))
+			ack.Version, ack.Md5, ack.Applied, ack.Encrypted, ack.Reason, len(ackContent), ackContent)
 	}
 	return nil
 }
