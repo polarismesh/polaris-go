@@ -24,6 +24,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
+	"errors"
+	"strings"
+	"unicode"
 )
 
 // RSAKey RSA key pair
@@ -45,12 +49,16 @@ func GenerateRSAKey() (*RSAKey, error) {
 	return rsaKey, nil
 }
 
-// Encrypt RSA encrypt plaintext using public key
+// Encrypt RSA encrypt plaintext using a PKCS1 or X.509 SPKI DER public key.
 func Encrypt(plaintext, publicKey []byte) ([]byte, error) {
-	pub, err := x509.ParsePKCS1PublicKey(publicKey)
+	pub, err := parsePkcs1OrX509(publicKey)
 	if err != nil {
 		return nil, err
 	}
+	return encryptWithPublicKey(plaintext, pub)
+}
+
+func encryptWithPublicKey(plaintext []byte, pub *rsa.PublicKey) ([]byte, error) {
 	totalLen := len(plaintext)
 	segLen := pub.Size() - 11
 	start := 0
@@ -95,17 +103,89 @@ func Decrypt(ciphertext, privateKey []byte) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// EncryptToBase64 RSA encrypt plaintext and base64 encode ciphertext
-func EncryptToBase64(plaintext []byte, base64PublicKey string) (string, error) {
-	pub, err := base64.StdEncoding.DecodeString(base64PublicKey)
+// EncryptToBase64 RSA encrypt plaintext and base64 encode ciphertext.
+// encodedPublicKey 对齐 polaris-java RSAUtil：PKCS1 DER Base64、X.509 SPKI Base64、
+// PEM（含 BEGIN PUBLIC KEY / BEGIN RSA PUBLIC KEY），以及 WatchClientEvents PUSH 的 Base64(PEM)。
+func EncryptToBase64(plaintext []byte, encodedPublicKey string) (string, error) {
+	pub, err := parseRsaPublicKey(encodedPublicKey)
 	if err != nil {
 		return "", err
 	}
-	ciphertext, err := Encrypt(plaintext, pub)
+	ciphertext, err := encryptWithPublicKey(plaintext, pub)
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// parseRsaPublicKey 解析 PKCS1 / X.509 / PEM 公钥（可再包一层 Base64）。
+func parseRsaPublicKey(encodedPublicKey string) (*rsa.PublicKey, error) {
+	material := unwrapToKeyMaterial(encodedPublicKey)
+	if strings.Contains(material, "BEGIN") {
+		block, _ := pem.Decode([]byte(material))
+		if block == nil {
+			return nil, errors.New("failed to decode PEM public key")
+		}
+		switch block.Type {
+		case "RSA PUBLIC KEY":
+			return x509.ParsePKCS1PublicKey(block.Bytes)
+		case "PUBLIC KEY":
+			return parsePKIXRSAPublicKey(block.Bytes)
+		default:
+			return parsePkcs1OrX509(block.Bytes)
+		}
+	}
+	der, err := base64.StdEncoding.DecodeString(stripWhitespace(material))
+	if err != nil {
+		return nil, err
+	}
+	return parsePkcs1OrX509(der)
+}
+
+// unwrapToKeyMaterial 若外层是 Base64(PEM)，先解开得到 PEM 文本；否则保持原串。
+func unwrapToKeyMaterial(encodedPublicKey string) string {
+	material := strings.TrimSpace(encodedPublicKey)
+	if strings.Contains(material, "BEGIN") {
+		return material
+	}
+	decoded, err := base64.StdEncoding.DecodeString(material)
+	if err != nil {
+		return material
+	}
+	asText := strings.TrimSpace(string(decoded))
+	if strings.HasPrefix(asText, "-----BEGIN") {
+		return asText
+	}
+	return material
+}
+
+func stripWhitespace(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func parsePkcs1OrX509(der []byte) (*rsa.PublicKey, error) {
+	pub, err := x509.ParsePKCS1PublicKey(der)
+	if err == nil {
+		return pub, nil
+	}
+	return parsePKIXRSAPublicKey(der)
+}
+
+func parsePKIXRSAPublicKey(der []byte) (*rsa.PublicKey, error) {
+	pub, err := x509.ParsePKIXPublicKey(der)
+	if err != nil {
+		return nil, err
+	}
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("not an RSA public key")
+	}
+	return rsaPub, nil
 }
 
 // DecryptFromBase64 base64 decode ciphertext and RSA decrypt

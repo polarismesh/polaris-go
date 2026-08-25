@@ -496,13 +496,13 @@ func (w *ClientEventWatcher) logger() log.Logger {
 }
 
 // wrapAckDataKey 用查询方 RSA 公钥加密对称数据密钥，返回 base64(RSA密文)。
-// 与 GetConfigFile 中服务端用 SDK 公钥加密 DataKey 同一套 rsa.EncryptToBase64。
+// 公钥格式与 polaris-java RSAUtil 对齐（PKCS1 / X.509 / PEM / Base64(PEM)）。
 // 缺公钥、缺密钥或加密失败时返回空串（omitempty 省略），绝不回传明文 data_key。
-func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKeyB64 string) string {
+func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKey string) string {
 	if plainDataKeyB64 == "" {
 		return ""
 	}
-	if publicKeyB64 == "" {
+	if publicKey == "" {
 		// 查询方未在 PUSH 中下发 public_key，无法加密回传，接收方将拿不到 data_key、无法核对明文。
 		// 这是查询入口的配置缺失（而非 SDK 异常），记 warn 使其可被直接定位，避免只看到字段缺失。
 		if l := w.logger(); l != nil {
@@ -517,7 +517,7 @@ func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKeyB64 string
 		}
 		return ""
 	}
-	wrapped, err := rsa.EncryptToBase64(rawKey, publicKeyB64)
+	wrapped, err := rsa.EncryptToBase64(rawKey, publicKey)
 	if err != nil {
 		if l := w.logger(); l != nil {
 			l.Warnf("rsa wrap data_key failed, clientID %s: %v", w.clientID, err)
@@ -530,8 +530,9 @@ func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKeyB64 string
 // clientEventQuery 服务端 PUSH 下发的查询指令 JSON 结构
 type clientEventQuery struct {
 	Kind string `json:"kind"`
-	// PublicKey 查询方生成的 RSA 公钥（PKCS1 DER 再 base64），用于加密 ACK 中的对称 data_key。
-	// 与 GetConfigFile 请求里 SDK 下发的 PublicKey 同一编码；缺省时加密配置不回传 data_key。
+	// PublicKey 查询方 RSA 公钥，用于加密 ACK 中的对称 data_key。
+	// 兼容 PKCS1 DER Base64、X.509 SPKI Base64、PEM，以及服务端 PUSH 的 Base64(PEM)；
+	// 缺省时加密配置不回传 data_key。
 	PublicKey string              `json:"public_key,omitempty"`
 	Config    clientEventQueryCfg `json:"config"`
 }

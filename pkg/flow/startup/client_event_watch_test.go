@@ -18,6 +18,7 @@
 package startup
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -202,6 +203,50 @@ func TestBuildAckContent_ConfigEncrypted(t *testing.T) {
 	assert.Equal(t, rawKey, decrypted, "查询方用 RSA 私钥应还原出原始 AES 密钥")
 	assert.Equal(t, "Y2lwaGVyLWNvbnRlbnQ=", ack.Content, "加密配置 content 仍为密文，不回传明文")
 	assert.Equal(t, "md5_cipher", ack.Md5, "md5 为密文摘要，与密文 content 自洽")
+}
+
+// TestBuildAckContent_ConfigEncryptedPemPublicKey 服务端下发 Base64(PEM X.509) 公钥时仍能封装 data_key。
+func TestBuildAckContent_ConfigEncryptedPemPublicKey(t *testing.T) {
+	rsaKey, err := rsa.GenerateRSAKey()
+	assert.NoError(t, err)
+	privDer, err := base64.StdEncoding.DecodeString(rsaKey.PrivateKey)
+	assert.NoError(t, err)
+	priv, err := x509.ParsePKCS1PrivateKey(privDer)
+	assert.NoError(t, err)
+	spki, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	assert.NoError(t, err)
+	pemText := "-----BEGIN PUBLIC KEY-----\r\n" + base64.StdEncoding.EncodeToString(spki) + "\r\n-----END PUBLIC KEY-----\r\n"
+	publicKey := base64.StdEncoding.EncodeToString([]byte(pemText))
+
+	plainDataKeyB64 := "UTEyMzQ1Njc4OTAxMjM0NQ=="
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Content: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true, EncryptAlgo: "AES",
+					DataKey: plainDataKeyB64, Pulled: true,
+				},
+			},
+		},
+	}
+	push, err := json.Marshal(map[string]interface{}{
+		"kind":       "config",
+		"public_key": publicKey,
+		"config":     map[string]string{"namespace": "default", "group": "g1", "file_name": "aes.yaml"},
+	})
+	assert.NoError(t, err)
+	raw := w.buildAckContent(string(push))
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.NotEmpty(t, ack.DataKey)
+	assert.NotEqual(t, plainDataKeyB64, ack.DataKey)
+	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
+	assert.NoError(t, err)
+	decrypted, err := rsa.DecryptFromBase64(ack.DataKey, rsaKey.PrivateKey)
+	assert.NoError(t, err)
+	assert.Equal(t, rawKey, decrypted)
 }
 
 // TestBuildAckContent_ConfigEncryptedWithoutPublicKey 加密配置但 PUSH 未带公钥时，
