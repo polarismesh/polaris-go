@@ -23,9 +23,13 @@
 # 验证原理:
 #   - 客户端启动后通过 ReportClient 上报 clientID，并建立 WatchClientEvents 长连接
 #   - 脚本读取客户端 /clientid 与 /config，获得 clientID 与本地生效配置 version/md5
-#   - 脚本调服务端 maintain 接口向该 clientID PUSH 查询 {kind:config, config:{ns,group,file}}
+#   - 脚本调服务端 maintain 接口向该 clientID PUSH 查询
+#     {kind:config, public_key:<RSA公钥>, config:{ns,group,file}}
 #   - 服务端通过 stream 下发 PUSH，客户端回 ACK，服务端把 ACK.clientEvent.content 透传回脚本
+#     (服务端投递链路有收敛延迟/首事件冷路径丢弃，无 clientEvent 时脚本自动重试)
 #   - 脚本解析 ACK content，断言 applied=true 且 version/md5 与客户端 /config 一致
+#   - 加密配置的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
+#     脚本用查询私钥解开 data_key 后再 AES 解密密文 content，断言等于明文基线
 # =============================================================================
 
 set -euo pipefail
@@ -53,6 +57,12 @@ ENCRYPT_ALGO="${ENCRYPT_ALGO:-AES}"
 # 服务端返回码：ExecuteSuccess / ExistedResource(已存在则转 PUT 更新)
 CODE_EXECUTE_SUCCESS=200000
 CODE_EXISTED_RESOURCE=400201
+
+# PUSH 重试: 服务端「查询 → 定位客户端 → 经 WatchClientEvents 下发 → 等 ACK」投递链路存在
+# 收敛延迟(客户端注册/节点缓存同步)，且每轮查询的首个事件易被冷路径丢弃(响应有 client 但无 clientEvent)。
+# 响应无 clientEvent.content 时按此次数/间隔重试。
+PUSH_RETRY_MAX="${PUSH_RETRY_MAX:-4}"
+PUSH_RETRY_INTERVAL="${PUSH_RETRY_INTERVAL:-3}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -336,8 +346,14 @@ start_client() {
 # 入参: client_id
 query_config_effect() {
     local client_id="$1" file="$2"
-    # PUSH content：单点查询目标配置文件（kind=config + 三元组，snake_case）
-    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
+    # PUSH content：单点查询 + 查询方 RSA 公钥（与 GetConfigFile 对称，供 SDK 加密 data_key）
+    local push_content
+    push_content=$(python3 -c 'import json,sys
+print(json.dumps({
+    "kind": "config",
+    "public_key": sys.argv[4],
+    "config": {"namespace": sys.argv[1], "group": sys.argv[2], "file_name": sys.argv[3]},
+}))' "$NAMESPACE" "$FILE_GROUP" "$file" "$QUERY_PUBLIC_KEY")
     local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${client_id}&content=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")"
     log_info "调服务端 maintain: ${url}"
     local resp
@@ -345,6 +361,22 @@ query_config_effect() {
         -H "X-Polaris-Token: ${POLARIS_TOKEN}" \
         "$url" 2>/dev/null) || true
     echo "$resp"
+}
+
+# resp_has_client_event 判断服务端响应是否含非空 clientEvent.content（含则返回 0）。
+# 用于 PUSH 重试判定：服务端投递链路未就绪时响应只有 client 字段、无 clientEvent。
+resp_has_client_event() {
+    local resp="$1"
+    [[ -n "$resp" ]] || return 1
+    echo "$resp" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ce = d.get('clientEvent') or {}
+    sys.exit(0 if ce.get('content') else 1)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
 }
 
 # extract_ack_field 从服务端响应中提取 clientEvent.content 内的指定字段。
@@ -391,6 +423,44 @@ record_result() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'),$1,$2,$3,$4" >> "$RESULT_FILE"
 }
 
+# decrypt_ack_content 用 AES 密钥（base64 明文）解密 ACK 回带的密文 content。
+# 与 SDK crypto/aes 实现对齐（plugin/configfilter/crypto/aes）：
+# 密文 = base64(AES-CBC-PKCS7(明文, key))，IV 取 key[:16]。
+# 入参: cipher_b64 key_b64（均为 base64 字符串）；stdout 输出解密后的明文，失败返回非 0。
+decrypt_ack_content() {
+    local cipher_b64="$1" key_b64="$2"
+    local key_hex key_len cipher
+    key_hex=$(echo "$key_b64" | base64 -d 2>/dev/null | od -A n -t x1 | tr -d ' \n')
+    [[ -n "$key_hex" ]] || return 1
+    key_len=$(( ${#key_hex} / 2 ))
+    case "$key_len" in
+        16) cipher="aes-128-cbc" ;;
+        24) cipher="aes-192-cbc" ;;
+        32) cipher="aes-256-cbc" ;;
+        *)  return 1 ;;
+    esac
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl enc -d "-${cipher}" -K "$key_hex" -iv "${key_hex:0:32}" 2>/dev/null
+}
+
+# init_query_rsa 生成 RSA-1024 PKCS1 密钥对：公钥随 PUSH 下发，私钥解开 ACK data_key。
+init_query_rsa() {
+    QUERY_RSA_PRIV="${LOG_DIR}/query_rsa_priv.pem"
+    openssl genrsa -out "$QUERY_RSA_PRIV" 1024 2>/dev/null
+    QUERY_PUBLIC_KEY=$(openssl rsa -in "$QUERY_RSA_PRIV" -RSAPublicKey_out -outform DER 2>/dev/null | openssl base64 -A)
+    if [[ -z "$QUERY_PUBLIC_KEY" ]]; then
+        log_error "生成查询 RSA 公钥失败"
+        exit 1
+    fi
+}
+
+# unwrap_rsa_datakey 用查询私钥解开 ACK 中 RSA 加密的 data_key，stdout 输出 base64(明文 AES key)。
+unwrap_rsa_datakey() {
+    local cipher_b64="$1"
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl rsautl -decrypt -inkey "$QUERY_RSA_PRIV" 2>/dev/null | openssl base64 -A
+}
+
 # ======================== 主流程 ========================
 main() {
     setup_test_log "$@"
@@ -419,6 +489,10 @@ main() {
     fi
     if ! command -v python3 &> /dev/null; then
         log_error "python3 未安装，脚本依赖 python3 解析 JSON"
+        exit 1
+    fi
+    if ! command -v openssl &> /dev/null; then
+        log_error "openssl 未安装，用例 4 依赖 openssl 生成 RSA 公钥并解密 ACK 密文"
         exit 1
     fi
     log_info "Go 版本: $(go version)"
@@ -539,8 +613,12 @@ main() {
     log_info "等待 WatchClientEvents 长连接建立 (5s)..."
     sleep 5
 
+    init_query_rsa
+    log_info "已生成查询 RSA 密钥对，公钥将随 PUSH 下发"
+
     # overall_pass 已在步骤 4 开头声明，此处直接沿用
     local case_idx=0
+    local enc_resp=""
     for fname in "${file_names[@]}"; do
         case_idx=$((case_idx + 1))
         log_step "  文件 ${case_idx}/${#file_names[@]}: ${fname}"
@@ -549,9 +627,22 @@ main() {
         client_version=$(get_file_field "$fname" "version")
         client_md5=$(get_file_field "$fname" "md5")
 
-        local resp
-        resp=$(query_config_effect "$client_id" "$fname")
+        # 无 clientEvent.content 时重试: 服务端投递链路收敛延迟/首事件冷路径丢弃可通过重试恢复
+        local resp attempt
+        resp=""
+        for ((attempt=1; attempt<=PUSH_RETRY_MAX; attempt++)); do
+            resp=$(query_config_effect "$client_id" "$fname")
+            if resp_has_client_event "$resp"; then
+                break
+            fi
+            if [[ $attempt -lt $PUSH_RETRY_MAX ]]; then
+                log_warn "服务端响应无 clientEvent.content (第 ${attempt}/${PUSH_RETRY_MAX} 次)，${PUSH_RETRY_INTERVAL}s 后重试..."
+                sleep "$PUSH_RETRY_INTERVAL"
+            fi
+        done
         log_info "服务端响应: ${resp}"
+        # 留存加密文件的原始响应，供用例 4 校验加密元信息与解密
+        [[ "$fname" == "$enc_file" ]] && enc_resp="$resp"
 
         local ack_applied ack_version ack_md5
         ack_applied=$(extract_ack_field "$resp" "applied") || {
@@ -592,6 +683,49 @@ main() {
             overall_pass=false
         fi
     done
+
+    # ==================== 用例 4：加密配置 ACK 携带加密算法与数据密钥，接收方可解密密文 ====================
+    log_step "用例 4 加密配置 ACK 解密信息校验 (${enc_file})"
+    if [[ -z "$enc_resp" ]]; then
+        log_error "❌ [用例 4 ACK 加密元信息] FAIL - 未采集到加密文件 ${enc_file} 的服务端响应"
+        record_result "4" "ACK 加密元信息 ${enc_file}" "FAIL" "no response captured"
+        overall_pass=false
+    else
+        local ack_encrypted ack_algo ack_datakey ack_cipher ack_plain=""
+        ack_encrypted=$(extract_ack_field "$enc_resp" "encrypted") || true
+        ack_algo=$(extract_ack_field "$enc_resp" "encrypt_algo") || true
+        ack_datakey=$(extract_ack_field "$enc_resp" "data_key") || true
+        ack_cipher=$(extract_ack_field "$enc_resp" "content") || true
+
+        # 校验 4.1：encrypted=true 且 encrypt_algo 与创建时一致、data_key 非空
+        if [[ "$ack_encrypted" == "True" && "$ack_algo" == "$ENCRYPT_ALGO" && -n "$ack_datakey" ]]; then
+            log_info "✅ [用例 4.1 ACK 携带加密元信息] PASS - ${enc_file} encrypted=${ack_encrypted}, algo=${ack_algo}, data_key 非空"
+            record_result "4.1" "ACK 加密元信息 ${enc_file}" "PASS" "algo=${ack_algo}"
+        else
+            log_error "❌ [用例 4.1 ACK 携带加密元信息] FAIL - ${enc_file} encrypted=${ack_encrypted}, algo=${ack_algo} (期望 ${ENCRYPT_ALGO}), data_key 长度=${#ack_datakey}"
+            record_result "4.1" "ACK 加密元信息 ${enc_file}" "FAIL" "encrypted=${ack_encrypted},algo=${ack_algo},keylen=${#ack_datakey}"
+            overall_pass=false
+        fi
+
+        # 校验 4.2：用查询私钥解开 RSA 加密的 data_key，再 AES 解密密文，应得到明文基线
+        if [[ -n "$ack_datakey" && -n "$ack_cipher" ]]; then
+            local aes_key_b64
+            aes_key_b64=$(unwrap_rsa_datakey "$ack_datakey") || true
+            ack_plain=$(decrypt_ack_content "$ack_cipher" "$aes_key_b64") || true
+            if [[ -n "$ack_plain" && "$ack_plain" == "$enc_expect" ]]; then
+                log_info "✅ [用例 4.2 接收方解密一致] PASS - ${enc_file} 解密后=${ack_plain}"
+                record_result "4.2" "接收方解密一致 ${enc_file}" "PASS" "decrypted=${ack_plain}"
+            else
+                log_error "❌ [用例 4.2 接收方解密一致] FAIL - ${enc_file} 解密后=${ack_plain} != 期望明文=${enc_expect}"
+                record_result "4.2" "接收方解密一致 ${enc_file}" "FAIL" "decrypted=${ack_plain},expect=${enc_expect}"
+                overall_pass=false
+            fi
+        else
+            log_error "❌ [用例 4.2 接收方解密一致] FAIL - ${enc_file} data_key 或密文 content 为空，无法解密"
+            record_result "4.2" "接收方解密一致 ${enc_file}" "FAIL" "datakey_len=${#ack_datakey},cipher_len=${#ack_cipher}"
+            overall_pass=false
+        fi
+    fi
 
     # ==================== 结果汇总 ====================
     echo ""

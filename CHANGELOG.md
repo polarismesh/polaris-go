@@ -4,6 +4,55 @@
 
 本项目所有重要的变更都必须记录在本文件中。
 
+## [v1.7.3-snapshot] - 2026-08-20
+
+### 添加的特性
+
+#### 配置管理 / 配置监听上报与生效查询（Configuration）
+
+- **配置监听上报（`ReportClient`）**：`ReportClientRequest` 新增 `ConfigEnabled` /
+  `ConfigMetadata`，周期性上报「是否启用配置中心 + 当前监听配置文件清单
+  （namespace/group/file_name/version/md5）」；配置 `Subscribe` 时经 debounce(500ms)
+  触发一次即时上报，避免启动期批量订阅造成上报风暴；监听清单排序后序列化，
+  变化检测采用顺序免疫的集合语义，避免误判订阅变化导致反复落盘。
+- **配置生效查询应答（`WatchClientEvents`）**：新增 `ServerConnector.WatchClientEvents`
+  双向流（复用 discover 集群连接），`ClientEventWatcher` 管理流生命周期
+  （建流/WATCH 首帧/接收循环/按 kind 分发回 ACK，指数退避重连，识别服务端
+  `Unimplemented` 自动停连）。ACK 回带本地生效配置的
+  `version / md5 / content / effective_time / applied`；`content` 超 512KB 截断并标记
+  （`content_truncated` / `content_length`）；以 `reason` 区分
+  `not_watched / config_disabled / pending / bad_content / unknown_kind` 等场景便于运维定位。
+- **加密配置 ACK 携带算法与数据密钥**：加密配置的 ACK 中 `content` 为密文（源内容，
+  与 `md5` 自洽，不回传解密明文），并新增 `encrypted` / `encrypt_algo` / `data_key`
+  （均 `omitempty`）。查询方在 PUSH 中下发 RSA 公钥（与 GetConfigFile 对称），SDK 用该
+  公钥加密对称 `data_key` 后回传；查询方用 RSA 私钥解开后再 AES 解密 `content`
+  （`AES-CBC-PKCS7`，IV 取 `key[:16]`）。无公钥或加密失败时不回传明文 `data_key`。
+  取值与 version/md5/content 来自同一次快照；非加密配置 ACK 零变化。
+- **clientID 多 context 唯一性**：同进程创建多个 `SDKContext` 时，自第二个起 clientID
+  追加 `-<seq>` 后缀，避免服务端按 clientID 互相覆盖；首个保持原格式，向后兼容。
+- **`examples/configuration/config_effect/`**：新增配置生效查询端到端验证 demo，
+  含本地脚本 `config-effect-test.sh` 与云上物料 `cloud/`（`client.sh` /
+  `verify-cloud.sh` / `build-materials.sh` / `pack-logs.sh` 节点日志打包）。
+  第 1 个派生文件为加密配置，覆盖
+  「密文下发 → SDK crypto filter 解密 → 明文生效 → ACK 携带 `encrypt_algo`/`data_key`
+  → 接收方 openssl 解密比对明文」全链路（本地用例 4 / 云上校验 5）。
+
+### 兼容性说明
+
+- **proto 均为新增字段 / 接口**（`Client.config_enabled` / `Client.config_metadata` /
+  `PolarisGRPC.WatchClientEvents`），双向兼容：新 SDK + 老服务端时 ReportClient 多带
+  字段被忽略、`WatchClientEvents` 收到 `Unimplemented` 自动停连；老 SDK + 新服务端
+  不受影响。
+- **ACK 加密字段为纯增量**（`omitempty`）：仅加密配置输出，旧服务端/旧调用方忽略未知
+  字段，无兼容性问题。
+- **加密配置 `data_key` 用查询方 RSA 公钥加密后回传**：与 GetConfigFile 相同，请求方
+  持 RSA 私钥、应答方用公钥包对称密钥；无公钥时省略 `data_key`，不回传明文。
+  SDK 日志不落 `data_key`（`ConfigFile.String()` 已掩码，ACK 日志只打标量字段）。
+- **`ReportClient` 默认上报间隔 2min → 60s**（`DefaultReportClientIntervalDuration`，
+  `polaris.yaml` 注释默认同步调整）：会提高全量客户端上报频率，升级前请确认服务端
+  CMDB/location 查询容量。
+- **SDK 启动后新增一条 `WatchClientEvents` 长连接**（老服务端自动停连，无重试风暴）。
+
 ## [v1.7.2-snapshot] - 2026-07-22
 
 ### 添加的特性

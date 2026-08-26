@@ -97,6 +97,87 @@ func TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyRemoteFile(t *testing.
 	assert.Equal(t, "f1", items[0].FileName)
 }
 
+// TestConfigFileFlow_GetWatchedConfigFileContent_Encrypted 验证加密配置的内容查询项：
+// 从同一次 loadRemoteFile 快照填充 Encrypted/EncryptAlgo/DataKey（取自 internal-encryptalgo /
+// internal-datakey tag），与 version/md5/content 自一致；非加密配置三个字段保持零值。
+func TestConfigFileFlow_GetWatchedConfigFileContent_Encrypted(t *testing.T) {
+	encRef := &atomic.Value{}
+	encRef.Store(&configconnector.ConfigFile{
+		Namespace: "default", FileGroup: "g1", FileName: "aes.yaml",
+		Version: 3, Md5: "md5_cipher", SourceContent: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true,
+		Tags: []*configconnector.ConfigFileTag{
+			{Key: configconnector.ConfigFileTagKeyEncryptAlgo, Value: "AES"},
+			{Key: configconnector.ConfigFileTagKeyUseEncrypted, Value: "true"},
+			{Key: configconnector.ConfigFileTagKeyDataKey, Value: "UTEyMzQ1Njc4OTAxMjM0NQ=="},
+		},
+	})
+	plainRef := &atomic.Value{}
+	plainRef.Store(&configconnector.ConfigFile{
+		Namespace: "default", FileGroup: "g1", FileName: "plain.yaml",
+		Version: 1, Md5: "md5_plain", SourceContent: "plain-body",
+	})
+	flow := &ConfigFileFlow{
+		configFilePool: map[string]*ConfigFileRepo{
+			"default+g1+aes.yaml": {
+				configFileMetadata: &model.DefaultConfigFileMetadata{
+					Namespace: "default", FileGroup: "g1", FileName: "aes.yaml",
+				},
+				remoteConfigFileRef: encRef,
+			},
+			"default+g1+plain.yaml": {
+				configFileMetadata: &model.DefaultConfigFileMetadata{
+					Namespace: "default", FileGroup: "g1", FileName: "plain.yaml",
+				},
+				remoteConfigFileRef: plainRef,
+			},
+		},
+		notifiedVersion: map[string]uint64{},
+	}
+
+	enc, ok := flow.GetWatchedConfigFileContent("default", "g1", "aes.yaml")
+	assert.True(t, ok)
+	assert.True(t, enc.Pulled)
+	assert.True(t, enc.Encrypted, "加密配置应标记 Encrypted")
+	assert.Equal(t, "AES", enc.EncryptAlgo, "应从 internal-encryptalgo tag 取加密算法")
+	assert.Equal(t, "UTEyMzQ1Njc4OTAxMjM0NQ==", enc.DataKey, "应从 internal-datakey tag 取 base64 明文数据密钥")
+	assert.Equal(t, "Y2lwaGVyLWNvbnRlbnQ=", enc.Content, "content 仍为源内容（密文）")
+	assert.Equal(t, uint64(3), enc.Version)
+	assert.Equal(t, "md5_cipher", enc.Md5)
+
+	plain, ok := flow.GetWatchedConfigFileContent("default", "g1", "plain.yaml")
+	assert.True(t, ok)
+	assert.True(t, plain.Pulled)
+	assert.False(t, plain.Encrypted, "非加密配置不应标记 Encrypted")
+	assert.Empty(t, plain.EncryptAlgo)
+	assert.Empty(t, plain.DataKey)
+}
+
+// TestConfigFileFlow_GetWatchedConfigFileContent_EncryptedMissingTags 边角：Encrypted=true 但
+// 加密 tag 缺失时，EncryptAlgo/DataKey 留空（omitempty 省略），不影响 version/md5/content 主字段。
+func TestConfigFileFlow_GetWatchedConfigFileContent_EncryptedMissingTags(t *testing.T) {
+	ref := &atomic.Value{}
+	ref.Store(&configconnector.ConfigFile{
+		Namespace: "default", FileGroup: "g1", FileName: "aes.yaml",
+		Version: 3, Md5: "md5_cipher", SourceContent: "cipher", Encrypted: true,
+	})
+	flow := &ConfigFileFlow{
+		configFilePool: map[string]*ConfigFileRepo{
+			"default+g1+aes.yaml": {
+				configFileMetadata: &model.DefaultConfigFileMetadata{
+					Namespace: "default", FileGroup: "g1", FileName: "aes.yaml",
+				},
+				remoteConfigFileRef: ref,
+			},
+		},
+		notifiedVersion: map[string]uint64{},
+	}
+	item, ok := flow.GetWatchedConfigFileContent("default", "g1", "aes.yaml")
+	assert.True(t, ok)
+	assert.True(t, item.Encrypted)
+	assert.Empty(t, item.EncryptAlgo, "tag 缺失时算法留空，由接收方按缺省处理")
+	assert.Empty(t, item.DataKey)
+}
+
 // TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyPool 验证空池返回非 nil 空切片。
 func TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyPool(t *testing.T) {
 	flow := &ConfigFileFlow{

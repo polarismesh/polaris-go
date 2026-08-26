@@ -17,3 +17,7 @@ config:
     addresses:
       - ${POLARIS_SERVER}:8093
     token: ${POLARIS_TOKEN}
+  # 加密配置解密：crypto 过滤器需显式挂链（默认空链），否则加密文件的生效内容是密文
+  configFilter:
+    chain:
+      - crypto

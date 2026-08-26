@@ -18,6 +18,8 @@
 package startup
 
 import (
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +33,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	configflow "github.com/polarismesh/polaris-go/pkg/flow/configuration"
+	"github.com/polarismesh/polaris-go/plugin/configfilter/crypto/rsa"
 )
 
 // mockConfigFlow 实现 watchedConfigFileProvider，返回预设的监听文件元数据与内容。
@@ -158,6 +161,196 @@ func TestBuildAckContent_ConfigPending(t *testing.T) {
 	assert.Equal(t, reasonPending, ack.Reason, "已监听未生效应回 pending 便于与 not_watched 区分")
 	assert.Equal(t, uint64(2), ack.Version, "pending 时仍回带已知版本供服务端参考")
 	assert.Empty(t, ack.Content, "未生效时不回带内容")
+}
+
+// TestBuildAckContent_ConfigEncrypted 加密配置命中且 PUSH 携带 RSA 公钥时，
+// ACK 回 AES 密文 content，并用该公钥 RSA 加密 data_key（与 GetConfigFile 对称，不回传明文密钥）。
+func TestBuildAckContent_ConfigEncrypted(t *testing.T) {
+	rsaKey, err := rsa.GenerateRSAKey()
+	assert.NoError(t, err)
+	plainDataKeyB64 := "UTEyMzQ1Njc4OTAxMjM0NQ=="
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Version: 3, Md5: "md5_cipher", Content: "Y2lwaGVyLWNvbnRlbnQ=",
+					Encrypted: true, EncryptAlgo: "AES", DataKey: plainDataKeyB64,
+					EffectiveTime: 1723458600123, Pulled: true,
+				},
+			},
+		},
+	}
+	push, err := json.Marshal(map[string]interface{}{
+		"kind":       "config",
+		"public_key": rsaKey.PublicKey,
+		"config":     map[string]string{"namespace": "default", "group": "g1", "file_name": "aes.yaml"},
+	})
+	assert.NoError(t, err)
+	raw := w.buildAckContent(string(push))
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.True(t, ack.Applied)
+	assert.True(t, ack.Encrypted, "加密配置 ACK 应显式标记 encrypted")
+	assert.Equal(t, "AES", ack.EncryptAlgo, "ACK 应携带加密算法供接收方选择解密器")
+	assert.NotEmpty(t, ack.DataKey, "携带公钥时应回传 RSA 加密后的 data_key")
+	assert.NotEqual(t, plainDataKeyB64, ack.DataKey, "ACK data_key 必须是 RSA 密文，禁止回传明文")
+	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
+	assert.NoError(t, err)
+	decrypted, err := rsa.DecryptFromBase64(ack.DataKey, rsaKey.PrivateKey)
+	assert.NoError(t, err)
+	assert.Equal(t, rawKey, decrypted, "查询方用 RSA 私钥应还原出原始 AES 密钥")
+	assert.Equal(t, "Y2lwaGVyLWNvbnRlbnQ=", ack.Content, "加密配置 content 仍为密文，不回传明文")
+	assert.Equal(t, "md5_cipher", ack.Md5, "md5 为密文摘要，与密文 content 自洽")
+}
+
+// TestBuildAckContent_ConfigEncryptedPemPublicKey 服务端下发 Base64(PEM X.509) 公钥时仍能封装 data_key。
+func TestBuildAckContent_ConfigEncryptedPemPublicKey(t *testing.T) {
+	rsaKey, err := rsa.GenerateRSAKey()
+	assert.NoError(t, err)
+	privDer, err := base64.StdEncoding.DecodeString(rsaKey.PrivateKey)
+	assert.NoError(t, err)
+	priv, err := x509.ParsePKCS1PrivateKey(privDer)
+	assert.NoError(t, err)
+	spki, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	assert.NoError(t, err)
+	pemText := "-----BEGIN PUBLIC KEY-----\r\n" + base64.StdEncoding.EncodeToString(spki) + "\r\n-----END PUBLIC KEY-----\r\n"
+	publicKey := base64.StdEncoding.EncodeToString([]byte(pemText))
+
+	plainDataKeyB64 := "UTEyMzQ1Njc4OTAxMjM0NQ=="
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Content: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true, EncryptAlgo: "AES",
+					DataKey: plainDataKeyB64, Pulled: true,
+				},
+			},
+		},
+	}
+	push, err := json.Marshal(map[string]interface{}{
+		"kind":       "config",
+		"public_key": publicKey,
+		"config":     map[string]string{"namespace": "default", "group": "g1", "file_name": "aes.yaml"},
+	})
+	assert.NoError(t, err)
+	raw := w.buildAckContent(string(push))
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.NotEmpty(t, ack.DataKey)
+	assert.NotEqual(t, plainDataKeyB64, ack.DataKey)
+	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
+	assert.NoError(t, err)
+	decrypted, err := rsa.DecryptFromBase64(ack.DataKey, rsaKey.PrivateKey)
+	assert.NoError(t, err)
+	assert.Equal(t, rawKey, decrypted)
+}
+
+// TestBuildAckContent_ConfigEncryptedWithoutPublicKey 加密配置但 PUSH 未带公钥时，
+// 不回传明文 data_key（与 GetConfigFile 必须持有对端公钥才能包密钥一致）。
+func TestBuildAckContent_ConfigEncryptedWithoutPublicKey(t *testing.T) {
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Version: 3, Md5: "md5_cipher", Content: "Y2lwaGVyLWNvbnRlbnQ=",
+					Encrypted: true, EncryptAlgo: "AES", DataKey: "UTEyMzQ1Njc4OTAxMjM0NQ==",
+					Pulled: true,
+				},
+			},
+		},
+	}
+	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"aes.yaml"}}`
+	raw := w.buildAckContent(push)
+	assert.NotContains(t, raw, "data_key", "无公钥时不得输出明文 data_key")
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.True(t, ack.Applied)
+	assert.True(t, ack.Encrypted)
+	assert.Equal(t, "AES", ack.EncryptAlgo)
+	assert.Empty(t, ack.DataKey)
+}
+
+// TestBuildAckContent_ConfigEncryptedInvalidPublicKey 公钥无法用于 RSA 加密时省略 data_key，
+// 不影响 applied/content 主应答。
+func TestBuildAckContent_ConfigEncryptedInvalidPublicKey(t *testing.T) {
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Content: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true, EncryptAlgo: "AES",
+					DataKey: "UTEyMzQ1Njc4OTAxMjM0NQ==", Pulled: true,
+				},
+			},
+		},
+	}
+	push := `{"kind":"config","public_key":"not-a-rsa-key","config":{"namespace":"default","group":"g1","file_name":"aes.yaml"}}`
+	raw := w.buildAckContent(push)
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.True(t, ack.Applied)
+	assert.True(t, ack.Encrypted)
+	assert.Empty(t, ack.DataKey)
+}
+
+// TestBuildAckContent_ConfigNotEncryptedOmitsCryptoFields 非加密配置命中时
+// ACK 不应出现 encrypted/encrypt_algo/data_key 字段（omitempty），保持线上协议对非加密场景零变化。
+func TestBuildAckContent_ConfigNotEncryptedOmitsCryptoFields(t *testing.T) {
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+f1": {
+					Namespace: "default", Group: "g1", FileName: "f1",
+					Version: 3, Md5: "md5_1", Content: "plain-body", Pulled: true,
+				},
+			},
+		},
+	}
+	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"f1"}}`
+	raw := w.buildAckContent(push)
+	assert.NotContains(t, raw, "encrypted", "非加密配置不应输出 encrypted 字段")
+	assert.NotContains(t, raw, "encrypt_algo", "非加密配置不应输出 encrypt_algo 字段")
+	assert.NotContains(t, raw, "data_key", "非加密配置不应输出 data_key 字段")
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.True(t, ack.Applied)
+	assert.False(t, ack.Encrypted)
+	assert.Empty(t, ack.EncryptAlgo)
+	assert.Empty(t, ack.DataKey)
+}
+
+// TestBuildAckContent_ConfigEncryptedMissingDataKey 边角：加密配置但 data_key 缺失（tag 被剥除）时，
+// data_key 按 omitempty 省略，encrypted/encrypt_algo 仍正常输出，不影响主应答流程。
+func TestBuildAckContent_ConfigEncryptedMissingDataKey(t *testing.T) {
+	w := &ClientEventWatcher{
+		clientID: "c1",
+		configFlow: &mockConfigFlow{
+			contentItems: map[string]configflow.ConfigFileContentItem{
+				"default+g1+aes.yaml": {
+					Namespace: "default", Group: "g1", FileName: "aes.yaml",
+					Version: 3, Md5: "md5_cipher", Content: "Y2lwaGVyLWNvbnRlbnQ=",
+					Encrypted: true, EncryptAlgo: "AES", DataKey: "", Pulled: true,
+				},
+			},
+		},
+	}
+	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"aes.yaml"}}`
+	raw := w.buildAckContent(push)
+	assert.NotContains(t, raw, "data_key", "data_key 缺失时应省略而非输出空串")
+	var ack clientEventAck
+	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
+	assert.True(t, ack.Applied)
+	assert.True(t, ack.Encrypted)
+	assert.Equal(t, "AES", ack.EncryptAlgo)
+	assert.Empty(t, ack.DataKey)
 }
 
 // TestBuildAckContent_NilConfigFlow 配置中心未启用时 applied=false 且 reason=config_disabled。

@@ -18,6 +18,7 @@
 package startup
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"runtime/debug"
@@ -31,6 +32,7 @@ import (
 	configflow "github.com/polarismesh/polaris-go/pkg/flow/configuration"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
+	"github.com/polarismesh/polaris-go/plugin/configfilter/crypto/rsa"
 )
 
 const (
@@ -350,6 +352,11 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 			err = errHandlePushPanic
 		}
 	}()
+	// 运维主动查询才触发，频率低；生产环境需可见 PUSH 原文与 ACK 正文，便于核对公钥与生效结果。
+	if l := w.logger(); l != nil {
+		l.Infof("client event push received, index %d, clientID %s, content %s",
+			event.GetIndex(), w.clientID, event.GetContent())
+	}
 	ack := w.buildAck(event.GetContent())
 	ackContent := w.marshalAck(ack)
 	if err := stream.Send(&apiservice.ClientEvent{
@@ -360,14 +367,12 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 	}); err != nil {
 		return err
 	}
-	// 运维主动查询才触发，频率低；生产环境需可见以便排查"查询结果为何如此"。
-	// 直接使用已构造的 ack 结构体字段打日志，无需把 ackContent 再反序列化一遍。
 	if l := w.logger(); l != nil {
 		l.Infof("client event ack sent, index %d, clientID %s, namespace %s, group %s, "+
-			"file %s, version %d, md5 %s, applied %v, reason %s, ackBytes %d",
+			"file %s, version %d, md5 %s, applied %v, encrypted %v, reason %s, ackBytes %d, content %s",
 			event.GetIndex(), w.clientID,
 			ack.Config.Namespace, ack.Config.Group, ack.Config.FileName,
-			ack.Version, ack.Md5, ack.Applied, ack.Reason, len(ackContent))
+			ack.Version, ack.Md5, ack.Applied, ack.Encrypted, ack.Reason, len(ackContent), ackContent)
 	}
 	return nil
 }
@@ -417,6 +422,13 @@ func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
 	ack.Md5 = item.Md5
 	ack.EffectiveTime = item.EffectiveTime
 	ack.Applied = true
+	// 加密配置：content 为 AES 密文，data_key 用 PUSH 下发的 RSA 公钥加密后再回传，
+	// 与 GetConfigFile 链路对称（请求方持私钥、应答方用公钥包对称密钥），禁止回传明文 data_key。
+	ack.Encrypted = item.Encrypted
+	ack.EncryptAlgo = item.EncryptAlgo
+	if item.Encrypted {
+		ack.DataKey = w.wrapAckDataKey(item.DataKey, query.PublicKey)
+	}
 	// 超大配置截断：gRPC 服务端默认消息体上限 4MB，超限会导致 ACK 发送失败、服务端 waiter 超时。
 	// md5 仍为完整内容的摘要，服务端可据此校验并按需另行拉取全量内容。
 	if len(item.Content) > watchMaxAckContentBytes {
@@ -482,10 +494,46 @@ func (w *ClientEventWatcher) logger() log.Logger {
 	return w.logCtx.GetBaseLogger()
 }
 
+// wrapAckDataKey 用查询方 RSA 公钥加密对称数据密钥，返回 base64(RSA密文)。
+// 公钥格式与 polaris-java RSAUtil 对齐（PKCS1 / X.509 / PEM / Base64(PEM)）。
+// 缺公钥、缺密钥或加密失败时返回空串（omitempty 省略），绝不回传明文 data_key。
+func (w *ClientEventWatcher) wrapAckDataKey(plainDataKeyB64, publicKey string) string {
+	if plainDataKeyB64 == "" {
+		return ""
+	}
+	if publicKey == "" {
+		// 查询方未在 PUSH 中下发 public_key，无法加密回传，接收方将拿不到 data_key、无法核对明文。
+		// 这是查询入口的配置缺失（而非 SDK 异常），记 warn 使其可被直接定位，避免只看到字段缺失。
+		if l := w.logger(); l != nil {
+			l.Warnf("push has no public_key, ack omits data_key for encrypted config, clientID %s", w.clientID)
+		}
+		return ""
+	}
+	rawKey, err := base64.StdEncoding.DecodeString(plainDataKeyB64)
+	if err != nil {
+		if l := w.logger(); l != nil {
+			l.Warnf("decode data_key failed, clientID %s: %v", w.clientID, err)
+		}
+		return ""
+	}
+	wrapped, err := rsa.EncryptToBase64(rawKey, publicKey)
+	if err != nil {
+		if l := w.logger(); l != nil {
+			l.Warnf("rsa wrap data_key failed, clientID %s: %v", w.clientID, err)
+		}
+		return ""
+	}
+	return wrapped
+}
+
 // clientEventQuery 服务端 PUSH 下发的查询指令 JSON 结构
 type clientEventQuery struct {
-	Kind   string              `json:"kind"`
-	Config clientEventQueryCfg `json:"config"`
+	Kind string `json:"kind"`
+	// PublicKey 查询方 RSA 公钥，用于加密 ACK 中的对称 data_key。
+	// 兼容 PKCS1 DER Base64、X.509 SPKI Base64、PEM，以及服务端 PUSH 的 Base64(PEM)；
+	// 缺省时加密配置不回传 data_key。
+	PublicKey string              `json:"public_key,omitempty"`
+	Config    clientEventQueryCfg `json:"config"`
 }
 
 // clientEventQueryCfg 查询目标配置文件三元组（snake_case 与服务端配置中心一致）
@@ -511,8 +559,16 @@ type clientEventAck struct {
 	// ContentTruncated 标记 Content 是否因超过上限被截断；为 true 时 ContentLength 给出原始长度
 	ContentTruncated bool `json:"content_truncated,omitempty"`
 	// ContentLength 原始内容字节数，仅在截断时输出
-	ContentLength int  `json:"content_length,omitempty"`
-	Applied       bool `json:"applied"`
+	ContentLength int `json:"content_length,omitempty"`
+	// Encrypted 标记该配置是否为加密配置；为 true 时 Content 为密文，
+	// 并携带 EncryptAlgo/DataKey 供接收方解密核对客户端实际生效的明文内容
+	Encrypted bool `json:"encrypted,omitempty"`
+	// EncryptAlgo 加密算法（如 AES），仅加密配置输出
+	EncryptAlgo string `json:"encrypt_algo,omitempty"`
+	// DataKey 对称数据密钥的 RSA 密文（base64），仅加密配置且 PUSH 携带 public_key 时输出。
+	// 查询方用对应 RSA 私钥解密得到原始 AES key，再解密 content。禁止进入任何日志。
+	DataKey string `json:"data_key,omitempty"`
+	Applied bool   `json:"applied"`
 	// Reason applied=false 的具体原因，便于运维区分"未监听"与"配置中心未启用"等场景
 	Reason string `json:"reason,omitempty"`
 }

@@ -7,12 +7,14 @@
 #   2. 本脚本调服务端 maintain 接口 GET /maintain/v1/clients/event 向该 clientID PUSH 配置生效查询
 #   3. 客户端经长连接回 ACK(含 version/md5/content/applied)，服务端原样透传给本脚本
 #   4. 本脚本解析 ACK，校验 applied=true 且 version/md5/content 与客户端本地一致
+#   5. 加密文件(默认第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
+#      本脚本用查询私钥解开 data_key 后再 AES 解密密文，断言与客户端生效明文一致
 #
 # 前置条件:
 #   1. 客户端已通过 client.sh start 启动并就绪(本目录 x86-bin 在跑)
 #   2. 服务端 maintain HTTP 端口可达(默认 8090，可用 --maintain-port 指定)
 #   3. 服务端已实现 WatchClientEvents 接口(商业版已含)
-#   4. python3 可用(解析 ACK JSON)
+#   4. python3 可用(解析 ACK JSON)、openssl 可用(解密加密文件 ACK 密文)
 #
 # 使用方法:
 #   ./verify-cloud.sh --polaris-server 172.16.0.5 --maintain-port 8090 --client-port 18091
@@ -31,6 +33,18 @@ NAMESPACE="${NAMESPACE:-default}"
 FILE_GROUP="${FILE_GROUP:-polaris-config-example}"
 FILE_NAME="${FILE_NAME:-config-effect-example}"
 WAIT_WATCHER_SEC="${WAIT_WATCHER_SEC:-5}"
+
+# PUSH 重试: 服务端「查询 → 定位客户端 → 经 WatchClientEvents 下发 → 等 ACK」投递链路存在
+# 收敛延迟(客户端注册/节点缓存同步)，且每轮查询的首个事件易被冷路径丢弃(响应有 client 但无 clientEvent)。
+# 响应无 clientEvent.content 时按此次数/间隔重试。
+PUSH_RETRY_MAX="${PUSH_RETRY_MAX:-4}"
+PUSH_RETRY_INTERVAL="${PUSH_RETRY_INTERVAL:-3}"
+
+# 加密配置: 第 ENCRYPT_FILE_INDEX 个派生文件由 client.sh setup 创建为加密配置，
+# 其 ACK 应携带 encrypted/encrypt_algo/data_key；本脚本解密其密文 content 并与客户端生效明文比对。
+ENCRYPT_FILE_INDEX="${ENCRYPT_FILE_INDEX:-1}"
+# 加密算法名，与 client.sh setup 创建时使用的算法一致
+ENCRYPT_ALGO="${ENCRYPT_ALGO:-AES}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -74,6 +88,10 @@ if [[ -z "$POLARIS_SERVER" ]]; then
     echo -e "${RED}需要 --polaris-server <地址>${NC}"
     exit 1
 fi
+if ! command -v openssl &> /dev/null; then
+    echo -e "${RED}openssl 未安装，加密文件 ACK 依赖 openssl 生成 RSA 公钥并解密密文${NC}"
+    exit 1
+fi
 
 log_info()  { echo -e "${GREEN}[INFO]${NC} $(date '+%H:%M:%S') $*" >&2; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $(date '+%H:%M:%S') $*" >&2; }
@@ -113,12 +131,54 @@ except Exception:
 " "$file" "$field" 2>/dev/null
 }
 
+# decrypt_ack_content 用 AES 密钥（base64 明文）解密 ACK 回带的密文 content。
+# 与 SDK crypto/aes 实现对齐（plugin/configfilter/crypto/aes）：
+# 密文 = base64(AES-CBC-PKCS7(明文, key))，IV 取 key[:16]。
+# 入参: cipher_b64 key_b64（均为 base64 字符串）；stdout 输出解密后的明文，失败返回非 0。
+decrypt_ack_content() {
+    local cipher_b64="$1" key_b64="$2"
+    local key_hex key_len cipher
+    key_hex=$(echo "$key_b64" | base64 -d 2>/dev/null | od -A n -t x1 | tr -d ' \n')
+    [[ -n "$key_hex" ]] || return 1
+    key_len=$(( ${#key_hex} / 2 ))
+    case "$key_len" in
+        16) cipher="aes-128-cbc" ;;
+        24) cipher="aes-192-cbc" ;;
+        32) cipher="aes-256-cbc" ;;
+        *)  return 1 ;;
+    esac
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl enc -d "-${cipher}" -K "$key_hex" -iv "${key_hex:0:32}" 2>/dev/null
+}
+
+init_query_rsa() {
+    QUERY_RSA_PRIV="${LOG_DIR}/query_rsa_priv.pem"
+    openssl genrsa -out "$QUERY_RSA_PRIV" 1024 2>/dev/null
+    QUERY_PUBLIC_KEY=$(openssl rsa -in "$QUERY_RSA_PRIV" -RSAPublicKey_out -outform DER 2>/dev/null | openssl base64 -A)
+    if [[ -z "$QUERY_PUBLIC_KEY" ]]; then
+        log_error "生成查询 RSA 公钥失败"
+        exit 1
+    fi
+}
+
+unwrap_rsa_datakey() {
+    local cipher_b64="$1"
+    echo "$cipher_b64" | base64 -d 2>/dev/null | \
+        openssl rsautl -decrypt -inkey "$QUERY_RSA_PRIV" 2>/dev/null | openssl base64 -A
+}
+
 # do_push 向服务端 maintain 接口 PUSH 单个配置文件的生效查询。
 # 入参: file_name。成功时全局 RESP/HTTP_CODE 填入服务端响应与状态码，返回 0；失败返回 1。
 # 鉴权失败(401/403)或路由不存在(404)直接 exit 1(对所有文件都失败，无谓重试)。
 do_push() {
     local file="$1"
-    local push_content="{\"kind\":\"config\",\"config\":{\"namespace\":\"${NAMESPACE}\",\"group\":\"${FILE_GROUP}\",\"file_name\":\"${file}\"}}"
+    local push_content
+    push_content=$(python3 -c 'import json,sys
+print(json.dumps({
+    "kind": "config",
+    "public_key": sys.argv[4],
+    "config": {"namespace": sys.argv[1], "group": sys.argv[2], "file_name": sys.argv[3]},
+}))' "$NAMESPACE" "$FILE_GROUP" "$file" "$QUERY_PUBLIC_KEY")
     local encoded
     encoded=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$push_content" 2>/dev/null || echo "$push_content")
     local url="http://${POLARIS_SERVER}:${MAINTAIN_PORT}/maintain/v1/clients/event?client_id=${CLIENT_ID}&content=${encoded}"
@@ -185,6 +245,8 @@ FILE_NAMES=()
 for i in 1 2 3; do
     FILE_NAMES+=("${FILE_NAME}-${i}.yaml")
 done
+# 加密配置文件名（client.sh setup 已将第 ENCRYPT_FILE_INDEX 份覆盖为加密）
+ENC_FILE="${FILE_NAME}-${ENCRYPT_FILE_INDEX}.yaml"
 
 # 轮询 /config 直到 3 个文件都拿到非空 version/md5
 waited=0
@@ -218,6 +280,9 @@ log_step "步骤 2/3 等待 WatchClientEvents 长连接建立"
 log_info "等待 ${WAIT_WATCHER_SEC}s ..."
 sleep "$WAIT_WATCHER_SEC"
 
+init_query_rsa
+log_info "已生成查询 RSA 密钥对，公钥将随 PUSH 下发"
+
 log_step "步骤 3/3 循环 3 个配置文件下发配置生效查询并校验 ACK"
 
 OVERALL_PASS=true
@@ -230,14 +295,16 @@ for fname in "${FILE_NAMES[@]}"; do
     cm=$(get_file_field "$fname" "md5")
     cc=$(get_file_field "$fname" "content")
 
-    if ! do_push "$fname"; then
-        log_error "❌ [文件 ${fname}] PUSH 失败"
-        OVERALL_PASS=false
-        continue
-    fi
-
-    # 解析 ACK content 字段(服务端响应 resp.clientEvent.content)
-    ACK_JSON=$(echo "$RESP" | python3 -c "
+    # 无 clientEvent.content 时重试: 服务端投递链路收敛延迟/首事件冷路径丢弃可通过重试恢复
+    ACK_JSON=""
+    PUSH_OK=false
+    for ((attempt=1; attempt<=PUSH_RETRY_MAX; attempt++)); do
+        if ! do_push "$fname"; then
+            break
+        fi
+        PUSH_OK=true
+        # 解析 ACK content 字段(服务端响应 resp.clientEvent.content)
+        ACK_JSON=$(echo "$RESP" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -246,13 +313,20 @@ try:
 except Exception as e:
     sys.stderr.write(str(e) + '\n')
     sys.exit(1)
-" 2>/dev/null) || {
-        log_error "❌ [文件 ${fname}] 解析服务端响应失败"
+" 2>/dev/null) || { ACK_JSON=""; break; }
+        [[ -n "$ACK_JSON" ]] && break
+        if [[ $attempt -lt $PUSH_RETRY_MAX ]]; then
+            log_warn "服务端响应无 clientEvent.content (第 ${attempt}/${PUSH_RETRY_MAX} 次)，${PUSH_RETRY_INTERVAL}s 后重试..."
+            sleep "$PUSH_RETRY_INTERVAL"
+        fi
+    done
+    if [[ "$PUSH_OK" != "true" ]]; then
+        log_error "❌ [文件 ${fname}] PUSH 失败"
         OVERALL_PASS=false
         continue
-    }
+    fi
     if [[ -z "$ACK_JSON" ]]; then
-        log_error "❌ [文件 ${fname}] 服务端响应无 clientEvent.content"
+        log_error "❌ [文件 ${fname}] 服务端响应无 clientEvent.content (重试 ${PUSH_RETRY_MAX} 次后仍无)"
         log_error "  排查: 查客户端 client.log 是否有 'stream established' 日志"
         OVERALL_PASS=false
         continue
@@ -264,6 +338,13 @@ except Exception as e:
     ACK_VERSION=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version',''))" 2>/dev/null || echo "")
     ACK_MD5=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('md5',''))" 2>/dev/null || echo "")
     ACK_CONTENT=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('content',''))" 2>/dev/null || echo "")
+    # 加密配置额外提取加密元信息（encrypted/encrypt_algo/data_key）
+    ACK_ENCRYPTED="" ACK_ALGO="" ACK_DATAKEY=""
+    if [[ "$fname" == "$ENC_FILE" ]]; then
+        ACK_ENCRYPTED=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('encrypted',''))" 2>/dev/null || echo "")
+        ACK_ALGO=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('encrypt_algo',''))" 2>/dev/null || echo "")
+        ACK_DATAKEY=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data_key',''))" 2>/dev/null || echo "")
+    fi
 
     echo ""
     echo "  对比项        客户端本地            ACK 应答  (${fname})"
@@ -272,6 +353,11 @@ except Exception as e:
     echo "  version       ${cv}      ${ACK_VERSION}"
     echo "  md5           ${cm}      ${ACK_MD5}"
     echo "  content 长度  ${#cc}      ${#ACK_CONTENT}"
+    if [[ "$fname" == "$ENC_FILE" ]]; then
+        echo "  encrypted     (加密配置)            ${ACK_ENCRYPTED}"
+        echo "  encrypt_algo  ${ENCRYPT_ALGO}                  ${ACK_ALGO}"
+        echo "  data_key 长度  (非空)               ${#ACK_DATAKEY}"
+    fi
     echo ""
 
     # 校验 1: applied 必须为 True
@@ -298,13 +384,44 @@ except Exception as e:
         OVERALL_PASS=false
     fi
 
-    # 校验 4: content 一致(客户端本地内容应包含在 ACK content 中，或被截断标记)
-    if [[ "$ACK_CONTENT" == "$cc" ]]; then
+    # 校验 4: content 一致(客户端本地内容应包含在 ACK content 中，或被截断标记)。
+    # 加密文件不适用：客户端 /config 的 content 是解密后的明文，ACK content 是密文，
+    # 二者必然不等，其一致性由校验 5.2（解密后比对）覆盖。
+    if [[ "$fname" == "$ENC_FILE" ]]; then
+        log_info "⏭️  [校验 4] ${fname} 为加密配置，ACK content 为密文，跳过明文比对(由校验 5.2 覆盖)"
+    elif [[ "$ACK_CONTENT" == "$cc" ]]; then
         log_info "✅ [校验 4] ${fname} ACK content 与客户端本地一致"
     else
         log_warn "⚠️  [校验 4] ${fname} ACK content 与客户端本地不完全一致"
         log_warn "    客户端长度=${#cc}, ACK 长度=${#ACK_CONTENT}"
         log_warn "    若配置超 512KB 会被截断(正常)，否则需排查"
+    fi
+
+    # 校验 5: 加密配置 ACK 应携带加密元信息，接收方可用 data_key 解密密文核对客户端生效明文
+    if [[ "$fname" == "$ENC_FILE" ]]; then
+        # 校验 5.1: encrypted=true 且 encrypt_algo 与创建时一致、data_key 非空
+        if [[ "$ACK_ENCRYPTED" == "True" && "$ACK_ALGO" == "$ENCRYPT_ALGO" && -n "$ACK_DATAKEY" ]]; then
+            log_info "✅ [校验 5.1] ${fname} ACK 携带加密元信息 (encrypted=true, algo=${ACK_ALGO}, data_key 非空)"
+        else
+            log_error "❌ [校验 5.1] ${fname} ACK 加密元信息缺失: encrypted=${ACK_ENCRYPTED}, algo=${ACK_ALGO} (期望 ${ENCRYPT_ALGO}), data_key 长度=${#ACK_DATAKEY}"
+            OVERALL_PASS=false
+        fi
+
+        # 校验 5.2: 用查询私钥解开 RSA 加密的 data_key，再 AES 解密密文，应等于客户端本地生效明文
+        local_plain=""
+        if [[ -n "$ACK_DATAKEY" && -n "$ACK_CONTENT" ]]; then
+            aes_key_b64=$(unwrap_rsa_datakey "$ACK_DATAKEY") || true
+            local_plain=$(decrypt_ack_content "$ACK_CONTENT" "$aes_key_b64") || true
+            if [[ -n "$local_plain" && "$local_plain" == "$cc" ]]; then
+                log_info "✅ [校验 5.2] ${fname} 接收方解密一致 (解密后=${local_plain})"
+            else
+                log_error "❌ [校验 5.2] ${fname} 解密后=${local_plain} != 客户端生效明文=${cc}"
+                OVERALL_PASS=false
+            fi
+        else
+            log_error "❌ [校验 5.2] ${fname} data_key 或密文 content 为空，无法解密"
+            OVERALL_PASS=false
+        fi
     fi
 done
 
@@ -313,6 +430,7 @@ if [[ "$OVERALL_PASS" == "true" ]]; then
     echo -e "${GREEN}验证结论: ✅ 配置生效查询功能验证通过${NC}"
     echo -e "${GREEN}  - 客户端通过 WatchClientEvents 长连接响应服务端配置生效查询${NC}"
     echo -e "${GREEN}  - ACK 携带的 version/md5/content 与客户端本地生效配置一致${NC}"
+    echo -e "${GREEN}  - 加密配置 ${ENC_FILE} 的 ACK 携带 encrypt_algo/data_key，接收方解密后与客户端生效明文一致${NC}"
 else
     echo -e "${YELLOW}验证结论: ⚠️ 部分校验未通过，请对照上述明细排查${NC}"
     echo -e "${YELLOW}  常见原因:${NC}"
@@ -320,6 +438,7 @@ else
     echo -e "${YELLOW}  2. maintain 端口或鉴权 token 配置错误${NC}"
     echo -e "${YELLOW}  3. 客户端未订阅该配置文件(检查 /config version/md5 非空)${NC}"
     echo -e "${YELLOW}  4. WatchClientEvents 长连接未建立(查 client.log 'stream established')${NC}"
+    echo -e "${YELLOW}  5. 加密校验失败: 未执行 client.sh setup(加密文件未就绪)、SDK crypto/aes filter 未启用，或服务端下发的 encrypt_algo 不是 ${ENCRYPT_ALGO}${NC}"
 fi
 echo ""
 log_info "完整日志: ${TEST_LOG_FILE}"

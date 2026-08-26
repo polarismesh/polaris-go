@@ -8,6 +8,7 @@
 #     polaris.yaml      配置模板(${POLARIS_SERVER}/${POLARIS_TOKEN} 占位)
 #     client.sh         节点启动脚本(setup/start/stop/status/restart)
 #     verify-cloud.sh   配置生效查询验证脚本(调服务端 maintain 接口)
+#     pack-logs.sh      节点日志打包脚本(生成 client-logs-<时间戳>.zip)
 #     clean.sh          节点清理脚本
 #
 # 使用方法:
@@ -58,10 +59,12 @@ cp "$TMP_BIN" "${DIST_DIR}/${NODE_NAME}/x86-bin"
 cp "${TEMPLATES_DIR}/polaris.yaml" "${DIST_DIR}/${NODE_NAME}/polaris.yaml"
 cp "${TEMPLATES_DIR}/client.sh" "${DIST_DIR}/${NODE_NAME}/client.sh"
 cp "${TEMPLATES_DIR}/verify-cloud.sh" "${DIST_DIR}/${NODE_NAME}/verify-cloud.sh"
+cp "${TEMPLATES_DIR}/pack-logs.sh" "${DIST_DIR}/${NODE_NAME}/pack-logs.sh"
 cp "${TEMPLATES_DIR}/clean.sh" "${DIST_DIR}/${NODE_NAME}/clean.sh"
 chmod +x "${DIST_DIR}/${NODE_NAME}/x86-bin" \
     "${DIST_DIR}/${NODE_NAME}/client.sh" \
     "${DIST_DIR}/${NODE_NAME}/verify-cloud.sh" \
+    "${DIST_DIR}/${NODE_NAME}/pack-logs.sh" \
     "${DIST_DIR}/${NODE_NAME}/clean.sh"
 rm -f "$TMP_BIN"
 
@@ -99,8 +102,8 @@ zip 包:   ${DIST_DIR}/${NODE_NAME}.zip
 上传 zip 到云节点后:
   unzip ${NODE_NAME}.zip && cd ${NODE_NAME}
 
-  # 1. 发布全量基线配置(已存在则跳过)
-  POLARIS_TOKEN=xxx ./client.sh setup --polaris-server <服务端地址> --content effect-content-v1
+  # 1. 发布 3 份基线配置(已存在则跳过)，并把第 1 份经 console 接口覆盖为加密配置后发布
+  POLARIS_TOKEN=xxx ./client.sh setup --polaris-server <服务端地址> --content effect-content-v
 
   # 2. 启动常驻客户端(自动订阅配置 + 建 WatchClientEvents 长连接)
   POLARIS_TOKEN=xxx ./client.sh start --polaris-server <服务端地址> --port 18091
@@ -112,7 +115,10 @@ zip 包:   ${DIST_DIR}/${NODE_NAME}.zip
   POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \\
       --maintain-port 8090 --client-port 18091
 
-  # 5. 停止与清理
+  # 5. 打包节点日志传回本地(可选，需在 clean.sh 之前执行)
+  ./pack-logs.sh
+
+  # 6. 停止与清理
   ./client.sh stop
   ./clean.sh -f
 
@@ -125,6 +131,8 @@ DEBUG: client.sh start 加 --debug。
   - 调服务端 maintain 接口向该 clientID PUSH 配置生效查询
   - 服务端经长连接下发 PUSH，客户端回 ACK，服务端透传给 verify-cloud.sh
   - 脚本解析 ACK，断言 applied=true 且 version/md5/content 与客户端本地一致
+  - 加密文件(第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key，
+    脚本用 data_key 解密密文 content 并断言与客户端生效明文一致
 EOF
 echo ""
 echo -e "${GREEN}物料生成完成。${NC}"
