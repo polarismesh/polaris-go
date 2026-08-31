@@ -127,10 +127,10 @@ DEBUG: client.sh start 加 --debug。
 
 验证原理:
   - 客户端启动后通过 ReportClient 上报 clientID，建立 WatchClientEvents 长连接
-  - verify-cloud.sh 读取客户端 /clientid 与 /config，获得 clientID 与本地 version/md5/content
+  - verify-cloud.sh 读取客户端 /clientid 与 /config，获得 clientID 与本地 version/versionName/md5/content
   - 调服务端 maintain 接口向该 clientID PUSH 配置生效查询
   - 服务端经长连接下发 PUSH，客户端回 ACK，服务端透传给 verify-cloud.sh
-  - 脚本解析 ACK，断言 applied=true 且 version/md5/content 与客户端本地一致
+  - 脚本解析 ACK，断言 applied=true 且 version/version_name/md5/content 与客户端本地一致
   - 加密文件(第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key，
     脚本用 data_key 解密密文 content 并断言与客户端生效明文一致
 EOF

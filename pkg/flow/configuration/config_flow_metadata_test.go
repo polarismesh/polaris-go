@@ -30,15 +30,17 @@ import (
 )
 
 // TestConfigFileFlow_GetWatchedConfigFileMetadata 验证从 configFilePool 收集监听文件元数据，
-// 包含 namespace/group/file_name/version/md5 五项，供 ReportClient 上报 config_metadata。
+// 包含 namespace/group/file_name/version/version_name/md5，供 ReportClient 上报 config_metadata。
 func TestConfigFileFlow_GetWatchedConfigFileMetadata(t *testing.T) {
 	ref1 := &atomic.Value{}
 	ref1.Store(&configconnector.ConfigFile{
-		Namespace: "default", FileGroup: "g1", FileName: "f1", Version: 3, Md5: "md5_1",
+		Namespace: "default", FileGroup: "g1", FileName: "f1",
+		Version: 3, VersionName: "v3", Md5: "md5_1",
 	})
 	ref2 := &atomic.Value{}
 	ref2.Store(&configconnector.ConfigFile{
-		Namespace: "default", FileGroup: "g2", FileName: "f2", Version: 5, Md5: "md5_2",
+		Namespace: "default", FileGroup: "g2", FileName: "f2",
+		Version: 5, VersionName: "v5", Md5: "md5_2",
 	})
 	flow := &ConfigFileFlow{
 		configFilePool: map[string]*ConfigFileRepo{
@@ -70,10 +72,12 @@ func TestConfigFileFlow_GetWatchedConfigFileMetadata(t *testing.T) {
 	assert.Equal(t, "g1", it1.Group)
 	assert.Equal(t, "f1", it1.FileName)
 	assert.Equal(t, uint64(3), it1.Version)
+	assert.Equal(t, "v3", it1.VersionName)
 	assert.Equal(t, "md5_1", it1.Md5)
 	it2 := byKey["g2/f2"]
 	assert.Equal(t, "md5_2", it2.Md5)
 	assert.Equal(t, uint64(5), it2.Version)
+	assert.Equal(t, "v5", it2.VersionName)
 }
 
 // TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyRemoteFile 验证 repo 尚未拉取到远端配置文件时
@@ -93,6 +97,7 @@ func TestConfigFileFlow_GetWatchedConfigFileMetadata_EmptyRemoteFile(t *testing.
 	items := flow.GetWatchedConfigFileMetadata()
 	assert.Equal(t, 1, len(items))
 	assert.Equal(t, "", items[0].Md5)
+	assert.Equal(t, "", items[0].VersionName)
 	assert.Equal(t, "default", items[0].Namespace)
 	assert.Equal(t, "f1", items[0].FileName)
 }
@@ -104,7 +109,7 @@ func TestConfigFileFlow_GetWatchedConfigFileContent_Encrypted(t *testing.T) {
 	encRef := &atomic.Value{}
 	encRef.Store(&configconnector.ConfigFile{
 		Namespace: "default", FileGroup: "g1", FileName: "aes.yaml",
-		Version: 3, Md5: "md5_cipher", SourceContent: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true,
+		Version: 3, VersionName: "v3", Md5: "md5_cipher", SourceContent: "Y2lwaGVyLWNvbnRlbnQ=", Encrypted: true,
 		Tags: []*configconnector.ConfigFileTag{
 			{Key: configconnector.ConfigFileTagKeyEncryptAlgo, Value: "AES"},
 			{Key: configconnector.ConfigFileTagKeyUseEncrypted, Value: "true"},
@@ -114,7 +119,7 @@ func TestConfigFileFlow_GetWatchedConfigFileContent_Encrypted(t *testing.T) {
 	plainRef := &atomic.Value{}
 	plainRef.Store(&configconnector.ConfigFile{
 		Namespace: "default", FileGroup: "g1", FileName: "plain.yaml",
-		Version: 1, Md5: "md5_plain", SourceContent: "plain-body",
+		Version: 1, VersionName: "v1", Md5: "md5_plain", SourceContent: "plain-body",
 	})
 	flow := &ConfigFileFlow{
 		configFilePool: map[string]*ConfigFileRepo{
@@ -142,6 +147,7 @@ func TestConfigFileFlow_GetWatchedConfigFileContent_Encrypted(t *testing.T) {
 	assert.Equal(t, "UTEyMzQ1Njc4OTAxMjM0NQ==", enc.DataKey, "应从 internal-datakey tag 取 base64 明文数据密钥")
 	assert.Equal(t, "Y2lwaGVyLWNvbnRlbnQ=", enc.Content, "content 仍为源内容（密文）")
 	assert.Equal(t, uint64(3), enc.Version)
+	assert.Equal(t, "v3", enc.VersionName)
 	assert.Equal(t, "md5_cipher", enc.Md5)
 
 	plain, ok := flow.GetWatchedConfigFileContent("default", "g1", "plain.yaml")

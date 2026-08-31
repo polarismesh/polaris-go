@@ -5,8 +5,8 @@
 # 验证客户端通过 WatchClientEvents 长连接响应服务端「配置生效查询」的端到端能力：
 #   1. 客户端启动后自动上报 clientID 并建立 WatchClientEvents 长连接
 #   2. 本脚本调服务端 maintain 接口 GET /maintain/v1/clients/event 向该 clientID PUSH 配置生效查询
-#   3. 客户端经长连接回 ACK(含 version/md5/content/applied)，服务端原样透传给本脚本
-#   4. 本脚本解析 ACK，校验 applied=true 且 version/md5/content 与客户端本地一致
+#   3. 客户端经长连接回 ACK(含 version/version_name/md5/content/applied)，服务端原样透传给本脚本
+#   4. 本脚本解析 ACK，校验 applied=true 且 version/version_name/md5/content 与客户端本地一致
 #   5. 加密文件(默认第 1 份)的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
 #      本脚本用查询私钥解开 data_key 后再 AES 解密密文，断言与客户端生效明文一致
 #
@@ -114,7 +114,7 @@ setup_test_log() {
 setup_test_log "$@"
 
 # 从客户端 /config 接口的 files 数组中，按文件名提取指定字段(依赖 python3)
-# 入参: file_name field (version|md5|content)
+# 入参: file_name field (version|versionName|md5|content)
 get_file_field() {
     local file="$1" field="$2"
     curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/config" 2>/dev/null \
@@ -272,8 +272,9 @@ fi
 for fname in "${FILE_NAMES[@]}"; do
     v=$(get_file_field "$fname" "version")
     m=$(get_file_field "$fname" "md5")
+    vn=$(get_file_field "$fname" "versionName")
     c=$(get_file_field "$fname" "content")
-    log_info "本地生效配置 ${fname}: version=${v}, md5=${m}, content 长度=${#c}"
+    log_info "本地生效配置 ${fname}: version=${v}, versionName=${vn}, md5=${m}, content 长度=${#c}"
 done
 
 log_step "步骤 2/3 等待 WatchClientEvents 长连接建立"
@@ -292,6 +293,7 @@ for fname in "${FILE_NAMES[@]}"; do
     log_step "  文件 ${CASE_IDX}/${#FILE_NAMES[@]}: ${fname}"
 
     cv=$(get_file_field "$fname" "version")
+    cvn=$(get_file_field "$fname" "versionName")
     cm=$(get_file_field "$fname" "md5")
     cc=$(get_file_field "$fname" "content")
 
@@ -336,6 +338,7 @@ except Exception as e:
     # 从 ACK content JSON 提取字段
     ACK_APPLIED=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('applied',''))" 2>/dev/null || echo "")
     ACK_VERSION=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version',''))" 2>/dev/null || echo "")
+    ACK_VERSION_NAME=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version_name',''))" 2>/dev/null || echo "")
     ACK_MD5=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('md5',''))" 2>/dev/null || echo "")
     ACK_CONTENT=$(echo "$ACK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('content',''))" 2>/dev/null || echo "")
     # 加密配置额外提取加密元信息（encrypted/encrypt_algo/data_key）
@@ -351,6 +354,7 @@ except Exception as e:
     echo "  -----------   -------------------   -------------------"
     echo "  applied       (客户端在监听)        ${ACK_APPLIED}"
     echo "  version       ${cv}      ${ACK_VERSION}"
+    echo "  version_name  ${cvn}      ${ACK_VERSION_NAME}"
     echo "  md5           ${cm}      ${ACK_MD5}"
     echo "  content 长度  ${#cc}      ${#ACK_CONTENT}"
     if [[ "$fname" == "$ENC_FILE" ]]; then
@@ -381,6 +385,14 @@ except Exception as e:
         log_info "✅ [校验 3] ${fname} ACK md5 一致 (${ACK_MD5})"
     else
         log_error "❌ [校验 3] ${fname} ACK md5=${ACK_MD5} != 客户端 ${cm}"
+        OVERALL_PASS=false
+    fi
+
+    # 校验 3.1: version_name 一致（ACK 空串与客户端空串视为一致，omitempty 省略时按空串比对）
+    if [[ "$ACK_VERSION_NAME" == "$cvn" ]]; then
+        log_info "✅ [校验 3.1] ${fname} ACK version_name 一致 (${ACK_VERSION_NAME})"
+    else
+        log_error "❌ [校验 3.1] ${fname} ACK version_name=${ACK_VERSION_NAME} != 客户端 ${cvn}"
         OVERALL_PASS=false
     fi
 
@@ -429,7 +441,7 @@ echo ""
 if [[ "$OVERALL_PASS" == "true" ]]; then
     echo -e "${GREEN}验证结论: ✅ 配置生效查询功能验证通过${NC}"
     echo -e "${GREEN}  - 客户端通过 WatchClientEvents 长连接响应服务端配置生效查询${NC}"
-    echo -e "${GREEN}  - ACK 携带的 version/md5/content 与客户端本地生效配置一致${NC}"
+    echo -e "${GREEN}  - ACK 携带的 version/version_name/md5/content 与客户端本地生效配置一致${NC}"
     echo -e "${GREEN}  - 加密配置 ${ENC_FILE} 的 ACK 携带 encrypt_algo/data_key，接收方解密后与客户端生效明文一致${NC}"
 else
     echo -e "${YELLOW}验证结论: ⚠️ 部分校验未通过，请对照上述明细排查${NC}"

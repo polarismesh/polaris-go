@@ -471,11 +471,12 @@ func (c *ConfigFileFlow) assembleWatchConfigFiles() []*configconnector.ConfigFil
 // ConfigFileMetadataItem 配置文件元数据项，对应 ReportClient 上报 config_metadata 中
 // config_watch 数组的单个元素，字段采用 snake_case JSON 命名与服务端配置中心三级树一致。
 type ConfigFileMetadataItem struct {
-	Namespace string `json:"namespace"`
-	Group     string `json:"group"`
-	FileName  string `json:"file_name"`
-	Version   uint64 `json:"version"`
-	Md5       string `json:"md5"`
+	Namespace   string `json:"namespace"`
+	Group       string `json:"group"`
+	FileName    string `json:"file_name"`
+	Version     uint64 `json:"version"`
+	VersionName string `json:"version_name"`
+	Md5         string `json:"md5"`
 }
 
 // GetWatchedConfigFileMetadata 返回当前监听的配置文件元数据列表快照，供 ReportClient 上报 config_metadata。
@@ -500,11 +501,12 @@ func (c *ConfigFileFlow) GetWatchedConfigFileMetadata() []ConfigFileMetadataItem
 			Group:     metadata.GetFileGroup(),
 			FileName:  metadata.GetFileName(),
 		}
-		// version 与 md5 统一取自同一次 loadRemoteFile 快照（即本地实际生效的配置），保证自一致——
+		// version/version_name/md5 统一取自同一次 loadRemoteFile 快照（即本地实际生效的配置），保证自一致——
 		// 若 version 取 notifiedVersion 而 md5 取 remoteConfigFileRef，长轮询并发更新瞬间会拼出
-		// "version 旧、md5 新" 的撕裂组合。尚未拉取到文件时 version 回退 notifiedVersion、md5 留空。
+		// "version 旧、md5 新" 的撕裂组合。尚未拉取到文件时 version 回退 notifiedVersion、md5/version_name 留空。
 		if cf := repo.loadRemoteFile(); cf != nil {
 			item.Version = cf.GetVersion()
+			item.VersionName = cf.GetVersionName()
 			item.Md5 = cf.GetMd5()
 		} else {
 			item.Version = c.getConfigFileNotifiedVersion(cacheKey, false)
@@ -528,11 +530,12 @@ func (c *ConfigFileFlow) GetWatchedConfigFileMetadata() []ConfigFileMetadataItem
 // 相比 ConfigFileMetadataItem 多 Content 字段，仅在单点查询命中时返回，
 // 不进入 ReportClient 的全量 config_metadata 上报（避免 config_metadata 携带大体积内容膨胀）。
 type ConfigFileContentItem struct {
-	Namespace string `json:"namespace"`
-	Group     string `json:"group"`
-	FileName  string `json:"file_name"`
-	Version   uint64 `json:"version"`
-	Md5       string `json:"md5"`
+	Namespace   string `json:"namespace"`
+	Group       string `json:"group"`
+	FileName    string `json:"file_name"`
+	Version     uint64 `json:"version"`
+	VersionName string `json:"version_name"`
+	Md5         string `json:"md5"`
 	// Content 为配置文件的源内容（SourceContent）：非加密配置即应用生效内容；加密配置为密文。
 	// 取源内容而非 GetContent() 的原因有二：
 	//  1. Md5 是服务端对源内容的摘要，回传源内容才能保证 md5(content) 自洽，可供服务端校验；
@@ -560,8 +563,8 @@ type ConfigFileContentItem struct {
 
 // GetWatchedConfigFileContent 按 (namespace, group, fileName) 查询单个监听配置文件的元数据与内容。
 // 未监听返回 (zero, false)；已监听但尚未拉取到远端文件返回 (item, true) 且 item.Pulled=false；
-// 已拉取返回 (item, true) 且 item.Pulled=true，version/md5/content/effectiveTime 齐全。
-// version/md5/content 三者统一取自同一次 loadRemoteFile 快照，保证自一致——
+// 已拉取返回 (item, true) 且 item.Pulled=true，version/version_name/md5/content/effectiveTime 齐全。
+// version/version_name/md5/content 统一取自同一次 loadRemoteFile 快照，保证自一致——
 // 若分别从 notifiedVersion 与 remoteConfigFileRef 取，长轮询并发更新时会返回
 // "version 旧、content 新" 的撕裂组合，导致服务端误判配置是否生效。
 // content 取 SourceContent（加密配置为密文），与 md5 自洽且不回传解密明文，详见字段注释。
@@ -584,7 +587,7 @@ func (c *ConfigFileFlow) GetWatchedConfigFileContent(namespace, fileGroup, fileN
 		Group:     fileGroup,
 		FileName:  fileName,
 	}
-	// 单次快照取值，保证 version/md5/content 自一致
+	// 单次快照取值，保证 version/version_name/md5/content 自一致
 	cf := repo.loadRemoteFile()
 	if cf == nil {
 		// 已订阅但尚未拉取到远端文件（首次拉取失败/重试中）：仅回退 notifiedVersion，
@@ -593,6 +596,7 @@ func (c *ConfigFileFlow) GetWatchedConfigFileContent(namespace, fileGroup, fileN
 		return item, true
 	}
 	item.Version = cf.GetVersion()
+	item.VersionName = cf.GetVersionName()
 	item.Md5 = cf.GetMd5()
 	item.Content = cf.GetSourceContent()
 	// 加密配置：携带算法与本地明文 data_key，与 content/md5 同一次快照保证自一致。
