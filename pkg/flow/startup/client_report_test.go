@@ -43,7 +43,7 @@ func TestConfigMetadataPayload_Marshal(t *testing.T) {
 	payload := configMetadataPayload{
 		Kind: "config",
 		ConfigWatch: []configflow.ConfigFileMetadataItem{
-			{Namespace: "default", Group: "g1", FileName: "f1", Version: 3, Md5: "md5_1"},
+			{Namespace: "default", Group: "g1", FileName: "f1", Version: 3, VersionName: "v3", Md5: "md5_1"},
 			{Namespace: "default", Group: "g2", FileName: "f2", Version: 5, Md5: ""},
 		},
 	}
@@ -57,6 +57,7 @@ func TestConfigMetadataPayload_Marshal(t *testing.T) {
 	assert.Contains(t, s, `"namespace":"default"`)
 	assert.Contains(t, s, `"group":"g1"`)
 	assert.Contains(t, s, `"version":3`)
+	assert.Contains(t, s, `"version_name":"v3"`)
 	assert.Contains(t, s, `"md5":"md5_1"`)
 }
 

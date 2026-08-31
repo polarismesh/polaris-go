@@ -72,7 +72,7 @@ func (m *mockClientEventStream) Recv() (*apiservice.ClientEvent, error) {
 
 func (m *mockClientEventStream) Close() error { return nil }
 
-// TestBuildAckContent_ConfigHit 命中监听文件时 ACK 含 version/md5/content/applied=true 并回显查询目标。
+// TestBuildAckContent_ConfigHit 命中监听文件时 ACK 含 version/version_name/md5/content/applied=true 并回显查询目标。
 func TestBuildAckContent_ConfigHit(t *testing.T) {
 	w := &ClientEventWatcher{
 		clientID: "c1",
@@ -80,7 +80,7 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 			contentItems: map[string]configflow.ConfigFileContentItem{
 				"default+g1+f1": {
 					Namespace: "default", Group: "g1", FileName: "f1",
-					Version: 3, Md5: "md5_1", Content: "config-body",
+					Version: 3, VersionName: "v3", Md5: "md5_1", Content: "config-body",
 					EffectiveTime: 1723458600123, Pulled: true,
 				},
 			},
@@ -89,6 +89,7 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 	push := `{"kind":"config","config":{"namespace":"default","group":"g1","file_name":"f1"}}`
 	raw := w.buildAckContent(push)
 	assert.Contains(t, raw, `"effective_time":1723458600123`, "命中时 ACK 应回带 effective_time")
+	assert.Contains(t, raw, `"version_name":"v3"`, "命中时 ACK 应回带 version_name")
 	var ack clientEventAck
 	assert.NoError(t, json.Unmarshal([]byte(raw), &ack))
 	assert.Equal(t, "config", ack.Kind)
@@ -96,6 +97,7 @@ func TestBuildAckContent_ConfigHit(t *testing.T) {
 	assert.Equal(t, "g1", ack.Config.Group)
 	assert.Equal(t, "f1", ack.Config.FileName)
 	assert.Equal(t, uint64(3), ack.Version)
+	assert.Equal(t, "v3", ack.VersionName)
 	assert.Equal(t, "md5_1", ack.Md5)
 	assert.Equal(t, "config-body", ack.Content, "ACK 应含配置文件内容")
 	assert.Equal(t, int64(1723458600123), ack.EffectiveTime, "ACK 应回带配置生效时间")

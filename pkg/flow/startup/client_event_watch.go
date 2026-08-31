@@ -369,10 +369,10 @@ func (w *ClientEventWatcher) handlePush(stream serverconnector.ClientEventStream
 	}
 	if l := w.logger(); l != nil {
 		l.Infof("client event ack sent, index %d, clientID %s, namespace %s, group %s, "+
-			"file %s, version %d, md5 %s, applied %v, encrypted %v, reason %s, ackBytes %d, content %s",
+			"file %s, version %d, version_name %s, md5 %s, applied %v, encrypted %v, reason %s, ackBytes %d, content %s",
 			event.GetIndex(), w.clientID,
 			ack.Config.Namespace, ack.Config.Group, ack.Config.FileName,
-			ack.Version, ack.Md5, ack.Applied, ack.Encrypted, ack.Reason, len(ackContent), ackContent)
+			ack.Version, ack.VersionName, ack.Md5, ack.Applied, ack.Encrypted, ack.Reason, len(ackContent), ackContent)
 	}
 	return nil
 }
@@ -385,7 +385,7 @@ func (w *ClientEventWatcher) buildAckContent(pushContent string) string {
 
 // buildAck 解析 PUSH content 按 kind 分发，构造 ACK 结构体（未序列化）。
 // kind=config：按 config.{namespace,group,file_name} 查本地监听文件，
-// 命中且已生效回 version/md5/content/applied=true；content 超过上限时截断并置 content_truncated。
+// 命中且已生效回 version/version_name/md5/content/applied=true；content 超过上限时截断并置 content_truncated。
 // 已监听但尚未拉取生效回 applied=false + reason=pending；未监听回 not_watched；
 // 未知 kind 或解析失败：回带 reason 的最小 ACK（applied=false），保证不阻塞服务端 waiter。
 func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
@@ -419,6 +419,7 @@ func (w *ClientEventWatcher) buildAck(pushContent string) clientEventAck {
 		return ack
 	}
 	ack.Version = item.Version
+	ack.VersionName = item.VersionName
 	ack.Md5 = item.Md5
 	ack.EffectiveTime = item.EffectiveTime
 	ack.Applied = true
@@ -545,10 +546,11 @@ type clientEventQueryCfg struct {
 
 // clientEventAck 客户端 ACK 应答 JSON 结构
 type clientEventAck struct {
-	Kind    string              `json:"kind"`
-	Config  clientEventQueryCfg `json:"config"`
-	Version uint64              `json:"version,omitempty"`
-	Md5     string              `json:"md5,omitempty"`
+	Kind        string              `json:"kind"`
+	Config      clientEventQueryCfg `json:"config"`
+	Version     uint64              `json:"version,omitempty"`
+	VersionName string              `json:"version_name,omitempty"`
+	Md5         string              `json:"md5,omitempty"`
 	// EffectiveTime 配置在客户端本地的实际生效时刻（int64 毫秒时间戳），
 	// 取自客户端首次拉取或变更更新时记录的 time.Now().UnixMilli()。
 	// applied=true 时输出；未拉取到或 applied=false 时 omitempty 省略。

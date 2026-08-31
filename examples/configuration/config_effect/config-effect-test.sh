@@ -5,8 +5,8 @@
 # 验证 polaris-go 客户端通过 WatchClientEvents 长连接响应服务端「配置生效查询」：
 #   - 客户端订阅配置文件后，SDK 自动建立 WatchClientEvents 双向流并上报 clientID
 #   - 服务端 maintain 接口 (GET /maintain/v1/clients/event) 向指定客户端 PUSH 配置生效查询
-#   - 客户端回 ACK (含 version/md5/applied)，服务端原样透传给本脚本
-#   - 脚本解析 ACK content，校验 version/md5 与客户端本地生效配置一致
+#   - 客户端回 ACK (含 version/version_name/md5/applied)，服务端原样透传给本脚本
+#   - 脚本解析 ACK content，校验 version/version_name/md5 与客户端本地生效配置一致
 #
 # 使用方法:
 #   chmod +x config-effect-test.sh
@@ -22,12 +22,12 @@
 #
 # 验证原理:
 #   - 客户端启动后通过 ReportClient 上报 clientID，并建立 WatchClientEvents 长连接
-#   - 脚本读取客户端 /clientid 与 /config，获得 clientID 与本地生效配置 version/md5
+#   - 脚本读取客户端 /clientid 与 /config，获得 clientID 与本地生效配置 version/versionName/md5
 #   - 脚本调服务端 maintain 接口向该 clientID PUSH 查询
 #     {kind:config, public_key:<RSA公钥>, config:{ns,group,file}}
 #   - 服务端通过 stream 下发 PUSH，客户端回 ACK，服务端把 ACK.clientEvent.content 透传回脚本
 #     (服务端投递链路有收敛延迟/首事件冷路径丢弃，无 clientEvent 时脚本自动重试)
-#   - 脚本解析 ACK content，断言 applied=true 且 version/md5 与客户端 /config 一致
+#   - 脚本解析 ACK content，断言 applied=true 且 version/version_name/md5 与客户端 /config 一致
 #   - 加密配置的 ACK 额外携带 encrypted/encrypt_algo/data_key（RSA 加密的对称密钥），
 #     脚本用查询私钥解开 data_key 后再 AES 解密密文 content，断言等于明文基线
 # =============================================================================
@@ -177,7 +177,7 @@ get_client_id() {
 }
 
 # get_file_field 从客户端 /config 接口的 files 数组中，按文件名提取指定字段。
-# 入参: file_name field (version|md5|content)
+# 入参: file_name field (version|versionName|md5|content)
 get_file_field() {
     local file="$1" field="$2"
     curl -s --connect-timeout 3 "http://127.0.0.1:${CLIENT_PORT}/config" 2>/dev/null \
@@ -381,8 +381,8 @@ except Exception:
 
 # extract_ack_field 从服务端响应中提取 clientEvent.content 内的指定字段。
 # 服务端响应结构：{ code, info, clientEvent: { client_id, index, content } }
-# content 是 JSON 字符串，内含 { kind, config, version, md5, applied }
-# 入参: resp_json ack_field (applied|version|md5)
+# content 是 JSON 字符串，内含 { kind, config, version, version_name, md5, applied }
+# 入参: resp_json ack_field (applied|version|version_name|md5)
 extract_ack_field() {
     local resp="$1" field="$2"
     # 先取 clientEvent.content 字符串值，再在其中提取目标字段
@@ -565,16 +565,17 @@ main() {
 
     # 记录每个文件的拉取结果
     for fname in "${file_names[@]}"; do
-        local v m c
+        local v m c vn
         v=$(get_file_field "$fname" "version")
         m=$(get_file_field "$fname" "md5")
         c=$(get_file_field "$fname" "content")
+        vn=$(get_file_field "$fname" "versionName")
         if [[ -z "$v" || "$v" == "0" || -z "$m" ]]; then
             log_error "客户端未拉取到配置文件 ${fname} (version=${v}, md5=${m})"
             record_result "0" "客户端拉取配置 ${fname}" "FAIL" "version=${v},md5=${m}"
         else
-            log_info "客户端本地生效配置 ${fname}: version=${v}, md5=${m}, content=${c}"
-            record_result "0" "客户端拉取配置 ${fname}" "PASS" "version=${v},md5=${m}"
+            log_info "客户端本地生效配置 ${fname}: version=${v}, versionName=${vn}, md5=${m}, content=${c}"
+            record_result "0" "客户端拉取配置 ${fname}" "PASS" "version=${v},versionName=${vn},md5=${m}"
         fi
     done
     if [[ "$all_ready" != "true" ]]; then
@@ -623,8 +624,9 @@ main() {
         case_idx=$((case_idx + 1))
         log_step "  文件 ${case_idx}/${#file_names[@]}: ${fname}"
 
-        local client_version client_md5
+        local client_version client_version_name client_md5
         client_version=$(get_file_field "$fname" "version")
+        client_version_name=$(get_file_field "$fname" "versionName")
         client_md5=$(get_file_field "$fname" "md5")
 
         # 无 clientEvent.content 时重试: 服务端投递链路收敛延迟/首事件冷路径丢弃可通过重试恢复
@@ -644,13 +646,14 @@ main() {
         # 留存加密文件的原始响应，供用例 4 校验加密元信息与解密
         [[ "$fname" == "$enc_file" ]] && enc_resp="$resp"
 
-        local ack_applied ack_version ack_md5
+        local ack_applied ack_version ack_version_name ack_md5
         ack_applied=$(extract_ack_field "$resp" "applied") || {
             record_result "2.${case_idx}" "解析 ACK ${fname}" "FAIL" "解析失败"
             overall_pass=false
             continue
         }
         ack_version=$(extract_ack_field "$resp" "version") || true
+        ack_version_name=$(extract_ack_field "$resp" "version_name") || true
         ack_md5=$(extract_ack_field "$resp" "md5") || true
 
         # 校验 1：applied 必须为 true（客户端确实在监听该配置文件）
@@ -680,6 +683,16 @@ main() {
         else
             log_error "❌ [用例 2.${case_idx}.3 ACK md5 一致] FAIL - ${fname} ack=${ack_md5} != client=${client_md5}"
             record_result "2.${case_idx}.3" "ACK md5 一致 ${fname}" "FAIL" "ack=${ack_md5},client=${client_md5}"
+            overall_pass=false
+        fi
+
+        # 校验 4：ACK version_name 与客户端本地 versionName 一致
+        if [[ "$ack_version_name" == "$client_version_name" ]]; then
+            log_info "✅ [用例 2.${case_idx}.4 ACK version_name 一致] PASS - ${fname} version_name=${ack_version_name}"
+            record_result "2.${case_idx}.4" "ACK version_name 一致 ${fname}" "PASS" "ack=${ack_version_name},client=${client_version_name}"
+        else
+            log_error "❌ [用例 2.${case_idx}.4 ACK version_name 一致] FAIL - ${fname} ack=${ack_version_name} != client=${client_version_name}"
+            record_result "2.${case_idx}.4" "ACK version_name 一致 ${fname}" "FAIL" "ack=${ack_version_name},client=${client_version_name}"
             overall_pass=false
         fi
     done
@@ -746,7 +759,7 @@ main() {
     if [[ "$overall_pass" == "true" ]]; then
         echo -e "${GREEN}验证结论: ✅ 配置生效查询功能验证通过${NC}"
         echo -e "${GREEN}  - 客户端通过 WatchClientEvents 长连接响应服务端配置生效查询${NC}"
-        echo -e "${GREEN}  - ACK 携带的 version/md5 与客户端本地生效配置一致${NC}"
+        echo -e "${GREEN}  - ACK 携带的 version/version_name/md5 与客户端本地生效配置一致${NC}"
         echo -e "${GREEN}  - applied=true 确认客户端正在监听该配置文件${NC}"
     else
         echo -e "${YELLOW}验证结论: ⚠️ 部分用例未通过，请对照上述明细与日志排查${NC}"

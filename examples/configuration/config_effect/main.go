@@ -21,11 +21,11 @@
 //   - setup 模式：创建并发布 3 份全量基线配置（由 base name 派生 -1/-2/-3.yaml），供验证流程初始化
 //   - run   模式：作为配置客户端常驻运行，订阅 3 个配置文件并暴露 HTTP 观察接口：
 //     GET /health    健康检查，初始拉取完成后返回 200
-//     GET /config    返回当前生效配置快照 (含 clientId 与 files 数组，每个文件含 version/md5/content)
+//     GET /config    返回当前生效配置快照 (含 clientId 与 files 数组，每个文件含 version/versionName/md5/content)
 //     GET /clientid  返回 SDK 的 clientID (供验证脚本调用服务端 /maintain/v1/clients/event)
 //
 // 验证脚本会通过服务端 maintain 接口向本客户端 PUSH 配置生效查询，
-// 客户端通过 WatchClientEvents 长连接回 ACK (含 version/md5/applied)，
+// 客户端通过 WatchClientEvents 长连接回 ACK (含 version/version_name/md5/applied)，
 // 脚本解析服务端返回的 ACK content 并与客户端 /config 快照比对，验证端到端生效查询。
 package main
 
@@ -189,14 +189,15 @@ func setupOne(configAPI polaris.ConfigAPI, ns, group, fname, fcontent string) er
 
 // configFileState 是 /config 接口返回的单个配置文件生效快照。
 type configFileState struct {
-	Namespace string `json:"namespace"`
-	FileGroup string `json:"fileGroup"`
-	FileName  string `json:"fileName"`
-	Version   uint64 `json:"version"`
-	Md5       string `json:"md5"`
-	Content   string `json:"content"`
-	Ready     bool   `json:"ready"`
-	FetchErr  string `json:"fetchErr,omitempty"`
+	Namespace   string `json:"namespace"`
+	FileGroup   string `json:"fileGroup"`
+	FileName    string `json:"fileName"`
+	Version     uint64 `json:"version"`
+	VersionName string `json:"versionName"`
+	Md5         string `json:"md5"`
+	Content     string `json:"content"`
+	Ready       bool   `json:"ready"`
+	FetchErr    string `json:"fetchErr,omitempty"`
 }
 
 // configSnapshot 是 /config 接口返回的整体快照，含 clientID 与全部监听文件的生效状态。
@@ -260,13 +261,13 @@ func runClient() {
 			continue
 		}
 		refreshFileState(idx, cf)
-		log.Printf("[Client] 配置文件 %s 获取成功: version=%d, md5=%s, content=%q",
-			fname, cf.GetVersion(), cf.GetMd5(), cf.GetContent())
+		log.Printf("[Client] 配置文件 %s 获取成功: version=%d, versionName=%s, md5=%s, content=%q",
+			fname, cf.GetVersion(), cf.GetVersionName(), cf.GetMd5(), cf.GetContent())
 		// 闭包捕获 idx 与 cf，变更时仅刷新对应文件快照
 		cf.AddChangeListener(func(event model.ConfigFileChangeEvent) {
 			refreshFileState(idx, cf)
-			log.Printf("[Change] 文件=%s, 变更类型=%v, 旧内容=%q, 新内容=%q, version=%d, md5=%s",
-				fname, event.ChangeType, event.OldValue, event.NewValue, cf.GetVersion(), cf.GetMd5())
+			log.Printf("[Change] 文件=%s, 变更类型=%v, 旧内容=%q, 新内容=%q, version=%d, versionName=%s, md5=%s",
+				fname, event.ChangeType, event.OldValue, event.NewValue, cf.GetVersion(), cf.GetVersionName(), cf.GetMd5())
 		})
 	}
 	ready.Store(true)
@@ -281,6 +282,7 @@ func refreshFileState(idx int, cf model.ConfigFile) {
 		return
 	}
 	snapshot.Files[idx].Version = cf.GetVersion()
+	snapshot.Files[idx].VersionName = cf.GetVersionName()
 	snapshot.Files[idx].Md5 = cf.GetMd5()
 	snapshot.Files[idx].Content = cf.GetContent()
 	snapshot.Files[idx].Ready = true
@@ -307,11 +309,11 @@ func helpHandler(w http.ResponseWriter, r *http.Request) {
 
 接口:
   GET /health    - 健康检查，初始拉取完成后返回 200
-  GET /config    - 返回当前生效配置快照(JSON): {clientId, files:[{namespace,fileGroup,fileName,version,md5,content,ready}]}
+  GET /config    - 返回当前生效配置快照(JSON): {clientId, files:[{namespace,fileGroup,fileName,version,versionName,md5,content,ready}]}
   GET /clientid  - 返回 SDK clientID (供验证脚本调用服务端 /maintain/v1/clients/event)
 
 验证脚本通过服务端 maintain 接口向本客户端 PUSH 配置生效查询，
-客户端通过 WatchClientEvents 长连接回 ACK (含 version/md5/applied)。
+客户端通过 WatchClientEvents 长连接回 ACK (含 version/version_name/md5/applied)。
 `)
 }
 

@@ -88,10 +88,10 @@ POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \
                      ▼                                               ▼
                 ┌──────────────────────────────────────────────────────────┐
                 │              verify-cloud.sh                            │
-                │  1. 读客户端 /clientid 与 /config (version/md5/content) │
+                │  1. 读客户端 /clientid 与 /config (version/versionName/md5/content) │
                 │  2. 调服务端 maintain 接口 PUSH 配置生效查询              │
                 │  3. 解析返回的 ACK content                              │
-                │  4. 断言 applied=true 且 version/md5/content 一致        │
+                │  4. 断言 applied=true 且 version/version_name/md5/content 一致        │
                 │  5. 加密文件 ACK 携带 encrypt_algo/data_key，            │
                 │     用 data_key 解密密文后断言 == 客户端生效明文          │
                 └──────────────────────────────────────────────────────────┘
@@ -113,7 +113,7 @@ POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \
 | `client.sh setup` 报"加密配置文件准备失败" | console 配置接口(`/config/v1/configfiles`，与 maintain 同端口)不可达，或 token 无配置写权限 |
 | `verify-cloud.sh` 报"无 clientEvent.content" | 服务端投递链路收敛延迟(客户端注册/节点缓存同步)或每轮首个事件被冷路径丢弃——脚本已自动重试(`PUSH_RETRY_MAX`/`PUSH_RETRY_INTERVAL`)；仍失败再查 WatchClientEvents 长连接(`client.log` 是否有 `stream established`)与服务端日志 |
 | `applied=false` | 客户端未订阅该配置文件(检查 `client.sh status` 的 version/md5 非空) |
-| version/md5 不一致 | 客户端在 PUSH 时配置刚变更，重跑 `verify-cloud.sh` |
+| version/md5/version_name 不一致 | 客户端在 PUSH 时配置刚变更，重跑 `verify-cloud.sh` |
 | 加密文件校验 5.1 失败 | 未先执行 `client.sh setup`(加密文件未就绪)，或客户端二进制为旧版本(不含加密元信息上报) |
 | 加密文件校验 5.2 失败 | 模板 polaris.yaml 未启用 `config.configFilter.chain: [crypto]`(客户端 `/config` content 为密文)、服务端下发的 `encrypt_algo` 不是 `AES`、openssl 未安装，或 PUSH 瞬间配置刚变更(重跑) |
 | `pack-logs.sh` 报"未找到任何日志文件" | 尚未执行 `client.sh start`/`verify-cloud.sh`，或已执行过 `clean.sh`(日志被清理) |
