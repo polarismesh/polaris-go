@@ -31,11 +31,12 @@ import (
 )
 
 // captureLogger 是一个捕获日志格式化结果的测试用 Logger，用于断言日志内容。
-// 所有级别方法都记录格式化后的字符串；IsLevelEnabled 返回 false，
-// 使得受 Debug 级别开关保护的日志不被触发，仅捕获无条件打印的 Info/Warn/Error 等。
+// 所有级别方法都记录格式化后的字符串；默认不启用受开关保护的 DEBUG，
+// 可以在开始分发前设置 debug，检查完整事件是否只在 DEBUG 输出。
 type captureLogger struct {
 	mu    sync.Mutex
 	lines []string
+	debug bool
 }
 
 func (l *captureLogger) record(format string, args ...interface{}) {
@@ -50,7 +51,7 @@ func (l *captureLogger) Infof(format string, args ...interface{})  { l.record(fo
 func (l *captureLogger) Warnf(format string, args ...interface{})  { l.record(format, args...) }
 func (l *captureLogger) Errorf(format string, args ...interface{}) { l.record(format, args...) }
 func (l *captureLogger) Fatalf(format string, args ...interface{}) { l.record(format, args...) }
-func (l *captureLogger) IsLevelEnabled(int) bool                   { return false }
+func (l *captureLogger) IsLevelEnabled(level int) bool             { return l.debug && level == log.DebugLog }
 func (l *captureLogger) SetLogLevel(int) error                     { return nil }
 
 // dump 返回捕获到的全部日志行拼接结果。

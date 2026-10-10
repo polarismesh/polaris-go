@@ -13,6 +13,7 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+// Package configuration 提供配置文件和配置分组的拉取、缓存与变更监听。
 package configuration
 
 import (
@@ -209,7 +210,12 @@ type defaultConfigGroup struct {
 	logCtx          *log.ContextLogger
 	lock            sync.RWMutex
 	changeListeners []model.OnConfigGroupChange
+	// cancelableListeners 和 nextListenerID 均由 lock 保护。
+	cancelableListeners map[uint64]model.OnConfigGroupChange
+	nextListenerID      uint64
 }
+
+var _ model.CancelableConfigGroupListener = (*defaultConfigGroup)(nil)
 
 func newDefaultConfigGroup(ns, group string, repo *ConfigGroupRepo) *defaultConfigGroup {
 	configGroup := &defaultConfigGroup{
@@ -231,6 +237,48 @@ func (c *defaultConfigGroup) AddChangeListener(cb model.OnConfigGroupChange) {
 	c.changeListeners = append(c.changeListeners, cb)
 }
 
+// AddChangeListenerWithCancel 注册独立的配置分组回调；nil 回调返回空操作取消函数。
+// 返回的取消函数可并发、重复调用，不等待已进入分发快照的回调，可在回调内取消自身。
+func (c *defaultConfigGroup) AddChangeListenerWithCancel(cb model.OnConfigGroupChange) (cancel func()) {
+	if cb == nil {
+		return func() {}
+	}
+
+	c.lock.Lock()
+	if c.cancelableListeners == nil {
+		c.cancelableListeners = make(map[uint64]model.OnConfigGroupChange)
+	}
+	c.nextListenerID++
+	id := c.nextListenerID
+	c.cancelableListeners[id] = cb
+	cancelableListenerCount := len(c.cancelableListeners)
+	listenerCount := len(c.changeListeners) + cancelableListenerCount
+	c.lock.Unlock()
+
+	// 数量在注册时持锁取快照，日志在锁外输出；通过 ID 与取消记录关联。
+	c.logCtx.GetBaseLogger().Infof("[Config][Group] 已注册配置分组监听器. namespace=%s, group=%s, "+
+		"listenerID=%d, cancelableListenerCount=%d, listenerCount=%d",
+		c.namespace, c.group, id, cancelableListenerCount, listenerCount)
+
+	// 仅捕获分组对象和 ID，取消函数本身不持有回调及其关联的调用方对象。
+	return func() {
+		c.lock.Lock()
+		if _, exists := c.cancelableListeners[id]; !exists {
+			c.lock.Unlock()
+			return
+		}
+		delete(c.cancelableListeners, id)
+		remainingCancelableListeners := len(c.cancelableListeners)
+		remainingListeners := len(c.changeListeners) + remainingCancelableListeners
+		c.lock.Unlock()
+
+		// 只记录实际摘除，数量在锁内取快照；日志写入在锁外，避免阻塞其他监听器操作。
+		c.logCtx.GetBaseLogger().Infof("[Config][Group] 已取消配置分组监听器. namespace=%s, group=%s, "+
+			"listenerID=%d, remainingCancelableListeners=%d, remainingListeners=%d",
+			c.namespace, c.group, id, remainingCancelableListeners, remainingListeners)
+	}
+}
+
 func (c *defaultConfigGroup) GetFiles() ([]*model.SimpleConfigFile, string, bool) {
 	val := c.repo.loadRemoteGroup()
 	if val == nil {
@@ -243,6 +291,8 @@ func (c *defaultConfigGroup) GetFiles() ([]*model.SimpleConfigFile, string, bool
 	return files, val.Revision, true
 }
 
+// repoChangeListener 将仓库变更同步分发给监听器；oldVal 可为 nil，newVal 必须非 nil。
+// 在锁内复制监听器、锁外调用，允许回调注册或取消监听器；本轮快照不受后续取消影响。
 func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGroupResponse,
 	newVal *configconnector.ConfigGroupResponse) {
 	event := &model.ConfigGroupChangeEvent{
@@ -252,21 +302,29 @@ func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGr
 		event.Before = oldVal.ReleaseFiles
 	}
 
+	c.lock.RLock()
+	listeners := make([]model.OnConfigGroupChange, 0, len(c.changeListeners)+len(c.cancelableListeners))
+	listeners = append(listeners, c.changeListeners...)
+	for _, listener := range c.cancelableListeners {
+		listeners = append(listeners, listener)
+	}
+	c.lock.RUnlock()
+
 	oldFileCount := 0
 	if oldVal != nil {
 		oldFileCount = len(oldVal.ReleaseFiles)
 	}
-	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d, event=%v",
-		c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles), event.GetString())
-	c.logCtx.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(c.changeListeners), info)
+	info := fmt.Sprintf("namespace=%s, group=%s, revision:%s, beforeFileCount=%d, afterFileCount=%d",
+		c.namespace, c.group, newVal.Revision, oldFileCount, len(newVal.ReleaseFiles))
+	c.logCtx.GetBaseLogger().Infof("[Config][Group] 配置分组变更监听触发. listenerCount=%d, %s", len(listeners), info)
+	if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
+		c.logCtx.GetBaseLogger().Debugf("[Config][Group] 配置分组变更详情. %s, event=%s", info, event.GetString())
+	}
 
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	for i := range c.changeListeners {
+	for i, listener := range listeners {
 		if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 			c.logCtx.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. %s", i, info)
 		}
-		c.changeListeners[i](event)
+		listener(event)
 	}
 }
