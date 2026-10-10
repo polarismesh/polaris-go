@@ -127,7 +127,7 @@ func (c *ConfigFileFlow) GetConfigFile(req *model.GetConfigFileRequest) (model.C
 		return configFile.(model.ConfigFile), nil
 	}
 
-	c.logCtx.GetBaseLogger().Infof("[ConfigFileFlow] 配置文件缓存未命中，开始创建. file=%s/%s/%s, subscribe=%v",
+	c.logCtx.GetBaseLogger().Debugf("[ConfigFileFlow] 配置文件缓存未命中，开始创建. file=%s/%s/%s, subscribe=%v",
 		req.Namespace, req.FileGroup, req.FileName, req.Subscribe)
 
 	// 使用分段写锁进行双重检查

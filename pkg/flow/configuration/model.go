@@ -125,9 +125,6 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 		newVersion = rf.GetVersion()
 	}
 
-	c.logCtx.GetBaseLogger().Infof("[Config] update content. file = %+v, encrypted = %v, newMd5 = %s, newVersion = %d",
-		configFileMetadata, encrypted, newMd5, newVersion)
-
 	var changeType model.ChangeType
 
 	if oldContent == NotExistedFileContent && newContent != NotExistedFileContent {
@@ -151,9 +148,10 @@ func (c *defaultConfigFile) repoChangeListener(configFileMetadata model.ConfigFi
 	}
 	c.content = newContent
 
-	c.logCtx.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, listenerCount=%d, "+
-		"chanListenerCount=%d", configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(),
-		configFileMetadata.GetFileName(), changeType, len(c.changeListeners), len(c.changeListenerChans))
+	c.logCtx.GetBaseLogger().Infof("[Config] 配置文件变更事件. file=%s/%s/%s, changeType=%v, encrypted=%v, "+
+		"newMd5=%s, newVersion=%d, listenerCount=%d, chanListenerCount=%d",
+		configFileMetadata.GetNamespace(), configFileMetadata.GetFileGroup(), configFileMetadata.GetFileName(),
+		changeType, encrypted, newMd5, newVersion, len(c.changeListeners), len(c.changeListenerChans))
 
 	c.fireChangeEvent(event)
 	return nil

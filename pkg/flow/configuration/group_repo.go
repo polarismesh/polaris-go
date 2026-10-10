@@ -71,7 +71,7 @@ func newConfigGroupRepo(globalCtx sdk.ValueContext, namespace, group string, mod
 		lastPullLogTime: time.Now(),
 	}
 
-	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
+	repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 创建配置分组仓库. namespace=%s, group=%s, mode=%v",
 		namespace, group, mode)
 
 	if err := repo.pull(); err != nil {
@@ -147,7 +147,7 @@ func (repo *ConfigGroupRepo) pull() error {
 				oldFileCount = len(remoteConfigFile.ReleaseFiles)
 			}
 
-			repo.logCtx.GetBaseLogger().Infof("[Config][Group] 拉取成功，比较版本. newRevision=%s, oldRevision=%s, "+
+			repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 拉取成功，比较版本. newRevision=%s, oldRevision=%s, "+
 				"newFileCount=%d, oldFileCount=%d, groupInfo:%s, hasCache=%v", response.Revision, oldRevision,
 				len(response.ReleaseFiles), oldFileCount, groupInfo, remoteConfigFile != nil)
 
@@ -211,8 +211,8 @@ func (repo *ConfigGroupRepo) fireChangeEvent(f *configconnector.ConfigGroupRespo
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
-	repo.logCtx.GetBaseLogger().Infof("[Config][Group] 触发分组变更事件. namespace=%s, group=%s, exist=%v, revision=%s, "+
-		"fileCount=%d, listenerCount=%d", repo.namespace, repo.groupName, exist, f.Revision, len(f.ReleaseFiles),
+	repo.logCtx.GetBaseLogger().Debugf("[Config][Group] 触发分组变更事件. namespace=%s, group=%s, exist=%v, revision=%s, "+
+		"fileCount=%d, repoListenerCount=%d", repo.namespace, repo.groupName, exist, f.Revision, len(f.ReleaseFiles),
 		len(repo.listeners))
 
 	// 在存储之前先取出变更前的旧值
