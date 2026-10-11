@@ -47,10 +47,6 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      # Execute vert check
-      # - name: vert check
-      #   run: bash vert.sh -install && bash vert.sh
-
       # Run tests
       - name: run tests
         continue-on-error: true

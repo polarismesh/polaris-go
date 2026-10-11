@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 AI 编码工具（Claude Code、Cursor、Codex、CodeBuddy 等）提供 polaris-go 的项目上下文与开发规范。
 
 ## 项目简介
 
@@ -20,16 +20,16 @@ polaris-go 是 [Polaris](https://github.com/polarismesh/polaris)（腾讯开源�
 
 流程：
 
-1. 使用 superpowers 提供的相关 skill 完成方案设计：
-   - `superpowers:brainstorming` — 探索用户意图、需求边界与设计空间（创意/新功能场景）
-   - `superpowers:systematic-debugging` — 系统化定位 bug 根因（疑难 bug 场景）
-   - `superpowers:writing-plans` — 把方案写成可执行的多步实施计划
+1. 用当前工具可用的方案设计手段（skill、subagent 或手动流程均可）完成方案设计：
+   - 需求探索：澄清用户意图、需求边界与设计空间（创意/新功能场景）
+   - 根因定位：系统化定位 bug 根因（疑难 bug 场景）
+   - 计划编写：把方案写成可执行的多步实施计划
 2. 方案文档及相关材料保存到 `specs/<YYYY-MM-DD-short-topic>/` 子目录下，按需求/bugfix 一个子目录隔离：
    - `specs/<YYYY-MM-DD-short-topic>/design.md` — 主设计文档，包含：背景、目标、非目标、方案对比、最终选型、影响面、实施步骤、回滚策略、测试计划
    - 同目录下放置该需求相关的其他材料：调研笔记、时序图、抓包/日志样本、PoC 代码片段、参考资料链接等
    - 例：`specs/2026-05-29-ratelimit-multi-windows/design.md`、`specs/2026-05-29-ratelimit-multi-windows/benchmark.md`
    - 注：`specs/` 已在 `.gitignore` 中（仅本地 / AI 工作目录使用，不入库），无需也不要提交到远程仓库
-3. 与用户确认方案后，再用 `superpowers:executing-plans` 或 `superpowers:test-driven-development` 进入实现阶段。
+3. 与用户确认方案后，再进入实现阶段：按计划的步骤逐步推进，或采用测试驱动（先写失败测试，再写实现）。
 
 小改动（typo、单文件局部修复、纯文档调整）可直接进入实现。
 
@@ -51,11 +51,6 @@ cd ./test
 export SDK_SUIT_TEST=ConsumerTestingSuite
 go test -timeout=120m -v -run "Test$"
 
-# 格式化代码和 import（提交前必须执行）
-bash import-format.sh
-
-# 版权头和其他检查（提交前必须执行）
-bash vert.sh
 ```
 
 ### 完整构建与测试
@@ -82,22 +77,13 @@ done
 
 # 代码检查（可用于 CI 或提交前检查）
 golangci-lint run          # 主 linter（配置见 .golangci.yml）
-revive -config revive.toml # 辅助 linter
-
-# 版权头、import 排序、go mod tidy 一体化检查
-bash vert.sh               # 检查会进行如下验证：
-                           # - 所有 .go 文件是否包含版权头
-                           # - import 排序和 go fmt
-                           # - go mod tidy 状态
-                           # - 禁止导入 x/net/context
-                           # - 禁止 math/rand 在非测试代码中使用
 ```
 
 ### 常见开发场景
 
 ```bash
-# 场景 1：修改了单个文件，想快速验证是否有编译错误和格式问题
-go build -v ./... && bash import-format.sh
+# 场景 1：修改了单个文件，想快速验证是否有编译错误
+go build -v ./...
 
 # 场景 2：写了新的测试，想快速验证测试通过
 cd ./test
@@ -276,7 +262,29 @@ go mod download
 go mod verify
 ```
 
-**提交前必须执行 `go mod tidy`，`vert.sh` 会检查此状态。**
+**提交前必须执行 `go mod tidy`**，保持 `go.mod` / `go.sum` 与代码一致（可用 `go mod tidy -diff` 只读自查）。
+
+## 日志上下文（logCtx）
+
+**打日志必须走 `log.ContextLogger`，不要用全局 logger**——否则多 SDKContext 场景下无法区分日志来自哪个实例。
+
+- **每个 SDKContext 持有一个 ContextLogger**：`sdk.NewValueContext()`（`pkg/sdk/context.go`）创建时顺带 `new(log.ContextLogger)` 并 `Init()`，内部聚合 13 个分类 logger：`base`、`network`、`cache`、`stat`、`statReport`、`detect`、`event`、`lossless`、`route`、`auth`、`rateLimit`、`circuitBreaker`、`audit`，各有一个 `GetXxxLogger()`。
+- **标签注入**：`InitContextByConfig` 初始化时调用 `globalCtx.GetContextLogger().AddFields(cfg.GetGlobal().GetClient().GetLabels())`，把 `global.client.labels` 作为固定字段注入全部 13 个 logger。zaplog 的实现是 `z.logger.With(fields...)`，最终输出为结构化 key-value 字段，据此区分不同 SDKContext。
+- **flow / 插件的取用方式**：插件在 `Init` 中 `g.logCtx = ctx.ValueCtx.GetContextLogger()`（例：`plugin/ratelimiter/reject/reject.go`）；flow 及内部函数以 `logCtx *log.ContextLogger` 参数逐层传递。打印时用 `logCtx.GetXxxLogger().Infof(...)`。
+- **nil 安全但有代价**：所有 getter 都有 `if c == nil { return GetBaseLogger() }` 兜底，不会 panic，但会退回全局 logger 从而丢失实例标签。新增插件务必在 `Init` 里完成赋值。
+- **实例身份**：`sdk.SDKToken`（`IP` / `PID` / `UID` / `Client` / `Version` / `PodName` / `HostName`）存在 `ContextKeyToken` 中，`plugin.InitContext.SDKContextID` 取 `token.UID`，`ValueContext.GetClientId()` 也返回它。
+
+两个已知的坑：
+
+1. `AddFields` 只在初始化时调用一次，且调用点在 `cfg.SetDefault()` 之前；SDKContext 创建完成后再往配置里补 labels 不会反映到日志。
+2. `initSelfLabels` 写入的 `CLIENT_IP` / `CLIENT_ID` / `CLIENT_VERSION` / `CLIENT_LANGUAGE` 是在 `AddFields` **之后**才设进 config 的，因此这几个默认标签不会出现在日志字段中（`global.client.id` 的兜底默认值取 `SDKToken.UID`，同样不会自动进日志）。需要在日志里区分实例时，必须在 `polaris.yaml` 显式配置：
+
+```yaml
+global:
+  client:
+    labels:
+      CLIENT_ID: my-service-a
+```
 
 ## 测试结构（`test/`）
 
@@ -312,34 +320,26 @@ go test -count=1 -timeout=10m -gcflags=all=-l \
 
 ## 代码风格
 
-项目通过 golangci-lint（`.golangci.yml`）和 revive（`revive.toml`）强制执行编码规范，关键约束如下：
+项目通过 golangci-lint（`.golangci.yml`）强制执行编码规范。revive 作为其中的一个 linter，规则写在同一份配置里。关键约束如下：
 
-- **版权头**：每个 `.go` 文件必须包含腾讯 BSD-3-Clause 版权声明头，`vert.sh` 脚本会对此进行检查
-- **import 排序**：通过 `import-format.sh` 调用 `goimports-reviser`，按标准库 → 外部依赖 → 内部包的顺序分组
-- **行长度限制**：revive 配置行最大长度为 180 字符
+- **版权头**：检查范围与 `.licenserc.yaml` 相同，只覆盖 `**/*.go`，排除 `**/*.pb.go`。这些文件必须包含 `Copyright (C) 2021 Tencent. All rights reserved.`，整段头与下文「License 文件头」一致。CI 由 `license-checker.yml` 按这个范围检查。非 Go 文件不放版权头
+- **import 排序**：`.golangci.yml` 的 `gci` 按标准库 → 第三方 → `github.com/polarismesh/polaris-go` 分组。`golangci-lint fmt` 写回文件，`golangci-lint run` 只检查、不改文件。排除 `test`、`examples`、`benchmark`、`pkg/model/pb`
+- **行长度限制**：`.golangci.yml` 里 revive 的 `line-length-limit` 为 480 字符
 - **导出命名**：遵循 Go 导出命名规范，常见缩写保持一致（如 `ID`、`URL`、`IP`、`API`）
 - **插件顺序**：`plugin.cfg` 中的插件执行顺序有意义，插件按声明顺序依次生效
-- **禁止通配符导入 x/net/context**：`vert.sh` 检查禁止在非 `.pb.go` 文件中导入 `x/net/context`
+- **禁止导入 `golang.org/x/net/context`**：使用标准库 `context`。`.pb.go` 除外
+- **禁止在非测试代码中导入 `math/rand`**：例外仅限 `scalable_rand.go`、`scalable_rand_test.go`、`benchmark/`、`*_suite.go`
 - **配置方式**：SDK 行为由工作目录下的 `polaris.yaml` 控制，也可通过代码方式配置
 
 ### 提交前检查清单
 
-每次提交前应执行：
+提交前请逐项确认：
 
-```bash
-# 1. 格式化 import 和代码
-bash import-format.sh
-
-# 2. 运行全面检查（包括版权头、lint、go mod tidy）
-bash vert.sh
-
-# 3. 如果修改了 plugin.cfg，需要重新生成代码
-go generate && go build -v ./...
-
-# 4. 提交时使用 -s flag 自动添加 Signed-off-by，并包含 Co-Authored-By
-# 格式参考全局 CLAUDE.md 的 Commit 规范
-git commit -s
-```
+- `go build ./...` 通过；改了 `plugin.cfg` 还要 `go generate && go build -v ./...`
+- 新增或改动的 `.go` 文件带 `Copyright (C) 2021 Tencent. All rights reserved.` 头，范围与 `.licenserc.yaml` 一致（`**/*.go`，排除 `**/*.pb.go`）；CI 由 `license-checker.yml` 检查
+- 格式与静态检查符合 `.golangci.yml`（含 revive、gofmt、gci）。CI 由 `golangci-lint.yml` 跑 `golangci-lint run --new-from-rev=origin/main`（v2.11.4）。本地可用 `golangci-lint fmt` 与 `golangci-lint run` 自查，本地需已有 `origin/main`
+- 每个 `go.mod` 的依赖整洁：本地用 `go mod tidy -diff`（只读，需 Go 1.23+）自查、`go mod tidy` 修复。仓库有 60 多个模块，根模块依赖变化会带动所有示例模块的 `go.sum`
+- `test/*.go` 中的测试函数写成 `func Test(`（leakcheck 约定），不要写 `func TestXxx`
 
 ## License 文件头
 
@@ -362,15 +362,17 @@ git commit -s
 // specific language governing permissions and limitations under the License.
 ```
 
-> 注意：`vert.sh` 脚本会通过 `git grep -L` 检查所有 `.go` 文件是否包含版权声明。新增文件即使不在已有路径，也必须按上述格式手工添加 license 头。
+> 版权头只加在 `.licenserc.yaml` 的检查范围内：`**/*.go`，排除 `**/*.pb.go`。`license-checker.yml` 使用同一范围。非 Go 文件不加这段头。新的 Go 文件整段按上面的模板书写。
+>
+> `license-checker.yml` 仍用 `apache/skywalking-eyes@v0.4.0` 读取 `.licenserc.yaml`。Go 的 `comment_style_id` 设为 `SlashSlash`，与上面的 `//` 行注释头匹配；`*.pb.go` 在 `paths-ignore` 中排除。
 
 ## CI
 
 GitHub Actions 在 `ubuntu-latest` 上运行，PR 需通过所有检查后方可合并。贡献代码请提交至 `main` 分支。三个 workflow 文件在 `.github/workflows/`：
 
-- **`testing.yml`（name: Testing）**：集成测试。matrix 跑 Go 1.19–1.24 六个版本，遍历 `test/suit.txt` 中所有套件（`continue-on-error: true`，套件失败不阻断 CI——部分套件有并发 flaky）。仅 `go=1.21` 版本上传覆盖率到 Codecov（`codecov/codecov-action@v4`，`flags: integration`），避免 6 个版本重复上传。覆盖率文件在 `test/coverage_<suite>.txt`，用 `-coverpkg` 指定被测范围为 `api/pkg/plugin`（集成测试代码在 `test/` 包，不加 `-coverpkg` 会显示 0%）。
+- **`testing.yml`（name: Testing）**：集成测试。matrix 跑 Go 1.19–1.24，遍历 `test/suit.txt` 中所有套件（`continue-on-error: true`，套件失败不阻断 CI——部分套件有并发 flaky）。仅 `go=1.21` 版本上传覆盖率到 Codecov（`codecov/codecov-action@v4`，`flags: integration`），避免 6 个版本重复上传。覆盖率文件在 `test/coverage_<suite>.txt`，用 `-coverpkg` 指定被测范围为 `api/pkg/plugin`（集成测试代码在 `test/` 包，不加 `-coverpkg` 会显示 0%）。
 - **`golangci-lint.yml`**：静态检查。单版本 Go 1.21，用 `golangci/golangci-lint-action@v9`（版本固定 `v2.11.4`），`--new-from-rev=origin/main` 只检查相对 main 的新增问题。
-- **`revive.yml`**：辅助 lint。单版本 Go 1.21，用 `morphy2k/revive-action@v2` + `revive.toml` 配置。
+- **`license-checker.yml`（name: License checker）**：版权头检查。用 `apache/skywalking-eyes@v0.4.0` 读取根目录 `.licenserc.yaml`，检查 `**/*.go`（排除 `**/*.pb.go`）。
 
 **Codecov 上传需要 `CODECOV_TOKEN` secret**（仓库 Settings → Secrets 配置）。公开仓库的受保护分支（`main`）上传要求 token，否则上传静默失败但不阻断 CI。
 
@@ -388,4 +390,25 @@ PR 模板要求标注影响的领域（Configuration、Docs、Performance、Nami
 
 ## Git 提交规范
 
+- Agent 创建 commit 之前，必须实际执行构建验证（`go build ./...`；改了 `plugin.cfg` 还要 `go generate`），通过后再 `git commit`
 - 每次提交必须包含 `Signed-off-by` 行，使用 `git commit -s`
+- 由 AI 协助产出的提交，正文末尾追加 `Co-Authored-By` 署名行，**带上实际使用的模型名称**；若该次产出使用了非默认的运行参数（如扩大上下文窗口），在模型名后用括号标注：
+
+```
+<改动说明>
+
+Signed-off-by: Your Name <you@example.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+```
+
+格式说明：`Co-Authored-By: <工具名/模型名> (<参数>) <noreply 邮箱>`。本仓库历史提交中的实际写法：
+
+```
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-Authored-By: kimi-k3 <noreply@moonshot.cn>
+Co-Authored-By: Cursor <cursoragent@cursor.com>
+Co-Authored-By: CodeBuddy Code
+```
+
+模型名与参数以当次会话实际使用的为准，不要凭记忆填；不确定时只写工具名。
