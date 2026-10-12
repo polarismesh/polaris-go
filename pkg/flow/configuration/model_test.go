@@ -49,7 +49,9 @@ func (l *captureLogger) Tracef(format string, args ...interface{}) { l.record(fo
 func (l *captureLogger) Debugf(format string, args ...interface{}) { l.record(format, args...) }
 func (l *captureLogger) Infof(format string, args ...interface{})  { l.record(format, args...) }
 func (l *captureLogger) Warnf(format string, args ...interface{})  { l.record(format, args...) }
-func (l *captureLogger) Errorf(format string, args ...interface{}) { l.record(format, args...) }
+func (l *captureLogger) Errorf(format string, args ...interface{}) {
+	l.record("ERROR "+format, args...)
+}
 func (l *captureLogger) Fatalf(format string, args ...interface{}) { l.record(format, args...) }
 func (l *captureLogger) IsLevelEnabled(level int) bool             { return l.debug && level == log.DebugLog }
 func (l *captureLogger) SetLogLevel(int) error                     { return nil }
@@ -179,9 +181,9 @@ func TestDefaultConfigFile_ListenerPanicRecovered(t *testing.T) {
 	cf := newTestConfigFile("old-value", remote)
 	panics := 0
 	var got []model.ConfigFileChangeEvent
-	cf.AddChangeListener(func(model.ConfigFileChangeEvent) {
+	cf.AddChangeListener(func(event model.ConfigFileChangeEvent) {
 		panics++
-		panic("file listener failure")
+		panic(event.NewValue)
 	})
 	cf.AddChangeListener(func(event model.ConfigFileChangeEvent) { got = append(got, event) })
 
@@ -213,7 +215,7 @@ func TestDefaultConfigFile_ListenerPanicRecovered(t *testing.T) {
 	if got := strings.Count(logs, "panic recovered"); got != 1 {
 		t.Errorf("panic recovered log count = %d, want 1: %s", got, logs)
 	}
-	for _, want := range []string{"file listener failure", "file=default/polaris-config-example/example.yaml",
+	for _, want := range []string{"panicType=string", "file=default/polaris-config-example/example.yaml",
 		"stack: goroutine"} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("panic log missing %q: %s", want, logs)

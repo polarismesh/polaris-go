@@ -321,7 +321,7 @@ func TestDefaultConfigGroup_ListenerPanicRecovered(t *testing.T) {
 	if got := strings.Count(logs, "panic recovered"); got != 2 {
 		t.Errorf("panic recovered log count = %d, want 2: %s", got, logs)
 	}
-	for _, want := range []string{"legacy listener failure", "index out of range", "group=test-group, revision:r1",
+	for _, want := range []string{"panicType=string", "group=test-group, revision:r1",
 		"stack: goroutine"} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("panic log missing %q: %s", want, logs)

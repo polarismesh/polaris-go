@@ -205,15 +205,21 @@ func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
 // invokeChangeListener 调用单个用户回调；回调 panic 时记录 ERROR 日志并返回，不影响后续监听器和宿主进程。
 func (c *defaultConfigFile) invokeChangeListener(index int, listener model.OnConfigFileChange,
 	event model.ConfigFileChangeEvent) {
+	returned := false
 	defer func() {
-		if r := recover(); r != nil {
-			c.logCtx.GetBaseLogger().Errorf("[Config] 配置文件变更监听器[%d] panic recovered. file=%s/%s/%s, "+
-				"changeType=%v: %v\nstack: %s", index, event.ConfigFileMetadata.GetNamespace(),
-				event.ConfigFileMetadata.GetFileGroup(), event.ConfigFileMetadata.GetFileName(), event.ChangeType,
-				r, string(debug.Stack()))
+		if returned {
+			return
 		}
+		// 旧版 panic(nil) 的 recover 返回 nil，必须通过正常返回标记识别异常。
+		r := recover()
+		// panic 值可能包含配置明文，只记录类型，不能格式化其内容。
+		c.logCtx.GetBaseLogger().Errorf("[Config] 配置文件变更监听器[%d] panic recovered. file=%s/%s/%s, "+
+			"changeType=%v, panicType=%T\nstack: %s", index, event.ConfigFileMetadata.GetNamespace(),
+			event.ConfigFileMetadata.GetFileGroup(), event.ConfigFileMetadata.GetFileName(), event.ChangeType,
+			r, string(debug.Stack()))
 	}()
 	listener(event)
+	returned = true
 }
 
 type defaultConfigGroup struct {
@@ -345,11 +351,17 @@ func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGr
 // invokeChangeListener 调用单个用户回调；回调 panic 时记录 ERROR 日志并返回，不影响后续监听器和宿主进程。
 func (c *defaultConfigGroup) invokeChangeListener(index int, listener model.OnConfigGroupChange,
 	event *model.ConfigGroupChangeEvent, info string) {
+	returned := false
 	defer func() {
-		if r := recover(); r != nil {
-			c.logCtx.GetBaseLogger().Errorf("[Config][Group] 分组变更监听器[%d] panic recovered. %s: %v\nstack: %s",
-				index, info, r, string(debug.Stack()))
+		if returned {
+			return
 		}
+		// 旧版 panic(nil) 的 recover 返回 nil，必须通过正常返回标记识别异常。
+		r := recover()
+		// panic 值可能包含配置明文，只记录类型，不能格式化其内容。
+		c.logCtx.GetBaseLogger().Errorf("[Config][Group] 分组变更监听器[%d] panic recovered. %s, panicType=%T\nstack: %s",
+			index, info, r, string(debug.Stack()))
 	}()
 	listener(event)
+	returned = true
 }
