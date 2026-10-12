@@ -15,9 +15,11 @@ angevil_test/
 style_tool/
 goimports-reviser
 
-.codebuddy/
-CODEBUDDY.md
+.agents/
 .claude/
+.codebuddy/
+.cursor/
+CODEBUDDY.md
 specs/
 
 /examples/**/provider
@@ -44,3 +46,4 @@ specs/
 /examples/**/dist/
 /examples/**/logs/
 /examples/**/log/
+
