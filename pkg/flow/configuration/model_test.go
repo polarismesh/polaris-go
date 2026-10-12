@@ -160,6 +160,70 @@ func TestRepoChangeListener_PlainNotLogContent(t *testing.T) {
 	}
 }
 
+// TestDefaultConfigFile_ListenerPanicRecovered 验证配置文件回调 panic 被恢复：变更正常完成，
+// 后续监听器照常收到事件，并记录一条带堆栈且不含配置内容的 ERROR 日志。
+func TestDefaultConfigFile_ListenerPanicRecovered(t *testing.T) {
+	orig := log.GetBaseLogger()
+	cl := &captureLogger{}
+	log.SetBaseLogger(cl)
+	defer log.SetBaseLogger(orig)
+
+	const newContent = "new-secret-value"
+	remote := &configconnector.ConfigFile{
+		Namespace: "default",
+		FileGroup: "polaris-config-example",
+		FileName:  "example.yaml",
+		Md5:       "md5-v2",
+		Version:   2,
+	}
+	cf := newTestConfigFile("old-value", remote)
+	panics := 0
+	var got []model.ConfigFileChangeEvent
+	cf.AddChangeListener(func(model.ConfigFileChangeEvent) {
+		panics++
+		panic("file listener failure")
+	})
+	cf.AddChangeListener(func(event model.ConfigFileChangeEvent) { got = append(got, event) })
+
+	metadata := &model.DefaultConfigFileMetadata{
+		Namespace: "default",
+		FileGroup: "polaris-config-example",
+		FileName:  "example.yaml",
+	}
+	var err error
+	escaped := func() (escaped interface{}) {
+		defer func() { escaped = recover() }()
+		err = cf.repoChangeListener(metadata, newContent, model.Persistent{})
+		return nil
+	}()
+	if escaped != nil {
+		t.Fatalf("listener panic escaped repoChangeListener: %v", escaped)
+	}
+	if err != nil {
+		t.Fatalf("repoChangeListener 返回错误: %v", err)
+	}
+	if panics != 1 || len(got) != 1 || got[0].NewValue != newContent || got[0].ChangeType != model.Modified {
+		t.Fatalf("panics = %d, later listener events = %+v, want one Modified event", panics, got)
+	}
+	if cf.content != newContent {
+		t.Errorf("content 未被正确更新: got %q, want %q", cf.content, newContent)
+	}
+
+	logs := cl.dump()
+	if got := strings.Count(logs, "panic recovered"); got != 1 {
+		t.Errorf("panic recovered log count = %d, want 1: %s", got, logs)
+	}
+	for _, want := range []string{"file listener failure", "file=default/polaris-config-example/example.yaml",
+		"stack: goroutine"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("panic log missing %q: %s", want, logs)
+		}
+	}
+	if strings.Contains(logs, newContent) {
+		t.Errorf("panic 日志不应包含配置内容:\n%s", logs)
+	}
+}
+
 // TestRepoChangeListener_DeletedRemoteNil 验证删除(NotExist)场景：loadRemoteFile() 返回 nil 时
 // 不 panic，encrypted/md5/version 取零值，日志不泄露原有内容，且 changeType 为 Deleted、content 被清空。
 func TestRepoChangeListener_DeletedRemoteNil(t *testing.T) {

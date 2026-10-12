@@ -140,6 +140,7 @@ type ConfigFile interface {
 	// AddChangeListenerWithChannel 增加配置文件变更监听器
 	AddChangeListenerWithChannel() <-chan ConfigFileChangeEvent
 	// AddChangeListener 增加配置文件变更监听器
+	// 回调 panic 时 SDK 会恢复并输出带堆栈的 ERROR 日志，继续通知其他监听器；panic 的回调本身可能只执行了一部分。
 	AddChangeListener(cb OnConfigFileChange)
 	// GetPersistent 获取文件持久化数据
 	GetPersistent() Persistent
@@ -184,7 +185,7 @@ type ConfigFileGroup interface {
 	GetFiles() ([]*SimpleConfigFile, string, bool)
 	// AddChangeListener 增加配置文件变更监听器
 	// 回调在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的同步。
-	// SDK 不恢复回调中的 panic，调用方应自行处理，避免异常终止进程。
+	// 回调 panic 时 SDK 会恢复并输出带堆栈的 ERROR 日志，继续通知其他监听器；panic 的回调本身可能只执行了一部分。
 	AddChangeListener(cb OnConfigGroupChange)
 }
 
@@ -197,7 +198,7 @@ type CancelableConfigGroupListener interface {
 	// 取消后创建的分发快照不再包含该回调；取消前已进入快照的回调仍可能在本轮被调用。
 	// 取消不等待正在执行的回调结束，可以在回调内取消自身。
 	// 回调在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的同步。
-	// SDK 不恢复回调中的 panic，调用方应自行处理，避免异常终止进程。
+	// 回调 panic 时 SDK 会恢复并输出带堆栈的 ERROR 日志，继续通知其他监听器；panic 的回调本身可能只执行了一部分。
 	AddChangeListenerWithCancel(cb OnConfigGroupChange) (cancel func())
 }
 

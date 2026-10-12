@@ -288,6 +288,59 @@ func TestDefaultConfigGroup_EventLogLevels(t *testing.T) {
 	}
 }
 
+// TestDefaultConfigGroup_ListenerPanicRecovered 验证两类监听器的 panic 被逐个恢复：分发正常返回，
+// 其余监听器照常收到事件，panic 的监听器保持注册且仍可取消，每次 panic 记录一条带堆栈的 ERROR 日志。
+func TestDefaultConfigGroup_ListenerPanicRecovered(t *testing.T) {
+	group, logger := newTestConfigGroup(t)
+	var legacyPanics, legacyCalls, cancelablePanics, cancelableCalls int
+	group.AddChangeListener(func(*model.ConfigGroupChangeEvent) {
+		legacyPanics++
+		panic("legacy listener failure")
+	})
+	group.AddChangeListener(func(*model.ConfigGroupChangeEvent) { legacyCalls++ })
+	cancelPanicking := group.AddChangeListenerWithCancel(func(event *model.ConfigGroupChangeEvent) {
+		cancelablePanics++
+		_ = event.After[0] // 事件不含文件，触发运行时越界 panic
+	})
+	cancelNormal := group.AddChangeListenerWithCancel(func(*model.ConfigGroupChangeEvent) { cancelableCalls++ })
+	defer cancelNormal()
+
+	dispatch := func() (escaped interface{}) {
+		defer func() { escaped = recover() }()
+		group.repoChangeListener(nil, &configconnector.ConfigGroupResponse{Revision: "r1"})
+		return nil
+	}
+	if escaped := dispatch(); escaped != nil {
+		t.Fatalf("listener panic escaped dispatch: %v", escaped)
+	}
+	if legacyPanics != 1 || legacyCalls != 1 || cancelablePanics != 1 || cancelableCalls != 1 {
+		t.Fatalf("calls after first dispatch = (%d, %d, %d, %d), want all 1",
+			legacyPanics, legacyCalls, cancelablePanics, cancelableCalls)
+	}
+	logs := logger.dump()
+	if got := strings.Count(logs, "panic recovered"); got != 2 {
+		t.Errorf("panic recovered log count = %d, want 2: %s", got, logs)
+	}
+	for _, want := range []string{"legacy listener failure", "index out of range", "group=test-group, revision:r1",
+		"stack: goroutine"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("panic log missing %q: %s", want, logs)
+		}
+	}
+
+	cancelPanicking()
+	if escaped := dispatch(); escaped != nil {
+		t.Fatalf("listener panic escaped second dispatch: %v", escaped)
+	}
+	if legacyPanics != 2 || legacyCalls != 2 || cancelablePanics != 1 || cancelableCalls != 2 {
+		t.Errorf("calls after canceling panicking listener = (%d, %d, %d, %d), want (2, 2, 1, 2)",
+			legacyPanics, legacyCalls, cancelablePanics, cancelableCalls)
+	}
+	if got := strings.Count(logger.dump(), "panic recovered"); got != 3 {
+		t.Errorf("panic recovered log count after second dispatch = %d, want 3", got)
+	}
+}
+
 // TestDefaultConfigGroup_SelfCancellation 验证回调内取消自身可完成且后续事件不再触发该回调。
 func TestDefaultConfigGroup_SelfCancellation(t *testing.T) {
 	group, _ := newTestConfigGroup(t)

@@ -18,6 +18,7 @@ package configuration
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"github.com/polarismesh/polaris-go/pkg/log"
@@ -197,8 +198,22 @@ func (c *defaultConfigFile) fireChangeEvent(event model.ConfigFileChangeEvent) {
 				i, event.ConfigFileMetadata.GetNamespace(), event.ConfigFileMetadata.GetFileGroup(),
 				event.ConfigFileMetadata.GetFileName())
 		}
-		changeListener(event)
+		c.invokeChangeListener(i, changeListener, event)
 	}
+}
+
+// invokeChangeListener 调用单个用户回调；回调 panic 时记录 ERROR 日志并返回，不影响后续监听器和宿主进程。
+func (c *defaultConfigFile) invokeChangeListener(index int, listener model.OnConfigFileChange,
+	event model.ConfigFileChangeEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logCtx.GetBaseLogger().Errorf("[Config] 配置文件变更监听器[%d] panic recovered. file=%s/%s/%s, "+
+				"changeType=%v: %v\nstack: %s", index, event.ConfigFileMetadata.GetNamespace(),
+				event.ConfigFileMetadata.GetFileGroup(), event.ConfigFileMetadata.GetFileName(), event.ChangeType,
+				r, string(debug.Stack()))
+		}
+	}()
+	listener(event)
 }
 
 type defaultConfigGroup struct {
@@ -323,6 +338,18 @@ func (c *defaultConfigGroup) repoChangeListener(oldVal *configconnector.ConfigGr
 		if c.logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
 			c.logCtx.GetBaseLogger().Debugf("[Config][Group] 调用分组变更监听器[%d]. %s", i, info)
 		}
-		listener(event)
+		c.invokeChangeListener(i, listener, event, info)
 	}
+}
+
+// invokeChangeListener 调用单个用户回调；回调 panic 时记录 ERROR 日志并返回，不影响后续监听器和宿主进程。
+func (c *defaultConfigGroup) invokeChangeListener(index int, listener model.OnConfigGroupChange,
+	event *model.ConfigGroupChangeEvent, info string) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logCtx.GetBaseLogger().Errorf("[Config][Group] 分组变更监听器[%d] panic recovered. %s: %v\nstack: %s",
+				index, info, r, string(debug.Stack()))
+		}
+	}()
+	listener(event)
 }
