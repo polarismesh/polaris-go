@@ -100,7 +100,7 @@ func (f *fixture) request(ctx context.Context, method, path string, body interfa
 func (f *fixture) prepare(ctx context.Context) error {
 	log.Printf("[SETUP] namespace=%s group=%s file=%s", f.namespace, f.group, fixtureFileName)
 	if err := f.request(ctx, http.MethodPost, "/config/v1/configfilegroups", map[string]string{
-		"namespace": f.namespace, "name": f.group, "comment": "CancelableConfigGroupListener E2E temporary group",
+		"namespace": f.namespace, "name": f.group, "comment": "CancelableConfigFileGroup E2E temporary group",
 	}); err != nil {
 		return err
 	}

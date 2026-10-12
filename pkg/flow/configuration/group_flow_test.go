@@ -88,16 +88,16 @@ func TestConfigGroupFlow_CancelableListeners(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get config group: %v", err)
 			}
-			listener, ok := group.(model.CancelableConfigGroupListener)
+			cg, ok := group.(model.CancelableConfigFileGroup)
 			if !ok {
 				t.Fatalf("returned group %T does not support cancelable listeners", group)
 			}
-			files, revision, exists := group.GetFiles()
+			files, revision, exists := cg.GetFiles()
 			if !exists || revision != "r1" || !reflect.DeepEqual(files, connector.response.ReleaseFiles) {
 				t.Fatalf("GetFiles() = (%v, %q, %v), want initial files at r1", files, revision, exists)
 			}
 			calls := 0
-			cancel := listener.AddChangeListenerWithCancel(func(*model.ConfigGroupChangeEvent) { calls++ })
+			cancel := cg.AddChangeListenerWithCancel(func(*model.ConfigGroupChangeEvent) { calls++ })
 			cached, err := tt.get(flow)
 			if err != nil {
 				t.Fatalf("get cached config group: %v", err)
@@ -105,7 +105,7 @@ func TestConfigGroupFlow_CancelableListeners(t *testing.T) {
 			if cached != group {
 				t.Fatal("cache hit returned a different config group")
 			}
-			if _, ok := cached.(model.CancelableConfigGroupListener); !ok {
+			if _, ok := cached.(model.CancelableConfigFileGroup); !ok {
 				t.Fatal("cached group lost cancelable listener capability")
 			}
 			wantReq := &configconnector.ConfigGroup{Namespace: "default", Group: "test-group", Mode: tt.mode}

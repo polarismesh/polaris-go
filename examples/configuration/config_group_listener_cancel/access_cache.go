@@ -91,11 +91,11 @@ func (f *configGroupFetcher) Fetch(ctx context.Context) error {
 		group.AddChangeListener(f.onConfigGroupChange)
 		close(f.stats.detached) // 对照组无取消能力；继续运行以检查真实的回调/对象泄漏。
 	} else {
-		listener, ok := group.(model.CancelableConfigGroupListener)
+		cg, ok := group.(model.CancelableConfigFileGroup)
 		if !ok {
-			return fmt.Errorf("SDK 返回 %T，不支持 CancelableConfigGroupListener", group)
+			return fmt.Errorf("SDK 返回 %T，不支持 CancelableConfigFileGroup", group)
 		}
-		cancel := listener.AddChangeListenerWithCancel(f.onConfigGroupChange)
+		cancel := cg.AddChangeListenerWithCancel(f.onConfigGroupChange)
 		detached := f.stats.detached
 		context.AfterFunc(ctx, func() {
 			cancel()

@@ -108,7 +108,7 @@ func (s *suite) initialize(ctx context.Context) error {
 		return err
 	}
 	s.group = group
-	if _, ok := group.(model.CancelableConfigGroupListener); !ok {
+	if _, ok := group.(model.CancelableConfigFileGroup); !ok {
 		return fmt.Errorf("FetchConfigGroup returned %T without cancelable capability", group)
 	}
 	getGroup, err := s.groups.GetConfigGroup(s.fixture.namespace, s.fixture.group)
@@ -457,13 +457,13 @@ func (s *suite) churn(ctx context.Context) error {
 
 // selfCancellation 验证真实仓库分发中自取消不会死锁，后续发布仍能抵达旧接口观察器。
 func (s *suite) selfCancellation(ctx context.Context) error {
-	listener := s.group.(model.CancelableConfigGroupListener)
+	cg := s.group.(model.CancelableConfigFileGroup)
 	stats := &fetcherStats{versions: make(map[uint64]int)}
 	canceled := make(chan struct{})
 	ready := make(chan struct{})
 	var cancel func()
 	var once sync.Once
-	cancel = listener.AddChangeListenerWithCancel(func(event *model.ConfigGroupChangeEvent) {
+	cancel = cg.AddChangeListenerWithCancel(func(event *model.ConfigGroupChangeEvent) {
 		<-ready
 		stats.record(event)
 		once.Do(func() { cancel(); close(canceled) })

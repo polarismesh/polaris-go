@@ -228,7 +228,7 @@ type defaultConfigGroup struct {
 	nextListenerID      uint64
 }
 
-var _ model.CancelableConfigGroupListener = (*defaultConfigGroup)(nil)
+var _ model.CancelableConfigFileGroup = (*defaultConfigGroup)(nil)
 
 func newDefaultConfigGroup(ns, group string, repo *ConfigGroupRepo) *defaultConfigGroup {
 	configGroup := &defaultConfigGroup{

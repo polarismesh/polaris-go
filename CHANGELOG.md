@@ -10,9 +10,10 @@
 
 #### 配置管理 / 可取消的配置分组监听（Configuration）
 
-- 新增 `model.CancelableConfigGroupListener` 能力接口，由 SDK 默认配置组对象实现。
-  `FetchConfigGroup` / `GetConfigGroup` 返回值可通过类型断言获得该能力，使用
-  `AddChangeListenerWithCancel` 注册 `model.OnConfigGroupChange` 回调并取得独立取消函数。
+- 新增 `model.CancelableConfigFileGroup` 接口：嵌入 `ConfigFileGroup` 并增加
+  `AddChangeListenerWithCancel`，由 SDK 默认配置组对象实现。`FetchConfigGroup` /
+  `GetConfigGroup` 返回值可通过类型断言转换为该接口，注册 `model.OnConfigGroupChange`
+  回调并取得独立取消函数。
   取消函数支持并发、重复调用和回调内自取消；传入 nil 回调时返回空操作取消函数。
 - 分组事件在锁内复制监听器快照、锁外调用回调。取消后创建的快照不再包含该监听器，
   已经进入快照的回调仍可能执行；取消函数不等待正在执行的回调结束。
@@ -22,8 +23,9 @@
 ### 日志与兼容性说明
 
 - `ConfigFileGroup`、旧 `AddChangeListener` 和回调类型的签名保持不变，外部实现与 mock
-  无需新增方法。新能力接口保留名称 `CancelableConfigGroupListener`，实现者是配置组，
-  单次注册由返回的取消函数管理；可取消监听器之间不保证调用顺序。
+  无需新增方法。`CancelableConfigFileGroup` 是可选能力，调用方应先类型断言，失败时回退到
+  旧接口；外部包装对象若要暴露该能力，需同时实现 `ConfigFileGroup` 的方法。
+  可取消监听器之间不保证调用顺序。
 - 回调仍在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的后续同步。
 - **回调 panic 不再终止进程**：配置文件监听器、配置分组的旧接口与可取消监听器，
   均由 SDK 逐个恢复回调中的 panic，输出一条带堆栈的 ERROR 日志（`panic recovered`），

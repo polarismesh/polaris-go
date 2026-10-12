@@ -6,7 +6,7 @@
 
 ## 1. 验证目标与代码入口
 
-这套 E2E 验证 `model.CancelableConfigGroupListener` 在缓存生命周期中的行为：缓存存活时正常收到配置组变更，停止后摘除自己的监听器，并释放方法值回调对旧缓存对象的引用，同时保持 SDK 配置组及其他监听器正常工作。
+这套 E2E 验证 `model.CancelableConfigFileGroup` 的可取消监听在缓存生命周期中的行为：缓存存活时正常收到配置组变更，停止后摘除自己的监听器，并释放方法值回调对旧缓存对象的引用，同时保持 SDK 配置组及其他监听器正常工作。
 
 相关文件分工如下：
 
@@ -148,7 +148,7 @@ HTTP 请求会校验状态码为 2xx、响应 JSON 可解析、业务码等于 `
 
 1. 调用 `publish` 发布第一份唯一内容，并取得服务端版本号。
 2. 调用公开 `FetchConfigGroup`，请求设置 `Subscribe: true`、`Mode: SDKMode`。
-3. 断言返回值支持 `model.CancelableConfigGroupListener`。
+3. 断言返回值支持 `model.CancelableConfigFileGroup`。
 4. 再调用公开 `GetConfigGroup`，断言返回对象与前一次相同。
 5. 通过旧 `AddChangeListener` 注册一个独立观察器 `observer`，整套测试期间保持它存活。
 6. 等待 `group.GetFiles()` 包含本轮 `listener.yaml`，且版本等于刚确认的基线版本。
@@ -262,7 +262,7 @@ generation: <本地发布序号>
 `Fetch` 首次取得共享配置组后注册方法值回调。在 `cancelable` 模式下，注册方式为：
 
 ```go
-cancel := listener.AddChangeListenerWithCancel(f.onConfigGroupChange)
+cancel := cg.AddChangeListenerWithCancel(f.onConfigGroupChange)
 detached := f.stats.detached
 context.AfterFunc(ctx, func() {
     cancel()

@@ -1,24 +1,24 @@
 # 可取消的配置分组监听器
 
-通过真实 Polaris 配置发布，验证 `model.CancelableConfigGroupListener` 的取消行为，以及缓存停止后回调所属对象能否被回收。示例模拟 access 的缓存生命周期；配置拉取、发布、分组缓存和事件分发使用本仓库 SDK。
+通过真实 Polaris 配置发布，验证 `model.CancelableConfigFileGroup` 的监听取消行为，以及缓存停止后回调所属对象能否被回收。示例模拟 access 的缓存生命周期；配置拉取、发布、分组缓存和事件分发使用本仓库 SDK。
 
 ## 接入方式
 
 `ConfigFileGroup` 原有接口保持不变。`FetchConfigGroup` 和 `GetConfigGroup` 返回的对象可通过类型断言获得可取消监听能力：
 
-`model.CancelableConfigGroupListener` 由配置组对象实现，用于注册 `model.OnConfigGroupChange` 回调。每次注册返回一个独立的取消函数，调用方用它管理该次注册的生命周期。
+`model.CancelableConfigFileGroup` 是支持可取消监听的配置分组，嵌入了 `ConfigFileGroup`：断言结果既能读取文件，也能注册 `model.OnConfigGroupChange` 回调。每次注册返回一个独立的取消函数，调用方用它管理该次注册的生命周期。
 
 ```go
 group, err := groupAPI.GetConfigGroup(namespace, groupName)
 if err != nil {
     return err
 }
-listener, ok := group.(model.CancelableConfigGroupListener)
+cg, ok := group.(model.CancelableConfigFileGroup)
 if !ok {
     return fmt.Errorf("config group does not support cancelable listeners")
 }
 
-cancel := listener.AddChangeListenerWithCancel(onGroupChange)
+cancel := cg.AddChangeListenerWithCancel(onGroupChange)
 defer cancel()
 ```
 
@@ -34,7 +34,7 @@ defer cancel()
 缓存场景应把监听器绑定到**缓存生命周期 context**。使用支持 `context.AfterFunc` 的 Go 版本时，可以这样注册：
 
 ```go
-cancel := listener.AddChangeListenerWithCancel(fetcher.onConfigGroupChange)
+cancel := cg.AddChangeListenerWithCancel(fetcher.onConfigGroupChange)
 context.AfterFunc(cacheCtx, cancel)
 ```
 
