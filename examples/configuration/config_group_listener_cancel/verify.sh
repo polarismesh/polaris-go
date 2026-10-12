@@ -9,5 +9,4 @@ go_command="${GO:-go}"
 "$go_command" build -race -o .build/config-group-listener-cancel .
 log_file=".logs/verify-$(date +%Y%m%d-%H%M%S)-$$.log"
 echo "E2E log: $script_dir/$log_file"
-exec 3>&1
 .build/config-group-listener-cancel "$@" 2>&1 | tee "$log_file"

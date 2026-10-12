@@ -183,6 +183,8 @@ type ConfigFileGroup interface {
 	// GetFiles
 	GetFiles() ([]*SimpleConfigFile, string, bool)
 	// AddChangeListener 增加配置文件变更监听器
+	// 回调在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的同步。
+	// SDK 不恢复回调中的 panic，调用方应自行处理，避免异常终止进程。
 	AddChangeListener(cb OnConfigGroupChange)
 }
 
@@ -193,6 +195,8 @@ type CancelableConfigGroupListener interface {
 	// cb 为 nil 时不注册监听器，返回安全的空操作函数；可取消监听器不保证调用顺序。
 	// 取消后创建的分发快照不再包含该回调；取消前已进入快照的回调仍可能在本轮被调用。
 	// 取消不等待正在执行的回调结束，可以在回调内取消自身。
+	// 回调在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的同步。
+	// SDK 不恢复回调中的 panic，调用方应自行处理，避免异常终止进程。
 	AddChangeListenerWithCancel(cb OnConfigGroupChange) (cancel func())
 }
 
