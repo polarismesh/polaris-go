@@ -6,6 +6,8 @@
 
 `ConfigFileGroup` 原有接口保持不变。`FetchConfigGroup` 和 `GetConfigGroup` 返回的对象可通过类型断言获得可取消监听能力：
 
+`model.CancelableConfigGroupListener` 由配置组对象实现，用于注册 `model.OnConfigGroupChange` 回调。每次注册返回一个独立的取消函数，调用方用它管理该次注册的生命周期。
+
 ```go
 group, err := groupAPI.GetConfigGroup(namespace, groupName)
 if err != nil {
@@ -109,6 +111,8 @@ token 仅从环境变量 `POLARIS_TOKEN` 读取。`verify.sh` 构建带 race 检
 SDK 基础日志 `polaris/log/base/polaris.log` 在 INFO 级别记录 `已注册配置分组监听器` 和 `已取消配置分组监听器`，可按同一组内的 `listenerID` 关联。缓存、过滤链、落盘及分层耗时等过程日志使用 DEBUG，完整配置组事件也只在 DEBUG 输出一次。运行阶段、回调和回收断言见 `.logs/verify-*.log`；详细说明见 [test.md](./test.md)。
 
 注册与取消保留 INFO，以便直接核对缓存换代时监听器是否成对释放。每个正常结束的监听器生命周期产生两条记录；大规模缓存部署应按缓存数量和 TTL 评估日志容量，换代越频繁，日志量越大。
+
+面向 SDK 升级的接口和日志兼容性说明见仓库根目录 [CHANGELOG.md](../../../CHANGELOG.md)。
 
 可以使用旧接口做泄漏对照，预期以非零状态退出并报告 `listener leak`：
 

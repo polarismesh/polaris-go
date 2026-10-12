@@ -4,6 +4,43 @@
 
 本项目所有重要的变更都必须记录在本文件中。
 
+## [Unreleased]
+
+### 添加的特性
+
+#### 配置管理 / 可取消的配置分组监听（Configuration）
+
+- 新增 `model.CancelableConfigGroupListener` 能力接口，由 SDK 默认配置组对象实现。
+  `FetchConfigGroup` / `GetConfigGroup` 返回值可通过类型断言获得该能力，使用
+  `AddChangeListenerWithCancel` 注册 `model.OnConfigGroupChange` 回调并取得独立取消函数。
+  取消函数支持并发、重复调用和回调内自取消；传入 nil 回调时返回空操作取消函数。
+- 分组事件在锁内复制监听器快照、锁外调用回调。取消后创建的快照不再包含该监听器，
+  已经进入快照的回调仍可能执行；取消函数不等待正在执行的回调结束。
+- 新增 [配置组监听取消示例](examples/configuration/config_group_listener_cancel/README.md)，
+  验证正常停止、停止超时、晚注册、TTL 换代和回调自取消，并提供旧接口泄漏对照。
+
+### 日志与兼容性说明
+
+- `ConfigFileGroup`、旧 `AddChangeListener` 和回调类型的签名保持不变，外部实现与 mock
+  无需新增方法。新能力接口保留名称 `CancelableConfigGroupListener`，实现者是配置组，
+  单次注册由返回的取消函数管理；可取消监听器之间不保证调用顺序。
+- 回调仍在 SDK 配置同步协程中同步执行，应快速返回；阻塞会延迟所有配置分组的后续同步。
+  SDK 不恢复回调中的 panic，调用方需自行处理可能的异常。
+- **注册和取消日志保留 INFO**：实际注册和首次成功摘除各输出一条记录，包含
+  `namespace`、`group`、`listenerID` 和监听器数量；重复取消与 nil 回调不产生额外记录。
+  若 N 个缓存各持有一个监听器，平均每 T 秒换代，日志量约为 `2 × N / T` 条/秒；
+  例如 1 万个缓存、TTL 为 6 分钟时约 56 条/秒，集中换代时还会有峰值。
+  升级前应结合实际缓存规模评估日志采集与存储容量。
+- 配置拉取的过程日志降为 DEBUG：文件仓库创建、过滤器链执行、分层耗时、正常缓存落盘、
+  版本比较和 `data no change`。INFO 保留拉取成功摘要及配置变更摘要，
+  配置不存在仍为 WARN，请求失败和异常响应仍为 ERROR。
+- `pull config file finished` 的 INFO 格式改为 `file / code / version / duration` 摘要，
+  完整响应元数据移至 DEBUG；原 `update content` 的类型相关上下文与
+  `newMd5 / newVersion / encrypted` 合并到 `配置文件变更事件` 中。
+  分组完整 Before/After JSON 仅在 DEBUG 的 `配置分组变更详情` 中每次事件输出一次。
+  依赖旧 INFO 文案、字段或 `data no change` 做采集和告警的规则需要同步调整，
+  排查拉取耗时或事件详情时可临时启用 DEBUG。
+
 ## [v1.7.3-snapshot] - 2026-08-20
 
 ### 添加的特性

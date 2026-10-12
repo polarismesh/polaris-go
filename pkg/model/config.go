@@ -188,8 +188,9 @@ type ConfigFileGroup interface {
 	AddChangeListener(cb OnConfigGroupChange)
 }
 
-// CancelableConfigGroupListener 支持取消注册的配置分组监听能力。
+// CancelableConfigGroupListener 是配置组提供的可取消监听注册能力接口。
 // FetchConfigGroup / GetConfigGroup 返回的 ConfigFileGroup 可通过类型断言获得该能力。
+// 配置组对象实现本接口，回调类型为 OnConfigGroupChange；每次注册通过返回的取消函数独立管理。
 type CancelableConfigGroupListener interface {
 	// AddChangeListenerWithCancel 注册独立的回调并返回并发安全、可重复调用的取消函数。
 	// cb 为 nil 时不注册监听器，返回安全的空操作函数；可取消监听器不保证调用顺序。
