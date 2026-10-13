@@ -164,8 +164,8 @@ func (c *Connector) GetConfigFile(configFile *configconnector.ConfigFile) (*conf
 
 	totalDuration := clock.GetClock().Now().Sub(totalStart)
 
-	// 打印详细耗时日志
-	c.logCtx.GetBaseLogger().Infof("[Config][Connector] GetConfigFile耗时统计 - file=%s/%s/%s, 总耗时=%dms, 等待就绪=%dms, 获取连接=%dms, 创建客户端=%dms, gRPC调用=%dms, 处理响应=%dms, connID=%s",
+	// 分层耗时仅用于 DEBUG 排障，INFO 拉取摘要由文件仓库统一输出。
+	c.logCtx.GetBaseLogger().Debugf("[Config][Connector] GetConfigFile耗时统计 - file=%s/%s/%s, 总耗时=%dms, 等待就绪=%dms, 获取连接=%dms, 创建客户端=%dms, gRPC调用=%dms, 处理响应=%dms, connID=%s",
 		configFile.Namespace, configFile.FileGroup, configFile.FileName,
 		totalDuration.Milliseconds(), waitDuration.Milliseconds(), connDuration.Milliseconds(),
 		grpcClientDuration.Milliseconds(), grpcCallDuration.Milliseconds(), handleDuration.Milliseconds(), conn.ConnID)

@@ -31,11 +31,12 @@ import (
 )
 
 // captureLogger 是一个捕获日志格式化结果的测试用 Logger，用于断言日志内容。
-// 所有级别方法都记录格式化后的字符串；IsLevelEnabled 返回 false，
-// 使得受 Debug 级别开关保护的日志不被触发，仅捕获无条件打印的 Info/Warn/Error 等。
+// 所有级别方法都记录格式化后的字符串；默认不启用受开关保护的 DEBUG，
+// 可以在开始分发前设置 debug，检查完整事件是否只在 DEBUG 输出。
 type captureLogger struct {
 	mu    sync.Mutex
 	lines []string
+	debug bool
 }
 
 func (l *captureLogger) record(format string, args ...interface{}) {
@@ -48,9 +49,11 @@ func (l *captureLogger) Tracef(format string, args ...interface{}) { l.record(fo
 func (l *captureLogger) Debugf(format string, args ...interface{}) { l.record(format, args...) }
 func (l *captureLogger) Infof(format string, args ...interface{})  { l.record(format, args...) }
 func (l *captureLogger) Warnf(format string, args ...interface{})  { l.record(format, args...) }
-func (l *captureLogger) Errorf(format string, args ...interface{}) { l.record(format, args...) }
+func (l *captureLogger) Errorf(format string, args ...interface{}) {
+	l.record("ERROR "+format, args...)
+}
 func (l *captureLogger) Fatalf(format string, args ...interface{}) { l.record(format, args...) }
-func (l *captureLogger) IsLevelEnabled(int) bool                   { return false }
+func (l *captureLogger) IsLevelEnabled(level int) bool             { return l.debug && level == log.DebugLog }
 func (l *captureLogger) SetLogLevel(int) error                     { return nil }
 
 // dump 返回捕获到的全部日志行拼接结果。
@@ -156,6 +159,70 @@ func TestRepoChangeListener_PlainNotLogContent(t *testing.T) {
 	}
 	if cf.content != newPlain {
 		t.Errorf("content 未被正确更新: got %q, want %q", cf.content, newPlain)
+	}
+}
+
+// TestDefaultConfigFile_ListenerPanicRecovered 验证配置文件回调 panic 被恢复：变更正常完成，
+// 后续监听器照常收到事件，并记录一条带堆栈且不含配置内容的 ERROR 日志。
+func TestDefaultConfigFile_ListenerPanicRecovered(t *testing.T) {
+	orig := log.GetBaseLogger()
+	cl := &captureLogger{}
+	log.SetBaseLogger(cl)
+	defer log.SetBaseLogger(orig)
+
+	const newContent = "new-secret-value"
+	remote := &configconnector.ConfigFile{
+		Namespace: "default",
+		FileGroup: "polaris-config-example",
+		FileName:  "example.yaml",
+		Md5:       "md5-v2",
+		Version:   2,
+	}
+	cf := newTestConfigFile("old-value", remote)
+	panics := 0
+	var got []model.ConfigFileChangeEvent
+	cf.AddChangeListener(func(event model.ConfigFileChangeEvent) {
+		panics++
+		panic(event.NewValue)
+	})
+	cf.AddChangeListener(func(event model.ConfigFileChangeEvent) { got = append(got, event) })
+
+	metadata := &model.DefaultConfigFileMetadata{
+		Namespace: "default",
+		FileGroup: "polaris-config-example",
+		FileName:  "example.yaml",
+	}
+	var err error
+	escaped := func() (escaped interface{}) {
+		defer func() { escaped = recover() }()
+		err = cf.repoChangeListener(metadata, newContent, model.Persistent{})
+		return nil
+	}()
+	if escaped != nil {
+		t.Fatalf("listener panic escaped repoChangeListener: %v", escaped)
+	}
+	if err != nil {
+		t.Fatalf("repoChangeListener 返回错误: %v", err)
+	}
+	if panics != 1 || len(got) != 1 || got[0].NewValue != newContent || got[0].ChangeType != model.Modified {
+		t.Fatalf("panics = %d, later listener events = %+v, want one Modified event", panics, got)
+	}
+	if cf.content != newContent {
+		t.Errorf("content 未被正确更新: got %q, want %q", cf.content, newContent)
+	}
+
+	logs := cl.dump()
+	if got := strings.Count(logs, "panic recovered"); got != 1 {
+		t.Errorf("panic recovered log count = %d, want 1: %s", got, logs)
+	}
+	for _, want := range []string{"panicType=string", "file=default/polaris-config-example/example.yaml",
+		"stack: goroutine"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("panic log missing %q: %s", want, logs)
+		}
+	}
+	if strings.Contains(logs, newContent) {
+		t.Errorf("panic 日志不应包含配置内容:\n%s", logs)
 	}
 }
 

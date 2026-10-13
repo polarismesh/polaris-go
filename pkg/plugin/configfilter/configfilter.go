@@ -33,7 +33,7 @@ type Chain []ConfigFilter
 // Execute 执行链中的过滤器
 func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHandleFunc, logCtx *log.ContextLogger) (*configconnector.ConfigFileResponse, error) {
 	chainStart := time.Now()
-	logCtx.GetBaseLogger().Infof("[Config] chain execute, chain length:%d, file=%s/%s/%s\n", len(c),
+	logCtx.GetBaseLogger().Debugf("[Config] chain execute, chain length:%d, file=%s/%s/%s", len(c),
 		configFile.Namespace, configFile.FileGroup, configFile.FileName)
 
 	for i := len(c) - 1; i >= 0; i-- {
@@ -48,7 +48,7 @@ func (c Chain) Execute(configFile *configconnector.ConfigFile, next ConfigFileHa
 	execDuration := time.Since(execStart)
 
 	totalDuration := time.Since(chainStart)
-	logCtx.GetBaseLogger().Infof("[Config][Chain] Execute耗时统计 - file=%s/%s/%s, 总耗时=%dms, 构建链=%dms, 执行链=%dms",
+	logCtx.GetBaseLogger().Debugf("[Config][Chain] Execute耗时统计 - file=%s/%s/%s, 总耗时=%dms, 构建链=%dms, 执行链=%dms",
 		configFile.Namespace, configFile.FileGroup, configFile.FileName, totalDuration.Milliseconds(),
 		buildChainDuration.Milliseconds(), execDuration.Milliseconds())
 

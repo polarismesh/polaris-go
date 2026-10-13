@@ -111,7 +111,7 @@ func (cph *CachePersistHandler) loadMessageFromAbsoluteFile(cacheFile string, me
 // DeleteCacheFromFile 删除缓存文件
 func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 	fileToDelete := filepath.Join(cph.persistDir, fileName)
-	cph.logCtx.GetBaseLogger().Infof("Start to delete cache for %s", fileToDelete)
+	cph.logCtx.GetBaseLogger().Debugf("Start to delete cache for %s", fileToDelete)
 	for retryTimes := 0; retryTimes <= cph.maxWriteRetry; retryTimes++ {
 		err := os.Remove(fileToDelete)
 		if err != nil {
@@ -119,12 +119,11 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 				cph.logCtx.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
 					" because %s, next retrytimes %d", fileToDelete, err.Error(), retryTimes)
 			} else {
-				cph.logCtx.GetBaseLogger().Warnf("Fail to delete cache file %s,"+
-					" error %s is not retryable, stop retrying", fileToDelete, err.Error())
+				cph.logCtx.GetBaseLogger().Debugf("Cache file %s is already absent, skip deleting", fileToDelete)
 				return
 			}
 		} else {
-			cph.logCtx.GetBaseLogger().Infof("Success to delete cache file %s", fileToDelete)
+			cph.logCtx.GetBaseLogger().Debugf("Success to delete cache file %s", fileToDelete)
 			return
 		}
 		time.Sleep(cph.retryInterval)
@@ -134,7 +133,7 @@ func (cph *CachePersistHandler) DeleteCacheFromFile(fileName string) {
 // SaveMessageToFile 按服务来进行缓存存储
 func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp interface{}) {
 	fileToAdd := filepath.Join(cph.persistDir, fileName)
-	cph.logCtx.GetBaseLogger().Infof("Start to save cache to file %s", fileToAdd)
+	cph.logCtx.GetBaseLogger().Debugf("Start to save cache to file %s", fileToAdd)
 	msg, err := json.Marshal(svcResp)
 	if err != nil {
 		cph.logCtx.GetBaseLogger().Warnf("Fail to marshal the service response for %s", fileToAdd)
@@ -148,7 +147,7 @@ func (cph *CachePersistHandler) SaveMessageToFile(fileName string, svcResp inter
 					" retry times: %v", fileToAdd, err.Error(), retryTimes)
 			}
 		} else {
-			cph.logCtx.GetBaseLogger().Infof("Success to write cache file %s", fileToAdd)
+			cph.logCtx.GetBaseLogger().Debugf("Success to write cache file %s", fileToAdd)
 			return
 		}
 		time.Sleep(cph.retryInterval)
