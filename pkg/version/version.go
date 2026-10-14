@@ -18,7 +18,7 @@ package version
 
 var (
 	// Version current version number
-	Version = "v1.7.2-snapshot"
+	Version = "v1.7.2"
 	// ClientType client type
 	ClientType = "polaris-go"
 )
