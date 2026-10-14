@@ -4,7 +4,7 @@
 
 本项目所有重要的变更都必须记录在本文件中。
 
-## [Unreleased]
+## [v1.7.2]
 
 ### 添加的特性
 
@@ -20,7 +20,7 @@
 - 新增 [配置组监听取消示例](examples/configuration/config_group_listener_cancel/README.md)，
   验证正常停止、停止超时、晚注册、TTL 换代和回调自取消，并提供旧接口泄漏对照。
 
-### 日志与兼容性说明
+##### 日志与兼容性说明
 
 - `ConfigFileGroup`、旧 `AddChangeListener` 和回调类型的签名保持不变，外部实现与 mock
   无需新增方法。`CancelableConfigFileGroup` 是可选能力，调用方应先类型断言，失败时回退到
@@ -48,9 +48,6 @@
   依赖旧 INFO 文案、字段或 `data no change` 做采集和告警的规则需要同步调整，
   排查拉取耗时或事件详情时可临时启用 DEBUG。
 
-## [v1.7.3-snapshot] - 2026-08-20
-
-### 添加的特性
 
 #### 配置管理 / 配置监听上报与生效查询（Configuration）
 
@@ -81,7 +78,7 @@
   「密文下发 → SDK crypto filter 解密 → 明文生效 → ACK 携带 `encrypt_algo`/`data_key`
   → 接收方 openssl 解密比对明文」全链路（本地用例 4 / 云上校验 5）。
 
-### 兼容性说明
+##### 兼容性说明
 
 - **proto 均为新增字段 / 接口**（`Client.config_enabled` / `Client.config_metadata` /
   `PolarisGRPC.WatchClientEvents`），双向兼容：新 SDK + 老服务端时 ReportClient 多带
@@ -97,9 +94,6 @@
   CMDB/location 查询容量。
 - **SDK 启动后新增一条 `WatchClientEvents` 长连接**（老服务端自动停连，无重试风暴）。
 
-## [v1.7.2-snapshot] - 2026-07-22
-
-### 添加的特性
 
 #### 可观测性 / 审计（Audit）
 
@@ -141,7 +135,7 @@
 - 补充 `maskTags` / `String` 与 `repoChangeListener`（加密 / 明文 / 删除场景）
   单元测试，并经 `-race` 验证。
 
-### 兼容性说明
+##### 兼容性说明
 
 - **审计日志为增量、opt-in 能力**：未在 `statReporter.chain` 中启用时行为完全
   不变，存量用户升级无感知、无额外后台 goroutine 或磁盘写入。
