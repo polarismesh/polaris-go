@@ -390,25 +390,7 @@ PR 模板要求标注影响的领域（Configuration、Docs、Performance、Nami
 
 ## Git 提交规范
 
+- 使用 conventional commits：`<type>: <subject>`，用英文。常用 type：`feat` / `fix` / `refactor` / `test` / `docs` / `chore`
 - Agent 创建 commit 之前，必须实际执行构建验证（`go build ./...`；改了 `plugin.cfg` 还要 `go generate`），通过后再 `git commit`
 - 每次提交必须包含 `Signed-off-by` 行，使用 `git commit -s`
-- 由 AI 协助产出的提交，正文末尾追加 `Co-Authored-By` 署名行，**带上实际使用的模型名称**；若该次产出使用了非默认的运行参数（如扩大上下文窗口），在模型名后用括号标注：
 
-```
-<改动说明>
-
-Signed-off-by: Your Name <you@example.com>
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-```
-
-格式说明：`Co-Authored-By: <工具名/模型名> (<参数>) <noreply 邮箱>`。本仓库历史提交中的实际写法：
-
-```
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-Co-Authored-By: kimi-k3 <noreply@moonshot.cn>
-Co-Authored-By: Cursor <cursoragent@cursor.com>
-Co-Authored-By: CodeBuddy Code
-```
-
-模型名与参数以当次会话实际使用的为准，不要凭记忆填；不确定时只写工具名。
