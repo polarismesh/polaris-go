@@ -109,6 +109,11 @@ type GetServiceRuleRequest struct {
 	model.GetServiceRuleRequest
 }
 
+// GetServiceContractRequest 查询 Service Contract 请求。
+type GetServiceContractRequest struct {
+	model.GetServiceContractRequest
+}
+
 // GetServicesRequest 获取批量服务请求
 type GetServicesRequest struct {
 	model.GetServicesRequest
@@ -157,6 +162,8 @@ type ConsumerAPI interface {
 	GetBlockAllowRule(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
 	// GetLane 同步获取泳道规则
 	GetLane(req *GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// GetServiceContract 同步获取服务契约。
+	GetServiceContract(req *GetServiceContractRequest) (*model.ServiceRuleResponse, error)
 	// UpdateServiceCallResult 上报服务调用结果
 	UpdateServiceCallResult(req *ServiceCallResult) error
 	// Destroy 销毁API，销毁后无法再进行调用

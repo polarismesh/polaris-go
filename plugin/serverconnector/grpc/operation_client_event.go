@@ -21,6 +21,8 @@ import (
 	"sync"
 
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/polarismesh/polaris-go/pkg/config"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -71,8 +73,21 @@ type clientEventStream struct {
 	conn      *network.Connection
 	opKey     string
 	cancel    context.CancelFunc
+	sendMu    sync.Mutex
+	sendDone  bool
 	closeOnce sync.Once
 	closeErr  error
+}
+
+// Send serializes SendMsg with CloseSend. gRPC client streams do not make
+// these two methods safe for concurrent use.
+func (s *clientEventStream) Send(event *apiservice.ClientEvent) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.sendDone {
+		return status.Error(codes.Canceled, "client event stream is closed")
+	}
+	return s.PolarisGRPC_WatchClientEventsClient.Send(event)
 }
 
 // Close 关闭双向流并释放底层连接与上下文。
@@ -81,11 +96,19 @@ type clientEventStream struct {
 // 首次调用记录 CloseSend 的错误并在后续调用中重复返回，便于调用方观测关流异常。
 func (s *clientEventStream) Close() error {
 	s.closeOnce.Do(func() {
-		s.closeErr = s.CloseSend()
+		// Cancel before waiting for sendMu. A backpressured Send can only be
+		// released by the stream context, so waiting for the mutex first can
+		// deadlock Close and SDKContext.Destroy.
 		if s.cancel != nil {
 			s.cancel()
 		}
-		s.conn.Release(s.opKey)
+		s.sendMu.Lock()
+		s.sendDone = true
+		s.closeErr = s.CloseSend()
+		s.sendMu.Unlock()
+		if s.conn != nil {
+			s.conn.Release(s.opKey)
+		}
 	})
 	return s.closeErr
 }

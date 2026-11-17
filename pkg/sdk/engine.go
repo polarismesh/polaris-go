@@ -96,9 +96,23 @@ type Engine interface {
 	// SyncGetServiceRule 同步获取服务规则
 	SyncGetServiceRule(
 		eventType model.EventType, req *model.GetServiceRuleRequest) (*model.ServiceRuleResponse, error)
+	// SyncReportServiceContract 同步上报服务契约
+	SyncReportServiceContract(
+		req *model.ReportServiceContractRequest) (*model.ReportServiceContractResponse, error)
+	// SyncGetServiceContract 同步查询服务契约
+	SyncGetServiceContract(
+		req *model.GetServiceContractRequest) (*model.ServiceRuleResponse, error)
 	// SyncGetServices 同步获取批量服务
 	SyncGetServices(
 		eventType model.EventType, req *model.GetServicesRequest) (*model.ServicesResponse, error)
+	// SyncGetSkill 获取单个 published Skill
+	SyncGetSkill(req *model.GetSkillRequest) (*model.SkillResource, error)
+	// SyncGetSkillList 获取 published Skill 列表
+	SyncGetSkillList(req *model.GetSkillListRequest) ([]*model.SkillResource, error)
+	// SyncDownloadSkill 下载 Skill
+	SyncDownloadSkill(req *model.SkillDownloadRequest) (*model.SkillPackage, error)
+	// SyncInstallSkill 安装 Skill
+	SyncInstallSkill(req *model.SkillInstallRequest) (*model.InstalledSkill, error)
 	// AsyncGetQuota 同步获取配额信息
 	AsyncGetQuota(request *model.QuotaRequestImpl) (*model.QuotaFutureImpl, error)
 	// ScheduleTask 启动定时任务

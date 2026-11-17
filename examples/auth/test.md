@@ -141,10 +141,10 @@ provider 侧 path 路由：`provider/main.go::runWebServer` 把 `http.HandleFunc
 | `update_rule <rule_json>` | PUT 更新一条规则（用例 2 把 smoke 规则的 caller_service 改成不命中值） | `PUT ${RULE_API_PATH}` |
 | `start_consumer` | 启动 consumer 进程（仅用例 1/2 使用），用 polaris-go SDK 走 GetOneInstance + 透传 X-Polaris-Caller-* Header | — |
 | `stop_consumer` | 用例 2 跑完立即关 consumer 释放 38080 端口；后续用例 3-28 不再用 consumer | — |
-| `do_consumer_call <expect> <label>` | 通过 consumer `/echo` 转发到 provider，校验 consumer 透传出来的 HTTP 状态码（命中→200 / 未命中→403；consumer demo 已修复成透传 provider 的状态码 + `X-Auth-Result/X-Auth-Info` Header） | — |
+| `do_consumer_call <expect> <label>` | 通过 consumer `/echo` 转发到 provider，校验 consumer 透传出来的 HTTP 状态码（命中→200 / 未命中→403）以及 `X-Auth-Result/X-Auth-Info` Header | — |
 | `verify_provider_caller_log <caller_svc>` | 在 provider 日志里查找 `[CALLER] caller service: ... service="<caller_svc>"`，验证 SDK 透传成功 | — |
 
-> **OpenAPI 端点**（以 polaris-server `apiserver/httpserver/discover/v1/server.go` 为准）：
+> **OpenAPI 端点**（以实际部署的 Polaris 服务端版本为准）：
 >
 > | 操作 | Method | Path |
 > | --- | --- | --- |
@@ -191,11 +191,14 @@ provider 侧 path 路由：`provider/main.go::runWebServer` 把 `http.HandleFunc
 > | 16 | `auth-it-allow-caller-meta-gold` | ALLOW_LIST | `/echo-caller-meta-gold` | CALLER_METADATA `tier` EXACT `gold` |
 > | 17 | `auth-it-allow-and-header-query` | ALLOW_LIST | `/echo-and-both` | **AND**: HEADER `user` EXACT `vip` ∧ QUERY `region` EXACT `cn` |
 >
-> 因 service 下存在 ALLOW_LIST 规则，`checkAllow` 内 `containsAllowList` 在 `matchMethod` 之前即被置 `true`（与 polaris-java 一致），**任何未命中规则的请求都会落入 `return !containsAllowList = false` → 403**。这就是用例 7/9/11/13/15/22/26/28 的共同根因。
+> service 下存在 ALLOW_LIST 规则时，**任何未命中规则的请求都会返回 403**。这是用例
+> 7/9/11/13/15/22/26/28 的共同预期。
 >
 > 用例 16-20 选 BLOCK_LIST + 命中：BLOCK 命中走 `return false` 直接出，不需要依赖 `containsAllowList` 的状态，能干净地断言"匹配类型本身工作正确"；其余 4 种 MatchString 类型 + 不命中 → 200 的语义由 `pkg/algorithm/match/match_test.go` 单测覆盖。
 >
-> 用例 21-26 把 BlockAllowConfig 7 种 MatchArgument 类型补齐：之前 4-13 已覆盖 HEADER / CALLER_SERVICE / CALLEE_METADATA / CUSTOM，19-24 再补 QUERY / CALLER_IP / CALLER_METADATA。CALLER_IP 用 REGEX 兜底 IPv4 / IPv6 loopback 差异。
+> 用例覆盖 BlockAllowConfig 的 7 种 MatchArgument 类型：HEADER、CALLER_SERVICE、
+> CALLEE_METADATA、CUSTOM、QUERY、CALLER_IP 和 CALLER_METADATA。CALLER_IP 使用
+> REGEX 兼容 IPv4 / IPv6 loopback 差异。
 >
 > 用例 27-28 验证 `matchArguments` 的 **AND 关系**：单条规则两个 MatchArgument，全部满足才整体命中。25 同时带 HEADER `user=vip` 与 QUERY `region=cn` → ALLOW 命中 → 200；26 仅带 HEADER 不带 QUERY → 第二个 MatchArgument 取空 ≠ `cn` → matchArguments 返回 false → 白名单未命中 + containsAllowList=true → 403。
 
@@ -505,12 +508,12 @@ POST 提交时 body 为 `[<rule_json>]` 数组，与北极星 OpenAPI 批量 API
 | 症状 | 可能原因 | 处置 |
 | --- | --- | --- |
 | `Provider 启动失败` | `polaris.yaml` 中 `serverConnector.addresses` 不可达 | 检查 `--polaris-server` 与 8091 端口连通性 |
-| OpenAPI 探测告警 HTTP=404 | 服务端实际端点不同 | 用 `--rule-api-path` 覆盖（参考 polaris-server `apiserver/httpserver/discover/v1/server.go::addBlockAllowAccess`） |
+| OpenAPI 探测告警 HTTP=404 | 服务端实际端点不同 | 用 `--rule-api-path` 覆盖为服务端实际使用的规则接口 |
 | `create_rule 返回非成功码 400201 existed resource` | 规则已被之前的运行创建 | 正常现象：`ensure_rule` 会用 `rule_exists_by_name` 提前探测；若仍触发，说明 path/policy 等 metadata 与新版本不一致，请去控制台删除该规则后重跑 |
 | 用例 6-28 创建规则成功但请求结果不符 | SDK 缓存还没拉到 | 加大 `--rule-cache-wait`（默认 5s）；或检查 `consumer.localCache.serviceRefreshInterval` |
-| 用例 8/9 期望 403 但拿到 200 | provider 上报的 Header key 与规则 key 大小写不一致（Go `http.Header` 自动 canonicalize 成 `User`） | 已修复：`provider/main.go::authenticate` 同时上报 canonical 与小写 key |
+| 用例 8/9 期望 403 但拿到 200 | provider 上报的 Header key 与规则 key 大小写不一致（Go `http.Header` 自动 canonicalize 成 `User`） | 检查 provider 是否同时上报 canonical 与小写 key |
 | 用例 11 期望 403 但拿到 200 | provider 没有透传 `X-Polaris-Caller-*` Header | 确认 main.go 解析逻辑（位于 `authenticate()` 函数） |
-| 用例 12 期望 200 但拿到 403 | provider 未通过 `--register-metadata` 上报 `env=prod`，或 Engine 未挂钩 `RegisterLocalInstanceMetadata` | 检查 `pkg/flow/sync_flow.go::doSyncRegister` 成功分支是否已调用登记，provider 日志里 `registerRequest` 是否包含 `Metadata` |
+| 用例 12 期望 200 但拿到 403 | provider 未通过 `--register-metadata` 上报 `env=prod` | 检查 provider 日志中的 `registerRequest` 是否包含 `Metadata` |
 | 用例 13 期望 403 但拿到 200 | 用例 12 的 env=prod 规则被错误地不带 `api.path` 限定，泄漏到了用例 13 的 path 上 | 确认服务端那条规则真带 `api.path=/echo-callee-prod`；可用 `GET ${RULE_API_PATH}?namespace=&service=&offset=0&limit=100` 列出后核对；老版本规则可能没有 path，需在控制台删除后由本脚本重建 |
 | 用例 14 期望 200 但拿到 403 | provider 未识别 `X-Custom-Arg-<Key>` Header 或 canonical 大小写问题 | 检查 `provider/main.go::authenticate` 对 `X-Custom-Arg-` 前缀的处理 |
 | 用例 16（REGEX）期望 403 但拿到 200 | 正则写错或未转义 `$`（shell 变量插值） | 规则 JSON 提交后用控制台核对原文；脚本内已 `\$` 转义；可改用 `^bad-foo\$` 完整 EXACT 风格做对比验证 |

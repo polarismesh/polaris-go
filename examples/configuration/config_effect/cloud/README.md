@@ -82,7 +82,7 @@ POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \
                 │ (config-effect│   WatchClientEvents(WATCH)  │              │
                 │   -demo)      │ ◄──────────────────────────► │  Polaris     │
                 │               │   PUSH ──────────────────►  │  服务端      │
-                │ 订阅配置文件   │   ◄──────────────── ACK     │  (商业版)    │
+                │ 订阅配置文件   │   ◄──────────────── ACK     │              │
                 └────┬──────────┘                             └──────┬───────┘
                      │ /clientid /config                             │
                      ▼                                               ▼
@@ -99,7 +99,7 @@ POLARIS_TOKEN=xxx ./verify-cloud.sh --polaris-server <服务端地址> \
 
 ## 前置条件
 
-1. 北极星服务端(商业版)已启动，且已实现 `WatchClientEvents` 接口
+1. 北极星服务端已启动，且支持 `WatchClientEvents`
 2. 服务端 maintain HTTP 端口可达(默认 `8090`，可用 `--maintain-port` 指定)
 3. 云节点有执行权限与 `curl`/`python3`/`openssl`(`verify-cloud.sh` 解析 JSON 与解密加密 ACK 依赖)
 4. 配置文件组 `polaris-config-example` 已存在或客户端有创建权限

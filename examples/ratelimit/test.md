@@ -125,7 +125,7 @@ global:
 3. Flush 失败（`SyncGetOneInstance` 拿不到实例 / HTTP timeout）→ **整个 batch 丢弃**，无缓存重试
 4. Provider 进程退出时 SDK `Destroy()` 触发同步 flush，把队列残留事件发出（最多 3 次重试）
 
-⚠️ 本地开发环境下 `polaris.pushgateway` 实例的注册 IP 可能是云端内网（如 30.x.x.x），客户端不可达时大量 batch 会被丢弃；用例 9.1/9.2 通过 mock server 规避这个问题，9.3 用于真实链路演示。
+⚠️ 本地环境下 `polaris.pushgateway` 的注册地址可能不可达，此时 batch 可能发送失败；用例 9.1/9.2 通过 mock server 验证事件生成，9.3 用于真实服务发现链路演示。
 
 ---
 
@@ -429,20 +429,20 @@ curl → consumer:18191/slow?ms=N → provider:18181/slow (sleep N ms, defer fut
 | 原理 | 验证规则不是"用一次就废"，sleep 后 limiter quota 重置，前 1~2 窗口 burst 全过，后续窗口必触发限流 |
 | 预期 | `limited ≥ 2`（4 窗口里至少 2 个事件证明规则未静音）|
 | 判定 | `limited ≥ 2 && other == 0 && SDK 日志含 type=GLOBAL` → PASS |
-| 备注 | 阈值从原 `limited ≥ 4`（每窗口至少 1）放宽到 `limited ≥ 2`（4 窗口里至少 2），容忍前期 burst |
+| 备注 | 4 个窗口中至少 2 个触发限流即可，容忍前期 burst |
 
 ### 用例 6.3 — 多实例共享配额（核心语义）
 
 | 项 | 内容 |
 |-----|------|
 | 操作 | 直接打 A:18185 并发 5 + B:18186 并发 5，连续 **8 窗口**（共 80 次） |
-| 原理 | 分布式限流"先消费后结算"：每个 SDK 实例本地 atomic 扣减 tokenLeft，异步上报 limiter；多实例并发时各自基于过期视图放行 → 单窗口短暂超 1~3 倍阈值（**polaris-limiter 服务端 stat 日志亲自记录** passed=8~12 而 threshold=4）|
+| 原理 | 分布式限流采用先消费后结算；多实例并发时可能基于短暂过期的配额视图放行，因此单窗口允许短时超过阈值 |
 | 预期 | GLOBAL：`ok ≤ 60`（LOCAL 下界 64 - MAX=4，留余量）、`limited ≥ 8` |
-| 反例 | LOCAL 退化：`ok = 8*2*MAX = 64`（确定值），明显高于 GLOBAL 实测的 30~56 |
+| 反例 | LOCAL 退化：`ok = 8*2*MAX = 64`，明显高于 GLOBAL 正常范围 |
 | 判定 | `ok ≤ 60 && limited ≥ 8 && other == 0 && SDK 日志含 type=GLOBAL` → PASS |
 | 二次校验 | grep `provider-qps-global-{a,b}/polaris/log/ratelimit/polaris-ratelimit.log` 中的 `type=GLOBAL` 行（INFO 级别，无需 --debug），结构性证明规则按 GLOBAL 加载 |
 | 备注 | `ok ≥ 64`：完全退化为 LOCAL，几乎可断定 polaris.limiter 没真正接入；`60 < ok < 64`：灰区，limiter 推送延迟过大 |
-| 设计依据 | 不再要求 `ok ≤ N*MAX`（严格上界），因为分布式限流允许预消费导致瞬时超限；改为"GLOBAL 至少节省 MAX 个请求 + 日志结构校验"双重判定 |
+| 判定依据 | 分布式限流允许预消费导致瞬时超限，因此使用“GLOBAL 至少节省 MAX 个请求 + 日志结构校验”双重判定 |
 
 ### 用例 6.3.5 — GLOBAL 稳态精准验证（对照 6.3 的 burst 场景）
 
@@ -600,7 +600,7 @@ provider 的 `polaris.yaml` 中 `eventReporter.enable: true`，pushgateway 插�
 | 环境变量 | 设置 | 行为 |
 |----------|------|------|
 | `POLARIS_EVENT_ADDR=127.0.0.1:19090` | 用例 9.1/9.2 | SDK 直接 POST 到 mock server，绕过服务发现 |
-| `POLARIS_EVENT_ADDR=`（空串） | 用例 9.3 | SDK 走服务发现拉 `Polaris/polaris.pushgateway` 实例，推到真实云端 |
+| `POLARIS_EVENT_ADDR=`（空串） | 用例 9.3 | SDK 通过服务发现获取 `Polaris/polaris.pushgateway` 实例并推送事件 |
 
 ### 事件触发原理
 
@@ -636,13 +636,15 @@ provider 的 `polaris.yaml` 中 `eventReporter.enable: true`，pushgateway 插�
 
 | 项 | 内容 |
 |-----|------|
-| 目的 | 与 9.1/9.2 互补：让 SDK 走服务发现真实推送到云端 pushgateway，便于在 `/data/pushgateway-data/polaris-client-event.log` 看到本次测试产生的事件，做端到端对账 |
+| 目的 | 与 9.1/9.2 互补：让 SDK 通过服务发现向 pushgateway 上报事件，便于在服务端日志中核对本次测试产生的事件 |
 | 操作 | provider:18203 发 6 次请求触发限流 → 等 2s → 发 1 次触发恢复 → 等 4s 让 SDK flush |
 | 必过断言 | SDK 端 `polaris/log/event/polaris-event.log` 中观察到至少 1 条 `ReportEvent called.*RateLimitStart` 和 1 条 `ReportEvent called.*RateLimitEnd` |
-| 告知信息 | grep 同一日志的 `request success` 与 `request failed` 行数：成功表示远程 pushgateway 收到事件；失败（本地 macOS 常见）只打印告知，不影响判定 |
-| 判定 | SDK 端触发了 ReportEvent → PASS（即使 Flush 失败也判 PASS，因为这是环境问题非代码问题） |
+| 告知信息 | grep 同一日志的 `request success` 与 `request failed` 行数：成功表示远程 pushgateway 收到事件；失败只打印告知，不影响判定 |
+| 判定 | SDK 端触发了 ReportEvent 即 PASS；Flush 是否成功取决于运行环境是否可达 pushgateway |
 
-> **设计权衡**：9.3 不强制要求事件到达远程，因为 `polaris.pushgateway` 实例的注册 IP 在客户端通常是云端内网不可达。如果运行环境（如同一 K8s 集群内）实际能连通，PASS 描述会显示"Flush 成功 N 次"，可登录云端 pushgateway 查看事件日志。
+> **设计权衡**：9.3 不强制要求事件到达远程，因为 `polaris.pushgateway`
+> 的注册地址在部分环境中不可达。如果运行环境可以连通，PASS 描述会显示
+> "Flush 成功 N 次"，可在 pushgateway 中查看事件日志。
 
 ---
 
@@ -667,9 +669,9 @@ provider 的 `polaris.yaml` 中 `eventReporter.enable: true`，pushgateway 插�
 | 3.1 出现 `200 > 2` | SDK 尚未拉到规则（脚本预留了 4s，检查网络） |
 | 3.2 单发 429 | 上批请求未 Release → 检查 `defer future.Release()` |
 | 6.3 `ok > 24` | polaris.limiter 不可达 → FAILOVER_LOCAL 退化为各自独享 |
-| 7.1 status=200 | 窗口跨秒（已用合并策略修复）；或规则不存在 |
-| 8.1 `callee_namespace=""` | label supplier 误用 `EmptyInstanceGauge.GetNamespace()`（已修复为 `val.Namespace`） |
-| 8.1 `limit=0` | 请求被 LB 分散到其他用例的同服务 provider（已修复为独立服务名 `MetricsRatelimitEchoServer`） |
+| 7.1 status=200 | 窗口跨秒或规则不存在；检查规则是否生效 |
+| 8.1 `callee_namespace=""` | 检查 label supplier 是否正确使用实例的 namespace |
+| 8.1 `limit=0` | 检查 metrics 用例是否使用独立服务名 `MetricsRatelimitEchoServer`，避免请求被负载均衡到其他用例的同名 provider |
 | 8.1 端口不可达 | 需至少一次 GetQuota 调用后 SDK 才 prepare registry |
 
 调用 `--keep` 保留进程和日志便于排查；`./cleanup.sh -f` 一键清理。

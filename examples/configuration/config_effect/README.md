@@ -15,7 +15,7 @@
                 │  (polaris-go)   │   WatchClientEvents(WATCH)  │              │
                 │                 │ ◄──────────────────────────► │  Polaris     │
                 │  订阅配置文件    │   PUSH ──────────────────►  │  服务端      │
-                │                 │   ◄──────────────── ACK     │  (商业版)    │
+                │                 │   ◄──────────────── ACK     │              │
                 └────────┬────────┘                             └──────┬───────┘
                          │ /config /clientid                          │
                          ▼                                            ▼
@@ -34,14 +34,14 @@
 
 派生的第 1 个文件（`-1.yaml`）作为**加密配置**参与验证，覆盖「密文下发 → SDK crypto filter 解密 → 明文生效 → ACK 应答」的完整链路。
 
-- **创建方式**：polaris-go SDK 的 `CreateConfigFile`/`UpdateConfigFile` 不携带 `Encrypted`/`Tags`（`transferToConfigFile` 仅映射 `namespace/group/name/content`），无法创建加密配置。因此脚本改用服务端 console HTTP 接口 `POST /config/v1/configfiles`（body 带 `encrypted:true, encrypt_algo:"AES"`）创建，再 `POST /config/v1/configfiles/release` 发布。
+- **创建方式**：polaris-go SDK 的 `CreateConfigFile`/`UpdateConfigFile` 不提供加密配置字段，因此脚本改用服务端 console HTTP 接口 `POST /config/v1/configfiles`（body 带 `encrypted:true, encrypt_algo:"AES"`）创建，再 `POST /config/v1/configfiles/release` 发布。
 - **客户端解密**：crypto/aes filter 需显式挂链才生效——`config.configFilter.chain` 默认为空链，不解密时 `GetContent()` 返回密文。示例 `polaris.yaml` 已配置 `chain: [crypto]`（默认启用 AES/RSA 条目，非 agent 模式下生效），`run` 模式订阅到加密的 `-1.yaml` 会自动解密，`GetContent()` 返回明文。
 - **一致性**：生效查询校验比对 `applied/version/version_name/md5`。ACK 回带的 `content` 为**源内容（密文）**、`md5` 为源内容摘要，与客户端 `/config` 快照的 `md5` 同源（同为服务端密文摘要），因此加密与非加密文件的校验逻辑一致，脚本无需特判。
 - **ACK 加密元信息**：加密配置的 ACK 额外携带 `encrypted:true`、`encrypt_algo`（如 `AES`）与 `data_key`（查询方 RSA 公钥加密后的对称密钥）。PUSH 需下发 `public_key`（与 GetConfigFile 对称）；脚本用例 4 用查询私钥解开 `data_key` 后再 AES 解密密文，断言等于明文基线。
 
 ## 前置条件
 
-1. 北极星服务端（Polaris Server **商业版**）已启动，且已更新含 `WatchClientEvents` 逻辑的版本
+1. 北极星服务端已启动，且支持 `WatchClientEvents`
 2. Go 环境已安装
 3. `python3` 可用（脚本解析 JSON 依赖）、`openssl` 可用（用例 4.2 解密 ACK 密文依赖）
 4. 服务端 maintain HTTP 端口可达（默认 `8090`，可用 `--maintain-port` 指定）
@@ -114,7 +114,7 @@ chmod +x config-effect-test.sh
 
 | 现象 | 可能原因 |
 |------|----------|
-| `undefined: apiservice.ClientEvent` 编译错误 | example go.mod 未 `replace specification` 到 main 分支（见 go.mod 注释） |
+| `undefined: apiservice.ClientEvent` 编译错误 | 示例依赖的 specification 版本过旧；升级 specification 或 SDK 依赖 |
 | 步骤 1 报 `openssl 未安装` | 用例 4.2 依赖 openssl 解密 ACK 密文，请先安装 |
 | ACK 为空 / `NotFoundResource` | 客户端未通过 ReportClient 上报 clientID，或 WatchClientEvents 长连接未建立（查 client.log） |
 | 响应有 `client` 但无 `clientEvent` | 服务端投递链路收敛延迟（客户端注册/节点缓存同步）或每轮首个事件被冷路径丢弃；脚本已自动重试（`PUSH_RETRY_MAX`/`PUSH_RETRY_INTERVAL`），仍失败则查服务端日志 |

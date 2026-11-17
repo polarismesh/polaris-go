@@ -4,6 +4,24 @@
 
 本项目所有重要的变更都必须记录在本文件中。
 
+## [Unreleased]
+
+### 新增特性
+
+- **AI Agent Registry**：新增 AI Agent、MCP 和 Skill 相关协议模型；Consumer
+  发现响应新增 `ServiceType`、`ServiceRevision` 和 `ExtendedMetadata`。
+- **Agent/MCP 实例注册**：支持标准 AI Agent 与 MCP 实例 metadata，并可与普通
+  服务发现、路由和负载均衡共用现有 Provider/Consumer 链路。
+- **Skill Registry**：新增 `SkillAPI`，支持 published Skill 查询、分页列表、
+  Markdown/ZIP 下载、安全解压、安装、本地持久化和网络异常 fallback。
+- **Service Contract**：新增 `ProviderAPI.ReportServiceContract` 和
+  `ConsumerAPI.GetServiceContract`，并提供可选的 Provider 上报开关。
+- **MCP metadata**：新增无状态 MCP metadata helper，支持
+  `mcp-streamable-http`、`mcp-sse` 和 `mcp-stdio` 校验。
+- **实例类型指标**：`ServiceCallResult` 新增 `InstanceType`，Prometheus 和审计
+  指标增加 `callee_instance_type=microservice|mcp|a2a` 维度。
+- **示例**：新增 AI Registry Agent、MCP 和 Skill 示例及真实服务端 E2E 脚本。
+
 ## [v1.7.2]
 
 ### 添加的特性

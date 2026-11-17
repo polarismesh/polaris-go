@@ -80,6 +80,10 @@ type ProviderConfig interface {
 	GetLossless() LosslessConfig
 	// GetAuth 获取服务鉴权配置
 	GetAuth() AuthenticatorConfig
+	// IsReportServiceContractEnable reports whether Service Contract APIs are enabled.
+	IsReportServiceContractEnable() bool
+	// SetReportServiceContractEnable enables or disables Service Contract APIs.
+	SetReportServiceContractEnable(bool)
 }
 
 // ConfigFileConfig 配置中心的配置.
@@ -573,6 +577,8 @@ type Configuration interface {
 	GetProvider() ProviderConfig
 	// GetConfigFile config前缀开头的所有配置项
 	GetConfigFile() ConfigFileConfig
+	// GetSkill skill前缀开头的所有配置项
+	GetSkill() SkillConfig
 }
 
 // When when to active health check.

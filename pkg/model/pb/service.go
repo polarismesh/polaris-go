@@ -43,9 +43,10 @@ type SvcPluginValues struct {
 
 // ServiceInstancesInProto 通用的应答.
 type ServiceInstancesInProto struct {
-	service   *apiservice.Service
-	notExists bool
-	instances []model.Instance
+	service         *apiservice.Service
+	serviceRevision string
+	notExists       bool
+	instances       []model.Instance
 	// instancesMap instanceId -> model.Instance
 	instancesMap map[string]model.Instance
 	// endpointMapping host:port -> instanceId
@@ -98,6 +99,13 @@ func NewServiceInstancesInProto(resp *apiservice.DiscoverResponse, createLocalVa
 		svcIDSet:        model.HashSet{},
 		svcPluginValues: pluginValues,
 		svcLocalValue:   svcLocalValue,
+	}
+	// INSTANCE service.revision is the instance aggregate revision on the server.
+	// Only a matching aliasFor projection can supply the resource revision.
+	if original := resp.GetAliasFor(); original != nil &&
+		original.GetNamespace().GetValue() == resp.GetService().GetNamespace().GetValue() &&
+		original.GetName().GetValue() == resp.GetService().GetName().GetValue() {
+		instancesInProto.serviceRevision = original.GetRevision().GetValue()
 	}
 	clusterCache := model.NewServiceClusters(instancesInProto)
 	if clusterCache.IsNearbyEnabled() {
@@ -189,6 +197,30 @@ func (s *ServiceInstancesInProto) GetMetadata() map[string]string {
 		return map[string]string{}
 	}
 	return s.service.GetMetadata()
+}
+
+// GetServiceType returns the actual service type from Discover.
+func (s *ServiceInstancesInProto) GetServiceType() model.ServiceType {
+	if s == nil || s.service == nil {
+		return model.ServiceTypeMicroservice
+	}
+	return model.ServiceType(s.service.GetServiceType())
+}
+
+// GetServiceRevision returns only the service resource revision.
+func (s *ServiceInstancesInProto) GetServiceRevision() string {
+	if s == nil || s.service == nil {
+		return ""
+	}
+	return s.serviceRevision
+}
+
+// GetExtendedMetadata returns a detached copy of service-level metadata.
+func (s *ServiceInstancesInProto) GetExtendedMetadata() []*model.ExtendedMetadata {
+	if s == nil || s.notExists || s.service == nil {
+		return nil
+	}
+	return NewAgentServiceFromProto(s.service).ExtendedMetadata
 }
 
 // GetGetTotalWeight 总权重.

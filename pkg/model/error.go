@@ -76,8 +76,30 @@ const (
 	ErrCodeMeshConfigNotFound ErrCode = BaseIndexErrCode + 20
 	// ErrCodeConsumerInitCalleeError 初始化服务运行中需要的被调服务失败
 	ErrCodeConsumerInitCalleeError ErrCode = BaseIndexErrCode + 21
+	// ErrCodeServiceTypeConflict 服务已存在但类型不是 AI Agent
+	ErrCodeServiceTypeConflict ErrCode = BaseIndexErrCode + 22
+	// ErrCodeServiceWriteUnsupported 未配置 Console Service Writer 或服务端不支持必需写入语义
+	ErrCodeServiceWriteUnsupported ErrCode = BaseIndexErrCode + 23
+	// ErrCodeServiceWriteError Console Service Writer 写入失败
+	ErrCodeServiceWriteError ErrCode = BaseIndexErrCode + 24
+	// ErrCodeSkillNotConfigured Skill Connector 未配置或未启用
+	ErrCodeSkillNotConfigured ErrCode = BaseIndexErrCode + 25
+	// ErrCodeSkillNotFound Skill 不存在、未发布或版本不可用
+	ErrCodeSkillNotFound ErrCode = BaseIndexErrCode + 26
+	// ErrCodeSkillPackageInvalid Skill 包内容不安全或不符合契约
+	ErrCodeSkillPackageInvalid ErrCode = BaseIndexErrCode + 27
+	// ErrCodeMCPNotConfigured MCP Contract API 未配置或未启用
+	ErrCodeMCPNotConfigured ErrCode = BaseIndexErrCode + 28
+	// ErrCodeServiceContractNotFound Service Contract 不存在
+	ErrCodeServiceContractNotFound ErrCode = BaseIndexErrCode + 29
+	// ErrCodeServiceNotEmpty 服务仍有关联资源，不能删除
+	ErrCodeServiceNotEmpty ErrCode = BaseIndexErrCode + 30
+	// ErrCodeServicePreconditionFailed 服务 revision 或 owner 前置条件不满足
+	ErrCodeServicePreconditionFailed ErrCode = BaseIndexErrCode + 31
+	// ErrCodeServiceContractDisabled Service Contract API 未启用
+	ErrCodeServiceContractDisabled ErrCode = BaseIndexErrCode + 32
 	// ErrCodeCount 接口错误码数量，每添加了一个错误码，将这个数值加1
-	ErrCodeCount = 23
+	ErrCodeCount = 34
 )
 
 const (
@@ -221,29 +243,40 @@ func serverCodeToErrCode(retCode uint32) ErrCode {
 }
 
 var errCodeString = map[ErrCode]string{
-	ErrCodeSuccess:                 "Success",
-	ErrCodeUnknown:                 "ErrCodeUnknown",
-	ErrCodeAPIInvalidArgument:      "ErrCodeAPIInvalidArgument",
-	ErrCodeAPIInvalidConfig:        "ErrCodeAPIInvalidConfig",
-	ErrCodePluginError:             "ErrCodePluginError",
-	ErrCodeAPITimeoutError:         "ErrCodeAPITimeoutError",
-	ErrCodeInvalidStateError:       "ErrCodeInvalidStateError",
-	ErrCodeServerUserError:         "ErrCodeServerUserError",
-	ErrCodeNetworkError:            "ErrCodeNetworkError",
-	ErrCodeCircuitBreakerError:     "ErrCodeCircuitBreakerError",
-	ErrCodeInstanceInfoError:       "ErrCodeInstanceInfoError",
-	ErrCodeAPIInstanceNotFound:     "ErrCodeAPIInstanceNotFound",
-	ErrCodeInvalidRule:             "ErrCodeInvalidRule",
-	ErrCodeRouteRuleNotMatch:       "ErrCodeRouteRuleNotMatch",
-	ErrCodeInvalidResponse:         "ErrCodeInvalidResponse",
-	ErrCodeServiceNotFound:         "ErrCodeServiceNotFound",
-	ErrCodeInternalError:           "ErrCodeInternalError",
-	ErrCodeServerException:         "ErrCodeServerException",
-	ErrCodeLocationNotFound:        "ErrCodeLocationNotFound",
-	ErrCodeLocationMismatch:        "ErrCodeLocationMismatch",
-	ErrCodeDstMetaMismatch:         "ErrCodeDstMetaMismatch",
-	ErrCodeMeshConfigNotFound:      "ErrCodeMeshConfigNotFound",
-	ErrCodeConsumerInitCalleeError: "ErrCodeConsumerInitCalleeError",
+	ErrCodeSuccess:                   "Success",
+	ErrCodeUnknown:                   "ErrCodeUnknown",
+	ErrCodeAPIInvalidArgument:        "ErrCodeAPIInvalidArgument",
+	ErrCodeAPIInvalidConfig:          "ErrCodeAPIInvalidConfig",
+	ErrCodePluginError:               "ErrCodePluginError",
+	ErrCodeAPITimeoutError:           "ErrCodeAPITimeoutError",
+	ErrCodeInvalidStateError:         "ErrCodeInvalidStateError",
+	ErrCodeServerUserError:           "ErrCodeServerUserError",
+	ErrCodeNetworkError:              "ErrCodeNetworkError",
+	ErrCodeCircuitBreakerError:       "ErrCodeCircuitBreakerError",
+	ErrCodeInstanceInfoError:         "ErrCodeInstanceInfoError",
+	ErrCodeAPIInstanceNotFound:       "ErrCodeAPIInstanceNotFound",
+	ErrCodeInvalidRule:               "ErrCodeInvalidRule",
+	ErrCodeRouteRuleNotMatch:         "ErrCodeRouteRuleNotMatch",
+	ErrCodeInvalidResponse:           "ErrCodeInvalidResponse",
+	ErrCodeServiceNotFound:           "ErrCodeServiceNotFound",
+	ErrCodeInternalError:             "ErrCodeInternalError",
+	ErrCodeServerException:           "ErrCodeServerException",
+	ErrCodeLocationNotFound:          "ErrCodeLocationNotFound",
+	ErrCodeLocationMismatch:          "ErrCodeLocationMismatch",
+	ErrCodeDstMetaMismatch:           "ErrCodeDstMetaMismatch",
+	ErrCodeMeshConfigNotFound:        "ErrCodeMeshConfigNotFound",
+	ErrCodeConsumerInitCalleeError:   "ErrCodeConsumerInitCalleeError",
+	ErrCodeServiceTypeConflict:       "ErrCodeServiceTypeConflict",
+	ErrCodeServiceWriteUnsupported:   "ErrCodeServiceWriteUnsupported",
+	ErrCodeServiceWriteError:         "ErrCodeServiceWriteError",
+	ErrCodeSkillNotConfigured:        "ErrCodeSkillNotConfigured",
+	ErrCodeSkillNotFound:             "ErrCodeSkillNotFound",
+	ErrCodeSkillPackageInvalid:       "ErrCodeSkillPackageInvalid",
+	ErrCodeMCPNotConfigured:          "ErrCodeMCPNotConfigured",
+	ErrCodeServiceContractNotFound:   "ErrCodeServiceContractNotFound",
+	ErrCodeServiceNotEmpty:           "ErrCodeServiceNotEmpty",
+	ErrCodeServicePreconditionFailed: "ErrCodeServicePreconditionFailed",
+	ErrCodeServiceContractDisabled:   "ErrCodeServiceContractDisabled",
 }
 
 var errCodeArray = []ErrCode{ErrCodeSuccess, ErrCodeUnknown, ErrCodeAPIInvalidArgument,
@@ -252,6 +285,10 @@ var errCodeArray = []ErrCode{ErrCodeSuccess, ErrCodeUnknown, ErrCodeAPIInvalidAr
 	ErrCodeAPIInstanceNotFound, ErrCodeInvalidRule, ErrCodeRouteRuleNotMatch, ErrCodeInvalidResponse,
 	ErrCodeInternalError, ErrCodeServiceNotFound, ErrCodeServerException, ErrCodeLocationNotFound,
 	ErrCodeLocationMismatch, ErrCodeDstMetaMismatch, ErrCodeMeshConfigNotFound, ErrCodeConsumerInitCalleeError,
+	ErrCodeServiceTypeConflict, ErrCodeServiceWriteUnsupported, ErrCodeServiceWriteError,
+	ErrCodeSkillNotConfigured, ErrCodeSkillNotFound, ErrCodeSkillPackageInvalid,
+	ErrCodeMCPNotConfigured, ErrCodeServiceContractNotFound, ErrCodeServiceNotEmpty,
+	ErrCodeServicePreconditionFailed, ErrCodeServiceContractDisabled,
 }
 
 // ErrCodeFromIndex 根据错误码索引返回错误码
@@ -290,19 +327,30 @@ var errCodeTypeMap = map[ErrCode]ErrCodeType{
 	ErrCodeCircuitBreakerError: PolarisError,
 	ErrCodeLocationNotFound:    PolarisError,
 
-	ErrCodeAPIInvalidArgument:      UserError,
-	ErrCodeAPIInvalidConfig:        UserError,
-	ErrCodeInvalidStateError:       UserError,
-	ErrCodeServerUserError:         UserError,
-	ErrCodeInstanceInfoError:       UserError,
-	ErrCodeAPIInstanceNotFound:     UserError,
-	ErrCodeInvalidRule:             UserError,
-	ErrCodeServiceNotFound:         UserError,
-	ErrCodeRouteRuleNotMatch:       UserError,
-	ErrCodeLocationMismatch:        UserError,
-	ErrCodeDstMetaMismatch:         UserError,
-	ErrCodeMeshConfigNotFound:      UserError,
-	ErrCodeConsumerInitCalleeError: UserError,
+	ErrCodeAPIInvalidArgument:        UserError,
+	ErrCodeAPIInvalidConfig:          UserError,
+	ErrCodeInvalidStateError:         UserError,
+	ErrCodeServerUserError:           UserError,
+	ErrCodeInstanceInfoError:         UserError,
+	ErrCodeAPIInstanceNotFound:       UserError,
+	ErrCodeInvalidRule:               UserError,
+	ErrCodeServiceNotFound:           UserError,
+	ErrCodeRouteRuleNotMatch:         UserError,
+	ErrCodeLocationMismatch:          UserError,
+	ErrCodeDstMetaMismatch:           UserError,
+	ErrCodeMeshConfigNotFound:        UserError,
+	ErrCodeConsumerInitCalleeError:   UserError,
+	ErrCodeServiceTypeConflict:       UserError,
+	ErrCodeServiceWriteUnsupported:   UserError,
+	ErrCodeServiceWriteError:         PolarisError,
+	ErrCodeSkillNotConfigured:        UserError,
+	ErrCodeSkillNotFound:             UserError,
+	ErrCodeSkillPackageInvalid:       UserError,
+	ErrCodeMCPNotConfigured:          UserError,
+	ErrCodeServiceContractNotFound:   UserError,
+	ErrCodeServiceNotEmpty:           UserError,
+	ErrCodeServicePreconditionFailed: UserError,
+	ErrCodeServiceContractDisabled:   UserError,
 }
 
 // GetErrCodeType 获取错误码类型

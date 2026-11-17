@@ -32,6 +32,7 @@ var (
 		CalleeSubset,
 		CalleeMethod,
 		CalleeInstance,
+		CalleeInstanceType,
 		CalleeRetCode,
 		CalleeResult,
 		CallerLabels,

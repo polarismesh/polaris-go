@@ -33,6 +33,7 @@ type ConfigurationImpl struct {
 	Consumer *ConsumerConfigImpl   `yaml:"consumer" json:"consumer"`
 	Provider *ProviderConfigImpl   `yaml:"provider" json:"provider"`
 	Config   *ConfigFileConfigImpl `yaml:"config" json:"config"`
+	Skill    *SkillConfigImpl      `yaml:"skill" json:"skill"`
 }
 
 // GetGlobal cl5.global前缀开头的所有配置项.
@@ -53,6 +54,11 @@ func (c *ConfigurationImpl) GetProvider() ProviderConfig {
 // GetConfigFile config前缀开头的所有配置项.
 func (c *ConfigurationImpl) GetConfigFile() ConfigFileConfig {
 	return c.Config
+}
+
+// GetSkill 获取 Skill Registry 配置。
+func (c *ConfigurationImpl) GetSkill() SkillConfig {
+	return c.Skill
 }
 
 // GlobalConfigImpl 全局配置.

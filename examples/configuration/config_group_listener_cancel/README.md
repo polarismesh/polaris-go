@@ -42,7 +42,7 @@ context.AfterFunc(cacheCtx, cancel)
 
 ## 构建和本地检查
 
-此示例是独立 Go module，使用 `replace github.com/polarismesh/polaris-go => ../../..` 引用本地 SDK。示例需要 Go 1.24 或更高版本，用 `weak.Pointer` 验证旧缓存对象被回收；SDK 本身没有引入这个依赖。race 检查还需要本机 C 编译器。
+此示例是独立 Go module，使用 `replace github.com/polarismesh/polaris-go => ../../..` 引用仓库中的 SDK。示例需要 Go 1.24 或更高版本，用 `weak.Pointer` 验证旧缓存对象被回收；SDK 本身没有引入这个依赖。race 检查还需要本机 C 编译器。
 
 在本目录执行：
 

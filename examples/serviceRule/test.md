@@ -14,8 +14,7 @@
 | `GetBlockAllowRule` | `GET /auth` | `GET /naming/v1/blockallow/rules` |
 | `GetLane` | `GET /lane` | `GET /naming/v1/lane/groups` |
 
-同时包含 `*pb.BehaviorNotRegisteredError` 修复的专项验证（当限流规则 `action=tsf` 时，
-SDK 日志降级为 WARN 而非 ERROR）。
+同时验证限流规则引用未注册行为插件时的错误返回和日志级别。
 
 ---
 
@@ -24,7 +23,7 @@ SDK 日志降级为 WARN 而非 ERROR）。
 1. **北极星服务端**已部署并可达（需同时开放 gRPC 8091 与 HTTP OpenAPI 8090 端口）
 2. **鉴权 Token** 具备规则的读写权限（建议管理员 token）
 3. 本机已安装：`go` (≥1.18)、`curl`、`python3`、`diff`、`bash`
-4. 如需验证 tsf 修复的 SDK 日志级别，建议带 `--debug` 参数（让 SDK 日志输出到 demo stdout）
+4. 如需查看 SDK 日志，建议带 `--debug` 参数（让 SDK 日志输出到 demo stdout）
 
 ---
 
@@ -86,14 +85,14 @@ cd examples/serviceRule
 
 ---
 
-## BehaviorNotRegisteredError 修复验证
+## 未注册行为插件验证
 
 ### 背景
 
 当服务端下发限流规则中 `action` 字段引用了客户端未注册的 RateLimiter 插件（如 `tsf`）时：
 
-- **修复前**：`plugin/localregistry/inmemory/inmemory.go:783` 以 **ERROR** 级别记录
-- **修复后**：同位置以 **WARN** 级别记录，错误类型为 `*pb.BehaviorNotRegisteredError`
+- API 响应返回可识别的 `BehaviorNotRegisteredError`。
+- SDK 日志使用 **WARN** 级别，不把该可容忍错误记录为 **ERROR**。
 
 ### 验证方式
 
@@ -113,7 +112,7 @@ cd examples/serviceRule
 
 2. **SDK 日志验证**（需 `--debug` 参数）：
    - ✅ 出现 WARN 关键字：`references unregistered behavior plugin`
-   - ❌ 不出现旧版 ERROR 文案：`fail to validate service rule.*behavior plugin .* not registered`
+   - ❌ 不出现 ERROR 文案：`fail to validate service rule.*behavior plugin .* not registered`
 
 ### 手动复现
 
@@ -138,9 +137,9 @@ curl -s http://127.0.0.1:38080/ratelimit \
 #      "unregisteredBehavior": "tsf"
 #    }
 
-# 5. 同时观察 demo stdout：
-#    应有 "[RateLimit] [VERIFY-FIX] 命中 *pb.BehaviorNotRegisteredError"
-#    SDK 日志中 base 模块应为 WARN（不再是 ERROR）
+# 5. 同时观察 demo HTTP 响应和 SDK 日志：
+#    响应应包含 BehaviorNotRegisteredError 信息
+#    SDK 日志中 base 模块应使用 WARN 级别
 ```
 
 ---
@@ -205,27 +204,6 @@ Token 权限不足，请使用管理员 Token 或确认 Token 对目标 namespac
 
 ### action=tsf 验证未通过
 
-- 确认本地 polaris-go 代码包含 `BehaviorNotRegisteredError` 修复（`go.mod` 中有 `replace` 指向 `../../`）
+- 确认当前使用的 polaris-go 版本支持 `BehaviorNotRegisteredError`
 - 确认 tsf 规则已成功创建到服务端（通过 OpenAPI 确认）
 - 加 `--debug` 重跑，查看完整 SDK 日志输出
-
----
-
-## 修复发布后的清理
-
-`examples/serviceRule/go.mod` 当前包含一行用于本地验证的 replace 指令：
-
-```
-replace github.com/polarismesh/polaris-go => ../../
-```
-
-它的作用是让 demo 引用工作树本地的 polaris-go 源码，从而验证尚未发版的
-`*pb.BehaviorNotRegisteredError` 修复。**修复随版本发布到正式版本后，请按以下步骤
-清理该 replace**，恢复 demo 的常规依赖形态：
-
-1. 把 `examples/serviceRule/go.mod` 中 polaris-go 的 require 行升级到包含本修复的版本
-2. 删除 `replace github.com/polarismesh/polaris-go => ../../` 这一行
-3. 在本目录下执行 `go mod tidy` 重新生成 `go.sum`
-4. 重跑 `./verify.sh`，确认行为与 replace 模式下一致
-
-> CI 不会自动检测此 replace；该清理步骤需手工完成。

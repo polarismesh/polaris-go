@@ -63,6 +63,7 @@ func TestBuildAuditEntry_FullFields(t *testing.T) {
 	r.SetCallerService(&model.ServiceInfo{Namespace: "Prod", Service: "order-svc"})
 	r.SetCalledIP("10.0.1.5")
 	r.SetTimestamp(now)
+	r.SetInstanceType(model.InstanceTypeMCP)
 	r.RuleName = "rule-1"
 
 	e := buildAuditEntry(r, "127.0.0.1", "client-uid-1", now.Add(time.Second))
@@ -83,6 +84,9 @@ func TestBuildAuditEntry_FullFields(t *testing.T) {
 	}
 	if e.CalleeID != "inst-1" {
 		t.Errorf("calleeID mismatch: %s", e.CalleeID)
+	}
+	if e.CalleeInstanceType != "mcp" {
+		t.Errorf("calleeInstanceType mismatch: %s", e.CalleeInstanceType)
 	}
 	if e.Method != "/api/get" {
 		t.Errorf("method mismatch: %s", e.Method)
@@ -142,6 +146,9 @@ func TestBuildAuditEntry_NilPointers(t *testing.T) {
 	}
 	if e.RetCode != 0 {
 		t.Errorf("retCode should be 0 when RetCode nil, got %d", e.RetCode)
+	}
+	if e.CalleeInstanceType != "microservice" {
+		t.Errorf("calleeInstanceType should default to microservice, got %s", e.CalleeInstanceType)
 	}
 }
 

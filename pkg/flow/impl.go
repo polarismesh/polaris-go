@@ -29,6 +29,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/flow/quota"
 	"github.com/polarismesh/polaris-go/pkg/flow/registerstate"
 	"github.com/polarismesh/polaris-go/pkg/flow/schedule"
+	skillflow "github.com/polarismesh/polaris-go/pkg/flow/skill"
 	"github.com/polarismesh/polaris-go/pkg/flow/startup"
 	"github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
@@ -46,6 +47,7 @@ import (
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/skillconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 	"github.com/polarismesh/polaris-go/pkg/sdk"
 )
@@ -56,6 +58,12 @@ type Engine struct {
 	connector serverconnector.ServerConnector
 	// 配置中心连接器
 	configConnector configconnector.ConfigConnector
+	// Skill Registry 连接器
+	skillConnector skillconnector.SkillConnector
+	// Service Contract 可选连接能力
+	contractConnector serverconnector.ServiceContractConnector
+	// Skill 编排流程
+	skillFlow *skillflow.Flow
 	// 服务本地缓存
 	registry localregistry.LocalRegistry
 	// 全局配置
@@ -114,12 +122,10 @@ func (e *Engine) getConfigFileFlow() *configuration.ConfigFileFlow {
 }
 
 // InitFlowEngine 初始化flowEngine实例
-func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
+func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) (err error) {
+	defer cleanupSkillFlowOnInitError(flowEngine, &err)
 	flowEngine.logCtx = initContext.ValueCtx.GetContextLogger()
-	var err error
-	cfg := initContext.Config
-	plugins := initContext.Plugins
-	globalCtx := initContext.ValueCtx
+	cfg, plugins, globalCtx := initContext.Config, initContext.Plugins, initContext.ValueCtx
 	flowEngine.configuration = cfg
 	flowEngine.plugins = plugins
 	// 加载服务端连接器
@@ -127,6 +133,7 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if err != nil {
 		return err
 	}
+	flowEngine.contractConnector, _ = flowEngine.connector.(serverconnector.ServiceContractConnector)
 	flowEngine.serverServices = config.GetServerServices(cfg)
 	// 加载本地缓存插件
 	flowEngine.registry, err = data.GetRegistry(cfg, plugins)
@@ -144,6 +151,11 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if len(cfg.GetConfigFile().GetConfigConnectorConfig().GetAddresses()) > 0 {
 		flowEngine.configConnector, err = data.GetConfigConnector(cfg, plugins)
 		if err != nil {
+			return err
+		}
+	}
+	if cfg.GetSkill().IsEnable() {
+		if err = flowEngine.initSkillFlow(cfg, plugins, globalCtx.GetContextLogger()); err != nil {
 			return err
 		}
 	}
@@ -223,6 +235,36 @@ func InitFlowEngine(flowEngine *Engine, initContext plugin.InitContext) error {
 	if err = flowEngine.loadAuthenticators(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func cleanupSkillFlowOnInitError(engine *Engine, err *error) {
+	if err != nil && *err != nil && engine.skillFlow != nil {
+		engine.skillFlow.Destroy()
+	}
+}
+
+func (e *Engine) initSkillFlow(
+	cfg config.Configuration, plugins plugin.Supplier, logCtx *log.ContextLogger,
+) error {
+	connector, err := data.GetSkillConnector(cfg, plugins)
+	if err != nil {
+		return err
+	}
+	flow, err := skillflow.NewFlowWithOptions(connector, skillflow.Options{
+		PersistEnable:        cfg.GetSkill().IsPersistEnable(),
+		PersistDir:           cfg.GetSkill().GetPersistDir(),
+		PersistMaxWriteRetry: cfg.GetSkill().GetPersistMaxWriteRetry(),
+		PersistMaxReadRetry:  cfg.GetSkill().GetPersistMaxReadRetry(),
+		PersistRetryInterval: cfg.GetSkill().GetPersistRetryInterval(),
+		FallbackToLocalCache: cfg.GetSkill().IsFallbackToLocalCache(),
+		LogCtx:               logCtx,
+	})
+	if err != nil {
+		return err
+	}
+	e.skillConnector = connector
+	e.skillFlow = flow
 	return nil
 }
 
@@ -526,7 +568,12 @@ func (e *Engine) Destroy() error {
 	if e.configFlow != nil {
 		e.configFlow.Destroy()
 	}
-	e.registerStates.Destroy()
+	if e.skillFlow != nil {
+		e.skillFlow.Destroy()
+	}
+	if e.registerStates != nil {
+		e.registerStates.Destroy()
+	}
 	return nil
 }
 

@@ -36,6 +36,7 @@ import (
 	statreporter "github.com/polarismesh/polaris-go/pkg/plugin/metrics"
 	"github.com/polarismesh/polaris-go/pkg/plugin/serverconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/servicerouter"
+	"github.com/polarismesh/polaris-go/pkg/plugin/skillconnector"
 	"github.com/polarismesh/polaris-go/pkg/plugin/weightadjuster"
 )
 
@@ -61,6 +62,16 @@ func GetConfigConnector(
 		return nil, err
 	}
 	return targetPlugin.(configconnector.ConfigConnector), nil
+}
+
+// GetSkillConnector 加载 Skill Registry 连接器插件。
+func GetSkillConnector(
+	cfg config.Configuration, supplier plugin.Supplier) (skillconnector.SkillConnector, error) {
+	targetPlugin, err := supplier.GetPlugin(common.TypeSkillConnector, cfg.GetSkill().GetConnectorType())
+	if err != nil {
+		return nil, err
+	}
+	return targetPlugin.(skillconnector.SkillConnector), nil
 }
 
 // GetConfigFilterChain 加载配置过滤链

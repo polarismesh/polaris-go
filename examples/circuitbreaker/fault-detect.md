@@ -270,7 +270,8 @@ TCP / UDP 用例都是 **SERVICE 级熔断规则（abort 型）**，闭环结构
 - **维持 OPEN 需业务 500 + 探测端口故障双重保证**：SERVICE 级 half-open 会放行业务请求探活，若维持阶段业务 `/echo` 恢复 200，业务请求会抢先推动 close。故维持阶段让业务 `/echo` 仍 500、同时让 TCP/UDP 探测端口故障，双重保证熔断不被意外恢复。恢复阶段则业务与探测端口同时转绿。
 - **TCP 探测器**：`doTCPDetect` 通过 `conn.SetDeadline(timeout)` 设置读写超时，`ioutil.ReadAll(conn)` 读对端回包（TCP 有 EOF 故 ReadAll 自然结束），内容匹配 `receive` 列表判健康。
 - **UDP 探测器**：`doUDPDetect` 通过 `conn.Write(send)` 发探测包，`conn.SetReadDeadline(timeout)` 设读超时，**单次 `conn.Read(buf)`** 读一个 UDP 响应包（不用 `ReadAll`，UDP 无 EOF、ReadAll 必等满 deadline 且返回 timeout err 丢弃已收到的响应），内容匹配 `receive` 列表判健康。
-- **UDP 探测器潜伏 bug**：此前 UDP 探测器从未被真正调用过，潜伏 4 个 SDK bug——`Name()` 误返回 `"tcp"` 与 TCP 探测器撞名导致插件 map 覆盖；`ReadAll` 无 read deadline 导致对端不回包时永久阻塞拖死 SDK worker goroutine；`DetectResultImp` 缺 `Code` 哨兵导致探测失败被误判成功；`ReadAll+deadline` 把已收到的正确响应也丢弃。这些 bug 在加入 TCP/UDP 探测用例后逐个暴露并修复。
+- **UDP 探测器实现约束**：探测器名称必须为 `udp`；读取使用带 deadline 的单次 `Read`，
+  无响应时按超时失败处理；探测失败统一使用错误码 `-1`，避免被误判为恢复。
 
 ---
 
@@ -413,24 +414,3 @@ SDK 内部熔断日志**不写到 consumer 应用 stdout**，而是落在各 con
 | D 段 `disabled_stop=no` | PUT `faultDetectConfig.enable=false` 后 SDK 未收到 push；或规则 id 错导致更新无效 | 检查 `polaris-circuitbreaker.log` 是否有 `[CircuitBreaker] OnEvent processing ... fault_detect`（感知事件，INFO）；确认 `cb_rule_id` 正确（`start to pull fault detect rule` 已降 DEBUG，需 `--debug` 才可见） |
 | D 段 `resume_schedule=no` | PUT `enable=true` 后 schedule task 行数未增加 | grep SDK 日志确认是否有新 `schedule task`；检查 `WAIT_RULE_READY_SECONDS` 是否够长 |
 | D 段 `new_interval=no` | PUT 探测规则 interval 后 SDK 未重建 checker | 检查是否有 `fault detect rule revision changed`；确认 PUT 是否成功（返回 200） |
-
-## 与 polaris-go 代码改造的对应关系
-
-| 改造点 | 由哪个用例验证 |
-|--------|-------------|
-| `faultDetectConfig.enable=true` 作为探测门控 | 全部用例步骤 2 规则下发 → 步骤 6 日志佐证 |
-| `ResourceHealthChecker` 周期调度（TaskExecutor 注入） | 全部用例步骤 4/6 探测调度=yes |
-| `IntervalExecute` 周期任务不退化为一次性 | 步骤 4 维持 OPEN 期间探测持续运行（多周期） |
-| `doCheck` 用规则 protocol 选取探测器（非实例 protocol） | 步骤 6 探测调度=yes 且无 `plugin not found` |
-| 探测结果 `record=false` 上报 | 步骤 4 探测失败不触发实例重新注册 |
-| HALF_OPEN 恢复判定（探测与业务共用） | SERVICE/METHOD 步骤 5 纯等待推动 CLOSE；INSTANCE 步骤 5 b 恢复可选 |
-| 三级（SERVICE/METHOD/INSTANCE）规则匹配与状态机 | 三个用例各自的 level 维度 |
-| `realRefreshHealthCheck` 门控重判 — enable toggle 实时关闭/开启探测 | **SERVICE 用例 D 段**：`faultDetectConfig.enable` true→false→true，验证 stop/rebuild checker |
-| `realRefreshHealthCheck` revision 检测 — 探测规则参数热更新 | **METHOD 用例 D 段**：PUT interval 2s→5s，验证 checker 重建且新 interval 生效 |
-| `selectFaultDetectRules` method 过滤 | 用例六 段 A（SERVICE 接受通配，复用已有规则验证）/ 段 B（METHOD 按 path 精确匹配） |
-| `generateHttpRequest` headers 设置 | 用例六 段 C（`X-Health-Probe=true` header 出现在探测请求） |
-| UDP 探测器 `Name()` 返回 `"udp"`（原误返回 `"tcp"` 与 TCP 探测器同名） | 用例五 UDP 探测调度=yes（探测器可被正确选取） |
-| UDP 探测改用 `conn.Read` + `SetReadDeadline` | 用例五 维持 OPEN（探测端口不回包时探测失败而非卡死） |
-| UDP `DetectResultImp` 失败置 `Code="-1"` | 用例五 维持 OPEN（探测失败正确命中失败哨兵，不误判恢复） |
-| 探测日志收敛：状态变化立即 INFO、连续失败 30s 定时 INFO、连续成功静默 | 全部用例步骤 4/6 日志佐证 |
-| 探测器异常日志收敛：http/tcp/udp 首次 err 打印 Errorf，内容不变静默 | 维持 OPEN 阶段（探测持续异常不刷屏） |

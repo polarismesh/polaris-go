@@ -44,6 +44,8 @@ type auditEntry struct {
 	CalleeHost string `json:"callee_host"`
 	// CalleeID 被调实例 ID
 	CalleeID string `json:"callee_id"`
+	// CalleeInstanceType 被调实例的受限类型。
+	CalleeInstanceType string `json:"callee_instance_type"`
 	// Method 调用接口方法
 	Method string `json:"method"`
 	// DelayMs 调用耗时(毫秒)
@@ -91,6 +93,11 @@ func buildAuditEntry(val *model.ServiceCallResult, clientIP, clientID string, no
 		entry.CalleeHost = fmt.Sprintf("%s:%d", inst.GetHost(), inst.GetPort())
 		entry.CalleeID = inst.GetId()
 	}
+	if typed, ok := interface{}(val).(model.InstanceTypeGauge); ok {
+		entry.CalleeInstanceType = string(model.NormalizeInstanceType(typed.GetInstanceType()))
+	} else {
+		entry.CalleeInstanceType = string(model.InstanceTypeMicroservice)
+	}
 	// 调用耗时(ms)
 	if d := val.GetDelay(); d != nil {
 		entry.DelayMs = d.Milliseconds()
@@ -121,6 +128,7 @@ func formatKV(e *auditEntry) []byte {
 	fmt.Fprintf(&buf, " callee_service=%q", e.CalleeService)
 	fmt.Fprintf(&buf, " callee_host=%q", e.CalleeHost)
 	fmt.Fprintf(&buf, " callee_id=%q", e.CalleeID)
+	fmt.Fprintf(&buf, " callee_instance_type=%q", e.CalleeInstanceType)
 	fmt.Fprintf(&buf, " method=%q", e.Method)
 	fmt.Fprintf(&buf, " delay_ms=%d", e.DelayMs)
 	fmt.Fprintf(&buf, " ret_code=%d", e.RetCode)

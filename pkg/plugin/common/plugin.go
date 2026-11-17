@@ -62,6 +62,8 @@ const (
 	TypeAdmin Type = 0x1018
 	// TypeAuthenticator 服务鉴权扩展点
 	TypeAuthenticator Type = 0x1019
+	// TypeSkillConnector Skill Registry 连接器扩展点
+	TypeSkillConnector Type = 0x1020
 )
 
 var typeToPresent = map[Type]string{
@@ -82,6 +84,7 @@ var typeToPresent = map[Type]string{
 	TypeLossless:         "lossless",
 	TypeAdmin:            "admin",
 	TypeAuthenticator:    "authenticator",
+	TypeSkillConnector:   "skillConnector",
 }
 
 // ToString方法
@@ -241,4 +244,5 @@ var LoadedPluginTypes = []Type{
 	TypeLossless,
 	TypeAdmin,
 	TypeAuthenticator,
+	TypeSkillConnector,
 }

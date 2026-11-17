@@ -138,7 +138,7 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByFile(c *check.C) {
 // TestInitConsumerConfigByDefault 测试以无文件默认配置初始化消费者api
 func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 	log.Printf("Start TestInitConsumerConfigByDefault")
-	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("127.0.0.1:%s", consumerPort)})
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("127.0.0.1:%d", consumerPort)})
 	enableStat := false
 	cfg.Global.StatReporter.Enable = &enableStat
 	consumerAPI, err := api.NewConsumerAPIByConfig(cfg)
@@ -150,6 +150,90 @@ func (t *ConsumerTestingSuite) TestInitConsumerConfigByDefault(c *check.C) {
 func (t *ConsumerTestingSuite) TestGetInstancesNormal(c *check.C) {
 	log.Printf("Start TestGetInstancesNormal")
 	t.testGetInstances(c, false)
+}
+
+// TestGetInstancesIncludesServiceMetadata verifies service metadata through ConsumerAPI.
+func (t *ConsumerTestingSuite) TestGetInstancesIncludesServiceMetadata(c *check.C) {
+	log.Printf("Start TestGetInstancesIncludesServiceMetadata")
+	agentService := &service_manage.Service{
+		Name:        &wrappers.StringValue{Value: "customer-agent"},
+		Namespace:   &wrappers.StringValue{Value: consumerNamespace},
+		Token:       &wrappers.StringValue{Value: uuid.New().String()},
+		ServiceType: service_manage.ServiceType_SERVICE_TYPE_AI_AGENT,
+		Metadata:    map[string]string{"owner": "agent-team"},
+		ExtendedMetadata: []*service_manage.ExtendedMetadata{
+			{
+				Type: service_manage.ExtendedMetadata_EXTENDED_METADATA_SKILL,
+				AgentSkill: &service_manage.AgentSkill{
+					Id:      consumerNamespace + ":demo-skill@1.2.3",
+					Name:    "demo-skill",
+					Version: "1.2.3",
+				},
+			},
+		},
+	}
+	t.mockServer.RegisterService(agentService)
+	defer t.mockServer.DeregisterService(consumerNamespace, "customer-agent")
+
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("127.0.0.1:%d", consumerPort)})
+	enableStat := false
+	cfg.Global.StatReporter.Enable = &enableStat
+	consumerAPI, err := api.NewConsumerAPIByConfig(cfg)
+	c.Assert(err, check.IsNil)
+	defer consumerAPI.Destroy()
+
+	response, err := consumerAPI.GetAllInstances(&api.GetAllInstancesRequest{
+		GetAllInstancesRequest: model.GetAllInstancesRequest{
+			Namespace: consumerNamespace,
+			Service:   "customer-agent",
+		},
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(response.ServiceType, check.Equals, model.ServiceTypeAIAgent)
+	c.Assert(response.Metadata["owner"], check.Equals, "agent-team")
+	c.Assert(len(response.ExtendedMetadata), check.Equals, 1)
+	c.Assert(response.ExtendedMetadata[0].AgentSkill.Version, check.Equals, "1.2.3")
+
+	cached, err := consumerAPI.GetAllInstances(&api.GetAllInstancesRequest{
+		GetAllInstancesRequest: model.GetAllInstancesRequest{
+			Namespace: consumerNamespace,
+			Service:   "customer-agent",
+		},
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(cached.ExtendedMetadata[0].AgentSkill.Version, check.Equals, "1.2.3")
+}
+
+// TestGetInstancesKeepsActualServiceType keeps AI-specific inference outside the Core.
+func (t *ConsumerTestingSuite) TestGetInstancesKeepsActualServiceType(c *check.C) {
+	log.Printf("Start TestGetInstancesKeepsActualServiceType")
+	agentService := &service_manage.Service{
+		Name:      &wrappers.StringValue{Value: "java-agent"},
+		Namespace: &wrappers.StringValue{Value: consumerNamespace},
+		Token:     &wrappers.StringValue{Value: uuid.New().String()},
+	}
+	t.mockServer.RegisterService(agentService)
+	defer t.mockServer.DeregisterService(consumerNamespace, "java-agent")
+	t.mockServer.GenTestInstancesWithMeta(agentService, 1, map[string]string{
+		model.MetadataKeyAIAgentName: "java-agent",
+	})
+	defer t.mockServer.ClearServiceInstances(agentService)
+
+	cfg := config.NewDefaultConfiguration([]string{fmt.Sprintf("127.0.0.1:%d", consumerPort)})
+	enableStat := false
+	cfg.Global.StatReporter.Enable = &enableStat
+	consumerAPI, err := api.NewConsumerAPIByConfig(cfg)
+	c.Assert(err, check.IsNil)
+	defer consumerAPI.Destroy()
+
+	response, err := consumerAPI.GetAllInstances(&api.GetAllInstancesRequest{
+		GetAllInstancesRequest: model.GetAllInstancesRequest{
+			Namespace: consumerNamespace,
+			Service:   "java-agent",
+		},
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(response.ServiceType, check.Equals, model.ServiceTypeMicroservice)
 }
 
 // 在mockTimeout宏中，执行测试逻辑

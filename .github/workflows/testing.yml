@@ -47,6 +47,16 @@ jobs:
       - name: Build
         run: go build -v ./...
 
+      # API unit tests are the source of API wrapper coverage. The integration
+      # suite does not exercise every public API delegation path.
+      - name: Run API unit tests with coverage
+        if: matrix.go == '1.21'
+        run: |
+          go test ./api/... -count=1 \
+            -covermode=count \
+            -coverprofile=coverage_api_unit.txt \
+            -coverpkg=github.com/polarismesh/polaris-go/api
+
       # Run tests
       - name: run tests
         continue-on-error: true
@@ -69,7 +79,7 @@ jobs:
         if: matrix.go == '1.21'
         uses: codecov/codecov-action@v4
         with:
-          files: ./test/coverage_*.txt
+          files: ./test/coverage_*.txt,./coverage_api_unit.txt
           flags: integration
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

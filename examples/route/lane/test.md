@@ -296,12 +296,12 @@
   - 关键判断：**管理 API 与 Discover API 是不同数据面**，前者改完就生效，后者要等服务端 naming cache 刷新才下发到 SDK
   - 最多 `max_discover_wait=120s` 轮询 `POST /v1/Discover`（type=LANE），直到返回的 `destinations` 不含 `LaneEchoServer`
   - **超时 → SKIP 6.1**（标 PASS 但语义为 SKIP），不进入 6.1a/6.1b；同时 `_restore_lane_group` 恢复泳道组
-  - 这是测试**服务端**缓存传播延迟，**不是** SDK bug
+  - 超时表示规则尚未传播到 Discover API，用例跳过 6.1 并恢复泳道组。
 
 - **Phase 2：SDK 行为探测**
   - 关键判断：1.5 已确认 Discover API 下发了新规则。SDK 默认 refreshInterval=2s，此时应很快拉到新规则
   - 30s 内每 5s 发一次 `-H "user: gray" http://127.0.0.1:48095/LaneEchoClient/echo`，探测是否路由到 `:19090`（base）而非 `:19091`（gray）
-  - **30s 内未生效 → FAIL 6.1**：这是 SDK 端 bug（疑似 `matchByStainLabel` 短格式歧义或 `LaneGroup` 跨组合并错误）
+  - **30s 内未生效 → FAIL 6.1**：检查 SDK 路由日志和泳道组规则
   - 同时记 6.1a/6.1b 为级联失败
 
 - **`6.1a` 染色请求验证**（10 次）
@@ -502,7 +502,8 @@ uptime = now - etime        // etime 为规则最近一次启用时间
 
 > **用例 6-9 组收尾**：`run_all_tests` 在 4 个 PERCENTAGE 用例全部跑完后（或被 Ctrl-C 打断时通过 trap）自动调用 `restore_gray_rule_to_warmup`，把 gray 规则的 `traffic_gray` 还原为 WARMUP，使用 `validate_lane_rules` 从 Polaris 读取到的 `WARMUP_INTERVAL / WARMUP_CURVATURE`。
 >
-> **关于 percent=0 不可测**：`_set_gray_rule_traffic_gray` 在收到 4xx/5xx 错误码时会显式 `return 1`，让上层用例 FAIL 而不是静默继续；这是初次跑测发现 percent=0 被服务端拒绝（返回 `400103`）后加入的防御。
+> **关于 percent=0 不可测**：服务端会拒绝 `percent=0` 的灰度规则（返回 `400103`）。
+> `_set_gray_rule_traffic_gray` 收到 4xx/5xx 时会显式返回失败，让上层用例 FAIL 而不是静默继续。
 
 ### 3.5 辅助能力
 - `get_gray_etime()`：从 Polaris OpenAPI 读取 `gray` 规则的 `etime`，用于计算 `uptime`
@@ -526,13 +527,13 @@ uptime = now - etime        // etime 为规则最近一次启用时间
 | 规则校验失败（`gray 规则未启用` / Header Key 不符） | Polaris 控制台未按前置条件配置 | 按 2.2 / 3.2 节重新配置规则并 `enable` |
 | 两个脚本同时运行冲突 | 共用 `48095 / 19080~19093` 端口（NLG 用例还会占用 `19100~19111`，half 链路占用 `19120~19131`） | 使用前先运行对方的 `stop`，或执行 `./cleanup.sh` |
 | 用例 5.1 专项失败 | `gateway-excl/polaris.yaml` 未替换为 `baseLaneMode: 1` | 检查脚本生成的 `${gateway_excl_workdir}/polaris.yaml` |
-| 用例 6.1 标记为 SKIP | 管理 API 已确认移除，但 **Discover API** 在 120s 内仍未下发新规则 → 服务端 naming cache 刷新延迟 | 属于服务端问题；可调小 Polaris 的 naming cache 刷新间隔或手动重跑 |
-| 用例 6.1 SDK 在 30s 内未感知到变更 | 已被 1.5 排除服务端问题；可能是 SDK 泳道路由存在 bug（如 matchByStainLabel 短格式歧义） | 排查 `consumer-base.log` 中 `[Router][Lane]` 关键字；确认其它泳道组（如 `lane-go-warmup`）未与本规则产生冲突 |
+| 用例 6.1 标记为 SKIP | 管理 API 已更新规则，但 **Discover API** 在 120s 内仍未下发新规则 | 检查服务端 naming cache 刷新间隔，或手动重跑 |
+| 用例 6.1 SDK 在 30s 内未感知到变更 | SDK 尚未刷新到最新泳道组规则 | 排查 `consumer-base.log` 中 `[Router][Lane]` 关键字；确认其它泳道组（如 `lane-go-warmup`）未与本规则冲突 |
 | 用例 6.2b 全打到 base，未命中 gray | consumer `polaris.yaml` 未切换为 `baseLaneMode: 1` | 检查脚本生成的 `${nlg_consumer_mode1_workdir}/polaris.yaml` |
 | 用例 7.2 / 7.2d 命中 `:19130` 而非 `:19131` | half-consumer 在 PERMISSIVE 回退基线时未透传 stainLabel | 排查 `half-consumer.log` 中 `[Router][Lane] passthrough stain label` 关键字；检查 consumer 业务代码是否把 `routedResp.RouteMetadata["service-lane"]` 透传给下游 |
-| 用例 7.3 STRICT 未返回 503，而是穿透到 `:19131` | SDK 把 STRICT + 无目标 lane 实例错误地降级或穿透 | 定位 `lane_router.go` STRICT 分支：检查 `IgnoreFilterOnlyOnEndChain` 是否被置位，以及 LB 层是否正确返回 `ErrCodeAPIInstanceNotFound` |
-| `x.4b` STRICT-503 用例未返回 503 | SDK 端把 STRICT+无实例降级成了 PERMISSIVE 行为（与契约不符） | 升级 polaris-go SDK 版本；定位到 laneRouter.routeToLane 中 STRICT 路径的降级逻辑 |
-| `x.2n / x.3n / x.7n～x.12n` 反向用例 FAIL | SDK 把不该命中的请求误染色到了 lane=gray | 排查方向：① stainLabelIndex 是否对短格式标签做了模糊匹配；② Argument EXACT 比较是否被实现成 CONTAINS；③ AND 复合条件是否在缺少子条件时被错误满足 |
+| 用例 7.3 STRICT 未返回 503，而是穿透到 `:19131` | STRICT 泳道请求错误降级或穿透 | 检查 STRICT 泳道路由配置和 `consumer` 日志 |
+| `x.4b` STRICT-503 用例未返回 503 | STRICT + 无目标实例时未返回请求失败 | 检查 STRICT 路由配置和当前 SDK 版本 |
+| `x.2n / x.3n / x.7n～x.12n` 反向用例 FAIL | 不应命中的请求进入了 lane=gray | 检查 stainLabel 匹配条件、EXACT 比较和 AND 复合条件 |
 | warmup 比例明显偏高（用例 1） | 规则 `etime` 未刷新导致 `uptime` 被放大 | 确认 `validate_rules_with_wait` 成功执行；必要时手动在控制台 disable → enable |
 | warmup 用例 2/3 频繁 SKIP | `warmup_interval` 过大 > `MAX_WARMUP_WAIT` | 将规则里的 `warmup_interval` 调小（建议 ≤ 120s） |
 

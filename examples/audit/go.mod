@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/golang/protobuf v1.5.2
 	github.com/polarismesh/polaris-go v1.7.1-rc2
-	github.com/polarismesh/specification v1.8.1-0.20260730090605-7b2855bfb207
+	github.com/polarismesh/specification v1.9.0-RC1
 	google.golang.org/grpc v1.51.0
 )
 

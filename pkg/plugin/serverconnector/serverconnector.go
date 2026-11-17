@@ -92,6 +92,19 @@ type ServerConnector interface {
 	WatchClientEvents() (ClientEventStream, error)
 }
 
+// ServiceContractConnector 是支持 Service Contract 读写的可选 ServerConnector 能力。
+// 独立扩展接口避免破坏已有第三方 ServerConnector 实现。
+type ServiceContractConnector interface {
+	// ReportServiceContract 创建或更新 Service Contract。
+	ReportServiceContract(
+		req *apiservice.ServiceContract, timeout time.Duration,
+	) (*apiservice.ServiceContract, error)
+	// GetServiceContract 查询 Service Contract。
+	GetServiceContract(
+		req *apiservice.ServiceContract, timeout time.Duration,
+	) (*apiservice.ServiceContract, error)
+}
+
 // ClientEventStream WatchClientEvents 双向流封装。
 // 调用方持有并在用完后调用 Close 释放底层连接，避免连接泄漏。
 type ClientEventStream interface {

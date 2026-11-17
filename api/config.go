@@ -99,7 +99,11 @@ func checkAvailable(owner SDKOwner) error {
 	if reflect2.IsNil(owner) {
 		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "API can not be nil")
 	}
-	if owner.SDKContext().IsDestroyed() {
+	context := owner.SDKContext()
+	if context == nil {
+		return model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil, "API SDK context can not be nil")
+	}
+	if context.IsDestroyed() {
 		return model.NewSDKError(model.ErrCodeInvalidStateError, nil,
 			"api instance has been destroyed")
 	}
@@ -119,7 +123,9 @@ type sdkContext struct {
 // Destroy 销毁SDK上下文
 func (s *sdkContext) Destroy() {
 	var err error
-	atomic.StoreUint32(&s.destroyed, 1)
+	if !atomic.CompareAndSwapUint32(&s.destroyed, 0, 1) {
+		return
+	}
 	err = s.engine.Destroy()
 	if err != nil {
 		s.valueContext.GetContextLogger().GetBaseLogger().Errorf("fail to destroy engine, error %+v", err)
@@ -258,7 +264,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	}
 	logCtx := globalCtx.GetContextLogger()
 	if logCtx.GetBaseLogger().IsLevelEnabled(log.DebugLog) {
-		text, err := yaml.Marshal(cfg)
+		text, err := marshalConfigForLog(cfg)
 		if err != nil {
 			return nil, model.NewSDKError(model.ErrCodeAPIInvalidConfig, err, "fail to marshal input config")
 		}
@@ -302,7 +308,7 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	if err != nil {
 		finalErrs = multierror.Append(finalErrs, err)
 	}
-	text, terr := yaml.Marshal(cfg)
+	text, terr := marshalConfigForLog(cfg)
 	if terr != nil {
 		finalErrs = multierror.Append(finalErrs, model.NewSDKError(model.ErrCodeAPIInvalidConfig, terr,
 			"fail to marshal input config"))
@@ -314,9 +320,11 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine initialized successfully-------", token.UID)
 	// 启动所有插件
 	if err = plugManager.StartPlugins(); err != nil {
+		_ = engine.Destroy()
 		return nil, err
 	}
 	if err = engine.Start(); err != nil {
+		_ = engine.Destroy()
 		return nil, err
 	}
 	logCtx.GetBaseLogger().Infof("\n-------%s, All plugins and engine started successfully-------", token.UID)
@@ -328,6 +336,39 @@ func InitContextByConfig(cfg config.Configuration) (SDKContext, error) {
 	globalCtx.SetValue(sdk.ContextKeyFinishInitTime, time.Now())
 	logCtx.GetBaseLogger().Infof("\n-------%s, SDKContext init successfully-------", token.UID)
 	return ctx, nil
+}
+
+func marshalConfigForLog(cfg interface{}) ([]byte, error) {
+	text, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var value interface{}
+	if err = yaml.Unmarshal(text, &value); err != nil {
+		return nil, err
+	}
+	redactConfigTokens(value)
+	return yaml.Marshal(value)
+}
+
+func redactConfigTokens(value interface{}) {
+	switch typed := value.(type) {
+	case map[interface{}]interface{}:
+		for key, item := range typed {
+			name, ok := key.(string)
+			if ok && strings.EqualFold(name, "token") {
+				if token, tokenOK := item.(string); tokenOK && token != "" {
+					typed[key] = "***"
+				}
+				continue
+			}
+			redactConfigTokens(item)
+		}
+	case []interface{}:
+		for _, item := range typed {
+			redactConfigTokens(item)
+		}
+	}
 }
 
 // initSelfIP 获取SDK自身的IP

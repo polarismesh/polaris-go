@@ -419,7 +419,8 @@ cat .build/provider_b_run/polaris/log/base/polaris.log
 
 ### 验证原理
 - **散装写法等价于装饰器**：装饰器（用例 1）本质是把 `Check → 业务调用 → Report` 三步封装。旧版直接调 `CircuitBreakerAPI.Report(InstanceResource)` 上报熔断结果 + `ConsumerAPI.UpdateServiceCallResult` 上报指标，绕过装饰器但触达的是**同一套 `InstanceResource` 计数器**（`counter.go` 的 `Report`/`dispatchToBlocks`）。
-- **结果与用例 1 完全对齐**正说明：新版 SDK 重构装饰器/InvokeHandler 时没有破坏底层实例级熔断与半开恢复链路，存量客户零改造即可继续工作（向后兼容）。
+- **结果与用例 1 对齐**说明：装饰器和 InvokeHandler 两种调用方式都能触达同一套
+  实例级熔断与半开恢复逻辑。
 
 ---
 
@@ -784,8 +785,7 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 
 > **维持 OPEN 需业务 500 + 探测端口故障双重保证**：SERVICE 级 half-open 会放行业务请求探活，若维持阶段
 > 业务 `/echo` 恢复 200 会抢先 close。故维持阶段让业务 `/echo` 仍 500、同时让 TCP/UDP 探测端口故障，
-> 恢复阶段则业务与探测端口同时转绿。TCP/UDP 探测器各暴露并修复了 3 个 SDK bug（`Name()` 撞名、
-> `ReadAll` 无 read deadline 阻塞、`DetectResultImp` 缺 `Code` 哨兵），详见 fault-detect.md「与代码改造对应关系」。
+> 恢复阶段则业务与探测端口同时转绿。
 
 ### 共同验证原理
 - 熔断规则 `faultDetectConfig.enable=true` 是探测启动门控；门控关闭则 SDK 不创建 `ResourceHealthChecker`
@@ -813,45 +813,3 @@ INSTANCE 级不经 AcquirePermission，OPEN 实例被路由层摘除、业务落
 | 用例 8/10 trigger 阶段未命中 | `RequestContext.Protocol/HTTPMethod` 未正确推断 | 查 `pm_consumer.log` / `pathtype_consumer.log` |
 | 用例 10 verify 阶段全 500（全死全活未生效） | trigger burst 不够，只有一个实例被熔断 | 确认 burst=60 |
 | InvokeHandler 子阶段 trigger 不够 | 50/50 LB 下连续命中概率不足 | 确认 burst 值与 Decorator 阶段一致（30） |
-
-## 与 polaris-go 代码改造的对应关系
-
-| 改造点 | 由哪个用例验证 |
-|--------|----------------|
-| `MethodResource` 三元组（Protocol/Method/Path） | 用例 3 / 用例 8 |
-| `selectCircuitBreakerRule` 遍历 `BlockConfigs.Api` | 用例 3 / 用例 8 |
-| `ResourceCounters.init` 走 `BlockConfigs × TriggerConditions` | 用例 1/2/3 共同依赖 |
-| `blockCounter.parseRetStatus` 块级独立判错 + 多种 MatchString | 用例 3 |
-| `blockCounter.parseRetStatus` 处理 `INPUT_TYPE=DELAY` | 用例 3 `/slow` |
-| `commonCheck/commonReport` 多级分发（SERVICE / METHOD） | 用例 2 + 用例 3 |
-| `InvokeContext.SetInstance` + `commonReport` 实例级分支 | 用例 1 |
-| 旧 `CircuitBreakerAPI.Report(InstanceResource)` 散装路径不破坏 | 用例 4 |
-| `HalfOpenStatus.AcquirePermission` 精确发放配额 | 用例 1/2/3 恢复阶段 |
-| `HalfOpenStatus.Release` 归集判定 | 用例 1/2/3 恢复阶段 |
-| `CircuitBreakerRuleDictionary` 三级索引 | 用例 3 多接口隔离 |
-| `blockCounter.parseRetStatus` 的 `-1` 哨兵识别 | 用例 5 C 段 |
-| demo 端 4xx → OnSuccess、5xx → OnError 的分流 | 用例 5 A/B 段 |
-| `default.go` dictionary lookup miss + `defaultRuleEnable=true` 兜底 | 用例 6 |
-| `update_circuitbreaker_rule` API 热改 trigger 阈值 | 用例 7 |
-| `matchProtocolOrMethod` 多维度独立匹配 | 用例 8 |
-| `MatchString` 5 种类型正向验证 | 用例 9 |
-| `FilterOnlyRouter` 全死全活兜底（`enableRecoverAll`） | 用例 10 |
-| `MakeInvokeHandler` + `AcquirePermission` 手动编排模式 | 用例 1/2/3 InvokeHandler 子阶段 + 用例 10(B) |
-| 三种调用模式行为一致性 | 用例 10（Decorator / InvokeHandler / Bare Report） |
-| `buildFallbackInfo` 解析规则降级响应（SERVICE/METHOD） | 用例 2/3 fallback 正向子阶段 |
-| `buildFallbackInfo` 的 `GetEnable()` 短路（enable=false 回 503） | 用例 2/3 fallback 反向子阶段 |
-| `CallAborted` 携带 fallback + demo `HasFallback()` 透传/回退 | 用例 2/3 fallback 子阶段 |
-| PUT 更新 fallbackConfig.enable 触发 SDK counter 重建（**无需重启 consumer**） | 用例 2/3 fallback 子阶段 |
-| `reportCircuitBreakMetric` + `buildCircuitBreakGauge` 构造熔断 gauge 并通过 `SyncReportStat` 上报 | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `PrometheusReporter.ReportStat` → `circuitBreakerCollector.CollectStatInfo` → `doAggregation` 聚合到 GaugeVec | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `PullAction.doAggregation` 读 `cfg.Interval`（默认 15s）替代硬编码 30s | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `PutDataFromContainerInOrder` `currentRevision>0` 守卫（熔断 gauge 永不过期，对齐 polaris-java） | 用例 1/2/3/4（嵌入可观测性子步骤） |
-| `reportCircuitBreakerEvent` → `BuildCircuitBreakerEvent` → `sendEvent` 投递事件链 | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
-| `PushgatewayReporter.ReportEvent` 入队 + batch flush POST `/polaris/client/events` | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
-| `toOpen` reason 形参透传（trigger 层 `CloseToOpen` 传入 CONSECUTIVE_ERROR/ERROR_RATE 描述） | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
-| `mock_event_server.py` 全局启动 1 个捕获 pushgateway POST + cleanup 停止 | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
-| 一次 trigger 同时产出 gauge + event（prometheus + pushgateway 同配同 consumer） | 用例 1/2/3/4/7（嵌入可观测性子步骤） |
-| 规则热更新（update_circuitbreaker_rule）后熔断事件仍正常上报 | 用例 7（嵌入可观测性子步骤） |
-| `precheck_and_disable_stranger_rules` 启动前巡检 + 自动关闭 `source=*/*` 通配干扰规则（`PUT enable=false`） | 全部用例 |
-| `disable_circuitbreaker_rule` 通过 PUT `/naming/v1/circuitbreaker/rules/enable` 传入 `enable=false` 关闭规则 | 全部用例 |
-| `_inspect_rules` 输出 `STRANGER_IDS`（陌生规则 id 列表）供调用方做 disable 操作 | 全部用例 |

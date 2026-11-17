@@ -34,6 +34,11 @@ type InstanceRegisterRequest struct {
 	model.InstanceRegisterRequest
 }
 
+// ReportServiceContractRequest 上报 Service Contract 请求。
+type ReportServiceContractRequest struct {
+	ServiceContract *model.ServiceContract
+}
+
 // ProviderAPI CL5服务端API的主接口
 type ProviderAPI interface {
 	SDKOwner
@@ -51,6 +56,8 @@ type ProviderAPI interface {
 	// Heartbeat the heartbeat report
 	// Deprecated: Use RegisterInstance instead.
 	Heartbeat(instance *InstanceHeartbeatRequest) error
+	// ReportServiceContract 创建或更新服务契约。
+	ReportServiceContract(req *ReportServiceContractRequest) (*model.ReportServiceContractResponse, error)
 	// Destroy the api is destroyed and cannot be called again
 	Destroy()
 }
