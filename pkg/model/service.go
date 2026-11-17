@@ -647,6 +647,12 @@ func (o *OneInstanceResponse) GetInstance() Instance {
 // InstancesResponse 服务实例查询应答
 type InstancesResponse struct {
 	ServiceInfo
+	// ServiceType is the service type reported by Discover, not inferred from instances.
+	ServiceType ServiceType
+	// ServiceRevision is the service resource revision, distinct from Revision below.
+	ServiceRevision string
+	// ExtendedMetadata contains an independent service-level metadata snapshot.
+	ExtendedMetadata []*ExtendedMetadata
 	// 可选，流水号，用于跟踪用户的请求，默认0
 	FlowID uint64
 	// 服务权重类型
@@ -666,6 +672,13 @@ type InstancesResponse struct {
 	// 例如泳道路由在染色成功后写入 {"service-lane": "groupName/ruleName"}，
 	// 供调用方（如网关）读取并透传给下游服务。
 	RouteMetadata map[string]string
+}
+
+// ServiceMetadataProvider exposes optional service fields without widening ServiceInstances.
+type ServiceMetadataProvider interface {
+	GetServiceType() ServiceType
+	GetServiceRevision() string
+	GetExtendedMetadata() []*ExtendedMetadata
 }
 
 // GetType 获取配置类型
@@ -778,6 +791,8 @@ type ServiceCallResult struct {
 	SourceService *ServiceInfo
 	// Timestamp 调用发生时间戳，可选；未设置时审计插件用上报时刻近似
 	Timestamp time.Time
+	// InstanceType 是被调实例的受限类型维度；零值表示 microservice。
+	InstanceType InstanceType
 }
 
 // RateLimitGauge Rate Limit Gauge
@@ -991,6 +1006,22 @@ func (s *ServiceCallResult) SetCalledIP(ip string) *ServiceCallResult {
 // SetCallerService 设置主调服务信息，复用 SourceService 字段。
 func (s *ServiceCallResult) SetCallerService(info *ServiceInfo) *ServiceCallResult {
 	s.SourceService = info
+	return s
+}
+
+// GetInstanceType 返回归一化后的被调实例类型。
+func (s *ServiceCallResult) GetInstanceType() InstanceType {
+	if s == nil {
+		return InstanceTypeMicroservice
+	}
+	return NormalizeInstanceType(s.InstanceType)
+}
+
+// SetInstanceType 设置被调实例类型。
+func (s *ServiceCallResult) SetInstanceType(instanceType InstanceType) *ServiceCallResult {
+	if s != nil {
+		s.InstanceType = NormalizeInstanceType(instanceType)
+	}
 	return s
 }
 
@@ -1357,6 +1388,9 @@ func (g *InstanceRegisterRequest) Validate() error {
 	}
 	if g.Port <= 0 || g.Port >= 65536 {
 		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: port should be in range (0, 65536)"))
+	}
+	if _, ok := g.Metadata[MetadataKeyAIAgentCard]; ok && g.Protocol != nil && *g.Protocol != "" {
+		errs = multierror.Append(errs, fmt.Errorf("InstanceRegisterRequest: A2A instance protocol must be empty"))
 	}
 	if nil != g.Weight && (*g.Weight < MinWeight || *g.Weight > MaxWeight) {
 		errs = multierror.Append(errs,

@@ -39,7 +39,7 @@ cd examples/configuration/config_group_listener_cancel
 - 一个已存在的测试命名空间，默认使用 `default`。
 - 创建、更新、发布、读取和删除测试配置所需的权限；启用鉴权时提前设置环境变量 `POLARIS_TOKEN`。
 
-示例的 `go.mod` 使用 `replace github.com/polarismesh/polaris-go => ../../..`，因此构建和验证的是当前工作区 SDK。
+示例的 `go.mod` 使用 `replace github.com/polarismesh/polaris-go => ../../..`，请从仓库根目录运行，确保构建使用本仓库的 SDK。
 
 ### 2.2 使用示例地址
 
@@ -181,7 +181,7 @@ generation: <本地发布序号>
 
 ### 5.2 为什么按版本号，而不是按 MD5 匹配
 
-在测试环境的实测中，分组元数据已经返回 `listener.yaml` 和有效版本，但 `Md5` 为空。若按本地内容 MD5 匹配，初始化会一直等待并超时，即使分组已经完成同步。
+分组元数据可能返回文件名和有效版本，但不包含 `Md5`。若按本地内容 MD5 匹配，初始化会一直等待并超时，即使分组已经完成同步。
 
 当前流程先独立确认文件内容，再使用它的服务端版本匹配分组事件中的 `SimpleConfigFile.Version`。这同时避免了“发布内容不正确”和“元数据省略 MD5”造成的误判。
 
@@ -510,7 +510,7 @@ make clean CLEAN_ARGS=--dry-run
 rg -n '已注册配置分组监听器|已取消配置分组监听器' polaris/log/base/polaris.log
 ```
 
-历史运行日志不会自动补上这些记录。旧 `AddChangeListener` 没有取消入口，`legacy` 对照中的旧缓存不会产生这对生命周期日志。
+旧 `AddChangeListener` 没有取消入口，`legacy` 对照中的旧缓存不会产生这对生命周期日志。
 
 ### 11.3 重复日志如何精简
 
@@ -537,26 +537,9 @@ INFO 保留可取消监听器注册/取消、配置文件拉取成功摘要、�
 - **清理请求失败**：测试不能算整体通过，按 `[SETUP]` 的具体组名确认残留。
 - **`WARNING: DATA RACE`**：查看报告中的访问栈；race 检查覆盖本次执行过的并发路径，不代表穷尽全部调度。
 
-## 12. 已有实测记录与验证范围
+## 12. 验证范围
 
-### 12.1 2026 年 10 月 10 日的实测
-
-实测服务地址已脱敏，文档统一以 `127.0.0.1` 示例表示。本次实测使用默认 `default` 命名空间、20 轮 TTL、每代 8 个缓存，以及带 race 检测的程序。
-
-可取消模式运行于本机时间 17:08:27—17:08:53（Asia/Shanghai），五个场景全部通过。TTL 场景的最终记录为：
-
-```text
-[CHECK] active=0 retired=168 retained=0 staleCallbacks=0
-[PASS] ttl-expiration-overlapping-generations
-[PASS] callback-self-cancellation
-PASS: 配置组监听取消 E2E 全部通过
-```
-
-旧接口对照运行于 17:18:01—17:18:26，在第一个场景检出 `retained=1 staleCallbacks=1` 并按预期失败。两次运行均记录了本轮临时分组清理成功。
-
-本工作区保留的日志文件为 `.logs/verify-20261010-170826-91317.log` 和 `.logs/verify-20261010-171800-7024.log`。日志目录被 Git 忽略，其他机器拉取仓库后不一定存在这些文件。
-
-### 12.2 与本地回归测试的配合
+### 12.1 与本地回归测试的配合
 
 E2E 验证真实发布和缓存生命周期。空回调、相同回调多次独立注册、旧接口顺序、慢回调期间注册/取消、快照边界、并发注册/取消/分发等细节，由仓库中的本地回归测试进一步覆盖：
 

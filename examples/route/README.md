@@ -112,14 +112,14 @@ chmod +x run_all_tests.sh
 
   Demo       结论         退出码     耗时(秒)   日志
   ---------- ------------ ---------- ---------- ----------------------------------------
-  lane       PASS         0          185        .logs/lane-20260424_170000.log
-  metadata   PASS         0          92         .logs/metadata-20260424_170310.log
-  nearby     PASS         0          78         .logs/nearby-20260424_170445.log
-  rule       PASS         0          143        .logs/rule-20260424_170610.log
+  lane       PASS         0          185        .logs/lane-<timestamp>.log
+  metadata   PASS         0          92         .logs/metadata-<timestamp>.log
+  nearby     PASS         0          78         .logs/nearby-<timestamp>.log
+  rule       PASS         0          143        .logs/rule-<timestamp>.log
 
   总数(不含 SKIP): 4,  PASS=4,  PARTIAL=0,  FAIL=0,  SKIP=0
   成功率:          100.0%
-  聚合日志:        .logs/run_all_tests-20260424_170000.log
+  聚合日志:        .logs/run_all_tests-<timestamp>.log
 
 ╔═══════════════════════════════════════════════════════════════════╗
 ║  最终结论: ✅ 全部 4 个路由 demo 验证通过！                           ║

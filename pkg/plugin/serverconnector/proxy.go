@@ -16,6 +16,10 @@
 package serverconnector
 
 import (
+	"time"
+
+	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"github.com/polarismesh/polaris-go/pkg/plugin"
 	"github.com/polarismesh/polaris-go/pkg/plugin/common"
@@ -73,6 +77,30 @@ func (p *Proxy) WatchClientEvents() (ClientEventStream, error) {
 func (p *Proxy) UpdateServers(key *model.ServiceEventKey) error {
 	err := p.ServerConnector.UpdateServers(key)
 	return err
+}
+
+// ReportServiceContract proxy ServiceContractConnector ReportServiceContract。
+func (p *Proxy) ReportServiceContract(
+	req *apiservice.ServiceContract, timeout time.Duration,
+) (*apiservice.ServiceContract, error) {
+	connector, ok := p.ServerConnector.(ServiceContractConnector)
+	if !ok {
+		return nil, model.NewSDKError(model.ErrCodeMCPNotConfigured, nil,
+			"server connector does not support Service Contract")
+	}
+	return connector.ReportServiceContract(req, timeout)
+}
+
+// GetServiceContract proxy ServiceContractConnector GetServiceContract。
+func (p *Proxy) GetServiceContract(
+	req *apiservice.ServiceContract, timeout time.Duration,
+) (*apiservice.ServiceContract, error) {
+	connector, ok := p.ServerConnector.(ServiceContractConnector)
+	if !ok {
+		return nil, model.NewSDKError(model.ErrCodeMCPNotConfigured, nil,
+			"server connector does not support Service Contract")
+	}
+	return connector.GetServiceContract(req, timeout)
 }
 
 // init 注册proxy

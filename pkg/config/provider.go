@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-multierror"
+
+	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // DefaultRateLimitEnable 默认打开限流能力
@@ -35,6 +37,8 @@ type ProviderConfigImpl struct {
 	Auth *AuthenticatorConfigImpl `yaml:"auth" json:"auth"`
 	// minimum interval between tow register operation
 	MinRgisterInterval time.Duration `yaml:"minRegisterInterval" json:"minRegisterInterval"`
+	// ReportServiceContractEnable controls Provider/Consumer Service Contract APIs.
+	ReportServiceContractEnable *bool `yaml:"reportServiceContractEnable" json:"reportServiceContractEnable"`
 }
 
 // GetRateLimit 是否启用限流能力.
@@ -55,6 +59,19 @@ func (p *ProviderConfigImpl) GetLossless() LosslessConfig {
 // GetAuth 获取服务鉴权配置
 func (p *ProviderConfigImpl) GetAuth() AuthenticatorConfig {
 	return p.Auth
+}
+
+// IsReportServiceContractEnable returns whether Service Contract APIs are enabled.
+func (p *ProviderConfigImpl) IsReportServiceContractEnable() bool {
+	return p != nil && p.ReportServiceContractEnable != nil && *p.ReportServiceContractEnable
+}
+
+// SetReportServiceContractEnable enables or disables Service Contract APIs.
+func (p *ProviderConfigImpl) SetReportServiceContractEnable(enable bool) {
+	if p == nil {
+		return
+	}
+	p.ReportServiceContractEnable = model.ToBoolPtr(enable)
 }
 
 // Verify 校验配置参数.
@@ -88,6 +105,9 @@ func (p *ProviderConfigImpl) SetDefault() {
 	if p.MinRgisterInterval == 0 {
 		p.MinRgisterInterval = DefaultMinRegisterInterval
 	}
+	if p.ReportServiceContractEnable == nil {
+		p.ReportServiceContractEnable = model.ToBoolPtr(false)
+	}
 	if nil == p.Lossless {
 		p.Lossless = &LosslessConfigImpl{}
 	}
@@ -106,4 +126,5 @@ func (p *ProviderConfigImpl) Init() {
 	p.Lossless.Init()
 	p.Auth = &AuthenticatorConfigImpl{}
 	p.Auth.Init()
+	p.ReportServiceContractEnable = model.ToBoolPtr(false)
 }

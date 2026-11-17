@@ -50,6 +50,7 @@ const (
 	reqIDPrefixCreateConfigFile
 	reqIDPrefixUpdateConfigFile
 	reqIDPrefixPublishConfigFile
+	reqIDPrefixServiceContract
 )
 
 const (
@@ -68,6 +69,7 @@ const (
 	OpKeyCreateConfigFile           = "CreateConfigFile"
 	OpKeyUpdateConfigFile           = "UpdateConfigFile"
 	OpKeyPublishConfigFile          = "PublishConfigFile"
+	OpKeyServiceContract            = "ServiceContract"
 	OpKeyGetConfigGroup             = "GetConfigGroup"
 	OpkeyUpsertAndPublishConfigFile = "UpsertAndPublishConfigFile"
 )
@@ -130,6 +132,11 @@ func NextUpdateConfigFileReqID() string {
 // NextPublishConfigFileReqID 生成PublishConfigFile调用的请求Id
 func NextPublishConfigFileReqID() string {
 	return fmt.Sprintf("%d%d", reqIDPrefixPublishConfigFile, uuid.New().ID())
+}
+
+// NextServiceContractReqID 生成 Service Contract 调用的请求Id。
+func NextServiceContractReqID() string {
+	return fmt.Sprintf("%d%d", reqIDPrefixServiceContract, uuid.New().ID())
 }
 
 // GetConnErrorCode 获取连接错误码

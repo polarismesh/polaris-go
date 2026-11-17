@@ -647,7 +647,6 @@ func (n *namingServer) Discover(server service_manage.PolarisGRPC_DiscoverServer
 			for i := range instances {
 				revisions = append(revisions, instances[i].GetRevision().GetValue())
 			}
-			revisions = append(revisions)
 			revision, _ = CompositeComputeRevision(revisions)
 			n.rwMutex.RUnlock()
 		case service_manage.DiscoverRequest_ROUTING:

@@ -47,19 +47,20 @@ type metricDesc struct {
 
 const (
 	// CalleeNamespace SystemMetricName.
-	CalleeNamespace = "callee_namespace"
-	CalleeService   = "callee_service"
-	CalleeSubset    = "callee_subset"
-	CalleeInstance  = "callee_instance"
-	CalleeRetCode   = "callee_result_code"
-	CalleeMethod    = "callee_method"
-	CalleeResult    = "callee_result"
-	CallerNamespace = "caller_namespace"
-	CallerService   = "caller_service"
-	CallerIP        = "caller_ip"
-	CallerLabels    = "caller_labels"
-	MetricNameLabel = "metric_name"
-	RuleName        = "rule_name"
+	CalleeNamespace    = "callee_namespace"
+	CalleeService      = "callee_service"
+	CalleeSubset       = "callee_subset"
+	CalleeInstance     = "callee_instance"
+	CalleeInstanceType = "callee_instance_type"
+	CalleeRetCode      = "callee_result_code"
+	CalleeMethod       = "callee_method"
+	CalleeResult       = "callee_result"
+	CallerNamespace    = "caller_namespace"
+	CallerService      = "caller_service"
+	CallerIP           = "caller_ip"
+	CallerLabels       = "caller_labels"
+	MetricNameLabel    = "metric_name"
+	RuleName           = "rule_name"
 
 	// MetricsNameUpstreamRequestTotal 与路由、请求相关的指标信息.
 	MetricsNameUpstreamRequestTotal      = "upstream_rq_total"
@@ -102,6 +103,13 @@ var (
 		CalleeInstance: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)
 			return fmt.Sprintf("%s:%d", val.GetCalledInstance().GetHost(), val.GetCalledInstance().GetPort())
+		},
+		CalleeInstanceType: func(args interface{}) string {
+			val := args.(*model.ServiceCallResult)
+			if typed, ok := interface{}(val).(model.InstanceTypeGauge); ok {
+				return string(model.NormalizeInstanceType(typed.GetInstanceType()))
+			}
+			return string(model.InstanceTypeMicroservice)
 		},
 		CalleeRetCode: func(args interface{}) string {
 			val := args.(*model.ServiceCallResult)

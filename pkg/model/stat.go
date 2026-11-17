@@ -16,8 +16,39 @@
 package model
 
 import (
+	"strings"
 	"time"
 )
+
+// InstanceType 是被调实例的受限类型维度。
+type InstanceType string
+
+const (
+	// InstanceTypeMicroservice 是普通微服务实例。
+	InstanceTypeMicroservice InstanceType = "microservice"
+	// InstanceTypeMCP 是 MCP Server 实例。
+	InstanceTypeMCP InstanceType = "mcp"
+	// InstanceTypeA2A 是 A2A Agent 实例。
+	InstanceTypeA2A InstanceType = "a2a"
+)
+
+// NormalizeInstanceType 将任意输入收敛到有限指标维度，零值和未知值均视为 microservice。
+func NormalizeInstanceType(value InstanceType) InstanceType {
+	switch InstanceType(strings.ToLower(strings.TrimSpace(string(value)))) {
+	case InstanceTypeMCP:
+		return InstanceTypeMCP
+	case InstanceTypeA2A:
+		return InstanceTypeA2A
+	default:
+		return InstanceTypeMicroservice
+	}
+}
+
+// InstanceTypeGauge 是可选的 InstanceType 指标能力。
+// 独立接口避免给既有 InstanceGauge 实现增加必选方法。
+type InstanceTypeGauge interface {
+	GetInstanceType() InstanceType
+}
 
 // InstanceGauge 针对单个实例的单次评估指标.
 type InstanceGauge interface {
@@ -155,6 +186,11 @@ func (e EmptyInstanceGauge) GetCalledInstance() Instance {
 // GetDelayRange 调用时延.
 func (e EmptyInstanceGauge) GetDelayRange() ApiDelayRange {
 	return ApiDelayMax
+}
+
+// GetInstanceType 返回微服务零值。
+func (e EmptyInstanceGauge) GetInstanceType() InstanceType {
+	return InstanceTypeMicroservice
 }
 
 // ApiOperation 命名类型，标识具体的API类型.

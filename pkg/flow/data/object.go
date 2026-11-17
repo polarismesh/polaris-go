@@ -473,7 +473,19 @@ func buildInstancesResponse(response *model.InstancesResponse, dstService model.
 	instances []model.Instance, totalWeight int, svcInstances model.ServiceInstances) *model.InstancesResponse {
 	response.ServiceInfo.Service = dstService.Service
 	response.ServiceInfo.Namespace = dstService.Namespace
-	response.ServiceInfo.Metadata = svcInstances.GetMetadata()
+	metadata := svcInstances.GetMetadata()
+	response.Metadata = make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		response.Metadata[key] = value
+	}
+	response.ServiceType = model.ServiceTypeMicroservice
+	response.ServiceRevision = ""
+	response.ExtendedMetadata = nil
+	if provider, ok := svcInstances.(model.ServiceMetadataProvider); ok {
+		response.ServiceType = provider.GetServiceType()
+		response.ServiceRevision = provider.GetServiceRevision()
+		response.ExtendedMetadata = provider.GetExtendedMetadata()
+	}
 	if nil != cluster {
 		// 对外返回的cluster，无需池化，因为可能会被别人引用
 		cluster.SetReuse(false)

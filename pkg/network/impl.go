@@ -83,7 +83,8 @@ func (s *ServerAddressList) getAndConnectServer(
 func (s *ServerAddressList) getServerAddress(hashKey []byte) (string, model.Instance, error) {
 	var targetAddress string
 	var instance model.Instance
-	if s.service.ClusterType == config.BuiltinCluster || s.service.ClusterType == config.ConfigCluster {
+	if s.service.ClusterType == config.BuiltinCluster || s.service.ClusterType == config.ConfigCluster ||
+		s.service.ClusterType == config.SkillCluster {
 		serverCount := len(s.addresses)
 		targetAddress = s.addresses[s.curIndex%serverCount]
 		if s.curIndex == math.MaxInt32 {
@@ -142,6 +143,9 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 		// 服务地址没有发生变更，无需切换
 		return lastConn, nil
 	}
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	connectTime := time.Now()
 	tcpConn, err := s.manager.creator.CreateConnection(addr, timeout, &s.manager.ClientInfo)
 	connID := ConnID{
@@ -158,6 +162,10 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 		return nil, fmt.Errorf("fail to connect to %s, timeout is %v, service is %s, because %s",
 			addr, connectDuration, s.service, err.Error())
 	}
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		_ = tcpConn.Close()
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 
 	if nil != lastConn {
 		// 延迟释放连接
@@ -169,18 +177,29 @@ func (s *ServerAddressList) connectServer(force bool, addr string, instance mode
 		ConnID:     connID,
 		logNetwork: s.manager.logNetwork,
 	}
+	if !s.manager.trackConnection(conn) {
+		conn.lazyClose(true)
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	if ctrl, ok := DefaultServerServiceToConnectionControl[s.service.ClusterType]; ok && ctrl == ConnectionLong {
 		s.manager.logNetwork.Infof("long connection %v, target address %s: create", conn.ConnID, addr)
 	} else {
 		s.manager.logNetwork.Debugf("short connection %v, target address %s: create", conn.ConnID, addr)
 	}
 	s.curConn.Store(conn)
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		conn.lazyClose(true)
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	return conn, nil
 }
 
 // ConnectServerByAddrOnly 。根据地址进行链接
 func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Duration,
 	clsService config.ClusterService, instance model.Instance) (*Connection, error) {
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	connectTime := time.Now()
 	tcpConn, err := s.manager.creator.CreateConnection(addr, timeout, &s.manager.ClientInfo)
 	connectDuration := time.Since(connectTime)
@@ -199,12 +218,21 @@ func (s *ServerAddressList) ConnectServerByAddrOnly(addr string, timeout time.Du
 		ConnID:     connID,
 		logNetwork: s.manager.logNetwork,
 	}
-	conn.acquire(addr)
+	if !s.manager.trackConnection(conn) {
+		conn.lazyClose(true)
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
+	if !conn.acquire(addr) {
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	return conn, nil
 }
 
 // tryGetConnection 与远程server进行连接
 func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []byte) (*Connection, error) {
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	curConnValue := s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
 		// log.GetNetworkLogger().Debugf("[CheckConnection]traceCheck IsAvailableConnection")
@@ -212,6 +240,9 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 	}
 	s.connectMutex.Lock()
 	defer s.connectMutex.Unlock()
+	if atomic.LoadUint32(&s.manager.closed) == 1 {
+		return nil, fmt.Errorf("connection manager for %s is destroyed", s.service)
+	}
 	curConnValue = s.loadCurrentConnection()
 	if IsAvailableConnection(curConnValue) {
 		return curConnValue, nil
@@ -226,7 +257,7 @@ func (s *ServerAddressList) tryGetConnection(timeout time.Duration, hashKey []by
 // closeCurrentConnection 关闭当前连接
 func (s *ServerAddressList) closeCurrentConnection(force bool) {
 	conn := s.loadCurrentConnection()
-	if IsAvailableConnection(conn) {
+	if conn != nil && (force || IsAvailableConnection(conn)) {
 		s.manager.logNetwork.Debugf("current connection for %s has been closed", s.service)
 		conn.lazyClose(force)
 	}
@@ -252,6 +283,11 @@ type connectionManager struct {
 	discoverEventMutex sync.Mutex
 	// 是否已经准备完成, 0代表未完成，1代表完成
 	ready uint32
+	// 是否已经销毁, 0代表未销毁，1代表已销毁
+	closed uint32
+	// Skill manager tracks retiring connections until their last RPC releases them.
+	connectionMutex sync.Mutex
+	connections     map[*Connection]struct{}
 	// 系统服务信息
 	serverServices map[config.ClusterType]*ServerAddressList
 	// 全局上下文信息
@@ -349,6 +385,42 @@ func NewConfigConnectionManager(cfg config.Configuration, valueCtx sdk.ValueCont
 	return configManager, nil
 }
 
+// NewSkillConnectionManager 创建独立 Skill Registry 连接管理器。
+func NewSkillConnectionManager(cfg config.Configuration, valueCtx sdk.ValueContext) (ConnectionManager, error) {
+	skillCfg := cfg.GetSkill()
+	addresses := skillCfg.GetAddresses()
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("skill addresses are empty")
+	}
+	manager := &connectionManager{
+		connectTimeout:   skillCfg.GetConnectTimeout(),
+		switchInterval:   config.DefaultServerSwitchInterval,
+		serverServices:   make(map[config.ClusterType]*ServerAddressList),
+		valueCtx:         valueCtx,
+		protocol:         config.DefaultServerConnector,
+		discoverEventSet: make(map[model.EventType]bool),
+		logNetwork:       valueCtx.GetContextLogger().GetNetworkLogger(),
+		connections:      make(map[*Connection]struct{}),
+	}
+	skillService := config.ClusterService{
+		ServiceKey: model.ServiceKey{
+			Namespace: config.ServerNamespace,
+			Service:   "polaris.skill",
+		},
+		ClusterType: config.SkillCluster,
+	}
+	manager.serverServices[config.SkillCluster] = &ServerAddressList{
+		service:    skillService,
+		useDefault: false,
+		manager:    manager,
+		addresses:  append([]string(nil), addresses...),
+		curIndex:   rand.Intn(len(addresses)),
+	}
+	manager.ready = serviceReadyStatus
+	manager.ctx, manager.cancel = context.WithCancel(context.Background())
+	return manager, nil
+}
+
 // SetConnCreator 设置当前协议的连接创建器
 func (c *connectionManager) SetConnCreator(creator ConnCreator) {
 	c.creator = creator
@@ -444,7 +516,39 @@ func (c *connectionManager) ReportConnectionDown(connID ConnID) {
 
 // Destroy 销毁连接管理器
 func (c *connectionManager) Destroy() {
+	atomic.StoreUint32(&c.closed, 1)
 	c.cancel()
+	c.connectionMutex.Lock()
+	connections := make([]*Connection, 0, len(c.connections))
+	for conn := range c.connections {
+		connections = append(connections, conn)
+	}
+	c.connectionMutex.Unlock()
+	for _, conn := range connections {
+		conn.lazyClose(true)
+	}
+	for _, serverList := range c.serverServices {
+		serverList.closeCurrentConnection(true)
+	}
+}
+
+func (c *connectionManager) trackConnection(conn *Connection) bool {
+	c.connectionMutex.Lock()
+	defer c.connectionMutex.Unlock()
+	if atomic.LoadUint32(&c.closed) == 1 {
+		return false
+	}
+	if c.connections != nil {
+		conn.onClose = c.forgetConnection
+		c.connections[conn] = struct{}{}
+	}
+	return true
+}
+
+func (c *connectionManager) forgetConnection(conn *Connection) {
+	c.connectionMutex.Lock()
+	delete(c.connections, conn)
+	c.connectionMutex.Unlock()
 }
 
 // doSwitchRoutine 执行切换流程，只有当初次连接成功后才启动

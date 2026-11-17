@@ -155,6 +155,23 @@ func (c *consumerAPI) GetLane(req *GetServiceRuleRequest) (*model.ServiceRuleRes
 	return c.context.GetEngine().SyncGetServiceRule(model.EventLane, &req.GetServiceRuleRequest)
 }
 
+// GetServiceContract 同步获取服务契约。
+func (c *consumerAPI) GetServiceContract(
+	req *GetServiceContractRequest,
+) (*model.ServiceRuleResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil,
+			"GetServiceContractRequest can not be nil")
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncGetServiceContract(&req.GetServiceContractRequest)
+}
+
 // GetServices 同步获取批量服务
 func (c *consumerAPI) GetServices(req *GetServicesRequest) (*model.ServicesResponse, error) {
 	if err := checkAvailable(c); err != nil {

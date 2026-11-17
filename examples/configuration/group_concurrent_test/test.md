@@ -4,16 +4,11 @@
 
 验证 `ConfigGroupFlow` 的并发首次获取性能：当多个 goroutine 同时请求不同的配置分组时，应能真正并发执行，不会因 `doSync` 的全局读锁或 `GetConfigGroup` 的全局写锁导致串行阻塞。
 
-## 背景
+## 测试范围
 
-修复前存在双重串行瓶颈：
-
-1. **`doSync` 在 `RLock` 内串行拉取所有已有分组**：当 `repos` 中有 N 个分组时，每次 `doSync` 持有 `fclock.RLock` 约 `N × 35ms`，期间所有新的 `GetConfigGroup` 写锁请求被阻塞。
-2. **`GetConfigGroup` 在写锁内执行 gRPC**：即使 `doSync` 不阻塞，并发请求也只能逐个通过。
-
-修复后：
-- `doSync` 只在快照 `repos` 列表时短暂持有 `RLock`（亚毫秒），gRPC 拉取在锁外并发执行。
-- `GetConfigGroup` 的 gRPC 调用移到锁外，使用 `inFlight` map 实现 singleflight 去重。
+- 不同配置分组的首次 gRPC 拉取应并发执行，不应被全局锁串行化。
+- 相同配置分组的并发首次获取应由 singleflight 合并，避免重复请求。
+- 所有请求应成功完成，并在阈值内返回。
 
 ## 测试架构
 
@@ -130,6 +125,5 @@ PASS: total 94.746ms <= threshold 10s — concurrent fetch is healthy
 
 ## 相关文件
 
-- `pkg/flow/configuration/group_flow.go` — 修复的核心代码
-- `examples/configuration/group/repro/` — 单元级复现测试（使用 mock connector，无需服务端）
-- `slow-concurrent-fetching-of-config-group.md` — 问题根因分析文档
+- `verify.sh`：创建测试分组并运行验证。
+- `main.go`：并发获取配置分组并输出结果。

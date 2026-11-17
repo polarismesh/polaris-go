@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/polarismesh/polaris-go v1.7.1-0.20260306034000-560ea3ca2dfe
-	github.com/polarismesh/specification v1.8.1-0.20260730090605-7b2855bfb207
+	github.com/polarismesh/specification v1.9.0-RC1
 )
 
 // 使用工作树本地的 polaris-go，便于验证尚未发版的 *pb.BehaviorNotRegisteredError 修复

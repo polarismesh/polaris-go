@@ -48,6 +48,8 @@ const (
 	EventBlockAllowRule EventType = 0x2010
 	// EventLane 服务泳道
 	EventLane EventType = 0x2011
+	// EventServiceContract 服务契约
+	EventServiceContract EventType = 0x2012
 )
 
 // RegistryValue 存储于sdk缓存中的对象，包括服务实例和服务路由
@@ -85,6 +87,7 @@ var (
 		EventLossless:        "lossless",
 		EventBlockAllowRule:  "block_allow_rule",
 		EventLane:            "lane",
+		EventServiceContract: "service_contract",
 	}
 
 	presentToEventType = map[string]EventType{
@@ -98,6 +101,7 @@ var (
 		"lossless":          EventLossless,
 		"block_allow_rule":  EventBlockAllowRule,
 		"lane":              EventLane,
+		"service_contract":  EventServiceContract,
 	}
 )
 

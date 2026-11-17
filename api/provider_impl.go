@@ -88,6 +88,23 @@ func (c *providerAPI) Heartbeat(instance *InstanceHeartbeatRequest) error {
 	return c.context.GetEngine().SyncHeartbeat(&instance.InstanceHeartbeatRequest)
 }
 
+// ReportServiceContract 创建或更新服务契约。
+func (c *providerAPI) ReportServiceContract(
+	req *ReportServiceContractRequest,
+) (*model.ReportServiceContractResponse, error) {
+	if err := checkAvailable(c); err != nil {
+		return nil, err
+	}
+	if req == nil || req.ServiceContract == nil {
+		return nil, model.NewSDKError(model.ErrCodeAPIInvalidArgument, nil,
+			"ReportServiceContractRequest and contract can not be nil")
+	}
+	if err := req.ServiceContract.Validate(); err != nil {
+		return nil, err
+	}
+	return c.context.GetEngine().SyncReportServiceContract(req.ServiceContract)
+}
+
 // SDKContext 获取SDK上下文
 func (c *providerAPI) SDKContext() SDKContext {
 	return c.context

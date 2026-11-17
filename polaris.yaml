@@ -172,6 +172,32 @@ global:
     host: 0.0.0.0
     # 描述：Admin监听的端口
     port: 28080
+# 描述: Skill Registry 独立 gRPC 服务配置；默认关闭
+skill:
+  enable: false
+  # 已注册的 Skill Registry 连接器
+  connectorType: polaris
+  # Skill gRPC 与 discover（默认 8091）分离，常用端口为 8094
+  addresses: []
+  token: ""
+  connectTimeout: 1s
+  messageTimeout: 5s
+  downloadTimeout: 30s
+  # 成功获取的 Skill Get/Download payload 持久化开关
+  persistEnable: true
+  # payload 持久化目录，包含 get/download/active
+  persistDir: ./polaris/backup/skill
+  # 写盘失败后的额外重试次数
+  persistMaxWriteRetry: 1
+  # 读盘失败后的额外重试次数
+  persistMaxReadRetry: 0
+  # 读写重试间隔
+  persistRetryInterval: 500ms
+  # 只对网络错误回退本地 payload
+  fallbackToLocalCache: true
+  plugin:
+    polaris:
+      maxCallRecvMsgSize: 134217728
 #描述:主调端配置
 consumer:
   #描述:本地缓存相关配置
@@ -342,6 +368,10 @@ consumer:
       - warmup
 # 被调方配置
 provider:
+  # 描述: 是否启用 Provider/Consumer Service Contract API
+  # 类型: bool
+  # 默认值: false
+  reportServiceContractEnable: false
   # 限流配置
   rateLimit:
     # 描述：是否启用限流能力

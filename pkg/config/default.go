@@ -317,6 +317,7 @@ const (
 	ConfigCluster      ClusterType = "config"
 	HealthCheckCluster ClusterType = "healthCheck"
 	MonitorCluster     ClusterType = "monitor"
+	SkillCluster       ClusterType = "skill"
 )
 
 // 默认注册中心服务名.
@@ -583,6 +584,8 @@ func (c *ConfigurationImpl) Init() {
 	c.Provider.Init()
 	c.Config = &ConfigFileConfigImpl{}
 	c.Config.Init()
+	c.Skill = &SkillConfigImpl{}
+	c.Skill.Init()
 }
 
 // Verify 检验configuration配置.
@@ -604,6 +607,9 @@ func (c *ConfigurationImpl) Verify() error {
 	if err = c.Config.Verify(); err != nil {
 		errs = multierror.Append(errs, err)
 	}
+	if err = c.Skill.Verify(); err != nil {
+		errs = multierror.Append(errs, err)
+	}
 	return errs
 }
 
@@ -613,6 +619,11 @@ func (c *ConfigurationImpl) SetDefault() {
 	c.Consumer.SetDefault()
 	c.Provider.SetDefault()
 	c.Config.SetDefault()
+	if c.Skill == nil {
+		c.Skill = &SkillConfigImpl{}
+		c.Skill.Init()
+	}
+	c.Skill.SetDefault()
 }
 
 // Init systemConfig init.

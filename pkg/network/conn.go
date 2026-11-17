@@ -40,6 +40,7 @@ var (
 		config.ConfigCluster:      ConnectionLong,
 		config.HealthCheckCluster: ConnectionShort,
 		config.MonitorCluster:     ConnectionShort,
+		config.SkillCluster:       ConnectionLong,
 	}
 )
 
@@ -64,6 +65,7 @@ type Connection struct {
 	mutex sync.Mutex
 	// 带有客户端标识的日志
 	logNetwork log.Logger
+	onClose    func(*Connection)
 }
 
 // IsAvailableConnection whether the connection is available
@@ -92,14 +94,20 @@ func (c *Connection) acquire(opKey string) bool {
 // closeConnection close the connection
 func (c *Connection) closeConnection(force bool) bool {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
 	curRef := atomic.LoadInt32(&c.ref)
+	justClosed := false
 	if (force || curRef <= 0) && !c.closed {
 		c.closed = true
 		_ = c.Conn.Close()
 		c.logNetwork.Infof("connection %v: close, curRef is %d", c.ConnID, curRef)
+		justClosed = true
 	}
-	return c.closed
+	closed := c.closed
+	c.mutex.Unlock()
+	if justClosed && c.onClose != nil {
+		c.onClose(c)
+	}
+	return closed
 }
 
 // ForceClose forcibly close the connection
