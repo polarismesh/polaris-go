@@ -7,6 +7,69 @@ metadata 使用 `ai-agent-name`、`ai-agent-card`、`ai-a2a-version` 三键，re
 并发起 HTTP 请求。Skill Provider 下载并安装已发布的 Skill，把实际安装内容用于业务响应。
 MCP 场景同时验证标准实例 metadata、Service Contract 上报和真实管理端持久化结果。
 
+## SDK 配置与 API
+
+AI Registry 相关 API 当前仍在 `main` 分支的 Unreleased 阶段。示例使用一个共享
+`SDKContext` 同时创建 `SkillAPI`、`ConsumerAPI` 和 `ProviderAPI`：
+
+```yaml
+skill:
+  enable: true
+  connectorType: polaris
+  addresses:
+    - 127.0.0.1:8094
+  connectTimeout: 1s
+  messageTimeout: 5s
+  downloadTimeout: 30s
+  persistEnable: true
+  persistDir: ./polaris/backup/skill
+  persistMaxWriteRetry: 1
+  persistMaxReadRetry: 0
+  persistRetryInterval: 500ms
+  fallbackToLocalCache: true
+
+provider:
+  reportServiceContractEnable: true
+```
+
+`provider.reportServiceContractEnable` 默认是 `false`。关闭时，
+`ProviderAPI.ReportServiceContract` 和 `ConsumerAPI.GetServiceContract` 都会返回
+`ErrCodeServiceContractDisabled`。本示例需要上报 Service Contract，因此显式开启。
+底层连接器不支持 Service Contract 时，两个接口同样不可用。
+
+```go
+cfg := config.NewDefaultConfiguration([]string{"127.0.0.1:8091"})
+cfg.GetSkill().SetEnable(true)
+cfg.GetSkill().SetAddresses([]string{"127.0.0.1:8094"})
+cfg.GetProvider().SetReportServiceContractEnable(true)
+
+ctx, err := api.InitContextByConfig(cfg)
+if err != nil {
+	panic(err)
+}
+defer ctx.Destroy()
+
+consumer := api.NewConsumerAPIByContext(ctx)
+provider := api.NewProviderAPIByContext(ctx)
+skillAPI := api.NewSkillAPIByContext(ctx)
+```
+
+关键行为边界：
+
+- Consumer 的服务发现响应保留实际 `ServiceType`、`ServiceRevision` 和独立的
+  `ExtendedMetadata` 快照，不从实例字段推断服务类型。
+- Agent 实例只使用 `ai-agent-name`、`ai-agent-card`、`ai-a2a-version` 三个标准 metadata
+  key；AgentCard 严格解析、同 IP 校验和 Console CRUD 属于 `go-agent-naming-polarismesh`。
+- Skill 安装会拒绝 ZIP Slip、绝对路径、符号链接、超过 64 MiB 的单文件和超过 256 MiB
+  的包；完整校验后使用不可变缓存代目录，Force 或修复安装不会破坏已返回的路径。
+- 成功 Get/Download 会持久化并按请求 Tag 校验；只有网络错误允许回退本地 payload，
+  NotFound、鉴权、协议和内容校验错误不会被掩盖。
+- MCP metadata helper 负责 `mcp-server-name`、`mcp-protocol-version` 和
+  `mcp-endpoint-path`；Tool/Resource/Prompt 使用 Service Contract feature `101/102/103`。
+- 服务调用指标新增受限维度 `callee_instance_type=microservice|mcp|a2a`。
+
+完整调用流程见 [main.go](main.go)，真实服务端用例和清理边界见 [test.md](test.md)。
+
 运行器按 Agent、MCP、Skill 拆分为三个 suite。服务读取通过 Consumer，Console
 仅用于预置和清理隔离测试数据。
 

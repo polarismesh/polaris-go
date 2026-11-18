@@ -22,6 +22,11 @@
   指标增加 `callee_instance_type=microservice|mcp|a2a` 维度。
 - **示例**：新增 AI Registry Agent、MCP 和 Skill 示例及真实服务端 E2E 脚本。
 
+### 维护
+
+- 示例模块统一声明 polaris-go v1.7.2 并升级至 Go 1.24，完成全部子模块 `go mod tidy`，
+  并修复示例版本管理脚本对块级 `require` 和 pseudo-version 的处理。
+
 ## [v1.7.2]
 
 ### 添加的特性

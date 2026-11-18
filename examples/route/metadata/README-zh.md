@@ -19,7 +19,7 @@
 
 1. 已部署并运行 [Polaris 服务端](https://github.com/polarismesh/polaris)（任意版本均可，仅用作注册中心）。
 2. 各示例目录下的 `polaris.yaml` 中 `global.serverConnector.addresses` 通过环境变量 `${POLARIS_SERVER}` 注入 Polaris 地址；也可编辑为固定地址。
-3. Go 1.18+。
+3. Go 1.24+。
 
 > **提示**：如仅运行测试脚本 `verify_metadata_route.sh`，脚本会自动编译并以 `POLARIS_SERVER=<地址>` 启动所有进程。
 

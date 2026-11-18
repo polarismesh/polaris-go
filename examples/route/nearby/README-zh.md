@@ -26,7 +26,7 @@
 2. 在 Polaris 控制台**或通过脚本自动创建**目标服务 `RouteNearbyEchoServer` 的就近路由规则（NearbyPolicy）。
 3. `polaris.yaml` 中 `global.serverConnector.addresses` 通过 `${POLARIS_SERVER}` 环境变量注入。
 4. 各进程通过 `${REGION} / ${ZONE} / ${CAMPUS}` 环境变量注入自身地域信息，SDK 的 `global.location.providers[type=local]` 据此生成 Location。
-5. Go 1.18+。
+5. Go 1.24+。
 
 > **提示**：直接运行 `verify_nearby_route.sh` 会自动处理规则创建、地域注入、进程启动。
 

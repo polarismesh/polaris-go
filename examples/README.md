@@ -2,17 +2,29 @@
 
 本目录包含了 Polaris Go SDK 的各种使用示例，帮助开发者快速了解和使用 Polaris 的各项功能。
 
+## 环境要求
+
+- Go 1.24+
+- 示例模块统一声明 polaris-go v1.7.2；除 `serviceRule` 外，其余示例通过 `replace` 使用仓库中的 SDK 源码
+- `check_versions.sh` 需要额外安装 `jq`
+
 ## 📚 示例类型
 
 | 示例目录 | 功能描述 | 包含内容 |
 |---------|---------|---------|
 | **quickstart** | 快速入门示例 | 基础的服务提供者(provider)和消费者(consumer)示例，以及K8s部署示例 |
+| **ai-registry** | AI Registry 集成示例 | AI Agent、MCP、Skill 的注册、发现、下载、Service Contract 及真实服务端 E2E 验证 |
 | **configuration** | 配置管理示例 | 配置的增删改查(crud)、加密配置(encrypt)、配置回退(fallback)、配置分组(group)、普通配置(normal) |
 | **circuitbreaker** | 熔断器示例 | 被调用方(callee)、实例级熔断(instance)、接口级熔断(interface)、服务级熔断(service) |
 | **ratelimit** | 限流示例 | 限流消费者(consumer)和多个限流提供者(provider-a/provider-b)示例 |
 | **loadbalancer** | 负载均衡示例 | 负载均衡消费者(consumer)和提供者(provider)示例 |
 | **route** | 路由示例 | 基于元数据路由(metadata)、就近路由(nearby)、规则路由(rule) |
 | **activehealthcheck** | 主动健康检查示例 | 主动健康检查的配置和使用 |
+| **audit** | 调用审计示例 | 校验服务调用结果上报后生成审计日志 |
+| **auth** | 服务鉴权示例 | 基于 BlockAllowList 规则的被调侧鉴权拦截 |
+| **lossless** | 无损上下线示例 | 上下线、预热、过载保护和健康检查延迟 |
+| **multiContext** | 多 Context 示例 | 多 SDKContext 下的配置、服务实例和规则隔离 |
+| **serviceRule** | 服务规则查询示例 | 查询路由、熔断、限流、就近路由、无损、鉴权及泳道规则，并验证缓存刷新和未注册限流插件错误处理 |
 | **watch** | 监听示例 | 服务实例变化监听功能 |
 | **watchinstance** | 实例监听示例 | 特定实例状态变化监听 |
 | **mock** | 模拟示例 | 用于测试的模拟服务示例 |
@@ -24,7 +36,8 @@
 ### 脚本功能对比
 
 | 脚本名称 | 主要功能 | 使用场景 | 执行效果 |
-|---------|---------|---------|---------| | **check_versions.sh** | 版本一致性检查 | 检查所有模块的依赖版本是否一致 | 显示版本分布统计，识别版本不一致问题 |
+|---------|---------|---------|---------|
+| **check_versions.sh** | 版本一致性检查 | 检查所有模块的依赖版本是否一致 | 显示版本分布统计，识别版本不一致问题 |
 | **update_polaris_versions.sh** | 批量版本更新 | 统一更新所有模块的polaris-go和Go版本 | 更新require依赖版本，忽略replace指令 |
 | **batch_mod_tidy.sh** | 批量依赖整理 | 清理和整理所有模块的依赖关系 | 执行go mod tidy，统计成功/失败数量 |
 | **batch_make_clean.sh** | 批量清理构建 | 清理所有子目录的构建产物 | 递归执行make clean，统计成功/失败数量 |

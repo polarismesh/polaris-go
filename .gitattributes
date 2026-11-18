@@ -1,2 +1,3 @@
 # Preserve the repository's existing CRLF-compatible sample configuration.
 polaris.yaml whitespace=cr-at-eol
+examples/route/nearby/README-zh.md whitespace=cr-at-eol

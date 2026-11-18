@@ -38,7 +38,7 @@
 ### 2.2 前置条件
 
 - Polaris 服务端已启动（任意版本，仅用作注册中心）
-- Go 1.18+；本机 Python 3（仅脚本日志解析需要）
+- Go 1.24+；本机 Python 3（仅脚本日志解析需要）
 - **无需**在 Polaris 控制台配置任何路由规则（`dstMetaRouter` 完全在 SDK 本地匹配）
 - `consumer/polaris.yaml` 配置 `serviceRouter.chain: [ruleBasedRouter]`（不启用 dstMetaRouter，演示手动过滤）
 - `simple-consumer/polaris.yaml` 配置 `serviceRouter.chain: [dstMetaRouter]`

@@ -22,7 +22,7 @@
 
 1. **北极星服务端**已部署并可达（需同时开放 gRPC 8091 与 HTTP OpenAPI 8090 端口）
 2. **鉴权 Token** 具备规则的读写权限（建议管理员 token）
-3. 本机已安装：`go` (≥1.18)、`curl`、`python3`、`diff`、`bash`
+3. 本机已安装：`go` (≥1.24)、`curl`、`python3`、`diff`、`bash`
 4. 如需查看 SDK 日志，建议带 `--debug` 参数（让 SDK 日志输出到 demo stdout）
 
 ---
@@ -204,6 +204,6 @@ Token 权限不足，请使用管理员 Token 或确认 Token 对目标 namespac
 
 ### action=tsf 验证未通过
 
-- 确认当前使用的 polaris-go 版本支持 `BehaviorNotRegisteredError`
+- 示例声明使用 polaris-go v1.7.2，该版本已包含 `BehaviorNotRegisteredError` 修复
 - 确认 tsf 规则已成功创建到服务端（通过 OpenAPI 确认）
 - 加 `--debug` 重跑，查看完整 SDK 日志输出

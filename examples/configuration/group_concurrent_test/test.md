@@ -32,7 +32,7 @@ verify.sh (Shell)                           main.go (Go SDK)
 
 ## 环境要求
 
-- Go 1.21+
+- Go 1.24+
 - bash, curl
 - 可访问的 Polaris 服务端（gRPC 8091/8093 端口 + OpenAPI 8090 端口）
 

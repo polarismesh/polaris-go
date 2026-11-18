@@ -40,7 +40,7 @@
 ### 2.2 前置条件
 
 - Polaris 服务端已启动（建议 v1.14.0+，支持路由 v2 API）
-- Go 1.18+；本机 Python 3（脚本解析 JSON）
+- Go 1.24+；本机 Python 3（脚本解析 JSON）
 - 脚本会自动创建如下规则（也可通过 `--skip-rule-check` 跳过）：
 
 ```

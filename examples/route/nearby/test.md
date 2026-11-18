@@ -37,7 +37,7 @@
 ### 2.2 前置条件
 
 - Polaris 服务端已启动（版本需支持 NearbyPolicy，建议 v1.17.0+）
-- Go 1.18+；本机 Python 3（脚本解析 JSON 用）
+- Go 1.24+；本机 Python 3（脚本解析 JSON 用）
 - 脚本会自动创建以下规则（也可通过 `--skip-rule-check` 跳过）：
 
 ```

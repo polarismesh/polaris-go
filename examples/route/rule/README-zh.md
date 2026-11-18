@@ -23,7 +23,7 @@
 1. 已部署并运行 [Polaris 服务端](https://github.com/polarismesh/polaris)（建议 v1.14.0+，支持 v2 路由规则）。
 2. 在 Polaris 控制台**或通过脚本自动**配置 `RouteEchoServer` 的路由规则（按 `env` 分组）。
 3. `polaris.yaml` 中 `global.serverConnector.addresses` 通过 `${POLARIS_SERVER}` 环境变量注入。
-4. Go 1.18+。
+4. Go 1.24+。
 
 > **提示**：直接运行 `verify_rule_route.sh` 会自动处理规则创建、进程启动、结果校验。
 
