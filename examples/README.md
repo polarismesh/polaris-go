@@ -35,6 +35,8 @@
 
 **功能**：检查项目中所有子模块的polaris-go版本和Go版本是否一致
 
+**依赖**：`go`、`jq`
+
 **使用方法**：
 ```bash
 # 给脚本执行权限
@@ -63,15 +65,15 @@ chmod +x check_versions.sh
 # 给脚本执行权限
 chmod +x update_polaris_versions.sh
 
-# 使用默认版本更新 (polaris-go v1.6.1, Go 1.24)
+# 使用默认版本更新 (polaris-go v1.7.2, Go 1.24)
 ./update_polaris_versions.sh
 
 # 指定版本更新
-./update_polaris_versions.sh v1.7.0 1.25
+./update_polaris_versions.sh v1.7.2 1.24
 ```
 
 **参数说明**：
-- 第1个参数：polaris-go版本 (默认: v1.6.1)
+- 第1个参数：polaris-go版本 (默认: v1.7.2)
 - 第2个参数：Go版本 (默认: 1.24)
 
 **执行流程**：
