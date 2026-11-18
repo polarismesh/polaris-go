@@ -527,6 +527,7 @@ func (c *BaseCircuitBreakerStatus) IsAvailable() bool {
 // HalfOpenStatus 半开状态
 // 状态机进入半开后会按 maxRequest 的额度精确放行调用：
 //   - AcquirePermission：请求阶段调用，按发放配额扣减；超额返回 false 视作熔断拒绝
+//   - CancelPermission：取消尚未执行的调用，只退还配额，不归集结果
 //   - Release：响应归集阶段调用，按结果累计 calledResult，触发条件满足时执行状态判定
 //
 // 同时保留 Report 入口供未走装饰器的旧路径（ResourceCounters.Report）继续使用，
@@ -576,17 +577,37 @@ func (c *HalfOpenStatus) Report(success bool) bool {
 }
 
 // AcquirePermission 申请一次半开放行配额
-// 热路径无锁，使用 atomic.AddInt64 自增 allocated；超过 maxRequest 立即回退并返回 false。
+// 热路径无锁，使用 CAS 发放配额，保证 allocated 不超过 maxRequest。
 // 当 maxRequest <= 0 时表示规则未配置或恢复条件无效，按拒绝处理避免半开态下无限放行。
 func (c *HalfOpenStatus) AcquirePermission() bool {
 	if c.maxRequest <= 0 {
 		return false
 	}
-	if atomic.AddInt64(&c.allocated, 1) > int64(c.maxRequest) {
-		atomic.AddInt64(&c.allocated, -1)
-		return false
+	for {
+		allocated := atomic.LoadInt64(&c.allocated)
+		if allocated >= int64(c.maxRequest) {
+			return false
+		}
+		if atomic.CompareAndSwapInt64(&c.allocated, allocated, allocated+1) {
+			return true
+		}
 	}
-	return true
+}
+
+// CancelPermission returns one unused permission without recording a call result.
+// The caller must cancel only its own successfully acquired permission, once,
+// before the call is executed or reported, on the same HalfOpenStatus instance.
+// It returns false when no permission is allocated.
+func (c *HalfOpenStatus) CancelPermission() bool {
+	for {
+		allocated := atomic.LoadInt64(&c.allocated)
+		if allocated <= 0 {
+			return false
+		}
+		if atomic.CompareAndSwapInt64(&c.allocated, allocated, allocated-1) {
+			return true
+		}
+	}
 }
 
 // Release 归集一次半开放行结果
